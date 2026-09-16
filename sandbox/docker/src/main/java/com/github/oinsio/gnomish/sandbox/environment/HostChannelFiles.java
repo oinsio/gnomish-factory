@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;

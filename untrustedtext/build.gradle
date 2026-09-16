@@ -1,0 +1,38 @@
+// Build script for the `:untrustedtext` module (FR1, NFR-S1, design D2/D7 of
+// split-logtext-leaves): the factory's one untrusted-text owner — the character-class
+// table every exit reads, `strip`, `capTail`, `flatten`, the console notation and the
+// record cap. Text in, inert text out.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson,
+// no logging API. Like `:baseref`, whose template this file follows, the emptiness is a
+// *security* property rather than a tidiness one (NFR-S1): an allowlist with nothing in it
+// is what constructively guarantees terminal-safety policy can know nothing of
+// subprocesses, trackers, logging or configuration formats, so the only thing
+// attacker-influenced input can drive here is a walk over code points. It is also
+// load-bearing for the layering: `:domain` and the published `:gnomish-plugin-api` both
+// reach this leaf, so any dependency added here would be pushed into the domain and into
+// the contract's published POM alike. There is no production-scope declaration below
+// because there is nothing to declare, and the layering gate proves it stays that way.
+//
+// What stays outside: which text counts as untrusted, which level a line takes and which
+// sink neutralizes a rendered record are the callers' decisions —
+// `logtext.LogText` (the log plane's facade), `app.findings.FindingsSanitizer` (the
+// findings funnel's facade) and the Logback sink layer in `:bootstrap`.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT
+// mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Untrusted-text primitives: the character-class table, stripping, tail and record caps, flattening, console notation.'
+
+// `:untrustedtext` reaches no other project at all — the same gate `:domain`,
+// `:subprocess`, `:atomicfile` and `:baseref` carry, here for the reason stated above:
+// the empty allowlist is the constructive half of NFR-S1.
+layering {
+    allowedProjects = []
+}

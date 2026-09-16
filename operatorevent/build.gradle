@@ -1,0 +1,41 @@
+// Build script for the `:operatorevent` module (FR4, design D1/D7 of split-logtext-leaves):
+// the factory's operator-event catalog — one constant per production WARN/ERROR call site,
+// each owning the stable `[GFnnn]` code that site renders as its message head.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson, no
+// logging API, not even slf4j. Like `:baseref` and `:untrustedtext`, whose template this file
+// follows, the emptiness is load-bearing rather than tidy: `:domain` reaches this leaf so its
+// four emitters can render the head from the constant instead of repeating it as a literal,
+// and the published `:gnomish-plugin-api` reaches it through `:domain`, so any dependency
+// added here would be pushed into the domain and into the contract's published POM alike.
+// There is no production-scope declaration below because there is nothing to declare, and the
+// layering gate proves it stays that way.
+//
+// Carved out of `:logtext` rather than left there because the catalog is not logging
+// plumbing: a consumer that needs an event identity must not acquire the slf4j edge
+// `:logtext` carries. It is a separate leaf from `:untrustedtext` because the two share
+// nothing but "JDK-only and reachable from the domain" (design D1).
+//
+// What stays outside: which level a line takes, how its untrusted text is neutralized and
+// which sink renders it are the callers' decisions — the emitters in every layer, the
+// `:logtext` facade, and the Logback sink layer in `:bootstrap`. The correspondence between
+// constants and call sites (every site coded, every code used once) is a scan of the source
+// tree and lives in the log-contract gate in `:bootstrap`.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT
+// mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Operator-event catalog: one stable [GFnnn] code per production WARN/ERROR call site.'
+
+// `:operatorevent` reaches no other project at all — the same gate `:domain`, `:subprocess`,
+// `:atomicfile`, `:baseref` and `:untrustedtext` carry, here for the reason stated above: the
+// domain and the published contract both reach this leaf, so an edge added here lands in both.
+layering {
+    allowedProjects = []
+}

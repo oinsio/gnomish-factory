@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

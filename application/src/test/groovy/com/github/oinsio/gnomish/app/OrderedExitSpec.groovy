@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

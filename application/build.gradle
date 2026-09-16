@@ -73,6 +73,11 @@ dependencies {
     // is a constructor parameter of public types here (`FinishedDecline` takes the latch
     // its poll edges are logged through), so it is on this module's own surface.
     api project(':logtext')
+    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
+    // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
+    // constant. `implementation`, not `api`: the enum is named only inside log calls,
+    // never in a signature this module exports.
+    implementation project(':operatorevent')
 
     // Annotations only — never a running context, which is the composition
     // root's concern (design D3): `@Component` on the startup collaborators and
@@ -125,8 +130,17 @@ layering {
         ':gitobjects',
         ':gnomish-plugin-api',
         ':logtext',
+        // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
+        // declared directly above, because this module's own log sites name `OperatorEvent`;
+        // also reached through `:domain`, whose engine emitters take their head from it.
+        ':operatorevent',
         ':sandbox:core',
         // The supervision leaf, also reached transitively through `:gitobjects`.
         ':subprocess',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
+        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
+        // it; the layering gate walks the transitive graph, so the reach is listed where
+        // it arrives.
+        ':untrustedtext',
     ]
 }

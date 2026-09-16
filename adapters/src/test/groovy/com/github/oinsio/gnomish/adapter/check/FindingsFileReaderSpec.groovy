@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import spock.lang.Specification

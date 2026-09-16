@@ -17,6 +17,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 class TrackerTaskFixtures {
 
     static TrackerTask taskWith(TaskRef ref, TrackerTaskState state) {
-        new TrackerTask(ref, new TaskSnapshot(ref.id(), 'title', 'body'), state, AbortFacts.none(), false)
+        taskWith(ref, state, false)
+    }
+
+    static TrackerTask taskWith(TaskRef ref, TrackerTaskState state, boolean finished) {
+        new TrackerTask(ref, new TaskSnapshot(ref.id(), 'title', 'body'), state, AbortFacts.none(), finished)
     }
 }

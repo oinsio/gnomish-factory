@@ -17,7 +17,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -71,12 +71,6 @@ class GithubClaimLeaseSpec extends Specification {
 
     private TaskRef refFor(int issueNumber) {
         new TaskRef(GithubTaskId.build(wireMock.baseUrl(), 'acme', 'widgets', issueNumber).canonicalId())
-    }
-
-    /** Renders one GitHub comment JSON object, JSON-escaping a rendered marker body for embedding in a listing. */
-    private static String commentJson(long id, String body) {
-        def escaped = body.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-        "{\"id\":${id},\"body\":\"${escaped}\"}"
     }
 
     private static void stubLabelCalls(WireMockServer wireMock, int issueNumber) {
@@ -441,11 +435,11 @@ class GithubClaimLeaseSpec extends Specification {
         stubLabelCalls(wireMock, 29)
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/29/comments'))
                 .willReturn(aResponse().withStatus(201).withBody('{"id":930,"body":"whatever"}')))
-        def deadClaim = commentJson(1, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def deadClaim = GithubCommentFixtures.commentJson(1, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-dead', Instant.parse('2026-07-20T09:00:00Z'), '🤖 claimed'))
-        def removal = commentJson(2, GithubMarker.render(GithubMarkerKind.STALE_CLAIM_REMOVED,
+        def removal = GithubCommentFixtures.commentJson(2, GithubMarker.render(GithubMarkerKind.STALE_CLAIM_REMOVED,
                 'gnomish-factory-dead', Instant.parse('2026-07-24T09:00:00Z'), '🤖 stale claim removed: gnomish-factory-dead'))
-        def freshClaim = commentJson(930, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def freshClaim = GithubCommentFixtures.commentJson(930, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-fresh', Instant.parse('2026-07-24T10:00:00Z'), '🤖 claimed by gnomish-factory-fresh'))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/29/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody("[${deadClaim},${removal},${freshClaim}]")))
@@ -464,7 +458,7 @@ class GithubClaimLeaseSpec extends Specification {
         def identity = GithubCommentIdentity.of(
                 new GithubTaskId('', 'acme', 'widgets', 24), 'claim@gnomish-factory-x7k2q1')
         def own = { long id ->
-            commentJson(id, GithubMarker.render(GithubMarkerKind.CLAIM,
+            GithubCommentFixtures.commentJson(id, GithubMarker.render(GithubMarkerKind.CLAIM,
             'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:00:00Z'),
             'claimed', null, identity, null))
         }
@@ -491,12 +485,12 @@ class GithubClaimLeaseSpec extends Specification {
         stubLabelCalls(wireMock, 25)
         def identity = GithubCommentIdentity.of(
                 new GithubTaskId('', 'acme', 'widgets', 25), 'claim@gnomish-factory-x7k2q1')
-        def oldClaim = commentJson(700, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def oldClaim = GithubCommentFixtures.commentJson(700, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:00:00Z'),
                 'claimed', null, identity, null))
-        def abort = commentJson(710, GithubMarker.render(GithubMarkerKind.ABORT,
+        def abort = GithubCommentFixtures.commentJson(710, GithubMarker.render(GithubMarkerKind.ABORT,
                 'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:30:00Z'), 'aborted'))
-        def newClaim = commentJson(720, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def newClaim = GithubCommentFixtures.commentJson(720, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T11:00:00Z'),
                 'claimed', null, identity, null))
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/25/comments'))
@@ -539,10 +533,10 @@ class GithubClaimLeaseSpec extends Specification {
         stubLabelCalls(wireMock, 27)
         def ownIdentity = GithubCommentIdentity.of(
                 new GithubTaskId('', 'acme', 'widgets', 27), 'claim@gnomish-factory-x7k2q1')
-        def own = commentJson(620, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def own = GithubCommentFixtures.commentJson(620, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:01:00Z'),
                 'claimed', null, ownIdentity, null))
-        def foreign = commentJson(600, GithubMarker.render(GithubMarkerKind.CLAIM,
+        def foreign = GithubCommentFixtures.commentJson(600, GithubMarker.render(GithubMarkerKind.CLAIM,
                 'gnomish-factory-rival', Instant.parse('2026-07-23T10:00:00Z'), 'claimed', null,
                 GithubCommentIdentity.of(new GithubTaskId('', 'acme', 'widgets', 27),
                 'claim@gnomish-factory-rival'), null))

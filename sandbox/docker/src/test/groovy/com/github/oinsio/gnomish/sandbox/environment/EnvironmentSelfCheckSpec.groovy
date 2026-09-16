@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -10,7 +9,6 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import java.time.Instant
 import org.jspecify.annotations.Nullable
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -385,28 +383,7 @@ class EnvironmentSelfCheckSpec extends Specification {
         ExecHandle exec(ExecCommand command) {
             execs << command.command()
             def (int code, String out) = onExec.call(command.command())
-            return new ExecHandle() {
-
-                        @Override
-                        InputStream output() {
-                            new ByteArrayInputStream(out.getBytes('UTF-8'))
-                        }
-
-                        @Override
-                        Instant startedAt() {
-                            Instant.EPOCH
-                        }
-
-                        @Override
-                        ExecHandle.Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
-                            throw new UnsupportedOperationException('not used by the self-check')
-                        }
-
-                        @Override
-                        int waitForExit() {
-                            code
-                        }
-                    }
+            return ScriptedExecHandle.of(code, out)
         }
 
         @Override

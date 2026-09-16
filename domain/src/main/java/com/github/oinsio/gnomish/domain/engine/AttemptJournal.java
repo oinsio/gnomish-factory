@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,14 +21,7 @@ import org.slf4j.LoggerFactory;
  * breaks a run (design D7); a thrown persist logs at ERROR at the point of capture and is
  * surfaced to the loop as a {@link TaskOutcome.Aborted} (NFR-O1).
  *
- * <p>Implements FR11, FR12, NFR-O1 of add-stage-engine.
- *
- * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
- * operator line repeats catalog code {@code GF110} as a literal head, because {@code :domain}
- * must not take a {@code :logtext} edge to reach the catalog (ADR 0004, accepted deviation 1).
- * The literal and the constant are pinned equal by {@code DomainOperatorEventHeadSpec}; there is
- * no resolvable link either way, which is why the pair is listed in
- * {@code .claude/rules/manual-sync-pairs.md}.
+ * <p>Implements FR11, FR12, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves.
  *
  * @param listener the listener the round's events are delivered to; never null
  * @param persistence the port each round's state is persisted through; never null
@@ -67,7 +61,7 @@ record AttemptJournal(EngineEventListener listener, AttemptPersistence persisten
         try {
             persistence.persist(taskId, newState, trace);
         } catch (RuntimeException ex) {
-            log.error("[GF110] persist failed for {}", key, ex);
+            log.error(OperatorEvent.ATTEMPT_PERSIST_FAILED.head() + "persist failed for {}", key, ex);
             return new TaskOutcome.Aborted(newState, key, StackTraces.render(ex));
         }
         Events.emit(listener, new EngineEvent.AttemptFinished(key, newState, trace));

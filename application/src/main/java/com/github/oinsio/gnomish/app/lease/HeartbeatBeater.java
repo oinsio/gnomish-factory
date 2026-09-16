@@ -5,9 +5,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.logtext.FailureReason;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

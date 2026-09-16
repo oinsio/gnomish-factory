@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.architecture
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testsupport.LogCallSites
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.util.regex.Pattern
@@ -8,10 +8,12 @@ import spock.lang.Shared
 import spock.lang.Specification
 
 /**
- * FR16, M7 of harden-logging-observability, design D15: the static half of the log contract.
- * Three questions about the whole tree at once, none of which a reviewer can answer by reading one
- * diff — every production WARN/ERROR site carries a catalog code; every catalog code belongs to
- * exactly one site; every code in use is named by at least one test source.
+ * FR16, M7 of harden-logging-observability, design D15; FR10, design D4 of split-logtext-leaves:
+ * the static half of the log contract. Four questions about the whole tree at once, none of which a
+ * reviewer can answer by reading one diff — every production WARN/ERROR site carries a catalog
+ * code; every catalog code belongs to exactly one site; every code in use is named by at least one
+ * test source; and no production source spells a code head as a string literal — anywhere in the
+ * source, not only inside a log call.
  *
  * <p>Why a gate: an operator's alert keys on {@code [GFnnn]}, so an uncoded degrade line is
  * invisible to the alerting it was written for, a code used twice makes the alert ambiguous about
@@ -22,7 +24,17 @@ import spock.lang.Specification
  * behavioral backstop is the runtime gate (FR17), which fails a spec that provokes an operator
  * event no capture asserted; the pair ships together for that reason.
  *
- * <p>In-place escape hatch {@code log-contract-exempt: <reason>}, the same idiom as
+ * <p>The fourth question has no escape hatch, unlike the other three. It is not asking whether a
+ * site has a code — it is asking where the code came from, and the catalog constant is reachable
+ * from every module in the build, {@code :domain} included since it took its {@code :operatorevent}
+ * edge. A literal head was accepted while the domain could not reach the catalog (D15 of
+ * harden-logging-observability pinned it as a valid form); once it can, that acceptance is the
+ * escape hatch {@code .claude/rules/implementation.md} item 3 says to close, and closing it is what
+ * keeps the catalog single-owner now that the round-trip pin ({@code DomainOperatorEventHeadSpec})
+ * is gone.
+ *
+ * <p>In-place escape hatch {@code log-contract-exempt: <reason>} for the first three questions, the
+ * same idiom as
  * {@link ThrowableConventionGateSpec}'s {@code throwable-not-subject}. Lives in {@code :bootstrap}
  * for the same reason as its siblings: it is a whole-tree source gate, and this is the module
  * whose {@code test} task wires {@code repoRoot}.
@@ -49,6 +61,14 @@ class LogContractGateSpec extends Specification {
     /** Both ways a site can name its code: the catalog constant, or the literal head. */
     private static final Pattern CODE_REFERENCE = Pattern.compile(
     'OperatorEvent\\.([A-Z][A-Z0-9_]*)|\\[(GF\\d{3})]')
+
+    /**
+     * A code head opening a string literal — {@code "[GFnnn]}. The rejected form (FR10): the
+     * quote is part of the pattern, so {@code OperatorEvent.X.head() + "message"} cannot match
+     * while {@code "[GF110] message"} must — wherever in a production source it is written, a log
+     * call's argument list included.
+     */
+    private static final Pattern LITERAL_HEAD = Pattern.compile('"\\[(GF\\d{3})]')
 
     /** Every code the catalog defines — the inventory the three checks are asked against. */
     private static final Set<String> CATALOG = OperatorEvent.values().collect {
@@ -110,6 +130,15 @@ class LogContractGateSpec extends Specification {
         } == []
     }
 
+    // FR10: the catalog constant is the only accepted form, now that every module can reach it.
+    def "no production source spells a code head as a string literal"() {
+        expect: 'the scan really reached the source tree'
+        RepoSourceTree.productionSources().size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
+
+        and: 'and no source carries a literal head — each would be a copy of a code that can drift'
+        literalHeadSites() == []
+    }
+
     // D15: the detector is the gate — a seeded violation must fail it, or a green run means nothing.
     def "a seeded uncoded operator site is detected: #call"() {
         expect: 'the site is seen at all — a snippet the parser drops would pass this vacuously'
@@ -154,14 +183,53 @@ class LogContractGateSpec extends Specification {
     }
 
     // D15: the correct form is not flagged — a gate that fails the fix is worse than none.
-    def "a coded site is not flagged, in either the catalog or the literal form"() {
-        expect:
+    def "a coded site rendering the catalog constant is not flagged: #form"() {
+        expect: 'its code is read from the site'
         codesOf(form, 'Correct.java') == [expected] as Set
+
+        and: 'and the literal-head rule leaves it alone — the head came from the constant'
+        literalHeadsIn(form)*.code == []
 
         where:
         form || expected
         'log.warn(OperatorEvent.PUSH_FAILED.head() + "push failed for {}", branch, e);' || 'GF015'
+        'log.atError().log(OperatorEvent.PUSH_FAILED.head() + "push failed", e);' || 'GF015'
+    }
+
+    // FR10, D4 of split-logtext-leaves: the inverse of the feature above. The literal form was a
+    //     pinned-valid shape while `:domain` could not reach the catalog; it is now the violation,
+    //     and the same two examples that used to pass are what the detector must catch.
+    def "a seeded literal head is detected: #form"() {
+        expect: 'the site is seen at all — a snippet the parser drops would pass this vacuously'
+        LogCallSites.inSource(form, 'Seeded.java').size() == 1
+
+        and: 'and its head is reported as a literal, which the whole-tree check reports as a violation'
+        literalHeadsIn(form)*.code == [expected]
+
+        where:
+        form || expected
         'log.error("[GF110] persist failed for {}", key, ex);' || 'GF110'
+        'log.warn("[GF110] persist failed for {}", key, ex);' || 'GF110'
+        'log.info("[GF110] not even an operator level", x);' || 'GF110'
+    }
+
+    // FR10: "in any production source" — a head spelled outside a log call reaches the operator
+    //     plane just the same (a constant the call prepends, a message assembled a statement
+    //     earlier, an exception text an operator greps), and a scan of call text alone never sees
+    //     it. Each of these used to pass the gate.
+    def "a seeded literal head outside a log call is detected: #form"() {
+        expect: 'no log call is involved at all, so only a whole-source scan can find it'
+        LogCallSites.inSource(form, 'Seeded.java') == []
+
+        and: 'and the head is reported with the line it sits on'
+        literalHeadsIn(form)*.code == ['GF110']
+
+        where:
+        form << [
+            'private static final String HEAD = "[GF110] ";',
+            'String message = "[GF110] persist failed";',
+            'throw new IllegalStateException("[GF110] persist failed");'
+        ]
     }
 
     /** One judged call site: where it is, which codes it names, and whether it carries a reason. */
@@ -185,6 +253,43 @@ class LogContractGateSpec extends Specification {
                 exempt: LogCallSites.exempted(file, call, EXEMPTION))
             }
         }
+    }
+
+    /** Every production source spelling a code head as a literal, as "path:line (code)". */
+    private static List<String> literalHeadSites() {
+        RepoSourceTree.productionSources().collectMany { file ->
+            def path = RepoSourceTree.relative(file)
+            literalHeadsIn(RepoSourceTree.code(file)).collect {
+                "${path}:${it.line} (${it.code})"
+            }
+        }
+    }
+
+    /**
+     * The code heads one already comment-stripped source spells as string literals, in source
+     * order, each with its line.
+     *
+     * <p>The whole source is scanned, not only its log calls: FR10 rejects the literal form "in any
+     * production source", and a head parked in a constant, in an exception message, or in a string
+     * assembled one statement above the call is the same copy of a code that can drift from the
+     * catalog — scanning call text alone would leave every one of those unjudged. Every level is
+     * judged for the same reason: an INFO line carries no code at all (FR14), so a literal head
+     * there is the same copy under a different level.
+     */
+    private static List<LiteralHead> literalHeadsIn(String code) {
+        def found = []
+        def matcher = LITERAL_HEAD.matcher(code)
+        while (matcher.find()) {
+            found << new LiteralHead(line: code.take(matcher.start()).count('\n') + 1,
+            code: matcher.group(1))
+        }
+        found
+    }
+
+    /** One literal code head found by the scan: the line it sits on and the code it spells. */
+    private static class LiteralHead {
+        int line
+        String code
     }
 
     /** Every code any test source names, by catalog constant or by literal — the pinning evidence. */

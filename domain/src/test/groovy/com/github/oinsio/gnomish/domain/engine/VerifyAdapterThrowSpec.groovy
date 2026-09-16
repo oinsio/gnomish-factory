@@ -1,15 +1,13 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
-import org.slf4j.LoggerFactory
 
 /**
  * VerifyOrchestrator adapter-throw handling, task 4.1 — a check adapter of any type
@@ -129,13 +127,10 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
 
     // NFR-O1: the caught adapter throw is logged at ERROR at the point of capture, naming the
     //     check — the delta-spec "Stack trace reaches the report" scenario's "an ERROR line is
-    //     logged" clause, asserted via a Logback ListAppender on the VerifyOrchestrator logger.
+    //     logged" clause, asserted via a capture on the VerifyOrchestrator logger.
     def "logs the caught adapter throw at ERROR at the point of capture"() {
-        given: 'a ListAppender attached to the VerifyOrchestrator logger'
-        Logger orchestratorLogger = (Logger) LoggerFactory.getLogger(VerifyOrchestrator)
-        def appender = new ListAppender<ILoggingEvent>()
-        appender.start()
-        orchestratorLogger.addAppender(appender)
+        given: 'a capture on the VerifyOrchestrator logger'
+        def logs = LogCaptureSupport.attach(VerifyOrchestrator)
 
         and: 'a builtin runner set to throw'
         def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -145,11 +140,12 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         orchestrator(builtinRunner, new ScriptedCommandCheckRunner()).verify([builtin('files_exist')], CONTEXT, WORKSPACE, KEY)
 
         then: 'exactly one ERROR line was logged, naming the adapter throw'
-        def errors = appender.list.findAll { it.level == Level.ERROR }
+        def errors = logs.list.findAll { it.level == Level.ERROR }
         errors.size() == 1
         errors[0].formattedMessage.contains('check adapter threw')
+        errors[0].formattedMessage.startsWith(OperatorEvent.CHECK_ADAPTER_THREW.head())
 
         cleanup:
-        orchestratorLogger.detachAppender(appender)
+        logs.detach()
     }
 }

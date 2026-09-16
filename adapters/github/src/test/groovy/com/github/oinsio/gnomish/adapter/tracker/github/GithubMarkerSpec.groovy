@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
 import spock.lang.Specification
@@ -125,6 +126,7 @@ class GithubMarkerSpec extends Specification {
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
         warnings[0].formattedMessage.contains(expectedReason as String)
+        warnings[0].formattedMessage.startsWith(OperatorEvent.MARKER_COMMENT_DROPPED.head())
 
         where:
         label | body | expectedReason

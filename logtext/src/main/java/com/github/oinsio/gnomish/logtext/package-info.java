@@ -7,8 +7,9 @@
  * virtual-thread hop that logs, and {@link com.github.oinsio.gnomish.logtext.ShutdownPhase}, the
  * process-global flag that tells a shutdown-caused death apart from a spontaneous one.
  *
- * <p><strong>Neutrality contract.</strong> This package imports the JDK and the SLF4J API, and
- * nothing else — no logging backend, no other module of the factory, no Spring, no domain type.
+ * <p><strong>Neutrality contract.</strong> This package imports the JDK, the SLF4J API and the
+ * JDK-only {@code :untrustedtext} leaf its sanitizer facade delegates to, and nothing else — no
+ * logging backend, no other module of the factory, no Spring, no domain type.
  * The constraint is load-bearing rather than tidy: the sanitizer is consumed from the application
  * layer, from the adapter modules and from the sandbox backends alike, and the layering leaves
  * those no common home above the leaves, so any dependency added here would be pushed into all of

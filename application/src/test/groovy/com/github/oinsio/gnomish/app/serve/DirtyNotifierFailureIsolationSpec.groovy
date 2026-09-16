@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 

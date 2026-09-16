@@ -1,6 +1,13 @@
 // Build script for the `:domain` module (FR1, FR2, design D1 of
 // split-into-modules): the pipeline/engine domain model and its driven-port
-// interfaces. The bottom of the layering — it depends on no other project.
+// interfaces. The bottom of the layering — the only projects it may reach are
+// JDK-only leafs (FR6, design D5 of split-logtext-leaves): a leaf that declares
+// no internal module and no external library, so reaching it can bring the
+// domain no logging API, no framework, no serialization library and no
+// filesystem. Today that is exactly `:operatorevent`; `:untrustedtext` joins the
+// list with `type-untrusted-text`, which brings the first domain type that names
+// it. The edge is declared by the change that uses it, never ahead of one: an
+// unused declaration is what the dependency-analysis gate exists to reject.
 //
 // It also hosts the root-package `@DoNotMutate` PIT marker. Design D1 lists
 // `:gitobjects` as the marker's home, but four domain types carry it, and
@@ -16,6 +23,16 @@ plugins {
 description = 'Pipeline and engine domain model plus its driven-port interfaces.'
 
 dependencies {
+    // The operator-event catalog leaf (FR4, FR5, design D3/D4 of split-logtext-leaves): the
+    // four engine emitters render their `[GFnnn]` message head from the constant instead of
+    // repeating it as a literal, which is what dissolved the `OperatorEvent` <-> domain-literal
+    // declared pair. `implementation`, not `api`: no signature of this module names the enum —
+    // the head is a `String` read inside four method bodies — so the catalog sits behind the
+    // domain's surface rather than on it. It still reaches the published contract's runtime
+    // classpath, and therefore its japicmp baseline, exactly as design D6 records: the
+    // configuration changes who compiles against it, not who resolves it.
+    implementation project(':operatorevent')
+
     // Version management only (no artifacts): slf4j-api, logback and the JUnit
     // BOM behind opentest4j are all BOM-pinned in this project rather than
     // versioned in the catalog, so every module that uses them imports the same
@@ -36,9 +53,17 @@ dependencies {
     testImplementation libs.logback.classic
 }
 
-// `:domain` is the bottom layer: it depends on nothing internal at all
-// (FR2). The domain-purity gate covers the package level; this covers the
-// module level.
+// `:domain` is the bottom layer: the only internal projects it may reach are
+// JDK-only leafs — a project whose own `allowedProjects` is empty and whose
+// `dependencies` block declares no production-scope artifact (FR6, design D5 of
+// split-logtext-leaves). That definition, not this list, is the rule:
+// `DomainLeafPuritySpec` in `:bootstrap` asserts it over every entry below, so a
+// leaf that later acquires an edge fails the build here rather than quietly
+// pushing a framework into the domain, and the next leaf the domain needs is
+// admitted by adding a line here rather than by amending a spec. The
+// domain-purity gate covers the package level; this covers the module level.
 layering {
-    allowedProjects = []
+    allowedProjects = [
+        ':operatorevent',
+    ]
 }

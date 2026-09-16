@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import spock.lang.Specification
@@ -142,5 +142,28 @@ class ContainerFileChannelSpec extends Specification {
 
         and:
         Thread.interrupted()
+    }
+
+    // FR17: a path that normalizes outside both the working copy and the scratch root is refused
+    // before any docker exec is started — never sent in-box for the exec script to reject.
+    def "a path escaping both the working copy and the scratch root is refused before any docker exec"() {
+        when:
+        channel().readFile('../../etc/passwd', 10)
+
+        then:
+        thrown(PathEscapeException)
+        docker.starts.isEmpty()
+    }
+
+    // FR17: .git/** under the working copy is refused alongside root escapes (validate's second
+    // branch), so no channel write can plant a hook or rewrite repository internals in the in-box
+    // clone — kept in sync with the host adapter's ChannelPathResolver per this class's javadoc.
+    def "a path under the working copy's .git directory is refused before any docker exec"() {
+        when:
+        channel().putFile('.git/hooks/pre-commit', 'x'.getBytes(StandardCharsets.UTF_8))
+
+        then:
+        thrown(PathEscapeException)
+        docker.starts.isEmpty()
     }
 }

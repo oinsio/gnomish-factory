@@ -54,6 +54,26 @@ include 'atomicfile'
 // anything it dragged behind it would land in `application`, the adapters and
 // the sandbox backends alike, which is exactly the coupling `:atomicfile` and
 // `:subprocess` are kept empty to avoid.
+// The untrusted-text leaf (FR1, NFR-S1, design D2 of split-logtext-leaves): the one
+// character-class table naming what is hostile to a terminal and to a log reader, and the
+// primitives both exits are built from — stripping, the tail and record caps, newline
+// flattening and the console notation. Carved out of `:logtext` because text safety is not
+// logging plumbing: the domain and the published plugin contract need the primitives and
+// must not acquire the slf4j edge `:logtext` carries. Dependency-free for `:baseref`'s
+// reason rather than `:atomicfile`'s — an empty allowlist is what constructively guarantees
+// terminal-safety policy can know nothing of subprocesses, trackers or configuration
+// formats (NFR-S1).
+include 'untrustedtext'
+// The operator-event leaf (FR4, design D1 of split-logtext-leaves): the catalog of
+// `[GFnnn]` codes, one constant per production WARN/ERROR call site, that gives every
+// operator line a stable identity an alert or a grep can key on. Carved out of `:logtext`
+// beside `:untrustedtext` and kept separate from it because the two share nothing but
+// "JDK-only and reachable from the domain": the domain's four emitters need the constant so
+// they stop repeating their codes as literal message heads, and they must not acquire the
+// slf4j edge `:logtext` carries. Dependency-free for the same reason `:untrustedtext` is —
+// the domain and the published plugin contract both reach it, so any edge added here would
+// land in both.
+include 'operatorevent'
 include 'logtext'
 include 'gitobjects'
 // The base-resolution leaf (FR10, design D2 of add-base-ref-resolution): the pure

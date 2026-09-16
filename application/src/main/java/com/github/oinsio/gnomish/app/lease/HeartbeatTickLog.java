@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app.lease;
 
 import com.github.oinsio.gnomish.logtext.FailureReason;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -18,10 +18,19 @@ provider whose targets are per-check, from a check's own params),
 workspace-capability interface, and the `FindingsSanitizer` contract utility —
 and nothing from `application` or `bootstrap` internals. Domain value and
 config types referenced by these ports stay in `domain` and are exposed through
-a transitive `api` dependency.
+a transitive `api` dependency; the untrusted-text primitives the findings
+sanitizer delegates to stay in the JDK-only `untrustedtext` leaf, which this
+module declares itself and resolves alongside its own artifact, so the single
+declared dependency contract is unchanged. The published project jar graph —
+and with it the committed compatibility baseline — is `gnomish-plugin-api`,
+`domain`, the `untrustedtext` leaf this module declares, and every JDK-only
+leaf `domain` reaches (today `operatorevent`);
+a change to that set is re-baselined with a version bump even when no
+signature moves.
 <!-- implements FR4 of split-into-modules -->
 <!-- implements FR5, FR12, FR15, FR17 of add-plugin-architecture -->
 <!-- implements FR1, FR2 of close-plugin-api-compilability-gap -->
+<!-- implements FR3, FR8 of split-logtext-leaves -->
 
 #### Scenario: api artifact excludes application and bootstrap internals
 - **WHEN** dependency-analysis inspects the `gnomish-plugin-api` artifact
@@ -32,15 +41,14 @@ a transitive `api` dependency.
 
 #### Scenario: A third party compiles against a single declared dependency
 - **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
-  only declared dependency (the `domain` types the ports reference arrive
-  transitively)
+  only declared dependency (the `domain` and `untrustedtext` types the ports
+  and the sanitizer reference arrive transitively, as does the `operatorevent`
+  jar the domain's own emitters use)
 - **THEN** it can implement any exposed port and its SPI factory — tracker or
   check — without needing `application` or `bootstrap`
 - **AND** an external-check implementation can read the attempt-commit sha of
   the round under verification through `AttemptCommitWorkspace` and sanitize
   its findings through `FindingsSanitizer` using only that dependency
-<!-- implements UX3 of split-into-modules -->
-<!-- implements G1, FR1, FR2, FR4 of close-plugin-api-compilability-gap -->
 
 #### Scenario: The first-party vendor bundle satisfies the same constraint
 - **WHEN** the production dependency declarations of the github vendor bundle
@@ -49,11 +57,6 @@ a transitive `api` dependency.
 - **THEN** no dependency on `application` (or `bootstrap`) appears — the
   bundle compiles against the published contract exactly as a third-party
   bundle would
-- **AND** its own specs name no `application` type either: they reach the
-  attempt-commit workspace through the shared test fixture, which hands back
-  the api interface, so `:application` stays an unreferenced transitive of
-  `:test-fixtures` on the test classpath
-<!-- implements FR3, M1 of close-plugin-api-compilability-gap -->
 
 ### Requirement: Independent semantic versioning of the api
 `gnomish-plugin-api` SHALL be independently versioned by semver; the semver
@@ -119,10 +122,14 @@ was recorded SHALL fail with a protocol error, as today.
 
 ### Requirement: Findings sanitization available to every plugin
 The api SHALL provide the findings-sanitization utility (control-character /
-ANSI strip and tail cap) so any check plugin can apply the same
+ANSI strip, tail cap, and the log-bound `forLog` composition of the two) so
+any check plugin can apply the same
 pre-publication hygiene as first-party adapters; first-party call sites SHALL
-keep enforcing it after the relocation.
+keep enforcing it after the relocation. The utility is a facade over the
+untrusted-text leaf's primitives: it holds no character-class table of its
+own, so it cannot drift from the log-line sanitizer.
 <!-- implements FR2, NFR-S1 of close-plugin-api-compilability-gap -->
+<!-- implements FR3 of split-logtext-leaves -->
 
 #### Scenario: A hostile CI log is neutralized with api-only means
 - **WHEN** a check implementation depending only on `gnomish-plugin-api`
@@ -135,6 +142,12 @@ keep enforcing it after the relocation.
   relocation
 - **THEN** they pass unchanged in substance (imports aside): strip and cap
   behavior is identical
+
+#### Scenario: The facade holds no table of its own
+- **WHEN** the findings sanitizer's source is scanned for escape-character or
+  control-class literals
+- **THEN** none is found — every primitive resolves to the untrusted-text
+  leaf
 
 ### Requirement: Sample plugin proves the check authoring path
 The stand-in third-party module SHALL include an external-check SPI factory

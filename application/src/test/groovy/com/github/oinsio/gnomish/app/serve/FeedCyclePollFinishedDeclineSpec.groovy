@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.serve
 
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -14,7 +13,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
-import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -40,11 +38,6 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, finished, 'fixture title')
     }
 
-    private static RemoteOutageGate closedGate() {
-        new RemoteOutageGate(
-                BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), Duration.ofSeconds(1), Duration.ofMinutes(1))
-    }
-
     private static FeedCycle cycle(Tracker tracker, int wipLimit = 2) {
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
@@ -53,7 +46,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def resilience = new FeedResilience(
                 outageRetry,
                 new FinishedDecline(new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5))),
-                closedGate())
+                RemoteOutageGateFixtures.closedGate())
         new FeedCycle(
                 new FeedTracker(tracker, INSTANCE), new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
                 new FeedSelection(BASE, CAP, wipLimit, new Random(0)), new FeedStateLogger(), resilience)
@@ -74,7 +67,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def poll = cycle(tracker).poll(NOW)
 
         then:
-        declined == [new TaskRef('github:o/r#1')]
+        declined.toList() == [new TaskRef('github:o/r#1')]
         poll.candidates().isEmpty()
     }
 
@@ -105,7 +98,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
 
         then:
         noExceptionThrown()
-        attempted == [
+        attempted.toList() == [
             new TaskRef('github:o/r#1'),
             new TaskRef('github:o/r#2')
         ]
@@ -137,7 +130,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def poll2 = feedCycle.poll(NOW)
 
         then: 'both polls attempted the decline, neither propagated the failure, and nothing was claimed'
-        attempts == [
+        attempts.toList() == [
             new TaskRef('github:o/r#1'),
             new TaskRef('github:o/r#1')
         ]
@@ -169,7 +162,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def poll = cycle(tracker, 1).poll(NOW)
 
         then: 'the finished entry was declined and excluded, and the fresh entry alone made it through as a candidate'
-        declined == [
+        declined.toList() == [
             new TaskRef('github:o/r#finished')
         ]
         poll.openFrontCount() == 0

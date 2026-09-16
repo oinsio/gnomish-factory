@@ -27,6 +27,14 @@ plugins {
 description = 'Logging support: untrusted-text sanitization, repeat suppression, MDC propagation.'
 
 dependencies {
+    // The untrusted-text owner `LogText` is a facade over (FR2, FR7 of split-logtext-leaves):
+    // the edge is what dissolved the `LogText` <-> `FindingsSanitizer` declared pair — one table,
+    // one owner, two facades. `implementation`, not `api`: every one of the facade's signatures is
+    // `String`, so no leaf type reaches a consumer's compile classpath through this module; a
+    // consumer that names `TextSafety` itself declares the leaf directly, as `:bootstrap`'s
+    // owner spec does.
+    implementation project(':untrustedtext')
+
     // Version management only (no artifacts): slf4j-api and logback are
     // BOM-pinned in this project rather than versioned in the catalog, so every
     // module that uses them imports the same platform (design D3 of
@@ -46,9 +54,11 @@ dependencies {
     testImplementation libs.logback.classic
 }
 
-// `:logtext` reaches no other project at all — the same gate `:domain`,
-// `:subprocess` and `:atomicfile` carry, and for the same reason: a shared leaf
-// that acquired an internal edge would push it into every layer above it.
+// `:logtext` reaches exactly one project: the `:untrustedtext` leaf its sanitizer
+// facade delegates to (FR7 of split-logtext-leaves). The rule the empty allowlist
+// stated still holds — a shared leaf that acquired an internal edge would push it into
+// every layer above it — which is why the one edge permitted here is to a leaf that is
+// itself empty, and why `:untrustedtext` may never acquire one of its own.
 layering {
-    allowedProjects = []
+    allowedProjects = [':untrustedtext']
 }

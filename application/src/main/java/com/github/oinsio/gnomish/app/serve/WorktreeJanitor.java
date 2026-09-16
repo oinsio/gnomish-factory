@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -159,7 +159,7 @@ public final class WorktreeJanitor {
         }
         // FR8/UX2: the loop has no task scope; the key IS the sanitized task id, and the
         // disposal's own lines inherit this one.
-        try (var taskScope = MdcAwareThread.taskScope(key)) {
+        try (var ignored = MdcAwareThread.taskScope(key)) {
             log.info("worktree janitor: disposing aged environment {} (age {})", key, age);
             disposal.dispose(key);
         }
@@ -173,7 +173,7 @@ public final class WorktreeJanitor {
             } catch (InvalidTaskIdException e) {
                 // A held ref that already survived worktree creation is expected to sanitize
                 // cleanly; ignored defensively rather than failing the whole tick over one ref.
-                try (var taskScope = MdcAwareThread.taskScope(ref.id())) {
+                try (var ignored = MdcAwareThread.taskScope(ref.id())) {
                     log.warn(
                             OperatorEvent.WORKTREE_JANITOR_REF_UNSANITARY.head()
                                     + "worktree janitor: held ref {} did not sanitize; skipping",

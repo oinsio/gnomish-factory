@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;

@@ -1,16 +1,14 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.TrackerTaskFixtures
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -31,10 +29,6 @@ class FinishEffectSpec extends Specification {
 
     Tracker tracker = Mock(Tracker)
 
-    private static TrackerTask task(TrackerTaskState state, boolean finished = false) {
-        new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none(), finished)
-    }
-
     private FinishEffect effect(Runnable cleanup) {
         new FinishEffect(tracker, REF, INSTANCE, 'all stages passed', VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered(cleanup), LoggerFactory.getLogger(FinishEffectSpec))
@@ -51,7 +45,7 @@ class FinishEffectSpec extends Specification {
                 probed = true
                 throw new RuntimeException('tracker unreachable')
             }
-            task(new TrackerTaskState.Working(INSTANCE.value()))
+            TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         }
 
         and:
@@ -81,7 +75,7 @@ class FinishEffectSpec extends Specification {
     def "a finish the probe finds already landed is not written again"() {
         given:
         def cleanupRuns = 0
-        tracker.fetchTask(REF) >> task(new TrackerTaskState.Finished(), true)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Finished(), true)
 
         when:
         effect({ cleanupRuns++ }).drive()
@@ -97,7 +91,7 @@ class FinishEffectSpec extends Specification {
     def "a claim held by another instance skips both the finish and its destructive tail"() {
         given:
         def cleanupRuns = 0
-        tracker.fetchTask(REF) >> task(new TrackerTaskState.Working('someone-else'))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working('someone-else'))
 
         and:
         def logs = LogCaptureSupport.attach(FinishEffectSpec)
@@ -127,7 +121,7 @@ class FinishEffectSpec extends Specification {
     def "a finish the retry bound never confirms leaves a coded ERROR and no destructive tail"() {
         given:
         def cleanupRuns = 0
-        tracker.fetchTask(REF) >> task(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, 'all stages passed') >> {
             throw new TrackerUnavailableException('tracker down')
         }

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
 import com.github.oinsio.gnomish.subprocess.Supervision;
 import com.github.oinsio.gnomish.subprocess.Termination;
@@ -32,6 +32,11 @@ import org.slf4j.LoggerFactory;
  * factory filesystem, so an in-box symlink can at worst redirect a read within
  * the box the gnome already controls, and reads run as the in-box task user, not
  * root (D16).
+ *
+ * <p>Kept in sync with {@link ChannelPathResolver}: both refuse a path that
+ * normalizes outside the working copy and the scratch root, and both refuse
+ * {@code .git/**} under the working copy, even though this class's refusal is
+ * lexical-only (no symlink resolution) where the host twin resolves symlinks.
  *
  * <p>Both exec pipes are drained on virtual threads of their own, concurrently
  * with the wait ({@link ExecPipeDrain}, design D2): reading either to the end on

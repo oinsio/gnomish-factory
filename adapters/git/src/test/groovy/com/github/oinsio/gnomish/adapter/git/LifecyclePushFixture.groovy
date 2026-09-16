@@ -1,11 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 
 /**
  * The bare-origin clone, task branch, and log capture the lifecycle-decorator specs of
@@ -57,16 +56,6 @@ trait LifecyclePushFixture implements BareGitRepoFixture {
 
     /** The {@code LifecyclePush} log events emitted while {@code emit} runs. */
     static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(LifecyclePush)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        appender.list
+        LogCaptureSupport.capture(LifecyclePush, Level.DEBUG, emit)
     }
 }

@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
@@ -18,7 +17,7 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -112,12 +111,6 @@ tracker:
             System.err = originalErr
         }
         return captured.toString('UTF-8')
-    }
-
-    // Kept in sync with com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory:
-    // this is the same "fixed tracker, expandRef unsupported" fixture other specs use directly.
-    private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        new FixedTrackerAdapterFactory({ t })
     }
 
     private static TrackerAdapterFactory factoryThrowingOnCreate(RuntimeException failure) {
@@ -257,7 +250,7 @@ tracker:
     def "a reachable tracker binding proceeds to assemble and start the scheduler"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -293,7 +286,7 @@ tracker:
     def "wires the real cross-slot heartbeat and claim-loss flag into the assembled slot runner (FR13)"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -321,7 +314,7 @@ tracker:
     def "the observability taskOutcomeLedgerWriter is attached to the assembled slot runner (FR11)"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -341,7 +334,7 @@ tracker:
     def "--drain drives the drain path instead of starter.start, claiming nothing on an empty queue"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -383,7 +376,7 @@ tracker:
 
         and: 'a config with a tiny worktree-age threshold, so the immediate startup tick disposes it'
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def command = new ServeCommand(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 TaskGitFixture.real(),
@@ -429,7 +422,7 @@ tracker:
         Tracker fakeTracker = [
             listOpen: { listOpenCalls.incrementAndGet(); [] },
         ] as Tracker
-        def factory = factoryReturning(fakeTracker)
+        def factory = fakeFactory(fakeTracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -449,7 +442,7 @@ tracker:
     def "--slots overrides ServeProperties#slots() without failing SlotLedger construction"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def factory = factoryReturning(tracker)
+        def factory = fakeFactory(tracker)
         def starter = new CapturingStarter()
         def command = newCommand([github: factory], starter)
 
@@ -469,7 +462,7 @@ tracker:
     def "the serve start anchor names the resolved configuration, including a --slots override"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
-        def command = newCommand([github: factoryReturning(tracker)], new CapturingStarter())
+        def command = newCommand([github: fakeFactory(tracker)], new CapturingStarter())
         def capture = LogCaptureSupport.attach(AnchorLog)
 
         when:

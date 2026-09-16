@@ -2,9 +2,9 @@ package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;

@@ -125,10 +125,12 @@ Every production WARN/ERROR message SHALL begin with a stable catalog code
 (`[GFnnn]`) owned by a single operator-event catalog: one code per call site,
 never reused, additive-only. The code — not the wording — is the operator
 contract; prose may change freely without breaking alerts, greps, or specs
-keyed on the code. Emitters that cannot reach the catalog module carry the
-literal code head, pinned to the catalog by a round-trip spec. INFO/DEBUG
-lines carry no codes.
+keyed on the code. Every emitter, the domain's included, SHALL render the head
+from the catalog constant; no production source carries a literal code head,
+and the log-contract gate SHALL fail the build on one — the catalog constant's
+rendering is the only accepted form. INFO/DEBUG lines carry no codes.
 <!-- implements FR14 of harden-logging-observability -->
+<!-- implements FR4, FR5, FR10 of split-logtext-leaves -->
 
 #### Scenario: Wording drifts, contract holds
 - **WHEN** an operator line's prose is reworded without touching its code
@@ -139,6 +141,14 @@ lines carry no codes.
 - **WHEN** a contributor adds a WARN line reusing an existing catalog code, or
   omits the code entirely
 - **THEN** the build fails naming the site and the collision or omission
+
+#### Scenario: A literal head fails the build
+- **WHEN** a production source in any module spells a `[GFnnn]` head as a
+  string literal instead of rendering the catalog constant — in a log call, in
+  a constant the call prepends, or in any other string
+- **THEN** the log-contract gate fails naming the site — the domain's four
+  emitters included, since they now reach the catalog — while the same call
+  rendering `OperatorEvent.<CONSTANT>.head()` passes
 
 ### Requirement: Every operator line is pinned by a spec
 Every production WARN/ERROR call site SHALL have at least one spec asserting
@@ -181,12 +191,13 @@ lines only through a sanitizing choke point that strips control and ANSI
 sequences, flattens newlines so one event renders as one log line, and caps
 length. The choke point and the plugin-boundary findings sanitizer — a
 distinct control at a distinct trust boundary, which deliberately preserves
-line structure — SHALL keep their shared character-stripping vocabulary (the
-ANSI/control table and cap semantics) in step as a declared pair verified by
-an executable equivalence spec over a common adversarial corpus. The findings
-sanitizer SHALL NOT prepare log-line text outside the findings funnel: a log
-line carrying untrusted text uses the logging choke point even where the same
-raw value also flows into findings — the judge-verdict extraction warning
+line structure — SHALL share one character-class table and one set of
+primitives owned by the untrusted-text leaf; each is a facade over that owner,
+and a single-table spec SHALL assert that both facades and the owner compute
+the same function over a common adversarial corpus. The findings sanitizer
+SHALL NOT prepare log-line text outside the findings funnel: a log line
+carrying untrusted text uses the logging choke point even where the same raw
+value also flows into findings — the judge-verdict extraction warning
 included. The mechanical gate that enforces the choke point SHALL catch an
 untrusted value that reaches a log call through a local variable, and a
 findings-sanitizer call inside a log argument outside the findings funnel
@@ -209,6 +220,7 @@ path and the MDC path.
 <!-- implements FR6, NFR-S1 of harden-logging-observability -->
 <!-- implements FR16 of add-subprocess-access-log -->
 <!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
+<!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is
@@ -262,6 +274,12 @@ path and the MDC path.
   argument, and as an MDC value
 - **THEN** the captured bytes contain no ESC, no C1 byte, no bidi override, no
   bare line break inside a record, and no record longer than the cap
+
+#### Scenario: One table serves both facades
+- **WHEN** the adversarial corpus is passed through the log-line sanitizer's
+  strip, the findings sanitizer's strip, and the untrusted-text leaf's strip
+- **THEN** the three outputs are identical for every corpus entry, and neither
+  facade holds a character-class literal of its own
 
 ### Requirement: Exceptions keep their stack traces
 Every log call site that reports an exception SHALL pass the throwable as the

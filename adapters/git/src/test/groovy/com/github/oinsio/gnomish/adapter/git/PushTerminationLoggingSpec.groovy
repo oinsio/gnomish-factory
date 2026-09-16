@@ -1,13 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -33,7 +30,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
     def "FR8, UX3: a timed-out push names the timeout instead of borrowing a rejection's words"() {
         when:
         def runner = timedOutRunner()
-        def events = capture(BestEffortPush) {
+        def events = LogCaptureSupport.capture(BestEffortPush, Level.INFO) {
             new BestEffortPush(runner).pushBestEffort(
             TASK_ID, 'implement', 1, tempDir, BRANCH, readyBoundary(runner), 'HEAD~1')
         }
@@ -50,7 +47,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         def push = new LifecyclePush(interruptibleRunner())
 
         when:
-        def events = capture(LifecyclePush) {
+        def events = LogCaptureSupport.capture(LifecyclePush, Level.INFO) {
             def runner = new Thread({
                 push.pushAfter(TASK_ID, 'park', tempDir, BRANCH)
             })
@@ -70,7 +67,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
 
     def "FR8, UX3: the revocation push distinguishes the same three outcomes"() {
         when:
-        def events = capture(BranchPush) {
+        def events = LogCaptureSupport.capture(BranchPush, Level.INFO) {
             new BranchPush(timedOutRunner()).pushBestEffort(tempDir, BRANCH)
         }
 
@@ -86,7 +83,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
     // NFR-O1: only the runner knows both numbers, so the WARN that carries them is the runner's.
     def "NFR-O1: the runner names the command class, the elapsed time and the configured deadline"() {
         when:
-        def events = capture(GitProcessRunner) {
+        def events = LogCaptureSupport.capture(GitProcessRunner, Level.INFO) {
             timedOutRunner().run(tempDir, 'push', 'origin', 'HEAD')
         }
 
@@ -119,19 +116,5 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
     private RoundBoundaryCheck readyBoundary(GitProcessRunner runner) {
         headBranch(tempDir).toFile().text = BRANCH
         new RoundBoundaryCheck(runner, tempDir, BRANCH)
-    }
-
-    private static List<ILoggingEvent> capture(Class<?> subject, Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(subject)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        appender.list
     }
 }

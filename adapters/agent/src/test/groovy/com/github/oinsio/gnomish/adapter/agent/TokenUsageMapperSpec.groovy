@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -21,7 +22,7 @@ class TokenUsageMapperSpec extends Specification {
     // FR5, D4: modelUsage present, single model — preferred path, matches modelUsage not flat usage
     def "maps the plain-round fixture's modelUsage to a single-entry tokensByModel"() {
         given: 'the plain-round fixture parsed into events'
-        def events = parser.parse(readerOf('plain-round'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
         def resultEvent = events.collect {
             it.event()
         }.find {
@@ -43,7 +44,7 @@ class TokenUsageMapperSpec extends Specification {
     // FR5, D4: modelUsage present with TWO model keys — proves modelUsage (not the flat usage sum) is authoritative
     def "maps the subagent-round fixture's modelUsage to a two-entry tokensByModel, not the flat usage sum"() {
         given: 'the subagent-round fixture parsed into events'
-        def events = parser.parse(readerOf('subagent-round'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
         def resultEvent = events.collect {
             it.event()
         }.find {
@@ -68,7 +69,7 @@ class TokenUsageMapperSpec extends Specification {
     // FR5, D4: another single-model modelUsage fixture
     def "maps the judge-verdict-pass fixture's modelUsage to a single-entry tokensByModel"() {
         given: 'the judge-verdict-pass fixture parsed into events'
-        def events = parser.parse(readerOf('judge-verdict-pass'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('judge-verdict-pass'))
         def resultEvent = events.collect {
             it.event()
         }.find {
@@ -227,11 +228,5 @@ class TokenUsageMapperSpec extends Specification {
 
         then: 'the fallback degrades to empty rather than a partially-filled TokenUsage, no exception'
         tokensByModel == [:]
-    }
-
-    private static BufferedReader readerOf(String scenario) {
-        def resource = TokenUsageMapperSpec.getResource("/fake-agent/scenarios/${scenario}/stdout.jsonl")
-        assert resource != null: "fixture not found for scenario '${scenario}'"
-        new BufferedReader(new InputStreamReader(resource.openStream(), 'UTF-8'))
     }
 }

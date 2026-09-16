@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;

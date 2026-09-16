@@ -60,6 +60,11 @@ dependencies {
     // party could build this bundle" claim below is about `:application` and the
     // layers above it, which are still absent.
     api project(':logtext')
+    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
+    // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
+    // constant. `implementation`, not `api`: the enum is named only inside log calls,
+    // never in a signature this module exports.
+    implementation project(':operatorevent')
 
     implementation libs.slf4j.api
 
@@ -125,5 +130,18 @@ pitest {
 // it. This list IS the "a third party could build this bundle" claim, checked by
 // the build rather than asserted in prose.
 layering {
-    allowedProjects = [':domain', ':gnomish-plugin-api', ':logtext']
+    allowedProjects = [
+        ':domain',
+        ':gnomish-plugin-api',
+        ':logtext',
+        // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
+        // declared directly above, because this module's own log sites name `OperatorEvent`;
+        // also reached through `:domain`, whose engine emitters take their head from it.
+        ':operatorevent',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
+        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
+        // it; the layering gate walks the transitive graph, so the reach is listed where
+        // it arrives.
+        ':untrustedtext',
+    ]
 }

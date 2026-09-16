@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,12 +18,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR1, FR3, NFR-O1 of fix-oversized-adapters.
  */
-final class AgentProgressEmitter {
+record AgentProgressEmitter(AgentProgressListener progressListener, TokenUsageMapper tokenUsageMapper) {
 
     private static final Logger log = LoggerFactory.getLogger(AgentProgressEmitter.class);
-
-    private final AgentProgressListener progressListener;
-    private final TokenUsageMapper tokenUsageMapper;
 
     /**
      * @param progressListener the live-progress subscriber (design D10); never
@@ -32,10 +29,7 @@ final class AgentProgressEmitter {
      * @param tokenUsageMapper derives {@code tokensByModel} for {@code
      *     RoundFinished} from an {@link AgentEvent.ResultEvent}; never null
      */
-    AgentProgressEmitter(AgentProgressListener progressListener, TokenUsageMapper tokenUsageMapper) {
-        this.progressListener = progressListener;
-        this.tokenUsageMapper = tokenUsageMapper;
-    }
+    AgentProgressEmitter {}
 
     /**
      * Dispatches the {@link AgentProgressEvent}(s) implied by {@code event}

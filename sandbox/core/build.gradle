@@ -51,5 +51,12 @@ dependencies {
 // must never reach `:application`, an adapter, a sandbox backend, or the
 // composition root.
 layering {
-    allowedProjects = [':domain']
+    allowedProjects = [
+        ':domain',
+        // The operator-event catalog leaf (FR11, design D9 of split-logtext-leaves): transitive
+        // via `:domain`, whose engine emitters take their `[GFnnn]` head from it. No production
+        // source in this module names it; the layering gate walks the transitive graph, so the
+        // reach is listed where it arrives.
+        ':operatorevent',
+    ]
 }
