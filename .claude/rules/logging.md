@@ -55,7 +55,9 @@ may be rewritten at any time. Rules:
   reaches the catalog — `:domain` included, since `split-logtext-leaves` moved it
   to the JDK-only `:operatorevent` leaf — so `OperatorEvent.X.head()` is the only
   accepted form, and `LogContractGateSpec` fails the build on a literal at any
-  level, INFO included.
+  level, INFO included — and anywhere in a production source, not only inside a
+  log call: a head parked in a constant or in a message built one statement
+  earlier is the same copy.
 
 `LogContractGateSpec` fails the build on an uncoded site, a duplicated code, a
 code no test source names, or a literal head; exempt in place with
@@ -236,7 +238,7 @@ is the subject of the assertion.
 
 - **Static** (`LogContractGateSpec`, `:bootstrap`): every WARN/ERROR site
   carries a code, every code belongs to one site, every code is named by some
-  test source, and no site spells its head as a literal. In-place escape hatch
+  test source, and no production source spells a head as a literal. In-place escape hatch
   for the first three: `log-contract-exempt: <reason>`.
 - **Console owner** (`ConsoleOwnerGateSpec`, `:bootstrap`): a source scan
   failing the build on `System.out.print*` / `System.err.print*` in any

@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * <p>Package-private and reentrant: it holds only its immutable injected collaborators
  * and no mutable state, so one instance drives concurrent verifications safely (NFR-R1).
  *
- * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine.
+ * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves.
  */
 final class VerifyOrchestrator {
 

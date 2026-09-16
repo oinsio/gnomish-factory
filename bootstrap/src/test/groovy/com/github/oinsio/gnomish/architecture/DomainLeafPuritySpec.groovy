@@ -92,4 +92,27 @@ class DomainLeafPuritySpec extends Specification {
             "implementation project(':untrustedtext')"
         ]
     }
+
+    // D5: the block the parser reads is the module's own, not a `buildscript` block's inner one —
+    // a leaf that locks its plugin classpath (as `:bootstrap` does) must not thereby go unread
+    def "a seeded leaf whose buildscript block has its own dependencies is still read"() {
+        given: 'a leaf build script with a buildscript block preceding the module dependencies'
+        def seeded = '''
+            buildscript {
+                dependencies {
+                }
+            }
+            dependencies {
+                implementation project(':logtext')
+            }
+            layering {
+                allowedProjects = []
+            }
+        '''.stripIndent()
+
+        expect: 'the external half reports the module declaration, not the empty buildscript block'
+        ModuleBuildFile.productionDependencies(seeded) == [
+            "implementation project(':logtext')"
+        ] as Set
+    }
 }

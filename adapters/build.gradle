@@ -127,9 +127,9 @@ layering {
         // reads (design D9/D11 of bound-subprocess-commands).
         ':subprocess',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
-        // `:logtext`, whose `LogText` is a facade over it, and via `:domain`, which reaches
-        // the leaf for the same primitives. No source in this module names it; the layering
-        // gate walks the transitive graph, so the reach is listed where it arrives.
+        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
+        // it; the layering gate walks the transitive graph, so the reach is listed where
+        // it arrives.
         ':untrustedtext',
     ]
 }

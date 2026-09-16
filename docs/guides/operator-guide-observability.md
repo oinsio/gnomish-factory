@@ -46,14 +46,14 @@ state transitions (FR1). Six sections plus two self-description scalars —
 see [`snapshot-v1.reference.json`](../../application/src/test/resources/snapshot-v1.reference.json)
 for the exact shape:
 
-| Section | Answers | Key fields |
-|---|---|---|
-| `instance` | "which process wrote this?" | `instanceId` (full id), `host`, `factoryVersion` |
-| `lifecycle` | "is the daemon up?" | `state` (`running\|draining\|stopping\|stopped`), `reason` |
-| `feed` | "is it claiming work?" | `state` (`filling\|idleEmpty\|idleBlocked\|full`), `since`, `lastPollAt`, `openFronts`, `wipLimit` |
-| `slots` | "what is it working right now?" | `capacity`, `entries[]` (`taskId`, `stage`, `attempt`, `since`) |
-| `vitals` | "are the daemon's own threads alive?" | `heartbeat` (`state`, `lastTickAt`, `heldClaims`), `reaper` (`lastRunAt`, `restartCount`, `intervalSeconds`), `janitor` (`lastRunAt`), `sweep` (see below, or `null`) |
-| `tracker` | "is the tracker reachable?" | `lastSuccessAt`, `consecutiveFailures` |
+| Section     | Answers                               | Key fields                                                                                                                                                            |
+|-------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `instance`  | "which process wrote this?"           | `instanceId` (full id), `host`, `factoryVersion`                                                                                                                      |
+| `lifecycle` | "is the daemon up?"                   | `state` (`running\|draining\|stopping\|stopped`), `reason`                                                                                                            |
+| `feed`      | "is it claiming work?"                | `state` (`filling\|idleEmpty\|idleBlocked\|full`), `since`, `lastPollAt`, `openFronts`, `wipLimit`                                                                    |
+| `slots`     | "what is it working right now?"       | `capacity`, `entries[]` (`taskId`, `stage`, `attempt`, `since`)                                                                                                       |
+| `vitals`    | "are the daemon's own threads alive?" | `heartbeat` (`state`, `lastTickAt`, `heldClaims`), `reaper` (`lastRunAt`, `restartCount`, `intervalSeconds`), `janitor` (`lastRunAt`), `sweep` (see below, or `null`) |
+| `tracker`   | "is the tracker reachable?"           | `lastSuccessAt`, `consecutiveFailures`                                                                                                                                |
 
 `vitals.sweep` is the sandbox-lifecycle sweep's entry: `lastTickAt`,
 `intervalSeconds` (the sweep's own cadence, the staleness yardstick for
@@ -109,13 +109,13 @@ them (UX2). See
 for exact shapes; every line carries `version`, a `type` discriminator, and
 the same `instance` block as the snapshot.
 
-| `type` | Written when | Carries |
-|---|---|---|
-| `taskOutcome` | a slot reaches a terminal result (`delivered\|awaitingHuman\|aborted\|revoked`) | `taskId`, `outcome`, `parkReason` (awaitingHuman only), `stage`, `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`, `tokensByModel` |
-| `lifecycle` | daemon start/stop | `event` (`started\|stopped`), `reason` |
-| `runSummary` | drain-run completion only | `counts` per outcome, summed `tokensByModel`, `wallMillis` |
-| `sweepAction` | the sandbox-lifecycle sweep stops or disposes one object | `objectName`, `role`, `mode` (`tracked\|manual`), `taskKey`, `category` (`stoppedOrphan\|disposedAged\|disposedReconstructible`), `reason`, `ageSeconds` |
-| `sweepTick` | every completed sweep tick | `counts` per verdict category, including the untouched ones |
+| `type`        | Written when                                                                    | Carries                                                                                                                                                  |
+|---------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `taskOutcome` | a slot reaches a terminal result (`delivered\|awaitingHuman\|aborted\|revoked`) | `taskId`, `outcome`, `parkReason` (awaitingHuman only), `stage`, `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`, `tokensByModel`                |
+| `lifecycle`   | daemon start/stop                                                               | `event` (`started\|stopped`), `reason`                                                                                                                   |
+| `runSummary`  | drain-run completion only                                                       | `counts` per outcome, summed `tokensByModel`, `wallMillis`                                                                                               |
+| `sweepAction` | the sandbox-lifecycle sweep stops or disposes one object                        | `objectName`, `role`, `mode` (`tracked\|manual`), `taskKey`, `category` (`stoppedOrphan\|disposedAged\|disposedReconstructible`), `reason`, `ageSeconds` |
+| `sweepTick`   | every completed sweep tick                                                      | `counts` per verdict category, including the untouched ones                                                                                              |
 
 Objects the sweep left untouched are never itemized — they are counted on the
 tick's `sweepTick` line only, so a day of quiet ticks costs one line per tick
@@ -157,10 +157,10 @@ Rolling keeps ~7 days and at most 100MB in total; older segments are deleted
 oldest-first. Two environment variables move or change it for one run, with
 no rebuild:
 
-| Variable            | Default             | Meaning                                                                                                                       |
-|---------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `GNOMISH_LOG_LEVEL` | `INFO`              | root level for the file and the consoles. A value Logback does not recognize resolves to `DEBUG` — a typo makes the run louder, never quieter. Spring's `logging.level.<logger>` still applies on top for finer grain |
-| `GNOMISH_LOG_DIR`   | `~/.gnomish/logs`   | log directory. Exists for test isolation; pointing it inside a workspace or a git tree gives up the "never in a git tree" guarantee |
+| Variable            | Default           | Meaning                                                                                                                                                                                                               |
+|---------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `GNOMISH_LOG_LEVEL` | `INFO`            | root level for the file and the consoles. A value Logback does not recognize resolves to `DEBUG` — a typo makes the run louder, never quieter. Spring's `logging.level.<logger>` still applies on top for finer grain |
+| `GNOMISH_LOG_DIR`   | `~/.gnomish/logs` | log directory. Exists for test isolation; pointing it inside a workspace or a git tree gives up the "never in a git tree" guarantee                                                                                   |
 
 **What reaches the terminal.** The console carries `WARN` and above only —
 `ERROR` goes to both stdout and stderr, `WARN` to stdout. Everything from
@@ -202,8 +202,8 @@ grep -o '\[GF[0-9]\{3\}\]' ~/.gnomish/logs/gnomish.log | sort | uniq -c | sort -
 
 `INFO` and `DEBUG` lines never carry a code — extending the catalog downward
 would make every diagnostic line a versioned interface. The full code list is
-the `OperatorEvent` enum in `:logtext`; codes worth knowing by heart are few,
-and the second command above is the practical way to find the ones a given
+the `OperatorEvent` enum in `:operatorevent`; codes worth knowing by heart are
+few, and the second command above is the practical way to find the ones a given
 incident produced.
 
 **Do not build alerting on the log.** It rolls, it can be truncated by a

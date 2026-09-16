@@ -26,10 +26,11 @@ imports-only commit by design (design — Risks).
 - [x] 1.3 Turn `LogText` into a facade: every public method delegates one-to-one to
       `TextSafety` (`forLog` keeps composing strip → capTail → flatten); the `Kept in
       sync with FindingsSanitizer` javadoc paragraph is deleted; `logtext/build.gradle`
-      gains `api project(':untrustedtext')` and `allowedProjects = [':untrustedtext']`
-      (FR2, FR7). Verify: `:logtext:check` green (PIT posture per design — Risks,
-      recorded in the build file if `excludedClasses` is used); no call site outside
-      `:logtext` changed.
+      gains `implementation project(':untrustedtext')` — every facade signature is a
+      `String`, so the edge is not part of `:logtext`'s own API — and
+      `allowedProjects = [':untrustedtext']` (FR2, FR7). Verify: `:logtext:check` green
+      (PIT posture per design — Risks, recorded in the build file if `excludedClasses`
+      is used); no call site outside `:logtext` changed.
 - [x] 1.4 Transitive allowlists for `:untrustedtext` (FR11, design D9): add
       `':untrustedtext'` with a `// transitive via :logtext` comment to the allowlists of
       `:application`, `:adapters`, `:adapters:agent`, `:adapters:git`, `:adapters:github`,
@@ -106,8 +107,8 @@ imports-only commit by design (design — Risks).
       green; `DomainLoggerAllowlistSpec` unchanged and green; `grep -rn "Kept in sync"
       domain/src/main` empty.
 - [x] 4.4 TDD (red first): the literal-head rule in `LogContractGateSpec` (FR10, design
-      D4) — a production log call whose format string starts with a `"[GF` literal fails
-      the gate naming the site; the existing feature "a coded site is not flagged, in
+      D4) — a `"[GF` literal anywhere in a production source, inside a log call or not,
+      fails the gate naming the site; the existing feature "a coded site is not flagged, in
       either the catalog or the literal form" is inverted: the catalog form stays
       accepted, the literal form becomes the seeded violation. Every level is judged, not
       only the operator ones — an INFO line carries no code at all, so a literal head

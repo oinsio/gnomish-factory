@@ -133,8 +133,9 @@ rendering is the only accepted form. INFO/DEBUG lines carry no codes.
 - **THEN** the build fails naming the site and the collision or omission
 
 #### Scenario: A literal head fails the build
-- **WHEN** a production log call in any module spells a `[GFnnn]` head as a
-  string literal instead of rendering the catalog constant
+- **WHEN** a production source in any module spells a `[GFnnn]` head as a
+  string literal instead of rendering the catalog constant — in a log call, in
+  a constant the call prepends, or in any other string
 - **THEN** the log-contract gate fails naming the site — the domain's four
   emitters included, since they now reach the catalog — while the same call
   rendering `OperatorEvent.<CONSTANT>.head()` passes

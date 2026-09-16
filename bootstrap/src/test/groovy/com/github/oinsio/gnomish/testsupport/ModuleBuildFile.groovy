@@ -37,7 +37,7 @@ class ModuleBuildFile {
      * with no {@code dependencies} block declares nothing.
      */
     static Set<String> productionDependencies(String code) {
-        blockBody(code, 'dependencies {')
+        blockBody(code, 'dependencies')
                 .readLines()
                 .collect { it.trim() }
                 .findAll { !it.isEmpty() }
@@ -47,7 +47,7 @@ class ModuleBuildFile {
 
     /** The project paths a build file's {@code layering { allowedProjects }} names, possibly none. */
     static Set<String> allowedProjects(String code) {
-        def layering = blockBody(code, 'layering {')
+        def layering = blockBody(code, 'layering')
         def start = layering.indexOf('allowedProjects')
         if (start < 0) {
             return [] as Set
@@ -63,13 +63,40 @@ class ModuleBuildFile {
         found
     }
 
-    /** The text between the braces of a named block, or empty when the build file has none. */
-    private static String blockBody(String code, String header) {
-        def start = code.indexOf(header)
-        if (start < 0) {
-            return ''
+    /**
+     * The text between the braces of a named <em>top-level</em> block, or empty when the build file
+     * has none. "Top-level" is read as brace depth zero rather than as a column, so indentation is
+     * not what decides it: a nested block of the same name — {@code buildscript { dependencies
+     * { ... } }}, which pins a module's plugin classpath — belongs to the buildscript classpath and
+     * is not the module's own declaration. A search that took the first textual occurrence would
+     * read that inner block instead and, when it is empty, report the module as declaring nothing.
+     */
+    private static String blockBody(String code, String name) {
+        def header = Pattern.compile("(?<![\\w.])${name}\\s*\\{").matcher(code)
+        while (header.find()) {
+            if (braceDepthBefore(code, header.start()) == 0) {
+                return bodyFrom(code, header.end() - 1, name)
+            }
         }
-        def open = code.indexOf('{' as char as int, start)
+        ''
+    }
+
+    /** How many braces are still open at {@code end} — zero means the next token is top-level. */
+    private static int braceDepthBefore(String code, int end) {
+        int depth = 0
+        for (int i = 0; i <end; i++) {
+            def ch = code.charAt(i)
+            if (ch == '{' as char) {
+                depth++
+            } else if (ch == '}' as char) {
+                depth--
+            }
+        }
+        depth
+    }
+
+    /** The text between {@code open}'s brace and its match. */
+    private static String bodyFrom(String code, int open, String name) {
         def depth = 0
         for (int i = open; i <code.length(); i++) {
             def ch = code.charAt(i)
@@ -82,6 +109,6 @@ class ModuleBuildFile {
                 }
             }
         }
-        throw new IllegalStateException("unbalanced '${header}' block")
+        throw new IllegalStateException("unbalanced '${name}' block")
     }
 }

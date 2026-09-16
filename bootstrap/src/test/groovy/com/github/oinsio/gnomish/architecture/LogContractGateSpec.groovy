@@ -12,7 +12,8 @@ import spock.lang.Specification
  * the static half of the log contract. Four questions about the whole tree at once, none of which a
  * reviewer can answer by reading one diff — every production WARN/ERROR site carries a catalog
  * code; every catalog code belongs to exactly one site; every code in use is named by at least one
- * test source; and no site spells its code as a string literal.
+ * test source; and no production source spells a code head as a string literal — anywhere in the
+ * source, not only inside a log call.
  *
  * <p>Why a gate: an operator's alert keys on {@code [GFnnn]}, so an uncoded degrade line is
  * invisible to the alerting it was written for, a code used twice makes the alert ambiguous about
@@ -64,7 +65,8 @@ class LogContractGateSpec extends Specification {
     /**
      * A code head opening a string literal — {@code "[GFnnn]}. The rejected form (FR10): the
      * quote is part of the pattern, so {@code OperatorEvent.X.head() + "message"} cannot match
-     * while {@code "[GF110] message"} must.
+     * while {@code "[GF110] message"} must — wherever in a production source it is written, a log
+     * call's argument list included.
      */
     private static final Pattern LITERAL_HEAD = Pattern.compile('"\\[(GF\\d{3})]')
 
@@ -129,12 +131,11 @@ class LogContractGateSpec extends Specification {
     }
 
     // FR10: the catalog constant is the only accepted form, now that every module can reach it.
-    def "no production log call spells its code head as a string literal"() {
-        expect: 'the scan really reached the source tree and its log calls'
+    def "no production source spells a code head as a string literal"() {
+        expect: 'the scan really reached the source tree'
         RepoSourceTree.productionSources().size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
-        LogCallSites.productionCalls().size() >= LogCallSites.KNOWN_LOG_CALLS
 
-        and: 'and no site carries a literal head — each would be a copy of a code that can drift'
+        and: 'and no source carries a literal head — each would be a copy of a code that can drift'
         literalHeadSites() == []
     }
 
@@ -187,7 +188,7 @@ class LogContractGateSpec extends Specification {
         codesOf(form, 'Correct.java') == [expected] as Set
 
         and: 'and the literal-head rule leaves it alone — the head came from the constant'
-        literalHeadsIn(form, 'Correct.java') == []
+        literalHeadsIn(form)*.code == []
 
         where:
         form || expected
@@ -203,13 +204,32 @@ class LogContractGateSpec extends Specification {
         LogCallSites.inSource(form, 'Seeded.java').size() == 1
 
         and: 'and its head is reported as a literal, which the whole-tree check reports as a violation'
-        literalHeadsIn(form, 'Seeded.java') == [expected]
+        literalHeadsIn(form)*.code == [expected]
 
         where:
         form || expected
         'log.error("[GF110] persist failed for {}", key, ex);' || 'GF110'
         'log.warn("[GF110] persist failed for {}", key, ex);' || 'GF110'
         'log.info("[GF110] not even an operator level", x);' || 'GF110'
+    }
+
+    // FR10: "in any production source" — a head spelled outside a log call reaches the operator
+    //     plane just the same (a constant the call prepends, a message assembled a statement
+    //     earlier, an exception text an operator greps), and a scan of call text alone never sees
+    //     it. Each of these used to pass the gate.
+    def "a seeded literal head outside a log call is detected: #form"() {
+        expect: 'no log call is involved at all, so only a whole-source scan can find it'
+        LogCallSites.inSource(form, 'Seeded.java') == []
+
+        and: 'and the head is reported with the line it sits on'
+        literalHeadsIn(form)*.code == ['GF110']
+
+        where:
+        form << [
+            'private static final String HEAD = "[GF110] ";',
+            'String message = "[GF110] persist failed";',
+            'throw new IllegalStateException("[GF110] persist failed");'
+        ]
     }
 
     /** One judged call site: where it is, which codes it names, and whether it carries a reason. */
@@ -235,32 +255,41 @@ class LogContractGateSpec extends Specification {
         }
     }
 
-    /** Every production log call whose head is spelled as a literal, as "path:line (code)". */
+    /** Every production source spelling a code head as a literal, as "path:line (code)". */
     private static List<String> literalHeadSites() {
         RepoSourceTree.productionSources().collectMany { file ->
             def path = RepoSourceTree.relative(file)
-            LogCallSites.inSource(RepoSourceTree.code(file), path).collectMany { call ->
-                literalHeadsIn(call.text, path).collect {
-                    "${path}:${call.line} (${it})"
-                }
+            literalHeadsIn(RepoSourceTree.code(file)).collect {
+                "${path}:${it.line} (${it.code})"
             }
         }
     }
 
     /**
-     * The code heads one snippet spells as string literals, in source order. Every level is judged,
-     * not just the operator ones: an INFO line carries no code at all (FR14), so a literal head
+     * The code heads one already comment-stripped source spells as string literals, in source
+     * order, each with its line.
+     *
+     * <p>The whole source is scanned, not only its log calls: FR10 rejects the literal form "in any
+     * production source", and a head parked in a constant, in an exception message, or in a string
+     * assembled one statement above the call is the same copy of a code that can drift from the
+     * catalog — scanning call text alone would leave every one of those unjudged. Every level is
+     * judged for the same reason: an INFO line carries no code at all (FR14), so a literal head
      * there is the same copy under a different level.
      */
-    private static List<String> literalHeadsIn(String code, String path) {
-        LogCallSites.inSource(code, path).collectMany { call ->
-            def found = []
-            def matcher = LITERAL_HEAD.matcher(call.text)
-            while (matcher.find()) {
-                found << matcher.group(1)
-            }
-            found
+    private static List<LiteralHead> literalHeadsIn(String code) {
+        def found = []
+        def matcher = LITERAL_HEAD.matcher(code)
+        while (matcher.find()) {
+            found << new LiteralHead(line: code.take(matcher.start()).count('\n') + 1,
+            code: matcher.group(1))
         }
+        found
+    }
+
+    /** One literal code head found by the scan: the line it sits on and the code it spells. */
+    private static class LiteralHead {
+        int line
+        String code
     }
 
     /** Every code any test source names, by catalog constant or by literal — the pinning evidence. */

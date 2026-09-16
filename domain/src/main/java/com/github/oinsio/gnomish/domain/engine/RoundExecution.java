@@ -47,7 +47,8 @@ import org.slf4j.LoggerFactory;
  * never enters a retry's feedback (FR2, FR3 of fix-denial-report-attachment).
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
- * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability.
+ * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability;
+ * FR5 of split-logtext-leaves.
  */
 final class RoundExecution {
 

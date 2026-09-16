@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
  * breaks a run (design D7); a thrown persist logs at ERROR at the point of capture and is
  * surfaced to the loop as a {@link TaskOutcome.Aborted} (NFR-O1).
  *
- * <p>Implements FR11, FR12, NFR-O1 of add-stage-engine.
+ * <p>Implements FR11, FR12, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves.
  *
  * @param listener the listener the round's events are delivered to; never null
  * @param persistence the port each round's state is persisted through; never null

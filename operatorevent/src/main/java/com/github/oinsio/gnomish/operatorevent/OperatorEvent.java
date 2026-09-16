@@ -144,7 +144,7 @@ public enum OperatorEvent {
     TASK_OUTCOME_LEDGER_APPEND_FAILED("GF108"),
     // status anchors
     TASK_SUMMARY_WORTH_LOOKING_AT("GF109"),
-    // domain engine (ADR 0004 accepted deviation 1: literal heads, no :logtext edge)
+    // domain engine (reached through :domain's :operatorevent edge, split-logtext-leaves)
     ATTEMPT_PERSIST_FAILED("GF110"),
     ENGINE_EVENT_LISTENER_THREW("GF111"),
     EXECUTOR_THREW("GF112"),

@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * <p>A stateless, package-private static-only utility with no instances (NFR-R1); the WARN
  * log is emitted here, at the point of capture (NFR-O1).
  *
- * <p>Implements FR12, NFR-O1 of add-stage-engine.
+ * <p>Implements FR12, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves.
  */
 final class Events {
 
