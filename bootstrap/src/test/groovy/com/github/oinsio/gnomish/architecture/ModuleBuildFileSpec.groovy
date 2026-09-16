@@ -103,6 +103,15 @@ class ModuleBuildFileSpec extends Specification {
         operatorevent: [] as Set,
     ]
 
+    /**
+     * The internal half of the same registry: the project edges a leaf may declare. Only
+     * {@code :logtext} has one — the untrusted-text leaf its {@code LogText} facade delegates to
+     * (FR7 of split-logtext-leaves); every other leaf reaches nothing internal at all.
+     */
+    private static final Map<String, Set<String>> LEAF_ALLOWED_PROJECTS = [
+        logtext: [':untrustedtext'] as Set,
+    ]
+
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,
     // so its permitted external edges are enumerated by this gate rather than described in a comment
     def "the shared leaf #module declares only its permitted production dependencies"() {
@@ -116,7 +125,7 @@ class ModuleBuildFileSpec extends Specification {
         ModuleBuildFile.productionDependencies(code) == permitted
 
         and: 'and the internal half holds too: no leaf reaches a project but the one FR7 grants'
-        ModuleBuildFile.allowedProjects(code) == (module == 'logtext' ? [':untrustedtext'] as Set : [] as Set)
+        ModuleBuildFile.allowedProjects(code) == LEAF_ALLOWED_PROJECTS.getOrDefault(module, [] as Set)
 
         where:
         module << LEAF_PRODUCTION_DEPENDENCIES.keySet()
