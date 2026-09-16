@@ -12,10 +12,12 @@ output quoted in a park report, tracker-sourced strings echoed back — SHALL
 go through one comment exit that wraps the text in a fenced block labeled as
 untrusted machine output, with mentions and issue references escaped and the
 fence longer than any run the content starts a line with. Every component
-that parks a task with a report SHALL render the report's untrusted parts
-through that exit; no tracker write SHALL carry a raw carrier.
+that writes prose to the tracker — a park report, a finish summary, an abort
+marker's cause, a decision acknowledgement, a stop note — SHALL render the
+text's untrusted parts through that exit; no tracker write SHALL carry a raw
+carrier.
 <!-- implements FR15 of add-sandbox-core -->
-<!-- implements FR8, NFR-S2 of type-untrusted-text -->
+<!-- implements FR6, FR8, NFR-S2 of type-untrusted-text -->
 
 #### Scenario: Terminal escape attack is neutralized
 - **WHEN** command-check output contains ANSI escape sequences and an `@team`
@@ -29,7 +31,9 @@ through that exit; no tracker write SHALL carry a raw carrier.
 - **THEN** the tracker comment shows the quoted text inside the labeled fence
   with mentions escaped, and the factory-authored instruction lines outside it
 
-#### Scenario: Every park writer uses the exit
-- **WHEN** production sources are scanned for tracker park and comment writes
+#### Scenario: Every tracker write uses the exit
+- **WHEN** production sources are scanned for every text-carrying tracker
+  write — park, finish, decline, acknowledge, note, and the abort marker's
+  construction
 - **THEN** every write that includes a carrier renders it through the comment
   exit, and the type gate fails a write that does not

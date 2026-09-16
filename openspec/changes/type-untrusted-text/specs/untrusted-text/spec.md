@@ -61,7 +61,7 @@ carry raw bytes to a machine medium (state and ledger JSON), and the findings
 funnel entry. An architecture gate SHALL fail the build on any other caller;
 the gate SHALL key on the annotation, never on a list of class names kept in
 build logic.
-<!-- implements FR3, FR7, NFR-S1 of type-untrusted-text -->
+<!-- implements FR3, FR7, NFR-R2, NFR-S1 of type-untrusted-text -->
 
 #### Scenario: A raw read outside an exit fails the build
 - **WHEN** a production class without the exit annotation calls the raw
@@ -72,7 +72,8 @@ build logic.
 - **WHEN** the task-branch state writer serializes a carrier
 - **THEN** it writes the raw text (JSON encoding bounds it) and is annotated
   as an exit, and reading the same document back mints a branch-document
-  carrier
+  carrier; a document written before the carrier existed reads back the same
+  way, because the wire format is unchanged
 
 ### Requirement: Sinks receive untrusted text only through an exit
 No logging call, throwable constructor, console print, or tracker write SHALL

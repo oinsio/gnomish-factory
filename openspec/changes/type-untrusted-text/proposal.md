@@ -10,7 +10,7 @@ banners and decision files, issue titles and claim-marker holders, `task.json`
 values, `.gnomish/` manifest strings — and **none of them is a distinct type**:
 each is a `String`, indistinguishable from a string the factory wrote itself.
 That is the root cause of every laundering path the audit listed: fold the
-text into an exception message (33 sites), a record's `toString()`, an MDC
+text into an exception message (38 sites), a record's `toString()`, an MDC
 value or an assembled report, and the name the gate keys on is gone. The
 sink-side backstop (`harden-untrusted-text-sinks`) makes those paths *safe*;
 it does not make them *visible*, and it does nothing for the tracker comment,
@@ -36,14 +36,15 @@ can name one type. This change introduces it and moves the codebase onto it.
 - **MODIFIED** carrier types across `:domain`, `:gnomish-plugin-api`,
   `:sandbox:core` and the adapters: every field that holds attacker-influenced
   text becomes `UntrustedText` (the full list is design.md's carrier table).
-  **BREAKING** for the published contract (`TaskSnapshot`, and the re-exposed
-  domain types `EscalationReport`, `Verdict`, `PollStatus`, `CheckRef`,
-  `ConfigError`, `TaskContext`) — a pre-1.0 MINOR bump.
+  **BREAKING** for the published contract (`TaskSnapshot`, the port payload
+  `AbortRecord`, and the re-exposed domain types `EscalationReport`, `Verdict`,
+  `PollStatus`, `CheckRef`, `TaskContext`) — a pre-1.0 MINOR bump. `ConfigError`
+  is not a carrier (NG6).
 - **MODIFIED** the seven capture families to mint the type where the text
   enters the process: git runner, docker CLI, in-box exec, agent stream/decision
   readers, tracker adapters, the `.gnomish/` loader, the task-branch document
   readers.
-- **MODIFIED** the 33 exception constructors and the three report builders to
+- **MODIFIED** the 38 exception constructors and the three report builders to
   take `UntrustedText`; their messages are built from the log-safe form.
 - **MODIFIED** `factory-logging`: the accessor-name gate is replaced by a
   type-level gate — untrusted accessors return `UntrustedText`; `raw()` is
@@ -54,7 +55,8 @@ can name one type. This change introduces it and moves the codebase onto it.
   — all park reports, not only escalation details; `@`/`#` neutralization and
   the labeled fence apply to all of them.
 - **MODIFIED** `plugin/plugin-api-contract`: `TaskSnapshot` carries
-  `UntrustedText`; a third-party adapter mints it; 0.6.0 → 0.7.0.
+  `UntrustedText`; a third-party adapter mints it; 0.7.0 → 0.8.0, the sixth
+  BREAKING move.
 
 ## Capabilities
 
@@ -78,7 +80,7 @@ can name one type. This change introduces it and moves the codebase onto it.
   without passing an exit: the compiler refuses it where a type mismatch
   exists, and one build gate refuses the residue (`raw()` outside an exit,
   an untrusted accessor returning `String`).
-- G2: The 33 exception-constructor sites and the three report builders are
+- G2: The 38 exception-constructor sites and the three report builders are
   brought under the rule by the type, not by a per-site `LogText` call — the
   "honest debt" section of `logging.md` is closed, not restated.
 - G3: The tracker comment has one owner for untrusted text, with every park
@@ -98,6 +100,14 @@ can name one type. This change introduces it and moves the codebase onto it.
   not untrusted.
 - NG5: A Checker Framework or Error Prone taint checker — the type plus an
   ArchUnit gate is the enforcement; a compiler plugin is not added.
+- NG6: `ConfigError` as a carrier. Its three fields stay factory-authored
+  `String`: the message is a template the factory wrote, and the 97
+  constructor sites span `:domain` rules, the `.gnomish/` loader, the vendor
+  bundle and the SPI validator interfaces third parties implement — making
+  each of them a mint would put minting outside the mint table and outside
+  the factory. The manifest fragment a message quotes (a key, a type token,
+  a URL) is minted once, where the loader's outcome leaves the loader:
+  `ConfigError.render()` returns a `MANIFEST` carrier (design D10).
 
 ## Users & Scenarios
 
@@ -139,22 +149,32 @@ can name one type. This change introduces it and moves the codebase onto it.
   SHALL construct it with its provenance; no other production code SHALL call
   a mint.
 - FR5: Every exception constructor that today concatenates subprocess or
-  container output (design.md lists the 33) SHALL take `UntrustedText` and
+  container output (design.md lists the 38) SHALL take `UntrustedText` and
   render its message from `forLog()`; `WorktreeResync` and the docker
   `IllegalStateException` sites SHALL move to a typed exception.
 - FR6: The three base reports and every other report builder that quotes
   untrusted text SHALL take `UntrustedText` and render through an exit; the
   per-field `LogText.forLog` calls `add-base-ref-resolution` added are removed
   in favor of the type.
-- FR7: The gate SHALL be type-level: (a) every production method named by the
-  former accessor list, and every method returning text from a mint family,
-  returns `UntrustedText`; (b) `raw()` only inside `@UntrustedExit` classes;
+- FR7: The gate SHALL be type-level: (a) every production method declared in
+  this repository whose name is in the capture vocabulary of the carrier table
+  (design D4), and every method returning text from a mint family, returns
+  `UntrustedText` — a third-party accessor the former list named
+  (`JsonProcessingException.getOriginalMessage()`) is not a method this
+  repository declares, so its text is minted at the catch site instead
+  (design D5); (b) `raw()` only inside `@UntrustedExit` classes;
   (c) an `UntrustedText`-typed expression is never a direct argument of an
   SLF4J call, a `Throwable` constructor, a `ConsoleIO` print or a tracker
-  write — it passes an exit first. The accessor-name gate is deleted.
+  write — every text-carrying `Tracker` method: `park`, `finish`,
+  `declineFinished`, `acknowledgeDecision`, `postNote`, and `recordAbort`
+  through `AbortRecord.cause` — it passes an exit first. The accessor-name
+  gate is deleted.
 - FR8: `TrackerFence` (moved to the leaf as the `forComment` exit's rendering,
   facade kept in `:application`) SHALL be the only path by which untrusted
-  text reaches a tracker comment; the eight park-report writers use it.
+  text reaches a tracker comment; every tracker write that carries untrusted
+  text uses it — the eight park-report writers, the finish summary, the abort
+  marker's cause (rendered by the adapter that posts it), the decision
+  acknowledgement echoing a human reply, and the two stop notes.
 - FR9: `docs/adr/0004-logging-policy.md` SHALL describe the three layers with
   the type as the second; `.claude/rules/logging.md` SHALL replace the
   accessor list and the "honest debt" paragraph with the type rule;
@@ -194,11 +214,18 @@ can name one type. This change introduces it and moves the codebase onto it.
 ## Success Metrics
 
 - M1: `UntrustedLogTextGateSpec` is deleted; its replacement passes with zero
-  allowlisted exemptions.
+  allowlisted exemptions. Measured at the close of cut B; at the close of cut A
+  rule (b) is declared over cut A's families only (design D9) — the vocabulary
+  grows by family, never by an exemption.
 - M2: `grep -rn "\.stderr()\|\.stdout()\|\.output()" --include=*.java` over
   production sources finds only `UntrustedText`-returning accessors.
-- M3: `TrackerFence`/`forComment` has ≥ 9 production consumers (the eight park
-  writers plus the escalation dialog).
+- M3: every production text-carrying `Tracker` write (the eight park writers,
+  `FinishEffect`, `DecisionAck`, the two stop notes) and every `new AbortRecord(`
+  passes `TrackerPublicationOwnerSpec`; every `forComment()` caller in
+  production is one of the builders and comment-rendering adapters design D7
+  names, and no untrusted text reaches a tracker comment by another path.
+  Counted by callers of the exit, not by the writers: the park writers receive
+  builder output and never call the exit themselves (design D7).
 - M4: `logging.md` contains no "honest debt" paragraph and no accessor list.
 - M5: PIT 100% in every touched module; `./gradlew check` green.
 
@@ -218,19 +245,32 @@ can name one type. This change introduces it and moves the codebase onto it.
 - `:untrustedtext`: the type, provenance, `@UntrustedExit`, the comment exit
   (fence/mention logic moved from `TrackerFence`).
 - `:domain`: `EscalationReport`, `Verdict`, `PollStatus`, `TaskOutcome.Aborted`,
-  `TaskContext`, `ConfigError`, `CheckRef`, `Activity`, `StackTraces`.
-- `:gnomish-plugin-api`: `TaskSnapshot`; version 0.7.0; baseline; sample.
+  `TaskContext`, `CheckRef`, `Activity`, `StackTraces`; `ConfigError.render()`
+  becomes the manifest mint for validation text (fields unchanged, NG6).
+- `:gnomish-plugin-api`: `TaskSnapshot`, `AbortRecord.cause`; version 0.8.0;
+  baseline; sample. The SPI validator interfaces returning `ConfigError` are
+  unchanged.
 - `:sandbox:core` / `:sandbox:docker`: `CapturedExec`, `DockerResult`,
   `DenialCursor`, exception sites.
 - `:adapters:git`: `GitCommandResult`, `RemoteBaseRef`, `BaseRefreshOutcome`
   family, 19 exception sites, `TaskJsonMapper`; `:adapters:agent`: `AgentEvent`,
   `DecisionFileReader`, `MissingResultEventException`; `:adapters:github`:
-  `ParsedMarker`, `GithubTaskFetcher`; `:adapters`: the `.gnomish/` loader.
+  `ParsedMarker`, `GithubTaskFetcher`, `GithubStateWrites` (the abort comment
+  renders `AbortRecord.cause` through the comment exit); `:adapters`: the
+  `.gnomish/` loader.
 - `:application`: `TakeResult`, `StatusReport`, the report builders, the
   renderers (`StatusLineFormatter`, `StatusTextRenderer`, `BoardTextRenderer`,
-  `EscalationResumeDialog`), the eight park writers, `TrackerFence` facade.
+  `EscalationResumeDialog`), the eight park writers, `FinishEffect` /
+  `TakeFinishReport`, `AbortHandler`, `DecisionAck`, the two stop-note writers
+  (`TakeContainerEngineExecution`, `RevocationHandler`), `TrackerFence` facade.
 - `:bootstrap`: the type gate (ArchUnit), deletion of the accessor gate.
-- Sequencing: after `split-logtext-leaves`. No other active change edits the
-  carrier records' field types; `add-tracker-task-hierarchy` and
-  `add-pipeline-routing` touch `tracker-port` requirements this change does
-  not modify.
+- Sequencing: after `split-logtext-leaves`; before
+  `add-subprocess-access-log`, which is unimplemented and edits the same
+  factory-logging requirement ("Untrusted text enters logs only sanitized").
+  Its delta still restates the pre-sinks text, so at its next revision it
+  must be re-layered on the stable spec as synced by this change ("Layered on
+  ... `type-untrusted-text`"); archiving it as written would replace the
+  sink-layer paragraph and this change's type-level text. No other active
+  change edits the carrier records' field types; `add-tracker-task-hierarchy`
+  and `add-pipeline-routing` touch `tracker-port` requirements this change
+  does not modify.

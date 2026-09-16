@@ -9,6 +9,11 @@ sentences and scenario, the sink-layer paragraph with its four scenarios, and
 the findings-funnel sentences with their two scenarios — instead of replacing
 the requirement.
 
+The lineage above is textual, not archive order: `add-subprocess-access-log`
+is unimplemented and archives after this change. Its own factory-logging
+delta restates the pre-sinks text and must be re-layered on the stable spec
+as synced here before it archives (see this change's proposal, Sequencing).
+
 ## MODIFIED Requirements
 
 ### Requirement: Untrusted text enters logs only sanitized
@@ -51,7 +56,7 @@ corpus, for the message path, the exception path and the MDC path.
 <!-- implements FR16 of add-subprocess-access-log -->
 <!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
 <!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
-<!-- implements FR4, FR7, NFR-R1, NFR-S1 of type-untrusted-text -->
+<!-- implements FR4, FR7, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is

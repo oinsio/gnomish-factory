@@ -1,11 +1,10 @@
 # plugin-api-contract — delta for type-untrusted-text
 
-Layered on the plugin-api-contract capability as modified by
-`split-logtext-leaves` (sequenced before this change): the first requirement
-below is written over that delta's text. If this change syncs first, the
-earlier sync must merge by hand — the `untrustedtext` transitive-edge
-sentence and its scenario wording — instead of replacing the requirement.
-The second requirement is written over the main spec.
+Both requirements below are written over the main spec as synced by
+`split-logtext-leaves` (archived 2026-09-16): the first repeats that synced
+text — the `untrustedtext` self-declaration and the four-jar published graph
+— and adds only the typed title/body sentence and its scenario line; the
+second adds the typed-field break rule and its scenario.
 
 ## MODIFIED Requirements
 
@@ -21,13 +20,17 @@ provider whose targets are per-check, from a check's own params),
 workspace-capability interface, and the `FindingsSanitizer` contract utility —
 and nothing from `application` or `bootstrap` internals. Domain value and
 config types referenced by these ports stay in `domain` and are exposed through
-a transitive `api` dependency; the untrusted-text carrier and primitives the
-ports and the findings sanitizer reference stay in the JDK-only
-`untrustedtext` leaf and reach a third party through the same transitive
-edge, so the single declared dependency contract is unchanged. The task
-snapshot's title and body SHALL be carried as untrusted text, so an adapter
-author mints them and the contract itself says which fields the tracker
-controls.
+a transitive `api` dependency; the untrusted-text primitives the findings
+sanitizer delegates to stay in the JDK-only `untrustedtext` leaf, which this
+module declares itself and resolves alongside its own artifact, so the single
+declared dependency contract is unchanged. The published project jar graph —
+and with it the committed compatibility baseline — is `gnomish-plugin-api`,
+`domain`, the `untrustedtext` leaf this module declares, and every JDK-only
+leaf `domain` reaches (today `operatorevent`);
+a change to that set is re-baselined with a version bump even when no
+signature moves. The task snapshot's title and body SHALL be carried as
+untrusted text from that same leaf, so an adapter author mints them and the
+contract itself says which fields the tracker controls.
 <!-- implements FR4 of split-into-modules -->
 <!-- implements FR5, FR12, FR15, FR17 of add-plugin-architecture -->
 <!-- implements FR1, FR2 of close-plugin-api-compilability-gap -->
@@ -44,7 +47,8 @@ controls.
 #### Scenario: A third party compiles against a single declared dependency
 - **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
   only declared dependency (the `domain` and `untrustedtext` types the ports
-  and the sanitizer reference arrive transitively)
+  and the sanitizer reference arrive transitively, as does the `operatorevent`
+  jar the domain's own emitters use)
 - **THEN** it can implement any exposed port and its SPI factory — tracker or
   check — without needing `application` or `bootstrap`
 - **AND** an external-check implementation can read the attempt-commit sha of
@@ -78,7 +82,7 @@ the break and the bump together.
   additions only for pre-existing types
 
 #### Scenario: A typed-field break is bumped and re-baselined together
-- **WHEN** the snapshot's title and body change from plain strings to the
-  untrusted-text carrier
+- **WHEN** the snapshot's title and body and the abort marker's cause change
+  from plain strings to the untrusted-text carrier
 - **THEN** the api version takes a MINOR bump, the baseline is regenerated in
   the same commit, and the build script names the break
