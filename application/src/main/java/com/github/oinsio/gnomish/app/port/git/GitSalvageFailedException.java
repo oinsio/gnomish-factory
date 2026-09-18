@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -20,7 +21,7 @@ public final class GitSalvageFailedException extends RuntimeException {
      * @param reason what failed, e.g. {@code "git add -A"} or {@code "git commit"}
      * @param detail the failing command's captured stderr; may be blank
      */
-    public GitSalvageFailedException(String taskId, String reason, String detail) {
+    public GitSalvageFailedException(String taskId, String reason, UntrustedText detail) {
         super("failed to salvage uncommitted leftovers for taskId \"" + taskId + "\" (" + reason + "): " + detail);
     }
 }

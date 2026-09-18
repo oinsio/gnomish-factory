@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -214,9 +215,9 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      */
     private TaskJsonDto readCurrentDto(String taskId, Path worktree, TaskLifecycleEvent event) {
         Path taskJson = worktree.resolve(".gnomish-task").resolve("task.json");
-        String json;
+        UntrustedText json;
         try {
-            json = Files.readString(taskJson);
+            json = UntrustedText.branchDocument(Files.readString(taskJson));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }

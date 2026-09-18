@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.environment.LeasedEnvironment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -74,9 +75,9 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
     }
 
     private committedCursor() {
-        StateJsonMapper.readDto(
-                gitOutput(cloneDir, 'show', gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
-                + ':.gnomish-task/state.json')).egressCursor()
+        StateJsonMapper.readDto(UntrustedText.branchDocument(
+                        gitOutput(cloneDir, 'show', gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
+                        + ':.gnomish-task/state.json'))).egressCursor()
     }
 
     // FR6, M4: the position the guard actually holds reaches the state commit THROUGH the leased

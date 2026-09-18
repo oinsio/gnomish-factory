@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeHeartbeatLifecycleSpecBase}
@@ -27,7 +28,7 @@ class InMemoryTakeHeartbeatLifecycleSpec extends TakeHeartbeatLifecycleSpecBase 
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
         InMemoryTracker tracker = new InMemoryTracker()
         new InMemoryTrackerHarness(tracker).seed(
-                ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+                ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
         [
             tracker,
             new FixedTrackerAdapterFactory({ tracker })

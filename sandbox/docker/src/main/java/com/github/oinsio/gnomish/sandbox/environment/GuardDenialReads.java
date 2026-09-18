@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Denial;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.DenialRead;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * <p>Implements NFR-O1, NFR-R1, FR5 of fix-denial-report-attachment; FR4, FR7, FR8 of
  * fix-denial-attribution-durability.
  */
+@UntrustedParser
 final class GuardDenialReads {
 
     private static final Logger log = LoggerFactory.getLogger(GuardDenialReads.class);
@@ -129,11 +130,15 @@ final class GuardDenialReads {
             log.warn(
                     OperatorEvent.GUARD_DENIAL_LOG_READ_FAILED.head() + "could not read egress guard log for {}: {}",
                     key,
-                    LogText.forLog(logs.stderr()));
+                    logs.stderr().forLog());
             return new DenialRead(restored.owedLoss(), cursor());
         }
         List<Denial> denials = restored.owedLoss();
-        if (GuardLogCursor.saturated(logs.stdout(), LOG_TAIL_LINES)) {
+        // @UntrustedParser warrant (design D11): the guard's log becomes denial findings, a
+        //     saturation boolean and a read position — an RFC-3339 instant `GuardLogCursor`
+        //     parses off the line. The lines themselves reach a reader only as a `Finding`'s
+        //     capped fields, never as raw text.
+        if (GuardLogCursor.saturated(logs.stdout().forParsing(), LOG_TAIL_LINES)) {
             log.warn(
                     OperatorEvent.GUARD_DENIAL_TAIL_WINDOW_FULL.head()
                             + "egress guard log read for {} filled its {}-line tail window; older lines of this"
@@ -142,7 +147,7 @@ final class GuardDenialReads {
                     LOG_TAIL_LINES);
             denials.add(DenialLossMarker.tailWindowFull(key, LOG_TAIL_LINES, window));
         }
-        String advanced = GuardLogCursor.advance(logs.stdout());
+        String advanced = GuardLogCursor.advance(logs.stdout().forParsing());
         if (advanced != null) {
             since = advanced;
         }
@@ -150,8 +155,10 @@ final class GuardDenialReads {
         // committable exactly when the source is identifiable, so a read that cannot name its
         // source stamps no identity either — both degrade together, and the daemon is probed once.
         Optional<DenialCursor> position = cursor();
-        denials.addAll(restored.merge(
-                GuardDenialLog.denials(key, position.map(DenialCursor::source).orElse(null), logs.stdout())));
+        denials.addAll(restored.merge(GuardDenialLog.denials(
+                key,
+                position.map(DenialCursor::source).orElse(null),
+                logs.stdout().forParsing())));
         return new DenialRead(denials, position);
     }
 }

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -43,7 +44,7 @@ trait SeededCloneFixture implements BareGitRepoFixture {
     void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0,
             String title = 'Fix the thing') {
         new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, title, 'Body', []),
+                new TaskContext(taskId, UntrustedText.tracker(title), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)

@@ -2,10 +2,7 @@ package com.github.oinsio.gnomish.e2e
 
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
 import java.util.stream.Collectors
-import spock.lang.Specification
-import spock.lang.Timeout
 
 /**
  * The reference E2E session (task 9.2): a single scripted stdin script drives a real
@@ -28,17 +25,7 @@ import spock.lang.Timeout
  *
  * <p>Implements M1, FR12, NFR-S1 of add-manual-run.
  */
-@Timeout(value = 120, unit = TimeUnit.SECONDS)
-class ReferenceE2ESessionSpec extends Specification {
-
-    private final E2eProcessHarness harness = new E2eProcessHarness()
-    private static final String MARKER_FILE = 'attempt-marker.txt'
-
-    def cleanup() {
-        // Reset the fixture to its pristine state so a re-run doesn't see a stale
-        // already-passing command check from a prior invocation of this spec.
-        Files.deleteIfExists(E2eFixture.projectRoot().resolve(MARKER_FILE))
-    }
+class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
 
     def "M1: quality retry, decision escalation + resume, manual pause, and completion all exit 0 with no runner artifacts in the workspace"() {
         given: 'the workspace holds only its pristine fixture files before the run'
@@ -101,7 +88,8 @@ class ReferenceE2ESessionSpec extends Specification {
         result.exitCode() == 0
 
         and: 'stdout shows the decision escalation was rendered'
-        result.stdout().contains('The gnome asked: should the fixture use approach A or B?')
+        result.stdout().contains('The gnome asked:')
+        result.stdout().contains('should the fixture use approach A or B?')
         result.stdout().contains('approach A')
         result.stdout().contains('approach B')
 

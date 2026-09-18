@@ -1,13 +1,26 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The outcome of one {@code git} subprocess invocation: how the invocation ended, its exit code,
  * and stdout/stderr captured as separate streams (unlike {@code CommandProcessRunner}'s
  * merged-stream approach for shell checks) so callers can parse git plumbing output cleanly while
  * still seeing warnings on stderr.
+ *
+ * <p>Both streams are {@link UntrustedText}: git speaks for remotes, for image authors and for
+ * whatever another instance wrote on a branch, so its output is attacker-influenced whichever
+ * stream it arrives on (design D3, D11 of type-untrusted-text). Stderr reaches logs, reports and
+ * {@code task.json} through an exit; stdout is read by the family's parsers through
+ * {@code forParsing()}, which hands over the bytes as git wrote them — a capped, flattened
+ * rendering would break every parse.
+ *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.sandbox.environment.DockerResult}: both
+ * mint their subprocess family's two streams as {@link UntrustedText} through the same
+ * three/four-argument {@code of} factory shape, defaulting to {@link Termination#EXITED}. They
+ * stay separate types because git additionally credential-scrubs stderr; only that factory shape
+ * and the untrusted-text minting must stay aligned.
  *
  * <p>A non-zero {@link #exitCode()} is a normal, expected outcome here — callers (branch creation,
  * commit, push, ...) decide per-command what a given exit code means. This type never represents
@@ -18,21 +31,46 @@ import com.github.oinsio.gnomish.subprocess.Termination;
  * reason it exists: a command that was killed on its deadline or interrupted by a shutdown never
  * established a remote outcome at all, so reading its exit code as "git ran and said no" is how a
  * fabricated {@code origin is behind} note reached an operator (design D6). Everything that ran to
- * its own exit is {@link Termination#EXITED}, which the three-argument constructor supplies — the
+ * its own exit is {@link Termination#EXITED}, which the three-argument factory supplies — the
  * construction sites and specs that predate the bound are unchanged and stay correct (NFR-R3).
  *
- * <p>Implements FR2 of add-git-workflow; FR6, NFR-R3 of bound-subprocess-commands.
+ * <p>Implements FR2 of add-git-workflow; FR6, NFR-R3 of bound-subprocess-commands; FR1, FR7 of
+ * type-untrusted-text.
  *
  * @param exitCode the git process's exit code; authoritative only on {@link Termination#EXITED}
  * @param stdout the process's standard output, captured in full on a normal exit
- * @param stderr the process's standard error, captured in full on a normal exit
+ * @param stderr the process's standard error, captured in full on a normal exit, credential-scrubbed
  * @param termination how the invocation ended
  */
-record GitCommandResult(int exitCode, String stdout, String stderr, Termination termination) {
+record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr, Termination termination) {
+
+    /**
+     * Captures one invocation's streams: the single place git's text becomes untrusted text, and
+     * the single place stderr is scrubbed of remote-URL credentials (NFR-S2 of fix-lifecycle-push).
+     * Both live here rather than at {@link GitProcessRunner}'s capture so a result built anywhere
+     * else — a spec, a second runner — cannot hold a token or an unminted string; the escape hatch
+     * the two details used to guard against by scrubbing again is closed by construction instead.
+     *
+     * <p>Stdout is deliberately not scrubbed: {@code remote get-url origin} answers through it and
+     * {@link OriginRemote}'s caller needs the real URL.
+     *
+     * @param exitCode the git process's exit code
+     * @param stdout the captured standard output
+     * @param stderr the captured standard error, scrubbed here
+     * @param termination how the invocation ended
+     * @return the result, with both streams minted as subprocess output
+     */
+    static GitCommandResult of(int exitCode, String stdout, String stderr, Termination termination) {
+        return new GitCommandResult(
+                exitCode,
+                UntrustedText.subprocess(stdout),
+                UntrustedText.subprocess(CredentialScrub.scrub(stderr)),
+                termination);
+    }
 
     /** A result for a command that ran to its own exit — the shape every caller had before FR6. */
-    GitCommandResult(int exitCode, String stdout, String stderr) {
-        this(exitCode, stdout, stderr, Termination.EXITED);
+    static GitCommandResult of(int exitCode, String stdout, String stderr) {
+        return of(exitCode, stdout, stderr, Termination.EXITED);
     }
 
     /**
@@ -43,18 +81,19 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
      *
      * <p>Extracted when the base refresh became the third caller of what {@link TaskBranchLocator}
      * and {@link RemoteDefaultBranch} both needed (rule of three, {@code manual-sync-pairs.md}).
-     * git's stderr is subprocess output that reaches logs, {@code task.json}, and escalation
-     * reports, so it is scrubbed and sanitized here, where it enters the factory's own text.
+     * git's stderr is subprocess output that reaches logs, {@code task.json} and escalation
+     * reports; it leaves the carrier here through the log exit, which {@link UntrustedText}'s own
+     * {@code toString()} is.
      *
      * <p>Implements FR5, FR9 of add-base-ref-resolution.
      */
-    String failureDetail(String what) {
-        return switch (termination()) {
-            case TIMED_OUT -> "the " + what + " timed out";
-            case INTERRUPTED -> "the " + what + " was interrupted";
-            case EXITED ->
-                "the " + what + " exited " + exitCode() + ": " + LogText.forLog(CredentialScrub.scrub(stderr().trim()));
-        };
+    UntrustedText failureDetail(String what) {
+        return UntrustedText.subprocess(
+                switch (termination()) {
+                    case TIMED_OUT -> "the " + what + " timed out";
+                    case INTERRUPTED -> "the " + what + " was interrupted";
+                    case EXITED -> "the " + what + " exited " + exitCode() + ": " + stderr();
+                });
     }
 
     /**
@@ -65,17 +104,11 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
      * <p>git's stderr is subprocess output, and this string travels into a {@code
      * GitPersistFailedException} message that is rendered into a log record, into {@code task.json}
      * and into the escalation report. The log-call gate cannot see inside an exception's message,
-     * so the sanitizing happens here, where the untrusted text enters it (FR6 of
+     * so the rendering happens here, where the untrusted text enters it (FR6 of
      * harden-logging-observability; {@code .claude/rules/logging.md}).
-     *
-     * <p>Credentials: {@code GitProcessRunner} scrubs stderr of remote-URL userinfo at capture
-     * (NFR-S2 of fix-lifecycle-push), so every result it produces is already clean here. This
-     * method scrubs again all the same, as {@link #failureDetail} does — the invariant then holds
-     * for a result built anywhere else (a spec, a second runner), and the two details cannot
-     * diverge on which of them a token may pass through (task 12.3 of add-base-ref-resolution).
      */
-    String cannotVerifyDetail() {
-        return "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): "
-                + LogText.forLog(CredentialScrub.scrub(stderr().trim()));
+    UntrustedText cannotVerifyDetail() {
+        return UntrustedText.subprocess(
+                "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): " + stderr());
     }
 }

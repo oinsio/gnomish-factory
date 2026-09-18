@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import org.slf4j.MDC
 import spock.lang.Specification
@@ -64,7 +65,7 @@ class MdcEventListenerSpec extends Specification {
         def listener = new MdcEventListener()
 
         when:
-        listener.onEvent(new EngineEvent.CheckStarted(key(0, 'build'), new CheckRef(0, 'builtin:files_exist')))
+        listener.onEvent(new EngineEvent.CheckStarted(key(0, 'build'), new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))))
 
         then:
         MDC.get('stage') == 'build'
@@ -75,7 +76,7 @@ class MdcEventListenerSpec extends Specification {
     def "CheckFinished sets stage and attempt from the key"() {
         given:
         def listener = new MdcEventListener()
-        def result = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
 
         when:
         listener.onEvent(new EngineEvent.CheckFinished(key(4, 'build'), result))

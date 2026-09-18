@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +83,10 @@ public final class TakeCrashAbort {
             InstanceId instanceId,
             RuntimeException crash) {
         TaskRef ref = trackerTask.ref();
-        String cause = "uncaught exception during the take run: " + crash;
+        // A fold of the crash's own chain, whose messages quote whatever the failing machinery
+        // captured — a git subprocess, an agent CLI — so it is minted at the fold with that
+        // operation's provenance (design D3's fold row, D5 of type-untrusted-text).
+        UntrustedText cause = UntrustedText.subprocess("uncaught exception during the take run: " + crash);
         AbortFacts facts = abortFactsBestEffort(tracker, ref);
         TaskState finalState =
                 TaskState.atStageStart(definition.stages().getFirst().name());

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.board;
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
@@ -28,7 +29,7 @@ import org.jspecify.annotations.Nullable;
  */
 public record ReadyRow(
         TaskRef ref,
-        String title,
+        UntrustedText title,
         boolean returned,
         @Nullable EligibilityReason eligibilityReason) {
 

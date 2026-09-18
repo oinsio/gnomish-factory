@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -28,7 +29,7 @@ class InMemoryIndexRepairSpec extends Specification {
     private InMemoryTrackerHarness harness = new InMemoryTrackerHarness(tracker)
 
     def setup() {
-        harness.seed(REF, new TaskSnapshot(REF.id(), 'title', 'body'),
+        harness.seed(REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Working('inst-1'), AbortFacts.none())
     }
 
@@ -185,7 +186,7 @@ class InMemoryIndexRepairSpec extends Specification {
 
     def "recordAbort keeps its own abort instant, unrelated to the repair"() {
         when:
-        tracker.recordAbort(REF, new AbortRecord('cause', 'inst-1', Instant.EPOCH))
+        tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('cause'), 'inst-1', Instant.EPOCH))
 
         then:
         tracker.fetchTask(REF).abortFacts().count() == 1

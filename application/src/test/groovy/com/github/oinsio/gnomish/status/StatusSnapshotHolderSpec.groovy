@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -17,7 +18,7 @@ import spock.lang.Specification
 class StatusSnapshotHolderSpec extends Specification {
 
     private static TaskContext context() {
-        new TaskContext('manual-20260716-143502-x7', 'Fix flaky spec', 'body text', [])
+        new TaskContext('manual-20260716-143502-x7', UntrustedText.tracker('Fix flaky spec'), UntrustedText.tracker('body text'), [])
     }
 
     // D7: a fresh holder starts at the given initial state, attempt limit and idle activity
@@ -61,7 +62,10 @@ class StatusSnapshotHolderSpec extends Specification {
     def "updateActivity replaces the activity and preserves any already-held escalation and outcome"() {
         given: 'a holder that already recorded an escalation'
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
-        def escalation = new EscalationReport.DecisionNeeded('Refactor or patch?', ['refactor', 'patch'])
+        def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor or patch?'), [
+            UntrustedText.agent('refactor'),
+            UntrustedText.agent('patch')
+        ])
         holder.recordEscalation(escalation)
         def executing = new Activity.Executing(Instant.EPOCH)
 
@@ -78,7 +82,7 @@ class StatusSnapshotHolderSpec extends Specification {
     def "recordEscalation captures the report and outcome and resets activity to idle"() {
         given: 'a holder mid-verification'
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
-        holder.updateActivity(new Activity.Verifying(new CheckRef(0, 'builtin:files_exist'), Instant.EPOCH))
+        holder.updateActivity(new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), Instant.EPOCH))
         def escalation = new EscalationReport.AttemptsExhausted(3)
 
         when: 'an escalation is recorded'

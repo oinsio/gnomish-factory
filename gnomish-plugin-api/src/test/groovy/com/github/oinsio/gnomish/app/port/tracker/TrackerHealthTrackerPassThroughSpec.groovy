@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -25,7 +26,7 @@ class TrackerHealthTrackerPassThroughSpec extends Specification {
     def "listReady returns the delegate's list unchanged"() {
         given:
         def ready = [
-            new ReadyTask(REF, AbortFacts.none(), false, false, 'a title')
+            new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('a title'))
         ]
         delegate.listReady(7) >> ready
 
@@ -56,7 +57,7 @@ class TrackerHealthTrackerPassThroughSpec extends Specification {
     def "listOpen returns the delegate's list unchanged"() {
         given:
         def openTasks = [
-            new OpenTask(REF, new TrackerTaskState.Gone(null), null, 'a title')
+            new OpenTask(REF, new TrackerTaskState.Gone(null), null, UntrustedText.tracker('a title'))
         ]
         delegate.listOpen() >> openTasks
 

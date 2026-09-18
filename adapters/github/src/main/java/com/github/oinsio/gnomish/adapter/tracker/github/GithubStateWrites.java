@@ -125,7 +125,11 @@ public final class GithubStateWrites {
                 new GithubMarkerWrite(
                         GithubMarkerKind.ABORT,
                         scope,
-                        "🤖 gnomish: aborted: " + record.cause(),
+                        // The one untrusted component of the marker leaves its carrier here, at
+                        // the write, through the exit the tracker plane owns (design D7 of
+                        // type-untrusted-text): fenced and labeled, so the factory's own
+                        // "aborted:" prefix stays visibly outside what the medium said.
+                        "🤖 gnomish: aborted:\n" + record.cause().forComment(),
                         // The marker's reason field carries the recovery category, so the fold reads
                         // the two shares of the unified accounting back off the thread (FR14 of
                         // harden-task-branch-contract); a pre-categorization marker has none and

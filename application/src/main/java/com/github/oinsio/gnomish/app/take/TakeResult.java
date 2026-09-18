@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The runner-level result of one {@code take} run (design D2): {@link Delivered} —
@@ -48,10 +49,11 @@ public sealed interface TakeResult
      * <p>Implements FR18, D3 of add-tracker-port.
      *
      * @param finalState the final task state the engine returned; never null
-     * @param summary finished text of the final report posted to the tracker;
+     * @param summary finished text of the final report posted to the tracker, carried: it quotes
+     *     what the run captured, and the writer that publishes it renders it at the comment;
      *     never blank
      */
-    record Delivered(TaskState finalState, String summary) implements TakeResult {
+    record Delivered(TaskState finalState, UntrustedText summary) implements TakeResult {
 
         public Delivered {
             summary = requireNonBlank(summary, "summary");
@@ -77,7 +79,7 @@ public sealed interface TakeResult
     record AwaitingHuman(TaskState finalState, ParkReason reason, String report) implements TakeResult {
 
         public AwaitingHuman {
-            report = requireNonBlank(report, "report");
+            report = requireNonBlankReport(report);
         }
     }
 
@@ -89,9 +91,9 @@ public sealed interface TakeResult
      * <p>Implements D3 of add-tracker-port.
      *
      * @param finalState the last known task state; never null
-     * @param cause free-text description of what went wrong; never blank
+     * @param cause description of what went wrong, carried; never blank
      */
-    record Aborted(TaskState finalState, String cause) implements TakeResult {
+    record Aborted(TaskState finalState, UntrustedText cause) implements TakeResult {
 
         public Aborted {
             cause = requireNonBlank(cause, "cause");
@@ -107,10 +109,10 @@ public sealed interface TakeResult
      *
      * @param finalState the last known task state at the point of revocation;
      *     never null
-     * @param note free-text salvage note left for the new claim holder; never
-     *     blank
+     * @param note salvage note left for the new claim holder, carried: it quotes the revocation
+     *     reason the tracker reported; never blank
      */
-    record Revoked(TaskState finalState, String note) implements TakeResult {
+    record Revoked(TaskState finalState, UntrustedText note) implements TakeResult {
 
         public Revoked {
             note = requireNonBlank(note, "note");
@@ -148,10 +150,10 @@ public sealed interface TakeResult
      * empty queue is {@link EmptyQueue} instead (see its javadoc for the
      * reasoning behind the split).
      *
-     * @param reason free-text description of why the run was skipped; never
-     *     blank
+     * @param reason description of why the run was skipped, carried: a refusal usually quotes
+     *     what a tracker or a subprocess said; never blank
      */
-    record Skipped(String reason) implements TakeResult {
+    record Skipped(UntrustedText reason) implements TakeResult {
 
         public Skipped {
             reason = requireNonBlank(reason, "reason");
@@ -169,9 +171,10 @@ public sealed interface TakeResult
      * slot's infrastructure failure" the gate opens on — whether the unreachable refresh was a
      * fresh claim's base resolution or a resume's pinned-ref refresh (design D13).
      *
-     * @param reason free-text description of what did not answer; never blank
+     * @param reason description of what did not answer, carried: it embeds the failing remote
+     *     command's own words; never blank
      */
-    record InfrastructureUnavailable(String reason) implements TakeResult {
+    record InfrastructureUnavailable(UntrustedText reason) implements TakeResult {
 
         public InfrastructureUnavailable {
             reason = requireNonBlank(reason, "reason");
@@ -179,14 +182,31 @@ public sealed interface TakeResult
     }
 
     /**
-     * Fails fast on a blank value: every {@link TakeResult} variant's free-text
-     * field must describe what happened, since a caller renders a report from it
-     * alone (FR18). Kept as a shared static method rather than inline in each
-     * compact constructor: PIT's record filter suppresses all mutations inside a
-     * record's canonical constructor, which would silently exempt this
-     * validation from the 100% mutation gate.
+     * Fails fast on a blank {@link AwaitingHuman#report}: every {@link TakeResult} variant's
+     * free-text field must describe what happened, since a caller renders a report from it alone
+     * (FR18). Kept as a shared static method rather than inline in the compact constructor: PIT's
+     * record filter suppresses all mutations inside a record's canonical constructor, which would
+     * silently exempt this validation from the 100% mutation gate. Takes no {@code component}
+     * parameter: {@link AwaitingHuman#report} is the only {@code String}-typed field across every
+     * variant (see the carrier twin below for the rest), so a parameter here would always carry the
+     * same value.
      */
-    private static String requireNonBlank(String value, String component) {
+    private static String requireNonBlankReport(String value) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("TakeResult.report must not be blank");
+        }
+        return value;
+    }
+
+    /**
+     * The carrier twin of the validator above, for the five variants whose free text embeds
+     * captured text and therefore travels as {@code UntrustedText} (design D4 of
+     * type-untrusted-text). {@link AwaitingHuman#report} deliberately keeps the {@code String}
+     * form: it is a report builder's finished output, already rendered once through the comment
+     * exit for its two readers (design D6), so a carrier there would ask a second rendering of
+     * every park writer.
+     */
+    private static UntrustedText requireNonBlank(UntrustedText value, String component) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("TakeResult." + component + " must not be blank");
         }

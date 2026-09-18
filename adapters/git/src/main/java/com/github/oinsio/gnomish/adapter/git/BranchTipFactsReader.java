@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionExcepti
 import com.github.oinsio.gnomish.domain.branch.BranchTipFacts;
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus;
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -40,8 +41,8 @@ public final class BranchTipFactsReader {
      * @return the facts, always complete and never a thrown content failure
      */
     public BranchTipFacts read(BranchTipSource source) {
-        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
+        Optional<UntrustedText> taskJson = source.readAtTip(TASK_JSON_PATH);
+        Optional<UntrustedText> stateJson = source.readAtTip(STATE_JSON_PATH);
         return factsFrom(taskJson, stateJson, source.cleanupCommitInHistory());
     }
 
@@ -55,7 +56,8 @@ public final class BranchTipFactsReader {
      * @param cleanupCommitInHistory whether the same tip's cleanup commit appears in its history
      * @return the facts, always complete and never a thrown content failure
      */
-    BranchTipFacts factsFrom(Optional<String> taskJson, Optional<String> stateJson, boolean cleanupCommitInHistory) {
+    BranchTipFacts factsFrom(
+            Optional<UntrustedText> taskJson, Optional<UntrustedText> stateJson, boolean cleanupCommitInHistory) {
         Optional<TaskJsonDto> task = Optional.empty();
         Optional<StateJsonDto> state = Optional.empty();
 

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -61,8 +62,8 @@ abstract class TakeLifecycleProgressResetSpecBase extends Specification implemen
 
     def "Progress resets the counter"() {
         given: 'two aborts recorded directly against the fresh Ready task, before any progress'
-        tracker.recordAbort(REF, new AbortRecord('boom-1', INSTANCE, START))
-        tracker.recordAbort(REF, new AbortRecord('boom-2', INSTANCE, START.plusSeconds(1)))
+        tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('boom-1'), INSTANCE, START))
+        tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('boom-2'), INSTANCE, START.plusSeconds(1)))
         assert tracker.fetchTask(REF).abortFacts().count() == 2
 
         when: 'the task is reclaimed and driven through one durable round via the real take engine'
@@ -79,7 +80,7 @@ abstract class TakeLifecycleProgressResetSpecBase extends Specification implemen
         afterProgress.abortFacts().count() == 0
 
         when: 'one more abort happens after that durable progress'
-        tracker.recordAbort(REF, new AbortRecord('boom-3', INSTANCE, roundTime.plusSeconds(1)))
+        tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('boom-3'), INSTANCE, roundTime.plusSeconds(1)))
 
         then: 'the count reflects only the abort since progress — one, not three (FR3, M1)'
         def afterFinalAbort = tracker.fetchTask(REF)

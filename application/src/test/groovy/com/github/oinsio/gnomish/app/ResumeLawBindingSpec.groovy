@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.nio.file.Paths
 import spock.lang.Specification
@@ -77,7 +78,7 @@ class ResumeLawBindingSpec extends Specification {
 
         then:
         1 * baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >>
-                new ResumeBaseOutcome.Refused("origin holds no ref named 'release/1.18'")
+                new ResumeBaseOutcome.Refused(UntrustedText.subprocess("origin holds no ref named 'release/1.18'"))
 
         and:
         1 * tracker.park(REF, ParkReason.INFRA, { String report ->
@@ -109,8 +110,8 @@ class ResumeLawBindingSpec extends Specification {
     // escaping exception — the task still parks, and the failed write is its own coded ERROR.
     def "a park failure is swallowed, logs GF136, and still returns AwaitingHuman(INFRA)"() {
         given:
-        baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Refused('gone')
-        tracker.park(*_) >> {
+        baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Refused(UntrustedText.subprocess('gone'))
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> {
             throw new RuntimeException('tracker unreachable')
         }
         def logs = LogCaptureSupport.attach(ResumeLawBinding)
@@ -147,7 +148,7 @@ class ResumeLawBindingSpec extends Specification {
 
         then:
         1 * baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >>
-                new ResumeBaseOutcome.Unavailable('connection timed out')
+                new ResumeBaseOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
 
         and:
         1 * tracker.release(REF)
@@ -171,26 +172,26 @@ class ResumeLawBindingSpec extends Specification {
         logs.detach()
     }
 
-    // FR6 of harden-logging-observability: the pinned ref comes back from the task branch's
-    // task.json, which never passed a ref-syntax check, and the release message it is folded into
-    // is logged whole by SlotOutcomeLog and by the drain/batch summaries. Neither the ref nor the
-    // resolution detail may carry an escape sequence or a forged record into that line.
-    def "the release reason carries no control characters from the pinned ref or the detail"() {
-        given:
-        def esc = Character.toString(27 as char)
-        def hostilePin = new ResumeLawBinding.PinnedBase(('release/1.18' + esc + '[2J').toString(), BaseRefKind.BRANCH)
-
+    // FR6 of harden-logging-observability, narrowed at task 6.1 of type-untrusted-text: the
+    // release message is logged whole by SlotOutcomeLog and by the drain/batch summaries, so the
+    // resolution detail folded into it may carry no escape sequence and no forged record. The
+    // pinned ref beside it is no longer part of this assertion: PinnedRefGate holds every
+    // task.json baseRef to RefNameSyntax at the read (task 12.2 of add-base-ref-resolution), so a
+    // hostile pin cannot reach this far — the one PinnedBase a caller can build without the gate
+    // is the base commit, a hex object name. A per-field neutralizing call here would be dead.
+    def "the release reason carries no control characters from the resolution detail"() {
         when:
-        def outcome = ResumeLawBinding.bind(baseRefGit, ROOT, hostilePin, STATE, REF, tracker)
+        def outcome = ResumeLawBinding.bind(baseRefGit, ROOT, PINNED, STATE, REF, tracker)
 
         then:
-        1 * baseRefGit.resolveForResume(ROOT, hostilePin.ref(), BaseRefKind.BRANCH) >>
-                new ResumeBaseOutcome.Unavailable('timed out\nWARN forged log record')
+        1 * baseRefGit.resolveForResume(ROOT, PINNED.ref(), BaseRefKind.BRANCH) >>
+                new ResumeBaseOutcome.Unavailable(
+                UntrustedText.subprocess('timed out' + Character.toString(27 as char) + '[2J\nWARN forged log record'))
         1 * tracker.release(REF)
 
         and:
         def reason = ((outcome as ResumeLawBinding.Released).result() as TakeResult.InfrastructureUnavailable).reason()
-        !reason.contains(esc)
+        !reason.contains(Character.toString(27 as char))
         !reason.contains('\nWARN forged log record')
     }
 
@@ -199,8 +200,8 @@ class ResumeLawBindingSpec extends Specification {
     // exits normally.
     def "a release failure is swallowed and logs GF138, still returns InfrastructureUnavailable"() {
         given:
-        baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Unavailable('no answer')
-        tracker.release(_) >> {
+        baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Unavailable(UntrustedText.subprocess('no answer'))
+        tracker.release(REF) >> {
             throw new RuntimeException('tracker unreachable')
         }
         def logs = LogCaptureSupport.attach(ResumeLawBinding)

@@ -29,6 +29,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -78,7 +79,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         given: 'a round the guard blocked, then the round timeout killed before it could close'
         def denial = Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
-        def context = new TaskContext(TASK_ID, 'Fix flaky OrderServiceSpec', 'body', [])
+        def context = new TaskContext(TASK_ID, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
 
         when: 'the engine runs that round and parks the task on the branch'
         def outcome = runRoundKilledBy(

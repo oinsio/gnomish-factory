@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -75,15 +76,19 @@ public final class DecisionFileReader {
         if (raw.isBlank()) {
             log.warn(OperatorEvent.DECISION_FILE_EMPTY.head()
                     + "decision file was empty; falling back to a stand-in question");
-            return Optional.of(new Decision(FALLBACK_QUESTION, List.of()));
+            return Optional.of(new Decision(UntrustedText.agent(FALLBACK_QUESTION), List.of()));
         }
         try {
             Payload payload = MAPPER.readValue(raw, Payload.class);
             if (payload.question() == null) {
                 throw new IllegalArgumentException("decision-file JSON is missing the \"question\" field");
             }
-            List<String> options = payload.options() == null ? List.of() : List.copyOf(payload.options());
-            return Optional.of(new Decision(payload.question(), options));
+            // The mint for this family (design D3): the wire record holds whatever JSON the agent
+            // wrote, and every field lifted out of it becomes agent text here.
+            List<UntrustedText> options = payload.options() == null
+                    ? List.of()
+                    : payload.options().stream().map(UntrustedText::agent).toList();
+            return Optional.of(new Decision(UntrustedText.agent(payload.question()), options));
         } catch (JsonProcessingException | IllegalArgumentException e) {
             // FR6: the decision file is written by the agent, so its raw content is attacker-influenced
             // — capped and neutralized before it reaches the line, while the Decision itself still
@@ -91,8 +96,8 @@ public final class DecisionFileReader {
             log.warn(
                     OperatorEvent.DECISION_FILE_NOT_JSON.head()
                             + "decision file was not valid decision JSON; using raw content as the question: {}",
-                    LogText.forLog(raw, RAW_CONTENT_CAP_CHARS));
-            return Optional.of(new Decision(raw, List.of()));
+                    UntrustedText.agent(raw).excerpt(RAW_CONTENT_CAP_CHARS));
+            return Optional.of(new Decision(UntrustedText.agent(raw), List.of()));
         }
     }
 
@@ -101,10 +106,16 @@ public final class DecisionFileReader {
      * shape for the caller (task 6.5) to fold into {@code
      * ExecutionResult.DecisionNeeded} alongside usage/trace this class does not have.
      *
+     * <p>Both components are {@link UntrustedText}: the decision file is written by the agent,
+     * and this pair is published to the tracker for a human to answer (design D3, D4 of
+     * type-untrusted-text). The wire record below stays plain — it is the shape the JSON has,
+     * not an accessor the factory reads text through; the mint is here, where the fields are
+     * lifted out of it.
+     *
      * @param question the question text; never null
      * @param options the offered options, in file order; never null, possibly empty
      */
-    public record Decision(String question, List<String> options) {}
+    public record Decision(UntrustedText question, List<UntrustedText> options) {}
 
     /**
      * The strict {@code {"question": ..., "options": [...]}} wire shape. Both components are

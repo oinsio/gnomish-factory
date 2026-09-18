@@ -38,6 +38,10 @@ dependencies {
     api project(':baseref')
     // The tracker port-contract suites are typed in the port's own DTOs.
     api project(':gnomish-plugin-api')
+    // The untrusted-text leaf (design D3 of type-untrusted-text: "a fixture is a tracker"):
+    // `TrackerFixtureText` mints `TRACKER` carriers and the port-contract suites build carrier
+    // arguments, so the type is on these fixtures' own signatures.
+    api project(':untrustedtext')
     // RepeatSuppressorFixture returns a RepeatSuppressor in its own signature.
     api project(':logtext')
     // The application-layer fixtures shared by `:application`'s own specs and

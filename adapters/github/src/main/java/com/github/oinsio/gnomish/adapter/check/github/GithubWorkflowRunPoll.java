@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check.github;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Optional;
@@ -50,7 +51,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class GithubWorkflowRunPoll {
 
-    private static final String CANNOT_VERIFY_REASON = "GitHub Actions runs query failed";
+    private static final UntrustedText CANNOT_VERIFY_REASON = UntrustedText.tracker("GitHub Actions runs query failed");
 
     private final GithubWorkflowRunQuery query;
     private final GithubWorkflowJobsFetcher jobsFetcher;
@@ -110,7 +111,7 @@ public final class GithubWorkflowRunPoll {
      * means no workflow by that file name is registered — the {@code checkId} must reference a
      * workflow that exists on the repository's default branch.
      */
-    private static String misconfigurationReason(String checkId, int statusCode) {
+    private static UntrustedText misconfigurationReason(String checkId, int statusCode) {
         String cause =
                 switch (statusCode) {
                     case 401 -> "the GitHub token is invalid or expired";
@@ -120,7 +121,8 @@ public final class GithubWorkflowRunPoll {
                                 + " (check the checkId)";
                     default -> "the GitHub API rejected the runs query";
                 };
-        return "external check '" + checkId + "' cannot be verified (HTTP " + statusCode + "): " + cause;
+        return UntrustedText.tracker(
+                "external check '" + checkId + "' cannot be verified (HTTP " + statusCode + "): " + cause);
     }
 
     private PollStatus withFindings(PollStatus mapped, @Nullable GithubWorkflowRun matchingRun) {
@@ -130,9 +132,11 @@ public final class GithubWorkflowRunPoll {
         return mapped;
     }
 
-    private static String render(Throwable ex) {
+    private static UntrustedText render(Throwable ex) {
         var writer = new StringWriter();
         ex.printStackTrace(new PrintWriter(writer));
-        return writer.toString();
+        // The fold re-mints (design D5 of type-untrusted-text): every message in the chain is the
+        // platform's own words, and the trace that quotes them is no more trusted than they are.
+        return UntrustedText.tracker(writer.toString());
     }
 }

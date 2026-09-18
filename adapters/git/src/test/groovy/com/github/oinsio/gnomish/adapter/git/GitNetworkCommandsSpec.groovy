@@ -132,8 +132,8 @@ echo "argv=[$*] ssh=[${GIT_SSH_COMMAND}]"
         def runner = new GitProcessRunner(fakeGit.toString())
 
         when:
-        def local = runner.run(tempDir, 'status').stdout().trim()
-        def network = runner.run(tempDir, 'ls-remote', 'origin').stdout().trim()
+        def local = runner.run(tempDir, 'status').stdout().forParsing().trim()
+        def network = runner.run(tempDir, 'ls-remote', 'origin').stdout().forParsing().trim()
 
         then: 'a local command is handed nothing it did not ask for — no options, no ssh wrapper'
         local.startsWith('argv=[status]')

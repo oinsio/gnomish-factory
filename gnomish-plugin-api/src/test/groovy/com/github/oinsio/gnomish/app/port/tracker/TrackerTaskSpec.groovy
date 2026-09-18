@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -13,7 +14,7 @@ class TrackerTaskSpec extends Specification {
     def "exposes ref, snapshot, state and abortFacts for a working task"() {
         given:
         def ref = new TaskRef('github:owner/repo#42')
-        def snapshot = new TaskSnapshot('github:owner/repo#42', 'Fix the thing', 'body')
+        def snapshot = new TaskSnapshot('github:owner/repo#42', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('body'))
         def state = new TrackerTaskState.Working('instance-a')
         def facts = new AbortFacts(2, null)
 
@@ -31,7 +32,7 @@ class TrackerTaskSpec extends Specification {
     def "reports a closed task as Gone state, not an exception"() {
         given:
         def ref = new TaskRef('github:owner/repo#42')
-        def snapshot = new TaskSnapshot('github:owner/repo#42', 'Fix the thing', 'body')
+        def snapshot = new TaskSnapshot('github:owner/repo#42', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('body'))
 
         when:
         def task = new TrackerTask(ref, snapshot, new TrackerTaskState.Gone(), AbortFacts.none(), false)
@@ -44,7 +45,7 @@ class TrackerTaskSpec extends Specification {
     def "tasks with the same components are equal values"() {
         given:
         def ref = new TaskRef('github:owner/repo#42')
-        def snapshot = new TaskSnapshot('github:owner/repo#42', 'Fix the thing', 'body')
+        def snapshot = new TaskSnapshot('github:owner/repo#42', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('body'))
         def state = new TrackerTaskState.Ready()
 
         expect:

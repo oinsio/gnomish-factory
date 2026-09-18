@@ -45,8 +45,8 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def result = extractor.extract(events, events.last().readAt())
 
         then: 'the essential result text and session id are surfaced verbatim'
-        result.sessionId() == 'ref-session-plain-1'
-        result.result() == 'I read spec.md, which asks for a file `output.txt` containing `done`. However, I\'m unable to create it: the Write tool is waiting on a permission grant that hasn\'t been given, and shell redirection is blocked by the sandbox. Please approve the write (or grant write permission) and I\'ll create `output.txt` with the content `done`.'
+        result.sessionId().forLog()== 'ref-session-plain-1'
+        result.result().forLog() == 'I read spec.md, which asks for a file `output.txt` containing `done`. However, I\'m unable to create it: the Write tool is waiting on a permission grant that hasn\'t been given, and shell redirection is blocked by the sandbox. Please approve the write (or grant write permission) and I\'ll create `output.txt` with the content `done`.'
 
         and: 'tokensByModel carries one entry per model in modelUsage, keyed by the resolved model id'
         result.usage().tokensByModel() == [
@@ -87,7 +87,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def result = extractor.extract(events, events.last().readAt())
 
         then: 'the raw fenced verdict text is carried through unparsed — verdict extraction is the judge adapter\'s job (task 7.4), not the parser\'s'
-        result.result() == '```json\n{"passed": true, "findings": []}\n```'
+        result.result().forConsole() == '```json\n{"passed": true, "findings": []}\n```'
 
         and: 'the tool trace reflects only the read-only calls a judge is allowed (FR12, NFR-S1)'
         result.usage().tools()*.name() == ['Grep', 'Read']

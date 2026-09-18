@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -100,7 +101,7 @@ advancement: auto
     }
 
     private void seedReady(TaskRef ref, TaskDesignators designators = TaskDesignators.none()) {
-        harness.seed(ref, new TaskSnapshot(ref.id(), 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Ready(), AbortFacts.none())
         if (!designators.byKind().isEmpty()) {
             harness.seedDesignators(ref, designators)
         }
@@ -128,7 +129,7 @@ advancement: auto
         def commits = gitOutput(projectDir, 'log', '--format=%H', branch, '--', '.gnomish-task/task.json').split('\n')
         String creationCommit = commits[commits.length - 1]
         def json = gitOutput(projectDir, 'show', "${creationCommit}:.gnomish-task/task.json")
-        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json))
+        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
     }
 
     // M1: on a zero-config project, a newly created task branch's recorded base SHA equals the

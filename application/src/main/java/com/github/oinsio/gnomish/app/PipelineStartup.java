@@ -61,6 +61,8 @@ public final class PipelineStartup {
     }
 
     private static List<String> render(List<ConfigError> errors) {
-        return errors.stream().map(ConfigError::render).toList();
+        // The console exit: these lines are printed for the author who must fix the manifest, so
+        // line structure and length are kept and only control sequences become visible (D6).
+        return errors.stream().map(error -> error.render().forConsole()).toList();
     }
 }

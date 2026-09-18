@@ -28,6 +28,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
@@ -130,7 +131,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         tracker.fetchTask(_) >> heldByUs()
         branches.readDelivered(_, _) >> new DeliveredBranchState(
-                new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()), TaskState.atStageStart('build'))
+                new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskState.atStageStart('build'))
 
         when:
         def result = resume(resumeChain(executor))
@@ -247,7 +248,10 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "re-parks a DecisionNeeded escalation that has no reply yet, restating the question"() {
         given:
         def executor = new ScriptedExecutor([completedRound()])
-        def report = new EscalationReport.DecisionNeeded('which database?', ['postgres', 'sqlite'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ])
         store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
         tracker.fetchTask(_) >> heldByUs()
 
@@ -278,7 +282,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         tracker.collectDecisions(REF) >> [
             new HumanReply('use postgres', NOW)
         ]
-        1 * tracker.acknowledgeDecision(REF, 'use postgres')
+        1 * tracker.acknowledgeDecision(REF, fenced('use postgres'))
 
         and: 'nothing else is repeated — no decision is appended a second time'
         0 * lifecycleStore.appendDecision(_, _, _)
@@ -305,7 +309,10 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // console), then the engine resumes carrying it.
     def "acknowledges the latest reply, appends it as a decision, and resumes"() {
         given:
-        def report = new EscalationReport.DecisionNeeded('which database?', ['postgres', 'sqlite'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ])
         store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
         tracker.fetchTask(_) >> heldByUs()
 
@@ -317,7 +324,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             new HumanReply('an earlier thought', NOW.minusSeconds(60)),
             new HumanReply('use postgres', NOW),
         ]
-        1 * tracker.acknowledgeDecision(REF, 'use postgres')
+        1 * tracker.acknowledgeDecision(REF, fenced('use postgres'))
         1 * lifecycleStore.appendDecision('PROJ-1', {
             it.body() == 'use postgres' && it.author() == 'tracker'
         }, _)
@@ -399,7 +406,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // the decision carries no stage rather than a fabricated one.
     def "stamps an appended decision with the parked stage, or with none at the pipeline end"() {
         given:
-        def report = new EscalationReport.DecisionNeeded('which database?', ['postgres'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres')
+        ])
         store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
         recordedState = finalState
         tracker.fetchTask(_) >> heldByUs()
@@ -462,5 +471,10 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         1 * tracker.park(REF, ParkReason.ESCALATION, _)
         1 * lifecycleStore.confirmTerminalWrite('PROJ-1')
         result instanceof TakeResult.AwaitingHuman
+    }
+
+    /** The comment exit's rendering of one text, as every tracker write now publishes it. */
+    private static String fenced(String text) {
+        UntrustedText.tracker(text).forComment()
     }
 }

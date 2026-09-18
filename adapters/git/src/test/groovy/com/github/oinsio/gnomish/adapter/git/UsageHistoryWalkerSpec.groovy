@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -29,7 +30,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
 
     def "FR14: a stage that fails round 1 then passes round 2 — both rounds appear with usage and count toward totals"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-1', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         def failedRound = round(0, AttemptRecord.Result.QUALITY_FAILURE, 1000, 100)
         def stateAfterFail = TaskState.atStageStart('implement').recordQualityFailure(failedRound)
@@ -65,7 +66,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
     // its commit left the task.
     def "FR14: a passing round whose commit already advanced the position is billed to the stage that ran it"() {
         given: 'a task whose implement stage passes, advancing to verify in that same commit'
-        taskRepository().createTask(new TaskContext('PROJ-9', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         def afterPass = TaskState.atStageStart('implement')
@@ -92,7 +93,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
 
     def "FR14: advancing to a new stage starts a fresh round history and still yields one row for the new stage's first round"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-2', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-2', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         def stateAtImplement = TaskState.atStageStart('implement').recordUnburnedRound(implementRound)
@@ -123,7 +124,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
 
     def "FR14: a task branch with only a task.json commit (no rounds yet) yields an empty history"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-4', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-4', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         when:
         def result = (walker.walk(cloneDir, 'PROJ-4') as UsageHistoryResult.Found)

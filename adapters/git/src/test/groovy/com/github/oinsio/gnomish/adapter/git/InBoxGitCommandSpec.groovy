@@ -30,7 +30,7 @@ class InBoxGitCommandSpec extends Specification {
         then:
         outcome.termination() == Termination.EXITED
         outcome.exitCode() == 0
-        outcome.output() == 'committed\n'
+        outcome.output().forParsing() == 'committed\n'
         outcome.succeeded()
     }
 
@@ -57,7 +57,7 @@ class InBoxGitCommandSpec extends Specification {
         then:
         outcome.termination() == Termination.INTERRUPTED
         !outcome.succeeded()
-        outcome.output().contains('interrupted')
+        outcome.output().forParsing().contains('interrupted')
 
         cleanup: 'the flag CapturedExec left set belongs to the shutdown, not to the next spec'
         Thread.interrupted()

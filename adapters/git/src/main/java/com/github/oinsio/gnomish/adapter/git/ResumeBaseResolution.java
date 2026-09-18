@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -46,7 +47,8 @@ final class ResumeBaseResolution {
             return localTip(cloneDir, ref)
                     .<ResumeBaseOutcome>map(
                             commit -> new ResumeBaseOutcome.Bound(ref, commit, OriginContact.CLONE_ONLY))
-                    .orElseGet(() -> new ResumeBaseOutcome.Refused(noRemoteUnresolvedReport(ref)));
+                    .orElseGet(() ->
+                            new ResumeBaseOutcome.Refused(UntrustedText.subprocess(noRemoteUnresolvedReport(ref))));
         }
         return switch (refresh.refresh(cloneDir, ref, kind)) {
             // The remote-backed path takes the refresh's own answer rather than restating one: it
@@ -54,8 +56,8 @@ final class ResumeBaseResolution {
             // Implements FR1 of signal-outage-gate-on-origin-contact.
             case BaseRefreshOutcome.Refreshed(String resolved, String commit, var ignoredKind, OriginContact contact) ->
                 new ResumeBaseOutcome.Bound(resolved, commit, contact);
-            case BaseRefreshOutcome.Refused(String report) -> new ResumeBaseOutcome.Refused(report);
-            case BaseRefreshOutcome.Unavailable(String reason) -> new ResumeBaseOutcome.Unavailable(reason);
+            case BaseRefreshOutcome.Refused(UntrustedText report) -> new ResumeBaseOutcome.Refused(report);
+            case BaseRefreshOutcome.Unavailable(UntrustedText reason) -> new ResumeBaseOutcome.Unavailable(reason);
         };
     }
 

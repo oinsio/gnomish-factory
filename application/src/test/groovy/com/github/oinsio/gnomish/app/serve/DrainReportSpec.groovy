@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -32,7 +33,7 @@ class DrainReportSpec extends Specification {
         def ref = new TaskRef('github:o/r#1')
 
         when:
-        report.record(ref, new TakeResult.Delivered(TaskState.atStageStart('build'), 'shipped it'))
+        report.record(ref, new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('shipped it')))
 
         then:
         report.entries().size() == 1
@@ -47,7 +48,7 @@ class DrainReportSpec extends Specification {
         def report = new DrainReport()
 
         when:
-        report.record(new TaskRef('github:o/r#1'), new TakeResult.Delivered(TaskState.atStageStart('build'), 'done'))
+        report.record(new TaskRef('github:o/r#1'), new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('done')))
         report.record(
                 new TaskRef('github:o/r#2'),
                 new TakeResult.AwaitingHuman(TaskState.atStageStart('build'), ParkReason.ESCALATION, 'needs a human'))
@@ -70,7 +71,7 @@ class DrainReportSpec extends Specification {
         when:
         (0..<taskCount).each { i ->
             executor.submit {
-                report.record(new TaskRef("github:o/r#${i}" as String), new TakeResult.Delivered(TaskState.atStageStart('build'), 'ok'))
+                report.record(new TaskRef("github:o/r#${i}" as String), new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('ok')))
                 done.countDown()
             }
         }

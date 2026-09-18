@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import org.slf4j.LoggerFactory
 
 /**
@@ -61,7 +62,7 @@ final class ParkKillPoints {
     static KillPointTransition denialTransition(String medium, Closure world) {
         row("${medium} cannotExecute park with drained denials",
                 world,
-                new EscalationReport.CannotExecute('round timed out', [DENIAL]), { KillPointWorld w ->
+                new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [DENIAL]), { KillPointWorld w ->
                     assert w.tipCursor() == new EgressCursorDto(DRAINED.source(), DRAINED.position())
                 })
     }

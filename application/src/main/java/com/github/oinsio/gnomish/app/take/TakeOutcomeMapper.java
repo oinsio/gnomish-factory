@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.EscalationResumeDialog;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * Maps an engine {@link TaskOutcome} to the {@link TakeResult} that decides which
@@ -62,7 +63,8 @@ public final class TakeOutcomeMapper {
      */
     public static TakeResult map(TaskOutcome outcome) {
         return switch (outcome) {
-            case TaskOutcome.Completed completed -> new TakeResult.Delivered(completed.finalState(), "Task completed.");
+            case TaskOutcome.Completed completed ->
+                new TakeResult.Delivered(completed.finalState(), UntrustedText.tracker("Task completed."));
             case TaskOutcome.Paused paused ->
                 new TakeResult.AwaitingHuman(
                         paused.finalState(),

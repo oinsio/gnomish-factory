@@ -1,15 +1,17 @@
 package com.github.oinsio.gnomish.app.port.agent;
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A live progress signal emitted by {@link StreamJsonParser}'s parse loop as it
+ * A live progress signal emitted by {@code adapter.agent.StreamJsonParser}'s parse loop as it
  * recognizes an event on a round's stream-json output, delivered to an {@link
- * AgentProgressListener} (design D10). Unlike {@link AgentEvent} — the durable
- * per-line wire model later folded into {@link ExecutorUsage} / {@link
- * ToolTraceBuilder} — a progress event exists only for the moment of observation:
+ * AgentProgressListener} (design D10). Unlike {@code adapter.agent.AgentEvent} — the durable
+ * per-line wire model later folded into {@link ExecutorUsage} / {@code
+ * adapter.agent.ToolTraceBuilder} — a progress event exists only for the moment of observation:
  * it carries the minimum a live subscriber (an SLF4J renderer, a status enricher)
  * needs to report a round in flight, not the full wire payload.
  *
@@ -27,15 +29,15 @@ import org.jspecify.annotations.Nullable;
 public sealed interface AgentProgressEvent {
 
     /**
-     * A round has started: emitted when {@link StreamJsonParser} recognizes the
+     * A round has started: emitted when {@code adapter.agent.StreamJsonParser} recognizes the
      * round's {@code system}/{@code init} event.
      *
-     * @param model the round's main model id, verbatim from {@link
-     *     AgentEvent.InitEvent#model()}; never blank
-     * @param sessionId the CLI's session id for this round, verbatim from {@link
-     *     AgentEvent.InitEvent#sessionId()}; never blank
+     * @param model the round's main model id, verbatim from {@code
+     *     adapter.agent.AgentEvent.InitEvent#model()}; never blank
+     * @param sessionId the CLI's session id for this round, verbatim from {@code
+     *     adapter.agent.AgentEvent.InitEvent#sessionId()}; never blank
      */
-    record RoundStarted(String model, String sessionId) implements AgentProgressEvent {
+    record RoundStarted(UntrustedText model, UntrustedText sessionId) implements AgentProgressEvent {
 
         public RoundStarted {
             model = requireNonBlank(model, "model");
@@ -44,17 +46,17 @@ public sealed interface AgentProgressEvent {
     }
 
     /**
-     * A top-level tool call has started: emitted once per top-level {@link
-     * ContentBlock.ToolUse} block, in the order encountered, when {@link
-     * StreamJsonParser} recognizes an {@code assistant} event whose {@link
-     * AgentEvent.AssistantEvent#parentToolUseId()} is {@code null} — the same
-     * top-level notion {@link ToolTraceBuilder} applies post-hoc, checked inline
+     * A top-level tool call has started: emitted once per top-level {@code
+     * adapter.agent.ContentBlock.ToolUse} block, in the order encountered, when {@code
+     * adapter.agent.StreamJsonParser} recognizes an {@code assistant} event whose {@code
+     * adapter.agent.AgentEvent.AssistantEvent#parentToolUseId()} is {@code null} — the same
+     * top-level notion {@code adapter.agent.ToolTraceBuilder} applies post-hoc, checked inline
      * here as each line is parsed (FR7: "top-level tool started"). A nested
      * subagent tool call (non-null {@code parentToolUseId}) never produces this
      * event.
      *
-     * @param name the tool's name, verbatim from {@link
-     *     ContentBlock.ToolUse#name()}; never blank
+     * @param name the tool's name, verbatim from {@code
+     *     adapter.agent.ContentBlock.ToolUse#name()}; never blank
      */
     record ToolStarted(String name) implements AgentProgressEvent {
 
@@ -64,42 +66,42 @@ public sealed interface AgentProgressEvent {
     }
 
     /**
-     * A round has finished: emitted when {@link StreamJsonParser} recognizes the
+     * A round has finished: emitted when {@code adapter.agent.StreamJsonParser} recognizes the
      * round's {@code result} event, carrying the three facts the spec's "round
      * finished" line enumerates — result subtype, token summary, final-message
-     * summary. {@code summary} is {@link AgentEvent.ResultEvent#result()}
+     * summary. {@code summary} is {@code adapter.agent.AgentEvent.ResultEvent#result()}
      * verbatim (design D9(c)) — the same text the domain never sees as decision
      * data, only as a log line and this event. {@code tokensByModel} is derived
-     * the same way {@link AgentRoundResultExtractor}'s telemetry is (task 3.3):
-     * {@link AgentEvent.ResultEvent#modelUsage()} when present, else the flat
-     * {@link AgentEvent.ResultEvent#usage()} keyed by the round's {@link
-     * AgentEvent.InitEvent#model()} — best-effort, empty when neither wire shape
+     * the same way {@code adapter.agent.AgentRoundResultExtractor}'s telemetry is (task 3.3):
+     * {@code adapter.agent.AgentEvent.ResultEvent#modelUsage()} when present, else the flat
+     * {@code adapter.agent.AgentEvent.ResultEvent#usage()} keyed by the round's {@code
+     * adapter.agent.AgentEvent.InitEvent#model()} — best-effort, empty when neither wire shape
      * was interpretable (NFR-R2).
      *
      * <p>Carries no {@code sessionId}: unlike {@link RoundStarted} / {@link
      * ToolStarted}, which report facts about an event mid-stream, a listener
      * receives {@code RoundStarted} and {@code RoundFinished} for the same round
      * as a strictly ordered pair on one subscriber instance scoped to that round
-     * (mirroring how {@link StreamJsonParser#parse} itself is called once per
+     * (mirroring how {@code adapter.agent.StreamJsonParser#parse} itself is called once per
      * round) — correlation by field is redundant with correlation by call order,
      * and the result event's session id carries no information {@code
      * RoundStarted} did not already report.
      *
      * @param subtype the result event's {@code subtype} (e.g. {@code "success"},
-     *     {@code "error_max_turns"}), verbatim from {@link
-     *     AgentEvent.ResultEvent#subtype()}, or {@code null} if the wire event
+     *     {@code "error_max_turns"}), verbatim from {@code
+     *     adapter.agent.AgentEvent.ResultEvent#subtype()}, or {@code null} if the wire event
      *     carried none
      * @param tokensByModel the round's token usage keyed by resolved model id;
      *     defensively copied, unmodifiable, empty when unreported
-     * @param summary the round's final-message text, verbatim from {@link
-     *     AgentEvent.ResultEvent#result()}; never null, possibly empty
+     * @param summary the round's final-message text, verbatim from {@code
+     *     adapter.agent.AgentEvent.ResultEvent#result()}; never null, possibly empty
      */
-    record RoundFinished(@Nullable String subtype, Map<String, TokenUsage> tokensByModel, String summary)
+    record RoundFinished(@Nullable String subtype, Map<String, TokenUsage> tokensByModel, UntrustedText summary)
             implements AgentProgressEvent {
 
         public RoundFinished {
             tokensByModel = Map.copyOf(tokensByModel);
-            requireNonNull(summary, "summary");
+            requireNonNull(summary);
         }
     }
 
@@ -118,13 +120,26 @@ public sealed interface AgentProgressEvent {
     }
 
     /**
+     * The same fail-fast for the two components the agent itself chose, which travel as the
+     * carrier they were minted in (design D4 of type-untrusted-text) — a listener renders them
+     * through an exit rather than receiving a string this port already flattened.
+     */
+    private static UntrustedText requireNonBlank(UntrustedText value, String component) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("AgentProgressEvent." + component + " must not be blank");
+        }
+        return value;
+    }
+
+    /**
      * Fails fast on a null {@code summary}: the CLI may report an empty string
      * but never omits the field entirely. Same explicit-static-method rationale
-     * as {@link #requireNonBlank}.
+     * as {@link #requireNonBlank}. Takes no {@code component} parameter — unlike
+     * {@link #requireNonBlank}, this check has exactly one caller.
      */
-    private static void requireNonNull(String value, String component) {
+    private static void requireNonNull(UntrustedText value) {
         if (value == null) {
-            throw new NullPointerException("AgentProgressEvent." + component + " must not be null");
+            throw new NullPointerException("AgentProgressEvent.summary must not be null");
         }
     }
 }

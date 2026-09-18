@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -44,7 +45,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     private static ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
         new ExecutionResult.DecisionNeeded(
-                'which way?', [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
+                UntrustedText.agent('which way?'), [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
     private static PipelineDefinition manualCheckpointPipeline() {
@@ -220,7 +221,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
     }
 
     private static TaskContext trackerContext(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', [])
+        new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 
     private static TaskState trackerState() {

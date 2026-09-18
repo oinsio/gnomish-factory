@@ -31,7 +31,7 @@ final class TaskStart {
     static ObjectId commit(Path repoDir, String revision) {
         def result = new GitProcessRunner().run(repoDir, 'rev-parse', '--verify', revision + '^{commit}')
         assert result.exitCode() == 0: "spec fixture: '${revision}' resolves to no commit in ${repoDir}"
-        ObjectId.of(result.stdout().trim())
+        ObjectId.of(result.stdout().forParsing().trim())
     }
 
     /**

@@ -450,19 +450,40 @@ trusted/task tier split, and the law-root rule.
   first-occurrence line. *Not:* a local aggregate counter, which collapses a
   flood *within one operation* into one summary line — a different invariant,
   deliberately not the same mechanism. *Never:* deduplication, throttling.
-- **Log text sanitization** — the choke point every piece of untrusted text
-  passes before it becomes part of a log line: control/ANSI stripping, newline
-  flattening so one event stays one line, and a length cap. Applied by `LogText`
-  in `:logtext`, a facade over the `:untrustedtext` leaf, which owns the
-  character table and the primitives. Behind it stands the **sink layer**: the
-  Logback encoder neutralizes the rendered message, the rendered throwable and
-  every MDC value through its own converters, so a hostile byte that reached a record without
-  passing the choke point still cannot forge a line — defense in depth, not a
-  license to skip the choke point (the three layers are stated in
-  `docs/adr/0004-logging-policy.md`). *Not:* findings sanitization —
-  `FindingsSanitizer` guards the plugin-findings boundary and deliberately
-  *preserves* line structure; the two are distinct controls at distinct trust
-  boundaries, both facades over the same `:untrustedtext` owner.
+- **Untrusted text** — text the factory captured from outside its own trust
+  boundary and must treat as attacker-influenced. It is a *type*, not a
+  convention: `UntrustedText` in the `:untrustedtext` leaf holds the bytes as
+  captured together with their provenance, and a capture accessor returns the
+  carrier rather than a string. It has four ways out, each with its own
+  allowlist: queries that yield a boolean or an int (open to all); the three
+  exits `forLog()`, `forConsole()` and `forComment()`, each applying its plane's
+  notation; `forParsing()`, for the `@UntrustedParser` classes that turn the text
+  into a value that is no longer untrusted text; and `raw()`, for the
+  `@UntrustedExit` classes that write the bytes to a machine medium. A build gate
+  holds all four. *Not:* a secret value, which is never written anywhere at all.
+  *Never:* raw string, tainted string.
+- **Provenance** — which trust boundary a piece of untrusted text crossed to
+  reach the factory, fixed at the mint and part of the carrier's identity: one of
+  *subprocess output*, *in-container command output*, *agent output*, *tracker
+  text*, *target-repository manifest*, *task-branch document*. It names the
+  source family, not the call site, and it is re-stated rather than inherited when
+  a value is lifted out of a document another instance wrote. *Not:* the exit,
+  which is chosen by the plane the text is leaving for, not by where it came from.
+  *Never:* taint tag, text kind.
+- **Log text sanitization** — the rendering untrusted text receives on its way
+  into a log line: control/ANSI stripping, newline flattening so one event stays
+  one line, and a length cap. The choke point is the carrier's own log exit,
+  `UntrustedText.forLog()`; `LogText` in `:logtext` is the `String` facade over
+  the same rendering for callers that do not hold a carrier. Both delegate to the
+  `:untrustedtext` leaf, which owns the character table and the primitives.
+  Behind them stands the **sink layer**: the Logback encoder neutralizes the
+  rendered message, the rendered throwable and every MDC value through its own
+  converters, so a hostile byte that reached a record without passing the exit
+  still cannot forge a line — defense in depth, not a license to skip the exit
+  (the three layers are stated in `docs/adr/0004-logging-policy.md`). *Not:*
+  findings sanitization — `FindingsSanitizer` guards the plugin-findings boundary
+  and deliberately *preserves* line structure; the two are distinct controls at
+  distinct trust boundaries, both facades over the same `:untrustedtext` owner.
 - **Shutdown phase** — the window between the moment a stop takes ownership of
   the process and the moment it exits. Marked once, first thing in the shutdown
   hook, and read by the sites that would otherwise report the stop's own

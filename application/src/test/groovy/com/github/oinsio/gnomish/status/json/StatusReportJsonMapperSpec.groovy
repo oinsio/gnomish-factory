@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -116,7 +117,7 @@ class StatusReportJsonMapperSpec extends Specification {
     def "activity executing renders currentTool and toolCalls when present"() {
         given:
         def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.Executing(since, "Edit", 3))
+        def report = activityReport(new Activity.Executing(since, UntrustedText.agent("Edit"), 3))
 
         expect:
         mapper.toDto(report).activity() ==
@@ -126,7 +127,7 @@ class StatusReportJsonMapperSpec extends Specification {
     def "activity verifying renders checkRef label and since"() {
         given:
         def since = Instant.parse("2026-07-16T14:41:02Z")
-        def checkRef = new CheckRef(0, "command:./gradlew test")
+        def checkRef = new CheckRef(0, UntrustedText.manifest("command:./gradlew test"))
         def report = activityReport(new Activity.Verifying(checkRef, since))
 
         expect:
@@ -137,7 +138,7 @@ class StatusReportJsonMapperSpec extends Specification {
     def "activity awaitingInput renders prompt and since"() {
         given:
         def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.AwaitingInput("Refactor or patch?", since))
+        def report = activityReport(new Activity.AwaitingInput(UntrustedText.agent("Refactor or patch?"), since))
 
         expect:
         mapper.toDto(report).activity() ==
@@ -175,7 +176,7 @@ class StatusReportJsonMapperSpec extends Specification {
     def "outcome aborted renders failedAt and cause"() {
         given:
         def failedAt = new AttemptKey("task-1", "implement", 2)
-        def report = outcomeReport(new Outcome.Aborted(failedAt, "disk full"))
+        def report = outcomeReport(new Outcome.Aborted(failedAt, UntrustedText.subprocess("disk full")))
 
         expect:
         mapper.toDto(report).outcome() == new OutcomeDto.Aborted("aborted", failedAt.toString(), "disk full")
@@ -183,7 +184,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "verdict pass renders empty findings and no reason/details"() {
         given:
-        def check = new CheckResult(new CheckRef(0, "builtin:files_exist"), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
 
         expect:
         AttemptMapper.toCheck(check) ==
@@ -194,7 +195,7 @@ class StatusReportJsonMapperSpec extends Specification {
         given:
         def finding = new Finding("command exited with 1", null, "…output tail…")
         def check = new CheckResult(
-                new CheckRef(1, "command:./gradlew test"), new Verdict.Fail([finding]), Duration.ofMillis(41250))
+                new CheckRef(1, UntrustedText.manifest("command:./gradlew test")), new Verdict.Fail([finding]), Duration.ofMillis(41250))
 
         expect:
         AttemptMapper.toCheck(check) ==
@@ -207,7 +208,7 @@ class StatusReportJsonMapperSpec extends Specification {
     def "verdict cannotVerify surfaces reason and details, empty findings"() {
         given:
         def check = new CheckResult(
-                new CheckRef(0, "external:ci"), new Verdict.CannotVerify("timeout", "poll exceeded 5m"),
+                new CheckRef(0, UntrustedText.manifest("external:ci")), new Verdict.CannotVerify(UntrustedText.subprocess("timeout"), UntrustedText.subprocess("poll exceeded 5m")),
                 Duration.ofMillis(300000))
 
         expect:
@@ -223,28 +224,31 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "escalation decisionNeeded renders question and options"() {
         expect:
-        EscalationMapper.toDto(new EscalationReport.DecisionNeeded("Refactor or patch?", ["refactor", "patch"])) ==
+        EscalationMapper.toDto(new EscalationReport.DecisionNeeded(UntrustedText.agent("Refactor or patch?"), [
+            UntrustedText.agent("refactor"),
+            UntrustedText.agent("patch")
+        ])) ==
         new EscalationDto.DecisionNeeded("decisionNeeded", null, null, "Refactor or patch?", ["refactor", "patch"])
     }
 
     def "escalation cannotVerify renders check label, reason, details"() {
         given:
-        def checkRef = new CheckRef(0, "external:ci")
+        def checkRef = new CheckRef(0, UntrustedText.manifest("external:ci"))
 
         expect:
-        EscalationMapper.toDto(new EscalationReport.CannotVerify(checkRef, "timeout", "detail")) ==
+        EscalationMapper.toDto(new EscalationReport.CannotVerify(checkRef, UntrustedText.subprocess("timeout"), UntrustedText.subprocess("detail"))) ==
                 new EscalationDto.CannotVerify("cannotVerify", null, null, "external:ci", "timeout", "detail")
     }
 
     def "escalation pipelineMismatch renders staleStage"() {
         expect:
-        EscalationMapper.toDto(new EscalationReport.PipelineMismatch("removed-stage")) ==
+        EscalationMapper.toDto(new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage"))) ==
                 new EscalationDto.PipelineMismatch("pipelineMismatch", null, null, "removed-stage")
     }
 
     def "escalation cannotExecute renders cause"() {
         expect:
-        EscalationMapper.toDto(new EscalationReport.CannotExecute("adapter crashed", [])) ==
+        EscalationMapper.toDto(new EscalationReport.CannotExecute(UntrustedText.subprocess("adapter crashed"), [])) ==
         new EscalationDto.CannotExecute("cannotExecute", null, null, "adapter crashed", [])
     }
 
@@ -257,7 +261,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
 
         expect:
-        EscalationMapper.toDto(new EscalationReport.CannotExecute("round timed out", [Denial.unidentified(denial)])) ==
+        EscalationMapper.toDto(new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [Denial.unidentified(denial)])) ==
         new EscalationDto.CannotExecute("cannotExecute", null, null, "round timed out", [
             new FindingDto("egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
         ])
@@ -304,7 +308,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "byTool maps each ToolUsage's name, calls and duration-in-millis"() {
         given: 'totals reporting a per-tool breakdown with two distinct tools'
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def totals = new ExecutorUsage(
                 Duration.ofMillis(500),
                 [
@@ -331,7 +335,7 @@ class StatusReportJsonMapperSpec extends Specification {
     // FR9, D12 of add-agent-executor: perVote maps each vote's per-model token map
     def "an attempt's judgeUsage.perVote maps each vote's tokensByModel in vote order"() {
         given: 'an attempt whose judge usage carries two cast votes'
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def judgeUsage = new JudgeUsage([
             ['model-a': new TokenUsage(100, 20, 0, 0)],
             ['model-a': new TokenUsage(150, 30, 0, 0)]
@@ -356,7 +360,7 @@ class StatusReportJsonMapperSpec extends Specification {
     // fabricated zero entry
     def "a judge vote with an empty token map maps to an empty tokensByModel map"() {
         given: 'an attempt whose judge usage carries one unreported vote'
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def judgeUsage = new JudgeUsage([[:]])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
@@ -373,13 +377,13 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     private static StatusReport idleReport(Position position) {
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(position, 0, [], ExecutorUsage.none())
         return StatusReport.build(context, state, position instanceof Position.AtStage ? 3 : null, LiveActivity.idle())
     }
 
     private static StatusReport activityReport(Activity activity) {
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
         return StatusReport.build(context, state, 3, new LiveActivity(activity, null, null))
     }
@@ -391,7 +395,7 @@ class StatusReportJsonMapperSpec extends Specification {
         given: 'a round that passed every check and denied one egress attempt'
         def denial = new Finding(
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
-        def check = new CheckResult(new CheckRef(0, "builtin:files_exist"), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
                 [check], ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
@@ -421,13 +425,13 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     private static StatusReport reportOf(AttemptRecord attempt) {
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(new Position.AtStage("implement"), 1, [attempt], ExecutorUsage.none())
         return StatusReport.build(context, state, 3, new LiveActivity(null, null, null))
     }
 
     private static StatusReport outcomeReport(Outcome outcome) {
-        def context = new TaskContext("task-1", "Title", "Body", [])
+        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
         return StatusReport.build(context, state, 3, new LiveActivity(null, null, outcome))
     }

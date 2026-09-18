@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -22,7 +23,6 @@ import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import spock.lang.Specification
-import spock.util.concurrent.PollingConditions
 
 /**
  * M4, G5 of add-base-ref-resolution (task 7.5): the end-to-end proof that the feed
@@ -69,20 +69,6 @@ class RemoteOutageServeEndToEndSpec extends Specification {
     private static final Duration SUSTAINED_OPEN_THRESHOLD = Duration.ofHours(3)
     private static final int WIP_LIMIT = 3
 
-    // Index/fraction always zero: candidate order and probe-interval jitter are exact, not
-    // randomized, so this scenario's step count is deterministic.
-    private static final class FixedRandom extends Random {
-        @Override
-        int nextInt(int bound) {
-            0
-        }
-
-        @Override
-        double nextDouble() {
-            0.0d
-        }
-    }
-
     private final VirtualClock clock = new VirtualClock()
     // Budgeted: a mutant that removes the gate's "no claim while open" check would send this
     // automaton back onto FeedOutageRetry's OWN retry-forever path (it never does today, since the
@@ -104,7 +90,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
     def setup() {
         REFS.eachWithIndex { ref, i ->
             harness.seed(
-            ref, new TaskSnapshot(ref.id(), "task ${i + 1}" as String, 'body'),
+            ref, new TaskSnapshot(ref.id(), UntrustedText.tracker("task ${i + 1}" as String), UntrustedText.tracker('body')),
             new TrackerTaskState.Ready(), AbortFacts.none())
         }
     }
@@ -114,15 +100,6 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         new RemoteOutageGate(
                 baseRefGit, Path.of('.'), clock, new FixedRandom(), IDLE, PROBE_CAP,
                 new RemoteOutageWiring('origin', suppressor, SUSTAINED_OPEN_THRESHOLD, {}, { ignored -> }))
-    }
-
-    // Waits for the async slot virtual-thread(s) started by FeedCycle.startSlot to actually run —
-    // step()/drain() return before that thread necessarily executes (same race FeedAutomatonSpec's
-    // own awaitSize() guards against).
-    private static void awaitSize(List<?> sink, int expectedSize) {
-        new PollingConditions(timeout: 2).eventually {
-            assert sink.size() == expectedSize
-        }
     }
 
     def "a remote dead for an hour then back: one WARN, one recovery line, zero abort facts, tasks claimable again (M4, G5)"() {
@@ -177,8 +154,8 @@ class RemoteOutageServeEndToEndSpec extends Specification {
 
         when: 'the feed fills all three slots — the only claims the outage costs the tracker (G5)'
         3.times { automaton.step() }
-        awaitSize(claims, 3)
-        awaitSize(releases, 3)
+        SlotAwait.awaitSize(claims, 3)
+        SlotAwait.awaitSize(releases, 3)
 
         then: 'each of the three slots hit the simulated outage and opened the gate exactly once (idempotent while already open)'
         gate.health().open()
@@ -208,7 +185,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         when: 'the clock reaches the one-hour mark: the SAME poll() call that runs the now-successful probe (closing the gate) also re-polls and claims — proving the probe strictly precedes the claim'
         clock.advance(PROBE_CAP)
         automaton.step()
-        awaitSize(claims, 4)
+        SlotAwait.awaitSize(claims, 4)
 
         then: 'the gate closed with exactly one INFO recovery line, never a second WARN'
         !gate.health().open()

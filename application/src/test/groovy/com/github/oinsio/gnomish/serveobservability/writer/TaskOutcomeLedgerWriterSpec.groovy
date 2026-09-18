@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -61,7 +62,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:05:00Z')
-        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
+        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), UntrustedText.tracker('shipped it'))
 
         when:
         writer(now).write(ref, result)
@@ -122,7 +123,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         def now = Instant.parse('2026-08-03T10:01:00Z')
 
         when:
-        writer(now).write(ref, new TakeResult.Skipped('lost claim race'))
+        writer(now).write(ref, new TakeResult.Skipped(UntrustedText.tracker('lost claim race')))
 
         then:
         !Files.exists(ledgerFile(now))
@@ -143,7 +144,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         slotClock.instant = Instant.parse('2026-08-03T09:30:00Z')
         slotLedger.assign(refB)
         def now = Instant.parse('2026-08-03T10:00:00Z')
-        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
+        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), UntrustedText.tracker('shipped it'))
 
         when: 'both occupied tasks finish, each looked up specifically'
         def w = writer(now)
@@ -172,7 +173,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
-        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
+        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), UntrustedText.tracker('shipped it'))
         Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
         def logs = LogCaptureSupport.attach(TaskOutcomeLedgerWriter)
 
@@ -197,7 +198,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         given:
         def ref = new TaskRef('PROJ-5')
         def now = Instant.parse('2026-08-03T10:01:00Z')
-        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
+        def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), UntrustedText.tracker('shipped it'))
         def logs = LogCaptureSupport.attach(TaskOutcomeLedgerWriter)
 
         when:

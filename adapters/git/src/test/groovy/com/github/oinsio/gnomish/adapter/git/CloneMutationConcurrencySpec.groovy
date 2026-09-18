@@ -71,7 +71,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     new File(worktree.toFile(), "${taskId}.txt").text = "work by ${taskId}"
                     runner.run(worktree, 'add', "${taskId}.txt")
                     runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', "round by ${taskId}")
-                    localTips[taskId] = runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim()
+                    localTips[taskId] = runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim()
 
                     // Exercises a mutating fetch issued with cwd INSIDE the worktree (like
                     // the replica-pair reconciler/TaskBranchLocator do) — the branch is not yet on the
@@ -109,7 +109,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
         (0..<slots).every { i ->
             def taskId = "PROJ-${i}"
             def branchName = "gnomish/${taskId}"
-            def remoteTip = seedRunner.run(bare, 'rev-parse', branchName).stdout().trim()
+            def remoteTip = seedRunner.run(bare, 'rev-parse', branchName).stdout().forParsing().trim()
             remoteTip == localTips[taskId]
         }
 

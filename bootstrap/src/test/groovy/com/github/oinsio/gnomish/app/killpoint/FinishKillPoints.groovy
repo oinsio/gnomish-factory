@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.take.FinishTransition
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import org.slf4j.LoggerFactory
 
 /**
@@ -18,8 +19,13 @@ import org.slf4j.LoggerFactory
  */
 final class FinishKillPoints {
 
-    /** The final report the finish is written with, fresh or re-driven. */
-    static final String SUMMARY = 'all stages passed'
+    /**
+     * The final report the finish is written with, fresh or re-driven. Carried, because
+     * {@code FinishEffect} renders it through the comment exit at the write (design D6, D7 of
+     * type-untrusted-text) — so the re-drive and the plain tracker call below must publish the
+     * same bytes, which is exactly what the settled fingerprint compares.
+     */
+    static final UntrustedText SUMMARY = UntrustedText.tracker('all stages passed')
 
     private FinishKillPoints() {}
 
@@ -53,7 +59,7 @@ final class FinishKillPoints {
             world.store.recordOutcome(
                     world.taskId, new TaskOutcome.Completed(TaskState.atStageStart('build')))
         } else if (index == 1) {
-            world.tracker.finish(world.ref, SUMMARY)
+            world.tracker.finish(world.ref, SUMMARY.forComment())
         } else {
             world.store.finishCleanup(world.taskId)
         }

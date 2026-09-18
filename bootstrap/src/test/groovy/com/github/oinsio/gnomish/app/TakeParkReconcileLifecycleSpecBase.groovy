@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -170,7 +171,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
             .orElseThrow {
                 new IllegalStateException("no task.json for ${taskId} under ${worktreesRoot}")
             }
-            TaskJsonMapper.readDto(Files.readString(taskJson)).trackerWritePending()
+            TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).trackerWritePending()
         }
     }
 }

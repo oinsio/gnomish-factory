@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -24,6 +26,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class DockerUnavailableException extends RuntimeException {
 
+    private static final String DAEMON_UNREACHABLE_MARKER = "cannot connect to the docker daemon";
+
     /**
      * @param message what could not reach the runtime; never null
      * @param cause the underlying failure (an {@code IOException}, or {@code
@@ -31,5 +35,32 @@ public final class DockerUnavailableException extends RuntimeException {
      */
     public DockerUnavailableException(String message, @Nullable Throwable cause) {
         super(message, cause);
+    }
+
+    /**
+     * Whether {@code text} is the daemon's own report that it could not be reached — the single
+     * detection rule for turning captured docker/git stderr into this exception, shared by every
+     * caller that classifies a runtime outage from subprocess output: {@link DockerCli#run} for a
+     * docker management command, and the git harvest fetch's {@code ext::} transport classification
+     * (which reaches docker only through {@code docker exec}, never through {@link DockerCli}).
+     *
+     * @param text the captured stderr to check, in whatever case docker or git printed it
+     * @return true if {@code text} contains the daemon's own unreachable-daemon wording
+     */
+    public static boolean reportsDaemonUnreachable(String text) {
+        return text.toLowerCase(Locale.ROOT).contains(DAEMON_UNREACHABLE_MARKER);
+    }
+
+    /**
+     * The form for an outage the daemon itself reported — an unreachable daemon quoting its own
+     * refusal, a listing that exited non-zero with a reason. The detail is {@link UntrustedText}
+     * rather than a {@code String} so that answer cannot reach the message unrendered (design D5
+     * of type-untrusted-text).
+     *
+     * @param message what could not reach the runtime; never null
+     * @param detail what docker said about it; never null
+     */
+    public DockerUnavailableException(String message, UntrustedText detail) {
+        super(message + ": " + detail);
     }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 
 /**
@@ -39,7 +40,7 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     //      exact returned verdict is what the CheckResult carries
     def "dispatches a Command to the command runner and passes its verdict through verbatim"() {
         given: 'a command runner returning a specific CannotVerify, and an untouched builtin runner'
-        def verdict = new Verdict.CannotVerify('binary not found', 'trace')
+        def verdict = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('trace'))
         def builtinRunner = new ScriptedBuiltinCheckRunner()
         def commandRunner = new ScriptedCommandCheckRunner([verdict])
         def check = command('./gradlew test')

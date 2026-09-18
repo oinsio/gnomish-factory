@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -28,7 +29,7 @@ import spock.lang.Specification
 abstract class BrokenListenerSpecBase extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     // A fresh port set: the throwing run and the silent control run each get their own
     // identical fakes so nothing but the listener's throwOnEvent flag differs.

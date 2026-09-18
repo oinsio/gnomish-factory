@@ -4,8 +4,9 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerHarvest;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
-import java.util.Locale;
 
 /**
  * The git realization of {@link ContainerHarvest} (design D3, FR5): a
@@ -39,9 +40,8 @@ import java.util.Locale;
  * @param cloneDir the factory clone the branch is fetched into; git commands run with this path
  *     as {@code cwd}
  */
+@UntrustedParser
 public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) implements ContainerHarvest {
-
-    private static final String DAEMON_UNREACHABLE = "cannot connect to the docker daemon";
 
     @Override
     public void fetch(String containerName, String branch) {
@@ -66,8 +66,8 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
                     "the harvest fetch "
                             + (result.termination() == Termination.TIMED_OUT
                                     ? "was cut off on its deadline"
-                                    : "was interrupted before it finished")
-                            + "; partial output: " + result.stderr().strip());
+                                    : "was interrupted before it finished"),
+                    result.stderr());
         }
         if (result.exitCode() != 0) {
             throw classify(branch, result.stderr());
@@ -96,10 +96,9 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
      * fast-forward refusal is the history-rewrite violation, a daemon outage is
      * infrastructure, everything else is a plain harvest failure.
      */
-    static RuntimeException classify(String branch, String stderr) {
-        if (stderr.toLowerCase(Locale.ROOT).contains(DAEMON_UNREACHABLE)) {
-            return new DockerUnavailableException(
-                    "docker daemon is unreachable during harvest: " + stderr.strip(), null);
+    static RuntimeException classify(String branch, UntrustedText stderr) {
+        if (DockerUnavailableException.reportsDaemonUnreachable(stderr.forParsing())) {
+            return new DockerUnavailableException("docker daemon is unreachable during harvest", stderr);
         }
         if (stderr.contains("non-fast-forward")) {
             return new HarvestRefusedException(branch, stderr);

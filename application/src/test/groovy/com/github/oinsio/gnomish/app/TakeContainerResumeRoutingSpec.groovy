@@ -36,6 +36,7 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -86,7 +87,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     BaseRefGit baseRefGit = resumingBaseRefGit()
 
     private static TaskContext taskContext(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', [])
+        new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 
     private TaskGit gitWith(TaskBranchGit branches) {
@@ -401,7 +402,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
         }
-        def report = new EscalationReport.DecisionNeeded('which way?', [])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which way?'), [])
         def repository = Mock(TaskRepository)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
@@ -430,7 +431,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         }, _)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, 'go left')
+        1 * tracker.acknowledgeDecision(REF, fenced('go left'))
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
     }
@@ -442,7 +443,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
         }
-        def report = new EscalationReport.DecisionNeeded('which way?', [])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which way?'), [])
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
             taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, BasePin.UNPINNED)
@@ -461,5 +462,10 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         })
         0 * tracker.finish(_, _)
         result instanceof TakeResult.AwaitingHuman
+    }
+
+    /** The comment exit's rendering of one text, as every tracker write now publishes it. */
+    private static String fenced(String text) {
+        UntrustedText.tracker(text).forComment()
     }
 }

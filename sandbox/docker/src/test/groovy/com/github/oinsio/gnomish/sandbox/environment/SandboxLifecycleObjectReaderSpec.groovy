@@ -11,7 +11,7 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
     def reader = new SandboxLifecycleObjectReader(docker)
 
     private static DockerResult ok(String stdout) {
-        new DockerResult(0, stdout, '')
+        DockerResult.of(0, stdout, '')
     }
 
     def "list splits name and labels on the tab, tolerating a name with no labels at all"() {
@@ -32,7 +32,7 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
     def "list refuses to read a failed listing as an empty one"() {
         given:
         docker.onRun = {
-            new DockerResult(1, '', 'Error response from daemon: filter failed')
+            DockerResult.of(1, '', 'Error response from daemon: filter failed')
         }
 
         when:
@@ -45,7 +45,7 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
 
     def "containerTiming returns empty when the inspect call fails"() {
         given:
-        docker.onRun = { new DockerResult(1, '', 'no such object') }
+        docker.onRun = { DockerResult.of(1, '', 'no such object') }
 
         expect:
         reader.containerTiming('n').isEmpty()
@@ -138,7 +138,7 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
     def "createdAt returns empty on an inspect failure, and the parsed instant on success"() {
         given:
         docker.onRun = { List<String> args ->
-            args == ['fail'] ? new DockerResult(1, '', 'gone') : ok('2026-08-07T09:00:00Z')
+            args == ['fail'] ? DockerResult.of(1, '', 'gone') : ok('2026-08-07T09:00:00Z')
         }
 
         expect:

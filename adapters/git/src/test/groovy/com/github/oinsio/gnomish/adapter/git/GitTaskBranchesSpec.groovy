@@ -48,7 +48,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         branches.harden(cloneDir)
 
         then:
-        def configured = Path.of(runner.run(cloneDir, 'config', '--get', 'core.hooksPath').stdout().trim())
+        def configured = Path.of(runner.run(cloneDir, 'config', '--get', 'core.hooksPath').stdout().forParsing().trim())
         configured.fileName.toString() == FactoryCloneHardening.EMPTY_HOOKS_DIR
         Files.isDirectory(configured)
     }

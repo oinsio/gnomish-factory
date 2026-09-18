@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,17 +59,18 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
     public Outcome ensureDelivered(Workspace workspace) {
         if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new Outcome.Undeliverable(
-                    "attempt-commit delivery requires the attempt-commit workspace",
-                    "workspace is " + workspace.getClass().getName() + ", which carries no attempt commit");
+                    UntrustedText.subprocess("attempt-commit delivery requires the attempt-commit workspace"),
+                    UntrustedText.subprocess(
+                            "workspace is " + workspace.getClass().getName() + ", which carries no attempt commit"));
         }
         String attempt = attemptWorkspace.attemptCommitSha();
 
         if (!origin.isConfigured(cloneRoot)) {
             return new Outcome.Undeliverable(
-                    "no remote to deliver the attempt commit to",
-                    "no '" + OriginRemote.NAME
+                    UntrustedText.subprocess("no remote to deliver the attempt commit to"),
+                    UntrustedText.subprocess("no '" + OriginRemote.NAME
                             + "' remote is configured, but the external check expects CI runs of the pushed"
-                            + " attempt commit " + attempt);
+                            + " attempt commit " + attempt));
         }
 
         if (remoteTip.carries(cloneRoot, branch, attempt)) {
@@ -83,7 +84,7 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
             log.info(
                     "attempt-commit delivery push failed, re-attempting once: branch={}, stderr={}",
                     branch,
-                    LogText.forLog(push.stderr()));
+                    push.stderr().forLog());
             push = push();
         }
         if (push.termination() != Termination.EXITED) {
@@ -94,19 +95,19 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
                     push.termination() == Termination.TIMED_OUT ? "timed out" : "was interrupted",
                     branch);
             return new Outcome.Undeliverable(
-                    "attempt-commit delivery could not be verified",
-                    "push of " + branch
+                    UntrustedText.subprocess("attempt-commit delivery could not be verified"),
+                    UntrustedText.subprocess("push of " + branch
                             + (push.termination() == Termination.TIMED_OUT
                                     ? " was cut off on its deadline"
                                     : " was interrupted before it finished")
                             + ", so whether attempt commit " + attempt + " reached '" + OriginRemote.NAME
-                            + "' is unknown");
+                            + "' is unknown"));
         }
         if (push.exitCode() != 0) {
             return new Outcome.Undeliverable(
-                    "attempt commit could not be delivered to the remote",
-                    "push of " + branch + " failed twice; attempt commit " + attempt + " is not confirmed on '"
-                            + OriginRemote.NAME + "': " + push.stderr().trim());
+                    UntrustedText.subprocess("attempt commit could not be delivered to the remote"),
+                    UntrustedText.subprocess("push of " + branch + " failed twice; attempt commit " + attempt
+                            + " is not confirmed on '" + OriginRemote.NAME + "': " + push.stderr()));
         }
         return new Outcome.Delivered();
     }

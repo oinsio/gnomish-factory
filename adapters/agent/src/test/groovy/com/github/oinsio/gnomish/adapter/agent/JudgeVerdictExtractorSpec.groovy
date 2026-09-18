@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -27,7 +28,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": true}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'FR8: passed:true maps to Pass'
         verdict == new Verdict.Pass()
@@ -43,7 +44,7 @@ class JudgeVerdictExtractorSpec extends Specification {
             '''.stripIndent()
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'FR8, D5: fenced JSON is parsed; findings mapped in order'
         verdict instanceof Verdict.Fail
@@ -62,7 +63,7 @@ class JudgeVerdictExtractorSpec extends Specification {
             '''.stripIndent()
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
         verdict == new Verdict.Pass()
@@ -73,7 +74,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = 'I reviewed the code carefully. {"passed": true} Thanks for reading.'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'D5: first JSON object is taken even with surrounding prose'
         verdict == new Verdict.Pass()
@@ -84,7 +85,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": true, "findings": ["irrelevant"]}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'Pass carries no findings field'
         verdict == new Verdict.Pass()
@@ -95,7 +96,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": false}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
         verdict instanceof Verdict.Fail
@@ -108,7 +109,9 @@ class JudgeVerdictExtractorSpec extends Specification {
 
         when:
         Verdict verdict = null
-        def events = capture { verdict = extractor.extract(message) }
+        def events = capture {
+            verdict = extractor.extract(UntrustedText.agent(message))
+        }
 
         then: 'NFR-R1: no verdict is never a silent pass'
         verdict instanceof Verdict.CannotVerify
@@ -127,7 +130,9 @@ class JudgeVerdictExtractorSpec extends Specification {
 
         when:
         Verdict verdict = null
-        def events = capture { verdict = extractor.extract(message) }
+        def events = capture {
+            verdict = extractor.extract(UntrustedText.agent(message))
+        }
 
         then:
         verdict instanceof Verdict.CannotVerify
@@ -139,7 +144,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": true, "meta": {"nested": "value"}}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'D5: depth tracking finds the true matching outer brace, not the inner one'
         verdict == new Verdict.Pass()
@@ -150,7 +155,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"findings": ["something"]}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
         verdict instanceof Verdict.CannotVerify
@@ -162,7 +167,9 @@ class JudgeVerdictExtractorSpec extends Specification {
 
         when:
         Verdict verdict = null
-        def events = capture { verdict = extractor.extract(message) }
+        def events = capture {
+            verdict = extractor.extract(UntrustedText.agent(message))
+        }
 
         then:
         verdict instanceof Verdict.CannotVerify
@@ -173,7 +180,9 @@ class JudgeVerdictExtractorSpec extends Specification {
     def "blank final message yields CannotVerify and logs at WARN"() {
         when:
         Verdict verdict = null
-        def events = capture { verdict = extractor.extract('   ') }
+        def events = capture {
+            verdict = extractor.extract(UntrustedText.agent('   '))
+        }
 
         then: 'consistent with 6.3 empty-file handling'
         verdict instanceof Verdict.CannotVerify
@@ -186,7 +195,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": "yes"}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
         verdict instanceof Verdict.CannotVerify
@@ -197,7 +206,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": true}'
 
         when:
-        def events = capture { extractor.extract(message) }
+        def events = capture { extractor.extract(UntrustedText.agent(message)) }
 
         then:
         events.isEmpty()
@@ -208,7 +217,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": false, "findings": [{"message": "smuggled"}]}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'schema failure is an infrastructure failure, never a partially parsed Fail'
         verdict instanceof Verdict.CannotVerify
@@ -219,7 +228,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def message = '{"passed": false, "findings": ["real problem", "   "]}'
 
         when:
-        def verdict = extractor.extract(message)
+        def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
         verdict instanceof Verdict.CannotVerify
@@ -231,12 +240,14 @@ class JudgeVerdictExtractorSpec extends Specification {
 
         when:
         def verdict = null
-        def events = capture { verdict = extractor.extract(message) }
+        def events = capture {
+            verdict = extractor.extract(UntrustedText.agent(message))
+        }
 
         then: 'the log line is stripped and truncated while details keep the message verbatim'
         events.size() == 1
         !events[0].formattedMessage.contains('\u001B')
         events[0].formattedMessage.contains('[truncated, showing last 2000 of')
-        ((Verdict.CannotVerify) verdict).details() == message
+        ((Verdict.CannotVerify) verdict).details().forParsing() == message
     }
 }

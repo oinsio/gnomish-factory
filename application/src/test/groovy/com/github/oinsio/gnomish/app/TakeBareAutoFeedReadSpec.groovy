@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 /**
@@ -64,7 +65,7 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
     // queue indefinitely behind other work.
     def "declines every reopened finished task it observes, even on a run that takes nothing"() {
         given:
-        def reopened = new ReadyTask(new TaskRef('github:o/r#7'), AbortFacts.none(), false, true, 'title')
+        def reopened = new ReadyTask(new TaskRef('github:o/r#7'), AbortFacts.none(), false, true, UntrustedText.tracker('title'))
 
         when:
         def result = run()

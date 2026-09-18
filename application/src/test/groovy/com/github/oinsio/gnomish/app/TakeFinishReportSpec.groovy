@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,7 +43,7 @@ class TakeFinishReportSpec extends Specification {
 
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
-    static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'Fix the widget', 'body', List.<Decision> of())
+    static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body'), List.<Decision> of())
     static final TaskState STATE = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
     static final String BRANCH = 'gnomish/PROJ-1'
 
@@ -86,7 +87,8 @@ class TakeFinishReportSpec extends Specification {
         delivered.summary().contains(BRANCH)
     }
 
-    // FR18, D11: the returned TakeResult carries exactly the summary text passed to tracker.finish.
+    // FR18, D11: the returned TakeResult carries exactly the summary the tracker.finish call
+    //     published — the same carrier, rendered through the comment exit at the write (task 6.3).
     def "finish returns a Delivered result whose summary matches the tracker.finish call"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
@@ -102,7 +104,7 @@ class TakeFinishReportSpec extends Specification {
         }
 
         and:
-        (result as TakeResult.Delivered).summary() == captured
+        (result as TakeResult.Delivered).summary().forComment() == captured
     }
 
     // FR7 of add-claim-heartbeat: the finish write is git-unfenced, so a claim reaped/taken over
@@ -196,7 +198,7 @@ class TakeFinishReportSpec extends Specification {
         given:
         def cleaned = new AtomicInteger()
         tracker.fetchTask(REF) >> new TrackerTask(
-                REF, new TaskSnapshot(REF.id(), 'title', 'body'),
+                REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Finished(), AbortFacts.none(), true)
 
         when:

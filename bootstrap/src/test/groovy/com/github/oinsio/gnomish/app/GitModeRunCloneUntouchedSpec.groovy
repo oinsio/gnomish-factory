@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -167,6 +168,6 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
     }
 
     private static TaskContext taskContext(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
+        new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
     }
 }

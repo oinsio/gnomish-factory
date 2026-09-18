@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
@@ -91,7 +90,7 @@ public final class TaskWorktreeCleanup {
                             + "could not remove the worktree at {} (git exited {}); it stays registered until a prune: {}",
                     worktreePath,
                     removal.exitCode(),
-                    LogText.forLog(removal.stderr()));
+                    removal.stderr().forLog());
         }
     }
 }

@@ -31,7 +31,7 @@ class SnapshotActivityTrackerSpec extends Specification {
         then:
         def activity = holder.activity().activity()
         activity instanceof Activity.AwaitingInput
-        activity.prompt() == 'pass/fail? '
+        activity.prompt().forLog() == 'pass/fail? '
         activity.since() == NOW
     }
 

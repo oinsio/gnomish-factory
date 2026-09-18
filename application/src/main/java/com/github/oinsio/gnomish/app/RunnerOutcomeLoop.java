@@ -184,7 +184,10 @@ public final class RunnerOutcomeLoop {
     private void handleAborted(TaskContext context, TaskOutcome.Aborted aborted) {
         var finalState = aborted.finalState();
         var failedAt = aborted.failedAt();
-        errorConsole.print("Aborted: " + aborted.cause() + ConsoleIO.LINE_END);
+        // The console exit, explicitly (design D6 of type-untrusted-text): an operator reading an
+        // abort needs the whole rendered chain with its line structure, which is exactly what the
+        // log exit would take away — one line, tail only.
+        errorConsole.print("Aborted: " + aborted.cause().forConsole() + ConsoleIO.LINE_END);
         errorConsole.print("Task '" + context.taskId() + "': the round at stage '" + failedAt.stage()
                 + "', attempt " + failedAt.attempt() + " was not persisted. Last known state: position="
                 + finalState.position() + ", attemptsUsed=" + finalState.attemptsUsed() + ", "

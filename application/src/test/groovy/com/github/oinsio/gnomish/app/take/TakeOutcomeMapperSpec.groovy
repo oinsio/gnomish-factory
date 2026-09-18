@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -68,10 +69,13 @@ class TakeOutcomeMapperSpec extends Specification {
         where:
         report || expectedReason
         new EscalationReport.AttemptsExhausted(3) || ParkReason.ESCALATION
-        new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no']) || ParkReason.ESCALATION
-        new EscalationReport.CannotVerify(new CheckRef(0, 'tests'), 'timeout', '') || ParkReason.INFRA
-        new EscalationReport.CannotExecute('executor crashed', []) || ParkReason.INFRA
-        new EscalationReport.PipelineMismatch('stale-stage') || ParkReason.INFRA
+        new EscalationReport.DecisionNeeded(UntrustedText.agent('proceed?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ]) || ParkReason.ESCALATION
+        new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('')) || ParkReason.INFRA
+        new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), []) || ParkReason.INFRA
+        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) || ParkReason.INFRA
     }
 
     // FR7, design D8 of harden-untrusted-text-sinks: the park report is the escalation render, not
@@ -95,9 +99,12 @@ class TakeOutcomeMapperSpec extends Specification {
         where:
         kind | report
         'AttemptsExhausted' | new EscalationReport.AttemptsExhausted(3)
-        'DecisionNeeded' | new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no'])
-        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, 'tests'), 'timeout', 'raw output')
-        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed', [])
-        'PipelineMismatch' | new EscalationReport.PipelineMismatch('stale-stage')
+        'DecisionNeeded' | new EscalationReport.DecisionNeeded(UntrustedText.agent('proceed?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
+        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('raw output'))
+        'CannotExecute' | new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), [])
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage'))
     }
 }

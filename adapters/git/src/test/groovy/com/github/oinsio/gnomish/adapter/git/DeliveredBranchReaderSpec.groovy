@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -43,7 +44,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     }
 
     private static TaskContext context(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'Fix the thing', 'Body text', [])
+        new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), [])
     }
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
@@ -73,7 +74,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
 
         then: 'the delivered identity and final state are recovered from history'
         delivered.context().taskId() == 'PROJ-1'
-        delivered.context().title() == 'Fix the thing'
+        delivered.context().title().forLog() == 'Fix the thing'
         delivered.finalState() == finalState
     }
 

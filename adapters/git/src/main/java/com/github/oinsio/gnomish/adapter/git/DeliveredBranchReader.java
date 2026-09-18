@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
 /**
@@ -87,7 +88,7 @@ public final class DeliveredBranchReader {
         return tip + "^";
     }
 
-    private String show(Path cloneDir, String ref, String filePath) {
+    private UntrustedText show(Path cloneDir, String ref, String filePath) {
         GitCommandResult result = runner.run(cloneDir, "show", ref + ":" + filePath);
         if (result.exitCode() != 0) {
             throw new BranchStateFileMissingException(ref, filePath, result.stderr());

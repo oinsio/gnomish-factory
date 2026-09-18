@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ import java.nio.file.Path;
  *
  * <p>Implements FR17 of add-sandbox-core.
  */
+@UntrustedParser
 public final class FactoryCloneHardening {
 
     /** Name of the empty hooks directory created under the clone's git dir. */
@@ -72,6 +74,6 @@ public final class FactoryCloneHardening {
         if (gitDir.exitCode() != 0) {
             throw new FactoryCloneHardeningException(cloneDir.toString(), gitDir.stderr());
         }
-        return Path.of(gitDir.stdout().trim());
+        return Path.of(gitDir.stdout().forParsing().trim());
     }
 }

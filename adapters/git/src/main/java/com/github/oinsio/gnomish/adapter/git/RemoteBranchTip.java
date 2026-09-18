@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -29,6 +30,7 @@ import java.util.Optional;
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
+@UntrustedParser
 final class RemoteBranchTip {
 
     /**
@@ -132,7 +134,9 @@ final class RemoteBranchTip {
                 || lsRemote.stdout().isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(lsRemote.stdout().strip().split("\\s+", 2)[0]);
+        // @UntrustedParser warrant (design D11): the first field of an ls-remote line is an object
+        //     id — compared for equality and passed to git, never rendered.
+        return Optional.of(lsRemote.stdout().forParsing().strip().split("\\s+", 2)[0]);
     }
 
     /**

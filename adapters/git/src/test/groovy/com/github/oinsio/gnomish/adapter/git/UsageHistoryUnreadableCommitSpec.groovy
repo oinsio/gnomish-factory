@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -31,12 +32,12 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
         new File(worktree.toFile(), '.gnomish-task/state.json').text = '{ this is not json'
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'corrupt mid-history')
-        return runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim()
+        return runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim()
     }
 
     def "FR16: an unreadable mid-history commit is skipped with a warning naming it, and the walk still renders"() {
         given: 'a first readable round'
-        taskRepository().createTask(new TaskContext('PROJ-20', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-20', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def first = round(0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50)
         def afterFirst = TaskState.atStageStart('implement').recordQualityFailure(first)
         persistRound('PROJ-20', afterFirst, 'implement', 0)
@@ -72,7 +73,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
 
     def "FR16: an unsupported state.json version in history is skipped too, not a thrown refusal"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-21', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-21', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def first = round(0, AttemptRecord.Result.PASSED, 100, 10)
         persistRound('PROJ-21', TaskState.atStageStart('implement').recordUnburnedRound(first), 'implement', 0)
 

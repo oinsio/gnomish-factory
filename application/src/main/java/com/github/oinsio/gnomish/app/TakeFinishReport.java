@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,7 +143,7 @@ final class TakeFinishReport {
             FinishTransition transition) {
         var report = StatusReport.build(context, completed.finalState(), null, LiveActivity.idle());
         String rendered = new StatusTextRenderer().renderFull(report);
-        String summary = rendered + "\n" + "Branch: " + branchName;
+        UntrustedText summary = UntrustedText.tracker(rendered + "\n" + "Branch: " + branchName);
 
         new FinishEffect(tracker, ref, instanceId, summary, retry, transition, log).drive();
         return new TakeResult.Delivered(completed.finalState(), summary);

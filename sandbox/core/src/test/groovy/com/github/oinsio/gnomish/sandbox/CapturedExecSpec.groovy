@@ -33,7 +33,7 @@ class CapturedExecSpec extends Specification {
 
         then:
         captured.exitCode() == 3
-        captured.output() == 'all of it'
+        captured.output().forParsing() == 'all of it'
     }
 
     // FR2: the join happens after the wait — output still arriving at exit time is not torn off
@@ -45,7 +45,7 @@ class CapturedExecSpec extends Specification {
         def captured = CapturedExec.of(handle, 'in-box probe')
 
         then:
-        captured.output() == 'late bytes'
+        captured.output().forParsing() == 'late bytes'
     }
 
     // FR11: a wait cut short by an interrupt is named, and the stalled pipe cannot hold the caller

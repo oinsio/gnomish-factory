@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The human decision as a kill-point table row (FR12, design D5/D13 of
@@ -47,7 +48,10 @@ final class DecisionKillPoints {
     /** The state a decision is reached from: a settled escalation park with a reply waiting. */
     private static KillPointWorld escalated(KillPointWorld world) {
         world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(
-                        TaskState.atStageStart('build'), new EscalationReport.DecisionNeeded('which?', ['a', 'b'])))
+                        TaskState.atStageStart('build'), new EscalationReport.DecisionNeeded(UntrustedText.agent('which?'), [
+                            UntrustedText.agent('a'),
+                            UntrustedText.agent('b')
+                        ])))
         world.store.confirmTerminalWrite(world.taskId)
         world.trackerHarness.reply(world.ref, REPLY)
         world
@@ -71,7 +75,7 @@ final class DecisionKillPoints {
         if (tip == null || tip.outcome() != null || !tip.decisions()) {
             return
         }
-        def decided = new TaskContext(world.taskId, 'title', 'body',
+        def decided = new TaskContext(world.taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
                 tip.decisions().collect {
                     new Decision(it.body(), null, null, null)
                 })

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -115,7 +116,7 @@ class ReaperRepairSpec extends Specification {
     def "a ghost claim on a ready-labeled task is swept through the ready feed and retired"() {
         given:
         def ghost = new ClaimFacts.Live('inst-1', VERSION)
-        def entry = new ReadyTask(REF, AbortFacts.none(), false, false, 'title', ghost)
+        def entry = new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('title'), ghost)
 
         when:
         reaper.reapOnce([])
@@ -208,7 +209,7 @@ class ReaperRepairSpec extends Specification {
         def own = new TaskRef('T-own')
         def ghost = new ClaimFacts.Live('inst-1', VERSION)
         tracker.listReady(_) >> [
-            new ReadyTask(own, AbortFacts.none(), false, false, 'title', ghost)
+            new ReadyTask(own, AbortFacts.none(), false, false, UntrustedText.tracker('title'), ghost)
         ]
 
         when:
@@ -414,18 +415,12 @@ class ReaperRepairSpec extends Specification {
      * pinned at DEBUG, which is where the sweep's reconciliation chatter now lives (FR12).
      */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        def logs = LogCaptureSupport.attach(Reaper, Level.DEBUG)
-        try {
-            emit()
-            return List.copyOf(logs.list)
-        } finally {
-            logs.detach()
-        }
+        LogCaptureSupport.capture(Reaper, Level.DEBUG, emit)
     }
 
     private static List<ReadyTask> readyPage(int size) {
         (1..size).collect {
-            new ReadyTask(new TaskRef("T-$it"), AbortFacts.none(), false, false, 'title', new ClaimFacts.None())
+            new ReadyTask(new TaskRef("T-$it"), AbortFacts.none(), false, false, UntrustedText.tracker('title'), new ClaimFacts.None())
         }
     }
 
@@ -454,6 +449,6 @@ class ReaperRepairSpec extends Specification {
     }
 
     private static OpenTask open(TrackerFacts facts) {
-        new OpenTask(REF, new TrackerTaskState.Working('inst-1'), facts.claim().liveVersion(), 'title', facts)
+        new OpenTask(REF, new TrackerTaskState.Working('inst-1'), facts.claim().liveVersion(), UntrustedText.tracker('title'), facts)
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -20,7 +21,14 @@ import org.jspecify.annotations.Nullable;
  * (3.2's result handling, 3.4's trace filtering) read a specific variant, not a
  * lump-sum shape with fields that are only sometimes meaningful.
  *
- * <p>Implements FR4, D3 of add-agent-executor.
+ * <p>The text fields a gnome's own agent chose — the session id, the model id it
+ * reports, and the round's final result — are {@link UntrustedText}, minted by
+ * {@link StreamJsonEventMapper} as the line is recognized (design D3, D4 of
+ * type-untrusted-text). The wire tokens beside them stay plain: {@code subtype} is a
+ * protocol constant the parser switches on, and {@code parentToolUseId} is an id the
+ * trace correlates by, never text a reader sees.
+ *
+ * <p>Implements FR4, D3 of add-agent-executor; FR1, FR7 of type-untrusted-text.
  */
 public sealed interface AgentEvent {
 
@@ -33,7 +41,7 @@ public sealed interface AgentEvent {
      * @param sessionId the CLI's session id for this round; never blank
      * @param model the round's main model id; never blank
      */
-    record InitEvent(String sessionId, String model) implements AgentEvent {
+    record InitEvent(UntrustedText sessionId, UntrustedText model) implements AgentEvent {
 
         public InitEvent {
             sessionId = requireNonBlank(sessionId, "sessionId");
@@ -59,10 +67,11 @@ public sealed interface AgentEvent {
      *     copied and unmodifiable, possibly empty
      */
     record AssistantEvent(
-            String sessionId,
+            UntrustedText sessionId,
             @Nullable String parentToolUseId,
-            @Nullable String model,
-            List<ContentBlock> content) implements AgentEvent {
+            @Nullable UntrustedText model,
+            List<ContentBlock> content)
+            implements AgentEvent {
 
         public AssistantEvent {
             sessionId = requireNonBlank(sessionId, "sessionId");
@@ -85,7 +94,7 @@ public sealed interface AgentEvent {
      * @param content the message's content blocks in wire order; defensively
      *     copied and unmodifiable, possibly empty
      */
-    record UserEvent(String sessionId, @Nullable String parentToolUseId, List<ContentBlock> content)
+    record UserEvent(UntrustedText sessionId, @Nullable String parentToolUseId, List<ContentBlock> content)
             implements AgentEvent {
 
         public UserEvent {
@@ -120,9 +129,9 @@ public sealed interface AgentEvent {
      *     unmodifiable when present
      */
     record ResultEvent(
-            String sessionId,
+            UntrustedText sessionId,
             @Nullable String subtype,
-            String result,
+            UntrustedText result,
             @Nullable Map<String, Object> usage,
             @Nullable Map<String, Object> modelUsage)
             implements AgentEvent {
@@ -143,7 +152,7 @@ public sealed interface AgentEvent {
      * constructor, which would silently exempt this validation from the 100%
      * mutation gate.
      */
-    private static String requireNonBlank(String value, String component) {
+    private static UntrustedText requireNonBlank(UntrustedText value, String component) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("AgentEvent." + component + " must not be blank");
         }
@@ -156,7 +165,7 @@ public sealed interface AgentEvent {
      * not wire data. Same explicit-static-method rationale as {@link
      * #requireNonBlank}.
      */
-    private static String requireNonNull(String value, String component) {
+    private static UntrustedText requireNonNull(UntrustedText value, String component) {
         if (value == null) {
             throw new NullPointerException("AgentEvent." + component + " must not be null");
         }

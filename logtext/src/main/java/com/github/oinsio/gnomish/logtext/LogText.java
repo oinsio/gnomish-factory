@@ -23,13 +23,15 @@ import com.github.oinsio.gnomish.untrustedtext.TextSafety;
  * of nothing but {@code U+2028} leaves as six characters per one: the worst case, and still a bound
  * (about 12 KB for the default cap) rather than the unbounded flood the cap exists to stop.
  *
- * <p>What this class owns is the <em>log plane</em>: which primitives a log line is composed from,
- * in which order, and with which default bound. Which characters are hostile, and what each
- * primitive does to them, belongs to {@link TextSafety} in the JDK-only {@code :untrustedtext} leaf
- * — the one owner the findings sanitizer reaches too, so neither facade can drift from the other
- * (FR1, FR2 of split-logtext-leaves). Every method below is that owner's, unchanged;
- * {@link #forLog} is the composition, and {@link #forConsole} and {@link #capRecord} are exposed
- * here so a log-plane caller needs one import rather than two.
+ * <p>What this class owns is the <em>log plane's vocabulary</em>: which bound a log line takes by
+ * default, and one import for every primitive a log-plane caller needs. The composition itself
+ * moved down to {@link TextSafety#forLog} when the carrier type arrived (FR2 of
+ * type-untrusted-text): {@code UntrustedText} renders its own log exit and may reach nothing above
+ * that leaf, so the order the three primitives run in has to live there or exist twice. Which
+ * characters are hostile, what each primitive does to them, and now how they compose, all belong
+ * to {@link TextSafety} in the JDK-only {@code :untrustedtext} leaf — the one owner the findings
+ * sanitizer reaches too, so neither facade can drift from the other (FR1, FR2 of
+ * split-logtext-leaves). Every method below is that owner's, unchanged.
  *
  * <p>Implements FR6, NFR-S1 of harden-logging-observability; FR2 of split-logtext-leaves.
  */
@@ -71,7 +73,7 @@ public final class LogText {
      * @throws IllegalArgumentException if {@code cap} is not positive
      */
     public static String forLog(String text, int cap) {
-        return flatten(capTail(strip(text), cap));
+        return TextSafety.forLog(text, cap);
     }
 
     /**

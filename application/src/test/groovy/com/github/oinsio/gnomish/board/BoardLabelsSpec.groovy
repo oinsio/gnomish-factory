@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.board
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -61,8 +62,8 @@ class BoardLabelsSpec extends Specification {
     def "truncationMarker names the shown-row count when the window is capped"() {
         given:
         def rows = [
-            new ReadyRow(new TaskRef('r-1'), 't1', false, null),
-            new ReadyRow(new TaskRef('r-2'), 't2', false, null)
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null),
+            new ReadyRow(new TaskRef('r-2'), UntrustedText.tracker('t2'), false, null)
         ]
         def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), true, NOW)
 
@@ -73,7 +74,7 @@ class BoardLabelsSpec extends Specification {
     def "truncationMarker is null when the window is not capped"() {
         given:
         def rows = [
-            new ReadyRow(new TaskRef('r-1'), 't1', false, null)
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null)
         ]
         def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), false, NOW)
 

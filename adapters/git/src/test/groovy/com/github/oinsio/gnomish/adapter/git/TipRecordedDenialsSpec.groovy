@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -16,8 +17,9 @@ class TipRecordedDenialsSpec extends Specification {
     private static BranchTipSource tip(String taskJson, String stateJson) {
         new BranchTipSource() {
                     @Override
-                    Optional<String> readAtTip(String path) {
-                        path.endsWith('task.json') ? Optional.ofNullable(taskJson) : Optional.ofNullable(stateJson)
+                    Optional<UntrustedText> readAtTip(String path) {
+                        Optional.ofNullable(path.endsWith('task.json') ? taskJson : stateJson)
+                                .map { UntrustedText.branchDocument(it) }
                     }
 
                     @Override

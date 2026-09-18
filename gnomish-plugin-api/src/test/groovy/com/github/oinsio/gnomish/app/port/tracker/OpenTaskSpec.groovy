@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -20,7 +21,7 @@ class OpenTaskSpec extends Specification {
         def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))
 
         when:
-        def entry = new OpenTask(REF, state, version, 'fixture title')
+        def entry = new OpenTask(REF, state, version, UntrustedText.tracker('fixture title'))
 
         then:
         entry.ref() == REF
@@ -34,7 +35,7 @@ class OpenTaskSpec extends Specification {
     // FR5: an AwaitingHuman entry has no claim version — it carries no live claim
     def "carries a null claim version for an AwaitingHuman task"() {
         when:
-        def entry = new OpenTask(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'fixture title')
+        def entry = new OpenTask(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, UntrustedText.tracker('fixture title'))
 
         then:
         entry.state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
@@ -44,7 +45,7 @@ class OpenTaskSpec extends Specification {
     // FR5, D2: a Working task whose claim marker is missing has an absent (null) version
     def "allows a null claim version for a Working task with a missing claim marker"() {
         when:
-        def entry = new OpenTask(REF, new TrackerTaskState.Working('gnomish-factory-x7k2q1'), null, 'fixture title')
+        def entry = new OpenTask(REF, new TrackerTaskState.Working('gnomish-factory-x7k2q1'), null, UntrustedText.tracker('fixture title'))
 
         then:
         entry.claimVersion() == null
@@ -57,13 +58,13 @@ class OpenTaskSpec extends Specification {
         def version = new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))
 
         expect:
-        new OpenTask(REF, state, version, 'fixture title') == new OpenTask(REF, state, version, 'fixture title')
+        new OpenTask(REF, state, version, UntrustedText.tracker('fixture title')) == new OpenTask(REF, state, version, UntrustedText.tracker('fixture title'))
 
         and: 'a differing version makes them unequal'
-        new OpenTask(REF, state, version, 'fixture title') !=
-                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1)), 'fixture title')
+        new OpenTask(REF, state, version, UntrustedText.tracker('fixture title')) !=
+                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1)), UntrustedText.tracker('fixture title'))
 
         and: 'a present versus absent version makes them unequal'
-        new OpenTask(REF, state, version, 'fixture title') != new OpenTask(REF, state, null, 'fixture title')
+        new OpenTask(REF, state, version, UntrustedText.tracker('fixture title')) != new OpenTask(REF, state, null, UntrustedText.tracker('fixture title'))
     }
 }

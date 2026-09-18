@@ -134,7 +134,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
             targetName
         ])
         assert inspect.ok()
-        targetIp = inspect.stdout().strip()
+        targetIp = inspect.stdout().forParsing().strip()
         assert targetIp ==~ /(\d{1,3}\.){3}\d{1,3}/: "target container has no bridge IP: '${targetIp}'"
     }
 

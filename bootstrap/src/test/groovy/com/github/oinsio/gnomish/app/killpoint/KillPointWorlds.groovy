@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -128,7 +129,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         def tracker = new InMemoryTracker()
         def ref = new TaskRef(TASK_ID)
         new InMemoryTrackerHarness(tracker).seed(
-                ref, new TaskSnapshot(TASK_ID, 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none())
+                ref, new TaskSnapshot(TASK_ID, UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         def world = new ClaimWorld(
                 origin: origin,
@@ -178,7 +179,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         epochs.issued(TASK_ID, tracker.listOpen().find {
             it.ref() == ref
         }.facts().claim().liveVersion().epoch())
-        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(repoDir, baseRef), TaskStart.pin(baseRef, BaseRule.EXPLICIT_ARGUMENT), TaskState.atStageStart('build'))
+        store.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []), TaskStart.commit(repoDir, baseRef), TaskStart.pin(baseRef, BaseRule.EXPLICIT_ARGUMENT), TaskState.atStageStart('build'))
         new KillPointWorld(
                 repoDir: repoDir,
                 store: store,

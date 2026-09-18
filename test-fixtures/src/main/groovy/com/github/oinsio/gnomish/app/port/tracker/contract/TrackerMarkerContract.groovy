@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -39,7 +40,7 @@ abstract class TrackerMarkerContract extends TrackerContract {
         def adapter = tracker.get()
         def ref = new TaskRef('fixture:abort-round-trip')
         seedTask(adapter, ref, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
-        def record = new AbortRecord('build failed', 'instance-a', Instant.parse('2026-07-20T10:00:00Z'))
+        def record = new AbortRecord(UntrustedText.subprocess('build failed'), 'instance-a', Instant.parse('2026-07-20T10:00:00Z'))
 
         when: 'the abort is recorded and a fresh fetchTask call observes it'
         adapter.recordAbort(ref, record)
@@ -65,10 +66,10 @@ abstract class TrackerMarkerContract extends TrackerContract {
         seedTask(adapter, ref, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
 
         when: 'one failed branch repair and one crashed run are recorded, each ending its tenure'
-        adapter.recordAbort(ref, new AbortRecord('repair failed', 'instance-a',
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('repair failed'), 'instance-a',
                 Instant.parse('2026-07-20T10:00:00Z'), RecoveryCause.RECOVERY_FAILURE))
         adapter.claim(ref, 'instance-a')
-        adapter.recordAbort(ref, new AbortRecord('worktree exploded', 'instance-a',
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('worktree exploded'), 'instance-a',
                 Instant.parse('2026-07-20T11:00:00Z'), RecoveryCause.INSTANCE_CRASH))
         // The same reclaim the progress-reset scenario uses: the streak an adapter reconstructs is
         // the one behind the current claim, so the retrying holder has to hold it to be counted.
@@ -91,9 +92,9 @@ abstract class TrackerMarkerContract extends TrackerContract {
         def adapter = tracker.get()
         def ref = new TaskRef('fixture:progress-reset')
         seedTask(adapter, ref, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
-        adapter.recordAbort(ref, new AbortRecord('build failed', 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('build failed'), 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
         adapter.claim(ref, 'instance-a')
-        adapter.recordAbort(ref, new AbortRecord('flaky network', 'instance-a', Instant.parse('2026-07-20T11:00:00Z')))
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('flaky network'), 'instance-a', Instant.parse('2026-07-20T11:00:00Z')))
         adapter.claim(ref, 'instance-a')
         // sanity check on the fixture itself: two aborts on record before progress is recorded
         assert adapter.fetchTask(ref).abortFacts().count() == 2

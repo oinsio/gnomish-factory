@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -32,7 +33,7 @@ import spock.lang.Specification
  */
 class GitFreshTaskSupportSpec extends Specification {
 
-    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
+    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     /** The caller's single peel — what the branch starts from (FR15). */
     private static final ObjectId LAW_COMMIT = ObjectId.of('0123456789abcdef0123456789abcdef01234567')
@@ -147,7 +148,12 @@ class GitFreshTaskSupportSpec extends Specification {
     def "unreachableOnManualPath names the underdetermined reason in its message"() {
         given:
         def resolution = new BaseResolution.Underdetermined(
-                UnderdeterminedCause.DESIGNATOR_CONFLICT, ['a', 'b'], 'the task names more than one base')
+                UnderdeterminedCause.DESIGNATOR_CONFLICT,
+                [
+                    UntrustedText.tracker('a'),
+                    UntrustedText.tracker('b')
+                ],
+                'the task names more than one base')
 
         expect:
         def ex = GitFreshTaskSupport.unreachableOnManualPath(resolution)

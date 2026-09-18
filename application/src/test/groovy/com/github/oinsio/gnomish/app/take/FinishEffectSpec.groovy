@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -27,10 +28,17 @@ class FinishEffectSpec extends Specification {
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
 
+    /**
+     * The final report is assembled from the task's title, its attempts and whatever the checks
+     * said, so it crosses this record carried and is rendered through the comment exit at the
+     * write (design D6, D7 of type-untrusted-text, task 6.3).
+     */
+    static final UntrustedText SUMMARY = UntrustedText.tracker('all stages passed')
+
     Tracker tracker = Mock(Tracker)
 
     private FinishEffect effect(Runnable cleanup) {
-        new FinishEffect(tracker, REF, INSTANCE, 'all stages passed', VirtualTimeRetries.terminalWrite(),
+        new FinishEffect(tracker, REF, INSTANCE, SUMMARY, VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered(cleanup), LoggerFactory.getLogger(FinishEffectSpec))
     }
 
@@ -55,7 +63,7 @@ class FinishEffectSpec extends Specification {
         effect({ cleanupRuns++ }).drive()
 
         then: 'the finish is written, and only then does the destructive tail run'
-        1 * tracker.finish(REF, 'all stages passed')
+        1 * tracker.finish(REF, SUMMARY.forComment())
         cleanupRuns == 1
 
         and: 'FR15 of harden-logging-observability: the unverifiable probe is a coded WARN naming the task'
@@ -122,7 +130,7 @@ class FinishEffectSpec extends Specification {
         given:
         def cleanupRuns = 0
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.finish(REF, 'all stages passed') >> {
+        tracker.finish(REF, SUMMARY.forComment()) >> {
             throw new TrackerUnavailableException('tracker down')
         }
         def logs = LogCaptureSupport.attach(FinishEffectSpec)

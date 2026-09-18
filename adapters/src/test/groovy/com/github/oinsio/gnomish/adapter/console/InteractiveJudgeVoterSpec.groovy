@@ -6,7 +6,9 @@ import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -26,7 +28,7 @@ class InteractiveJudgeVoterSpec extends Specification {
     private static final PipelineLaw LAW = PipelineLaw.ofContent(['criteria.md': 'Acceptance: the widget spins.'])
 
     private static TaskContext sampleContext() {
-        new TaskContext('TASK-1', 'title', 'body', [])
+        new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 
     private static VerifyCheck.Judge sampleCheck() {
@@ -92,7 +94,7 @@ class InteractiveJudgeVoterSpec extends Specification {
         def io = new ScriptedConsoleIO(['pass'])
         def console = new DialogConsole(io, { json -> 'status' })
         def voter = new InteractiveJudgeVoter(console, LAW)
-        def opaqueWorkspace = new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}
+        def opaqueWorkspace = new Workspace() {}
 
         when:
         voter.vote(sampleCheck(), sampleContext(), opaqueWorkspace)

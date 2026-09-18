@@ -32,8 +32,8 @@ class StreamJsonParserSpec extends Specification {
         then: 'a single InitEvent carries the session id and model, stamped with the read-time instant'
         events.size() == 1
         events[0].event() instanceof AgentEvent.InitEvent
-        events[0].event().sessionId() == 'sess-1'
-        events[0].event().model() == 'claude-x'
+        events[0].event().sessionId().forLog()== 'sess-1'
+        events[0].event().model().forLog()== 'claude-x'
         events[0].readAt() == clock.now()
     }
 
@@ -80,8 +80,8 @@ class StreamJsonParserSpec extends Specification {
         then: 'an AssistantEvent carries both content blocks intact'
         events.size() == 1
         def event = events[0].event() as AgentEvent.AssistantEvent
-        event.sessionId() == 'sess-1'
-        event.model() == 'claude-x'
+        event.sessionId().forLog()== 'sess-1'
+        event.model().forLog()== 'claude-x'
         event.parentToolUseId() == null
         event.content().size() == 2
         event.content()[0] == new ContentBlock.Text('working')
@@ -100,7 +100,7 @@ class StreamJsonParserSpec extends Specification {
         then: 'a UserEvent carries the tool result'
         events.size() == 1
         def event = events[0].event() as AgentEvent.UserEvent
-        event.sessionId() == 'sess-1'
+        event.sessionId().forLog()== 'sess-1'
         event.content() == [
             new ContentBlock.ToolResult('toolu_1', 'file written')
         ]
@@ -119,8 +119,8 @@ class StreamJsonParserSpec extends Specification {
         then: 'a ResultEvent carries the result text, usage, and modelUsage'
         events.size() == 1
         def event = events[0].event() as AgentEvent.ResultEvent
-        event.sessionId() == 'sess-1'
-        event.result() == 'done'
+        event.sessionId().forLog()== 'sess-1'
+        event.result().forLog()== 'done'
         event.usage() == [input_tokens: 10, output_tokens: 5]
         event.modelUsage() == [(('claude-x')): [inputTokens: 10, outputTokens: 5]]
     }
@@ -241,8 +241,8 @@ class StreamJsonParserSpec extends Specification {
 
         then: 'no exception, the known fields are preserved, the unknown one is dropped silently'
         events.size() == 1
-        events[0].event().sessionId() == 'sess-1'
-        events[0].event().model() == 'claude-x'
+        events[0].event().sessionId().forLog()== 'sess-1'
+        events[0].event().model().forLog()== 'claude-x'
     }
 
     // FR4: a non-JSON garbage line is silently skipped, parsing continues to subsequent lines

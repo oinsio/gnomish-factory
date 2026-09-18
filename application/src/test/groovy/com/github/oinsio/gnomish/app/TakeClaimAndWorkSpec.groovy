@@ -34,6 +34,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -343,7 +344,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         // A conflicting designator (two values named for the same base) is Underdetermined before
         // any refresh is even attempted — the same shape FreshClaimBaseBindingSpec drives at the
         // unit level, here driven through the real claim/dispatch stack.
-        def conflictingTask = new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+        def conflictingTask = new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false,
                 TaskDesignators.of('base', Designator.conflict(['a', 'b'])))
 
@@ -375,7 +376,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             classifyShape(_, _) >> new BranchShape.Bare()
         }
         def unavailableBaseRefGit = Stub(BaseRefGit) {
-            refresh(_, _) >> new BaseRefreshOutcome.Unavailable('connection timed out')
+            refresh(_, _) >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
         }
         def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), unavailableBaseRefGit, new ClaimEpochBook())
@@ -403,14 +404,14 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def facts = new AbortFacts(2, Instant.parse('2026-07-24T09:00:00Z'))
-        def taskWithAborts = new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+        def taskWithAborts = new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), facts, false)
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }
         def unavailableBaseRefGit = Stub(BaseRefGit) {
-            refresh(_, _) >> new BaseRefreshOutcome.Unavailable('connection timed out')
+            refresh(_, _) >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
         }
         def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), unavailableBaseRefGit, new ClaimEpochBook())
@@ -455,7 +456,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
         def recoveringBaseRefGit = Stub(BaseRefGit) {
             refresh(_, _) >>> [
-                new BaseRefreshOutcome.Unavailable('connection timed out'),
+                new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out')),
                 new BaseRefreshOutcome.Refreshed('main', 'c0ffee', BaseRefKind.BRANCH, OriginContact.CONTACTED),
             ]
         }

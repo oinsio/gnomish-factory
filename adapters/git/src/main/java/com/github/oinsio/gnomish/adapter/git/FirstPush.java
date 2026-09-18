@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.port.git.FirstPushFailedException;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
@@ -99,7 +98,7 @@ final class FirstPush {
         if (outcome == null) {
             return new Attempt(true, "pushed");
         }
-        logAttemptFailure(taskId, branch, outcome, LogText.forLog(result.stderr()));
+        logAttemptFailure(taskId, branch, outcome, result.stderr().forLog());
         return confirmLanded(repo, branch, outcome);
     }
 

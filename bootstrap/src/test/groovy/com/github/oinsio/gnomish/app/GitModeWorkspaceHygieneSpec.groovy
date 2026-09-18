@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -75,7 +76,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def runner = newRunner(properties)
-        def context = new TaskContext('HYG-1', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('HYG-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
         runner.run(cloneDir, null, pipeline(), context, TaskState.atStageStart('build'),
@@ -110,7 +111,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def runner = newRunner(properties)
-        def context = new TaskContext('HYG-2', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('HYG-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
         runner.run(cloneDir, null, pipeline(), context, TaskState.atStageStart('build'),

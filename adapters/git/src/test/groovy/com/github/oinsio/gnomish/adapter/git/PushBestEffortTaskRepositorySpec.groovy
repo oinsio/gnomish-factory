@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -40,7 +41,7 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String recorded = null
 
         when:
-        repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
+        repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
 
         then:
         1 * delegate.createTask(_, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), _) >> {
@@ -115,7 +116,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
 
         when:
         repository.recordOutcome(TASK_ID, new TaskOutcome.Escalated(TaskState.atStageStart('work'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])))
+                new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                    UntrustedText.agent('yes'),
+                    UntrustedText.agent('no')
+                ])))
         def tipAtReturn = remoteTip()
 
         then:

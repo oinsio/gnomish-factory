@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -20,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR6, FR9, NFR-P1 of add-base-ref-resolution.
  */
+@UntrustedParser
 final class RemoteBaseRef {
 
     private static final String HEADS = "refs/heads/";
@@ -60,7 +63,7 @@ final class RemoteBaseRef {
         record NoRemote() implements Held {}
 
         /** Origin never answered — the one arm the infrastructure budget is spent on. */
-        record Unanswered(String reason) implements Held {}
+        record Unanswered(UntrustedText reason) implements Held {}
     }
 
     /**
@@ -91,8 +94,8 @@ final class RemoteBaseRef {
             return new Held.Unanswered(refs.failureDetail("base refs read"));
         }
         return classify(
-                branches ? commitAt(refs.stdout(), HEADS + name).orElse(null) : null,
-                tags ? commitAt(refs.stdout(), TAGS + name).orElse(null) : null);
+                branches ? commitAt(refs.stdout().forParsing(), HEADS + name).orElse(null) : null,
+                tags ? commitAt(refs.stdout().forParsing(), TAGS + name).orElse(null) : null);
     }
 
     private static Held classify(@Nullable String branch, @Nullable String tag) {
@@ -109,6 +112,10 @@ final class RemoteBaseRef {
      * The commit {@code ls-remote} listed for exactly {@code ref}. The equality is deliberate: the
      * peeled {@code refs/tags/<n>^{}} line an annotated tag can produce names a different object,
      * and taking it for the tag's own would report a commit the tag ref does not point at.
+     *
+     * <p>@UntrustedParser warrant (design D11): what the parse yields is group 1 of {@link
+     * #REF_LINE}, an object-id-shaped field of a line whose ref field equalled a name the factory
+     * asked for — a revision argument and an equality subject, never text shown to a reader.
      */
     private static Optional<String> commitAt(String stdout, String ref) {
         return stdout.lines()

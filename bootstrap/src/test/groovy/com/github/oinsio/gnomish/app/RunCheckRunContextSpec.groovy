@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -14,7 +15,7 @@ import spock.lang.Specification
  */
 class RunCheckRunContextSpec extends Specification {
 
-    private static final TaskContext TASK = new TaskContext('PROJ-42', 'title', 'body', [])
+    private static final TaskContext TASK = new TaskContext('PROJ-42', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     private static StatusSnapshotHolder holderAt(String stage) {
         new StatusSnapshotHolder(TaskState.atStageStart(stage), 3)

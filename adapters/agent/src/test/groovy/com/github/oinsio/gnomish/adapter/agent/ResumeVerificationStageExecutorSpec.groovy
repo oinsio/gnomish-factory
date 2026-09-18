@@ -8,12 +8,13 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -27,17 +28,15 @@ class ResumeVerificationStageExecutorSpec extends Specification {
 
     private static StageExecutor.Request request(String stageName, int attempt) {
         new StageExecutor.Request(
-                new TaskContext('T-1', 'title', 'body', List.<Decision> of()),
+                new TaskContext('T-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 new StageDefinition(
                         stageName, 'purpose', [], [],
                         new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
                         'instructions.md', [], new AutonomyLimits(3), AdvancementMode.AUTO),
-                new StubWorkspace(),
+                new FakeWorkspace(),
                 attempt,
                 [])
     }
-
-    private static final class StubWorkspace implements Workspace {}
 
     private static ExecutionResult completed() {
         new ExecutionResult.Completed(

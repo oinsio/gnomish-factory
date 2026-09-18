@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.serveobservability.SweepCounts;
 import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,7 +33,13 @@ import org.jspecify.annotations.Nullable;
  * a new variant fails to compile here until its mapping is added.
  *
  * <p>Implements FR2, FR3, FR10 conventions of add-serve-observability.
+ *
+ * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): this writer carries untrusted
+ * text to a machine medium, where the document's own encoding bounds it and a neutralized value
+ * would corrupt the record. It is therefore one of the few classes that may read
+ * {@code UntrustedText.raw()}; the reader on the other side mints the carrier back.
  */
+@UntrustedExit
 public final class SnapshotJsonMapper {
 
     private final ObjectMapper mapper;

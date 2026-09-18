@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * Lease-maintenance properties of the {@link Tracker} port contract suite
@@ -104,17 +105,19 @@ abstract class TrackerLeaseContract extends TrackerFetchContract {
         def workingRef = new TaskRef('fixture:open-title-working')
         def awaitingRef = new TaskRef('fixture:open-title-awaiting')
         seedWorkingWithClaim(adapter, workingRef, 'instance-a')
-        seedTask(adapter, awaitingRef, new TaskSnapshot(awaitingRef.id(), 'Escalated widget', 'body'),
+        seedTask(adapter, awaitingRef, new TaskSnapshot(awaitingRef.id(), UntrustedText.tracker('Escalated widget'), UntrustedText.tracker('body')),
                 new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), AbortFacts.none())
 
         when: 'listOpen is called'
         List<OpenTask> result = adapter.listOpen()
 
         then: 'the AwaitingHuman entry carries its own seeded title'
-        result.find { it.ref() == awaitingRef }.title() == 'Escalated widget'
+        result.find {
+            it.ref() == awaitingRef
+        }.title().forLog() == 'Escalated widget'
 
         and: 'the Working entry carries a non-null title'
-        result.find { it.ref() == workingRef }.title() != null
+        result.find { it.ref() == workingRef }.title().forLog() != null
     }
 
     // FR5, FR4: listOpen and listReady partition the feed — a Ready task shows in

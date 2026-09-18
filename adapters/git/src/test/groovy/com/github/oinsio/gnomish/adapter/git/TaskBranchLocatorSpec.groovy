@@ -103,7 +103,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         and: 'the resolved ref is readable end-to-end via git show'
         def show = runner.run(clone, 'show', "${ref}:f.txt")
         show.exitCode() == 0
-        show.stdout().trim() == 'branch-content'
+        show.stdout().forParsing().trim() == 'branch-content'
     }
 
     def "FR8: the narrow fetch retrieves exactly the target branch, never a second unrelated branch on origin"() {

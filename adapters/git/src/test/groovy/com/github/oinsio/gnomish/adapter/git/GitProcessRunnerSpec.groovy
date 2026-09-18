@@ -26,7 +26,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
 
         then:
         result.exitCode() == 0
-        result.stdout().trim() == 'true'
+        result.stdout().forParsing().trim() == 'true'
     }
 
     def "FR2: captures stdout and stderr separately, not merged"() {
@@ -41,7 +41,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
 
         then:
         result.exitCode() == 0
-        result.stdout().contains('first')
+        result.stdout().forParsing().contains('first')
     }
 
     def "FR2: a non-zero git exit code is returned, not thrown"() {
@@ -54,7 +54,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         then:
         noExceptionThrown()
         result.exitCode() != 0
-        !result.stderr().isEmpty()
+        !result.stderr().forParsing().isEmpty()
     }
 
     def "FR2: git init --bare succeeds and produces a bare repository marker"() {
@@ -85,7 +85,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
 
         then:
         result.exitCode() != 0
-        !result.stderr().isEmpty()
+        !result.stderr().forParsing().isEmpty()
     }
 
     def "FR2: a runner configured with a nonexistent git binary throws a clear exception instead of hanging"() {
@@ -122,11 +122,11 @@ exit 128
 
         then: 'the secret is gone from stderr, and the rest of the diagnosis survives'
         result.exitCode() == 128
-        !result.stderr().contains('ghp_FAKETOKEN1234567890')
-        result.stderr().contains("could not read Password for 'https://***@github.com'")
+        !result.stderr().forParsing().contains('ghp_FAKETOKEN1234567890')
+        result.stderr().forParsing().contains("could not read Password for 'https://***@github.com'")
 
         and: 'stdout is untouched — OriginRemote#url reads the real origin URL from it'
-        result.stdout().contains('ghp_FAKETOKEN1234567890@github.com')
+        result.stdout().forParsing().contains('ghp_FAKETOKEN1234567890@github.com')
     }
 
     // Design D8/NFR-R2 of add-factory-serve: isRepoLevelMutating classifies which subcommands must
@@ -290,6 +290,6 @@ echo "prompt=[${GIT_TERMINAL_PROMPT-unset}] askpass=[${GIT_ASKPASS-unset}] ssh=[
         def result = new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
 
         then:
-        result.stdout().trim() == 'prompt=[0] askpass=[] ssh=[]'
+        result.stdout().forParsing().trim() == 'prompt=[0] askpass=[] ssh=[]'
     }
 }

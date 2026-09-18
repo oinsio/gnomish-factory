@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+
 /**
  * StageAttemptLoop persistence ordering, task 5.4 — every executed round is persisted
  * synchronously AFTER the round is recorded and BEFORE the AttemptFinished event and any
@@ -19,7 +21,7 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
     def "persists the round before emitting AttemptFinished"() {
         given: 'a stage whose single check cannot be verified'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
 
         when: 'the run is driven'
@@ -49,7 +51,7 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
         given: 'a stage that fails once (burning an attempt and retrying) then cannot verify'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << fail('findingA')
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         executor.scripted << completed()
 
@@ -89,7 +91,7 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
     def "persists a CannotVerify round exactly once with no attempt burned"() {
         given: 'a stage whose single check cannot be verified'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
 
         when: 'the run is driven'

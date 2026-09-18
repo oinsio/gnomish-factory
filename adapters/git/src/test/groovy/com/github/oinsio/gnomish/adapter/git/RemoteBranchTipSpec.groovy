@@ -155,7 +155,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
 
     def "FR7: an ancestry command that never ran to its own exit answers unknown"() {
         expect:
-        RemoteBranchTip.ancestryVerdict(new GitCommandResult(exit, '', '', termination)) == expected
+        RemoteBranchTip.ancestryVerdict(GitCommandResult.of(exit, '', '', termination)) == expected
 
         where:
         termination | exit || expected

@@ -16,8 +16,8 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
         // Every docker action fails, and the object is still there when the existence probe asks.
         docker.onRun = { List<String> args ->
             existenceProbe(args)
-            ? new DockerResult(0, 'still-here', '')
-            : new DockerResult(1, '', 'Error response from daemon: nope')
+            ? DockerResult.of(0, 'still-here', '')
+            : DockerResult.of(1, '', 'Error response from daemon: nope')
         }
     }
 
@@ -61,7 +61,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
     def "a disposal port that throws is absorbed, and the surviving object is still reported as skipped"() {
         given:
         disposal.dispose(_) >> {
-            throw new DockerUnavailableException('daemon gone', null)
+            throw new DockerUnavailableException('daemon gone', null as Throwable)
         }
 
         when:
@@ -80,11 +80,11 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
     def "a disposal port that throws after the object is gone still reports the disposal"() {
         given:
         disposal.dispose(_) >> {
-            throw new DockerUnavailableException('daemon gone mid-dispose', null)
+            throw new DockerUnavailableException('daemon gone mid-dispose', null as Throwable)
         }
         // The existence probe answers "gone" — the triple really was removed before the failure.
         docker.onRun = { List<String> args ->
-            existenceProbe(args) ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+            existenceProbe(args) ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', '')
         }
 
         when:

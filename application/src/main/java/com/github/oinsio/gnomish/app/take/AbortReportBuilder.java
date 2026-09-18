@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -43,16 +44,16 @@ final class AbortReportBuilder {
      * instance are recorded — so a human can diagnose the underlying
      * infrastructure problem across the whole streak, not just its last link.
      *
-     * @param cause free-text description of the abort that tripped the fuse, already capped to
-     *     the abort-cause budget by {@link AbortHandler} — this builder adds framing to it and
-     *     never re-checks the bound; never blank
+     * @param cause description of the abort that tripped the fuse, carried, already capped to the
+     *     abort-cause budget by {@link AbortHandler} — this builder adds framing to it and never
+     *     re-checks the bound; never blank
      * @param category which category the tripping attempt belongs to; never null
      * @param facts the accounting as it stood BEFORE this attempt — the tripping
      *     attempt is added to its own category here; never null
      * @param threshold the configured abort-fuse threshold (K); positive
      * @return finished report text; never blank
      */
-    static String build(String cause, RecoveryCause category, AbortFacts facts, int threshold) {
+    static String build(UntrustedText cause, RecoveryCause category, AbortFacts facts, int threshold) {
         int crashes = facts.crashCount() + (category == RecoveryCause.INSTANCE_CRASH ? 1 : 0);
         int repairs = facts.recoveryCount() + (category == RecoveryCause.RECOVERY_FAILURE ? 1 : 0);
         return "Infrastructure abort fuse tripped: "
@@ -65,9 +66,16 @@ final class AbortReportBuilder {
                 + repairs
                 + " failed branch repairs). Most recent cause ("
                 + category.wireValue()
-                + "): "
-                + cause
-                + "."
+                + "):\n"
+                // The comment exit (design D6, D7 of type-untrusted-text, task 6.3): this report
+                // is posted as a tracker comment and logged whole, so the one part the factory did
+                // not author lands in a labeled fence with mentions and issue references broken,
+                // while every framing sentence around it stays outside — the division D7's
+                // rejected alternative, fencing the whole park report, would have destroyed. The
+                // fence keeps line structure and length, so the abort-cause budget applied by
+                // AbortHandler stays the only bound on it.
+                + cause.forComment()
+                + "\n"
                 + priorAttempt(facts.lastAbortAt())
                 + " Each abort's own cause and instance are recorded in this task's abort entries;"
                 + " review them for the full history across the streak."

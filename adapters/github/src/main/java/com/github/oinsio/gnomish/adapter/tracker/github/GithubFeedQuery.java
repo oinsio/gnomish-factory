@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -116,7 +117,8 @@ public final class GithubFeedQuery {
             // ready-labeled issue that still carries a claim marker is visible to the sweep instead
             // of losing races to a ghost.
             ClaimFacts claim = GithubTrackerFacts.claim(GithubClaimComment.parse(commentsBody));
-            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished, issue.title(), claim));
+            readyTasks.add(
+                    new ReadyTask(ref, abortFacts, returned, finished, UntrustedText.tracker(issue.title()), claim));
         }
         return List.copyOf(readyTasks);
     }

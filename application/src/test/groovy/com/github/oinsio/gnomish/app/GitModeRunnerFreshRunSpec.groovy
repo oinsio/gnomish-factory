@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -62,7 +63,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     }
 
     private static TaskContext context(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
+        new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
     }
 
     ScriptedExecutor executor = new ScriptedExecutor([completedRound()])

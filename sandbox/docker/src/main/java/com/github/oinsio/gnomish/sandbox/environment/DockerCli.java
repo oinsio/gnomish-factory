@@ -7,11 +7,11 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,8 +47,6 @@ import org.slf4j.LoggerFactory;
 class DockerCli {
 
     private static final Logger log = LoggerFactory.getLogger(DockerCli.class);
-
-    private static final String DAEMON_UNREACHABLE = "cannot connect to the docker daemon";
 
     /**
      * The documented default for a management command (FR5): generous enough
@@ -112,11 +110,14 @@ class DockerCli {
         // or a shutdown into an outage report (FR6 of bound-subprocess-commands).
         if (captured.termination() == Termination.EXITED
                 && captured.exitCode() != 0
-                && captured.stderr().toLowerCase(Locale.ROOT).contains(DAEMON_UNREACHABLE)) {
+                && DockerUnavailableException.reportsDaemonUnreachable(captured.stderr())) {
+            // The mint for what the daemon said about itself: `Captured` is still a plain String
+            // at this point by design D3, so the carrier is made here, at the first factory
+            // reader — the typed parameter is what keeps it out of the message unrendered.
             throw new DockerUnavailableException(
-                    "docker daemon is unreachable: " + captured.stderr().strip(), null);
+                    "docker daemon is unreachable", UntrustedText.subprocess(captured.stderr()));
         }
-        return new DockerResult(captured.exitCode(), captured.stdout(), captured.stderr(), captured.termination());
+        return DockerResult.of(captured.exitCode(), captured.stdout(), captured.stderr(), captured.termination());
     }
 
     /**

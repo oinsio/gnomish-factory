@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
-import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -74,7 +73,7 @@ final class SandboxLifecycleActions {
                 what,
                 object.name(),
                 result.exitCode(),
-                LogText.forLog(result.stderr()));
+                result.stderr().forLog());
         return false;
     }
 

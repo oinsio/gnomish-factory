@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -68,7 +69,7 @@ class HeartbeatProgressSpec extends Specification {
         stage | attempt | event
         'implement' | 3 | new EngineEvent.AttemptStarted(key('implement', 3))
         'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), ExecutorUsage.none())
-        'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, 'builtin:files_exist'))
+        'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, UntrustedText.manifest('builtin:files_exist')))
         'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult())
         'review' | 2 | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))
     }
@@ -112,7 +113,7 @@ class HeartbeatProgressSpec extends Specification {
     }
 
     private static CheckResult passResult() {
-        new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
     }
 
     private static ToolTrace trace(String stage, int attempt) {

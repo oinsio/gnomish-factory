@@ -16,6 +16,9 @@ import java.time.ZoneOffset
  * TwoInstanceTakeFixture} used to repeat verbatim aside from how each computes its {@link
  * FactoryProperties}.
  *
+ * <p>The optional {@code sandboxLifecyclePass} defaults to {@link SandboxLifecyclePass#NONE}, which
+ * every take spec but the startup-sweep one relies on so the sweep call site stays invisible to them.
+ *
  * <p>Nothing here wires a tenure record: {@link TaskGitFixture#real} builds one book per bundle,
  * and the command resolves its tracker through {@code TrackerResolution.resolveTracker}, which
  * wraps it in the recording decorator over that same book (FR4, design D2/D3 of
@@ -28,7 +31,9 @@ import java.time.ZoneOffset
 trait TakeCommandFixture implements AppAssemblyFixture {
 
     TakeCommand newTakeCommand(
-            FactoryProperties factoryProperties, Path worktreesRoot, Map<String, TrackerAdapterFactory> trackerFactories) {
+            FactoryProperties factoryProperties, Path worktreesRoot, Map<String, TrackerAdapterFactory> trackerFactories,
+            TakeCommandSeams seams = TakeCommandSeams.DEFAULTS,
+            SandboxLifecyclePass sandboxLifecyclePass = SandboxLifecyclePass.NONE) {
         TakeCommandFactory.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
@@ -39,7 +44,7 @@ trait TakeCommandFixture implements AppAssemblyFixture {
                 trackerFactories,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                TakeCommandSeams.DEFAULTS,
-                SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                seams,
+                sandboxLifecyclePass, ContainerTakeSupport.hostOnly())
     }
 }

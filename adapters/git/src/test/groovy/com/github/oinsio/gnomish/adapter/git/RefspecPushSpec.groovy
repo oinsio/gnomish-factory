@@ -59,7 +59,7 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
         def result = new RefspecPush(new GitProcessRunner(fakeGit.toString())).push(clone, BRANCH)
 
         then:
-        result.stdout().trim() == (stallDetectionArgv() + [
+        result.stdout().forParsing().trim() == (stallDetectionArgv() + [
             'push',
             'origin',
             "${BRANCH}:${BRANCH}"

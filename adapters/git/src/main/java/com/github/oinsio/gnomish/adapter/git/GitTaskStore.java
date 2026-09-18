@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -26,8 +27,6 @@ import java.nio.file.Path;
  * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules.
  */
 public final class GitTaskStore implements TaskStoreGit {
-
-    private static final String TASK_DIR = ".gnomish-task";
 
     private final GitProcessRunner runner;
     private final UsageHistoryWalker usageWalker;
@@ -63,19 +62,19 @@ public final class GitTaskStore implements TaskStoreGit {
 
     @Override
     public TaskState readRecordedState(Path worktree) {
-        Path stateJson = worktree.resolve(TASK_DIR).resolve("state.json");
+        Path stateJson = worktree.resolve(FactoryOwnedPaths.STATE_DIR).resolve("state.json");
         return StateJsonMapper.fromDto(StateJsonMapper.readDto(read(stateJson, "state.json")));
     }
 
     @Override
     public TaskRecord readTaskRecord(Path worktree) {
-        Path taskJson = worktree.resolve(TASK_DIR).resolve("task.json");
+        Path taskJson = worktree.resolve(FactoryOwnedPaths.STATE_DIR).resolve("task.json");
         return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(read(taskJson, "task.json")));
     }
 
-    private static String read(Path file, String label) {
+    private static UntrustedText read(Path file, String label) {
         try {
-            return Files.readString(file);
+            return UntrustedText.branchDocument(Files.readString(file));
         } catch (IOException e) {
             throw new UncheckedIOException("failed to read " + label + " at " + file, e);
         }

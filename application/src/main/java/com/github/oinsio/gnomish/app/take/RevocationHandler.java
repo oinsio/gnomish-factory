@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskSalvage;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
 /**
@@ -62,11 +63,15 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
         worktreeSalvage.salvage(taskId);
         branchPush.pushBestEffort(worktreeRoot, branch);
 
-        String note = "Work stopped: " + reason + ". Uncommitted work was salvage-committed and the branch"
-                + " left in place for whoever resumes this task.";
+        // The reason names what the tracker held — the new claim's holder, a closure reason — so it
+        // leaves through the comment exit at the write, with the factory's own sentences outside
+        // the fence (design D7 of type-untrusted-text).
+        String note = "Work stopped:\n" + UntrustedText.tracker(reason).forComment()
+                + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
+                + " this task.";
         tracker.postNote(ref, note);
         tracker.release(ref);
 
-        return new TakeResult.Revoked(finalState, note);
+        return new TakeResult.Revoked(finalState, UntrustedText.tracker(note));
     }
 }

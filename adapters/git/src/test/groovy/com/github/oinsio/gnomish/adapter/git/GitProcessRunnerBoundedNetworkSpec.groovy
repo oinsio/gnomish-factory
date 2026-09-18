@@ -51,7 +51,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
         then: 'it ran to its own exit; the network deadline never applied to it'
         result.termination() == Termination.EXITED
         result.exitCode() == 0
-        result.stdout().trim() == 'local done'
+        result.stdout().forParsing().trim() == 'local done'
     }
 
     def "NFR-R3: a network command that answers normally is byte-identical to before, and EXITED"() {
@@ -65,7 +65,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
         then:
         result.termination() == Termination.EXITED
         result.exitCode() == 0
-        result.stdout().isEmpty()
+        result.stdout().forParsing().isEmpty()
     }
 
     def "FR3, NFR-S2: the partial stderr of a killed network command is still scrubbed"() {
@@ -84,8 +84,8 @@ sleep ${STALL_SECONDS}
 
         then: 'the scrub is the one choke point, on the kill path as much as on the normal one'
         result.termination() == Termination.TIMED_OUT
-        !result.stderr().contains('ghp_FAKETOKEN1234567890')
-        result.stderr().contains("could not read Password for 'https://***@github.com'")
+        !result.stderr().forParsing().contains('ghp_FAKETOKEN1234567890')
+        result.stderr().forParsing().contains("could not read Password for 'https://***@github.com'")
     }
 
     private Path stallingGit() {

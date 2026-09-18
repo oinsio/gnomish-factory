@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The {@link AgentProgressListener} that enriches the held {@link
@@ -63,7 +64,9 @@ public record AgentActivityEnricher(StatusSnapshotHolder holder) implements Agen
 
     private void onToolStarted(String toolName) {
         if (holder.activity().activity() instanceof Activity.Executing executing) {
-            holder.updateActivity(new Activity.Executing(executing.since(), toolName, executing.toolCalls() + 1));
+            // The agent named the tool, so the live activity carries the agent's word (design D3).
+            holder.updateActivity(new Activity.Executing(
+                    executing.since(), UntrustedText.agent(toolName), executing.toolCalls() + 1));
         }
     }
 

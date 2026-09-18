@@ -60,11 +60,11 @@ class FakeDockerHost {
         }
         def probed = existenceProbe(args)
         if (probed != null) {
-            return objects.containsKey(probed) ? ok(probed) : new DockerResult(1, '', 'Error: No such object')
+            return objects.containsKey(probed) ? ok(probed) : DockerResult.of(1, '', 'Error: No such object')
         }
         def inspected = inspectTarget(args)
         if (inspected != null) {
-            return inspectAnswer(args, inspected)
+            return inspectAnswer(inspected)
         }
         return mutate(args)
     }
@@ -99,7 +99,7 @@ class FakeDockerHost {
         objects[args.last()]
     }
 
-    private static DockerResult inspectAnswer(List<String> args, Obj obj) {
+    private static DockerResult inspectAnswer(Obj obj) {
         if (obj.kind == ObjectKind.CONTAINER) {
             def finished = obj.finishedAt ?: Instant.parse('0001-01-01T00:00:00Z')
             return ok("${obj.running} ${finished} ${obj.createdAt} ${obj.createdAt}")
@@ -113,7 +113,7 @@ class FakeDockerHost {
         if (args == DockerCommands.stop(target)) {
             def obj = objects[target]
             if (obj == null) {
-                return new DockerResult(1, '', 'Error: No such container')
+                return DockerResult.of(1, '', 'Error: No such container')
             }
             mutations << args
             obj.running = false
@@ -124,7 +124,7 @@ class FakeDockerHost {
                 || args == DockerCommands.removeVolume(target)
                 || args == DockerCommands.removeNetwork(target)) {
             if (!objects.containsKey(target)) {
-                return new DockerResult(1, '', 'Error: No such object')
+                return DockerResult.of(1, '', 'Error: No such object')
             }
             mutations << args
             objects.remove(target)
@@ -134,7 +134,7 @@ class FakeDockerHost {
     }
 
     private static DockerResult ok(String stdout) {
-        new DockerResult(0, stdout, '')
+        DockerResult.of(0, stdout, '')
     }
 
     static final String PROJECT = 'proj-1'

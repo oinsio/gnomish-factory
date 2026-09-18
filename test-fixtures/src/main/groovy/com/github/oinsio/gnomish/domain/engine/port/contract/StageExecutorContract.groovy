@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -50,7 +51,7 @@ abstract class StageExecutorContract extends Specification implements PortContra
 
     private static StageExecutor.Request sampleRequest() {
         new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
+                new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 sampleStage(), new Workspace() {}, 0, [])
     }
 

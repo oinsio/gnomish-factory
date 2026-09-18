@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcome;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -28,7 +29,13 @@ import org.jspecify.annotations.Nullable;
  * default} arm, mirroring {@link SnapshotJsonMapper}'s idiom.
  *
  * <p>Implements FR10, FR11, FR12, FR13 conventions of add-serve-observability.
+ *
+ * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): this writer carries untrusted
+ * text to a machine medium, where the document's own encoding bounds it and a neutralized value
+ * would corrupt the record. It is therefore one of the few classes that may read
+ * {@code UntrustedText.raw()}; the reader on the other side mints the carrier back.
  */
+@UntrustedExit
 public final class LedgerJsonMapper {
 
     private final ObjectMapper mapper;

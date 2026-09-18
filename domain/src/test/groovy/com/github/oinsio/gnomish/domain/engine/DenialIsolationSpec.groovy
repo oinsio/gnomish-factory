@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -33,7 +34,7 @@ import spock.lang.Specification
 class DenialIsolationSpec extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     static final def DENIAL = new Finding(
     'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
 
@@ -62,7 +63,10 @@ class DenialIsolationSpec extends Specification {
 
     static ExecutionResult.DecisionNeeded decisionNeeded(List<Finding> denials) {
         new ExecutionResult.DecisionNeeded(
-                'which db?', ['postgres', 'mysql'], ExecutorUsage.none(),
+                UntrustedText.agent('which db?'), [
+                    UntrustedText.agent('postgres'),
+                    UntrustedText.agent('mysql')
+                ], ExecutorUsage.none(),
                 new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), denials)
     }
 

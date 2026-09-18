@@ -46,6 +46,12 @@ dependencies {
     api project(':gnomish-plugin-api')
     api project(':sandbox:core')
     api project(':gitobjects')
+    // The untrusted-text leaf (design D4 of type-untrusted-text): the in-memory tracker mints
+    // `TRACKER` carriers, `ConfigError.render()` returns one and the check clients carry them into
+    // `Verdict.CannotVerify`. `api`, not `implementation`: those carriers sit on this module's own
+    // signatures, and the gate asks for a directly used edge to be declared rather than inherited
+    // through `:application`.
+    api project(':untrustedtext')
     // The execution-environment backends (task 6.1): the environment-source
     // bridges construct host environments and lease container ones, and
     // `ContainerHarvestFetch` / `SandboxCheckEnvironmentSource` name backend

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -18,7 +19,7 @@ import spock.lang.Specification
  */
 class TrackedTaskFactsSpec extends Specification {
 
-    private static final TaskSnapshot SNAPSHOT = new TaskSnapshot('PROJ-1', 'title', 'body')
+    private static final TaskSnapshot SNAPSHOT = new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'))
 
     def "the #state state stands for the #description label set"() {
         given:

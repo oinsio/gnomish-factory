@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -23,7 +24,7 @@ import spock.lang.Specification
  */
 class FakesSanitySpec extends Specification {
 
-    private static final TaskContext CTX = new TaskContext('TASK-1', 't', 'b', [])
+    private static final TaskContext CTX = new TaskContext('TASK-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), [])
     private static final FakeWorkspace WS = new FakeWorkspace()
 
     private static ToolTrace trace() {
@@ -38,10 +39,15 @@ class FakesSanitySpec extends Specification {
         new StageExecutor.Request(CTX, null, WS, attempt, [])
     }
 
+    // Suppressed: IntelliJ's Groovy static checker misinfers the [r0, r1] literal's common
+    // type where r0/r1 are different permitted subtypes of the sealed ExecutionResult
+    // interface; the constructor accepts List<ExecutionResult> and this resolves correctly
+    // at runtime — this is an IDE-only false positive (see BoardModelEligibilitySpec).
+    @SuppressWarnings('GroovyAssignabilityCheck')
     def "ScriptedExecutor returns queued results in order and records each request"() {
         given: 'an executor scripted with two results'
         def r0 = completed()
-        def r1 = new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), trace(), [])
+        def r1 = new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), trace(), [])
         def executor = new ScriptedExecutor([r0, r1])
 
         when: 'two rounds are executed'
@@ -92,6 +98,9 @@ class FakesSanitySpec extends Specification {
         runner.calls.size() == 1
     }
 
+    // Suppressed: same IDE-only false positive as ScriptedExecutor above, for the sealed
+    // PollStatus interface's Running/Pass subtypes in the [.., ..] literal.
+    @SuppressWarnings('GroovyAssignabilityCheck')
     def "ScriptedExternalCheckClient returns a poll sequence and counts polls"() {
         given: 'a client scripted Running then Pass'
         def client = new ScriptedExternalCheckClient([

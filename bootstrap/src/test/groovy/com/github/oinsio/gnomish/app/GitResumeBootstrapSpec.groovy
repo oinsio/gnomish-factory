@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 
 /**
@@ -46,7 +47,10 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         given:
         def repo = repository()
         repo.createTask(context('PROJ-2'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         repo.recordOutcome('PROJ-2', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
         when:
@@ -55,7 +59,14 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         then:
         bundle.outcome() != null
         bundle.outcome() instanceof RecordedOutcome.Escalated
-        bundle.lastEscalation() == report
+        // The reader re-mints every lifted field BRANCH_DOCUMENT (design D3 of
+        // type-untrusted-text), and the carrier's equality includes provenance.
+        bundle.lastEscalation() == new EscalationReport.DecisionNeeded(
+                UntrustedText.branchDocument('continue?'),
+                [
+                    UntrustedText.branchDocument('yes'),
+                    UntrustedText.branchDocument('no')
+                ])
     }
 
     // FR8: resuming on a machine/clone without a local worktree still succeeds, materializing one

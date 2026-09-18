@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -32,7 +33,7 @@ import spock.lang.Specification
 class DecisionNeededSpec extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
     def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -69,7 +70,11 @@ class DecisionNeededSpec extends Specification {
 
     static ExecutionResult.DecisionNeeded decisionNeeded(String question, List<String> options) {
         new ExecutionResult.DecisionNeeded(
-                question, options, ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+                UntrustedText.agent(question),
+                options.collect { UntrustedText.agent(it) },
+                ExecutorUsage.none(),
+                new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []),
+                [])
     }
 
     static Verdict.Fail fail(String message) {
@@ -86,7 +91,10 @@ class DecisionNeededSpec extends Specification {
         def stageDef = stage('build', 5, [builtin('files_exist')])
         def usage = ExecutorUsage.none()
         def trace = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
-        executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['postgres', 'mysql'], usage, trace, [])
+        executor.scripted << new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('mysql')
+        ], usage, trace, [])
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
@@ -95,8 +103,8 @@ class DecisionNeededSpec extends Specification {
         outcome instanceof TaskOutcome.Escalated
         def report = outcome.report()
         report instanceof EscalationReport.DecisionNeeded
-        (report as EscalationReport.DecisionNeeded).question() == 'which db?'
-        (report as EscalationReport.DecisionNeeded).options() == ['postgres', 'mysql']
+        (report as EscalationReport.DecisionNeeded).question().forLog() == 'which db?'
+        (report as EscalationReport.DecisionNeeded).options()*.forLog() == ['postgres', 'mysql']
 
         and: 'no attempt was burned and exactly one round was recorded'
         def finalState = outcome.finalState()

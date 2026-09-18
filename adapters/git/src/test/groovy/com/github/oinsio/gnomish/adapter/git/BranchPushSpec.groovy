@@ -26,20 +26,12 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
     BranchPush push
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(repo, 'origin', bareRepo.toString())
 
         push = new BranchPush(runner)
-    }
-
-    private String currentHead() {
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
     }
 
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
@@ -79,8 +71,8 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         push.pushBestEffort(repo, 'gnomish/PROJ-1')
 
         then:
-        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
-        remoteHead == currentHead()
+        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
+        remoteHead == currentHead(repo)
     }
 
     def "a non-fast-forward push rejection just WARNs, no force retry"() {
@@ -92,7 +84,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         runner.run(otherClone, 'add', 'divergent.txt')
         runner.run(otherClone, '-c', 'user.email=x@b.c', '-c', 'user.name=x', 'commit', '-m', 'divergent')
         runner.run(otherClone, 'push', 'origin', 'gnomish/PROJ-1:gnomish/PROJ-1')
-        def remoteHeadBeforeLocalPush = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
+        def remoteHeadBeforeLocalPush = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
 
         when:
         def events = capture {
@@ -101,7 +93,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
 
         then:
         noExceptionThrown()
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() == remoteHeadBeforeLocalPush
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() == remoteHeadBeforeLocalPush
 
         and: 'a WARN was actually logged for the rejected push'
         events.size() == 1

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -13,7 +14,7 @@ class CheckResultSpec extends Specification {
     // FR4: CheckResult exposes checkRef, verdict and duration as constructed
     def "exposes checkRef, verdict and duration as constructed"() {
         given: 'a check reference and a verdict'
-        def ref = new CheckRef(0, 'builtin:files_exist')
+        def ref = new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))
         def verdict = new Verdict.Pass()
         def duration = Duration.ofMillis(250)
 
@@ -29,7 +30,7 @@ class CheckResultSpec extends Specification {
     // FR4: a result works with each Verdict variant
     def "carries any Verdict variant"() {
         given: 'a check reference'
-        def ref = new CheckRef(1, 'command:make')
+        def ref = new CheckRef(1, UntrustedText.manifest('command:make'))
 
         when: 'a CheckResult is created with the verdict'
         def result = new CheckResult(ref, verdict, Duration.ofSeconds(1))
@@ -43,14 +44,14 @@ class CheckResultSpec extends Specification {
             new Verdict.Fail([
                 new Finding('boom', null, null)
             ]),
-            new Verdict.CannotVerify('binary not found', ''),
+            new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('')),
         ]
     }
 
     // FR4: a zero duration is valid — a check may take no measurable time
     def "accepts a zero duration"() {
         when: 'a CheckResult is created with a zero duration'
-        def result = new CheckResult(new CheckRef(0, 'builtin:x'), new Verdict.Pass(), Duration.ZERO)
+        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(), Duration.ZERO)
 
         then: 'the zero duration is exposed as constructed'
         result.duration() == Duration.ZERO
@@ -59,7 +60,7 @@ class CheckResultSpec extends Specification {
     // FR4: a duration cannot be negative — a negative duration is rejected
     def "rejects a negative duration with the component named"() {
         when: 'a CheckResult is created with a negative duration'
-        new CheckResult(new CheckRef(0, 'builtin:x'), new Verdict.Pass(), negative)
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(), negative)
 
         then: 'construction fails and the message names the duration'
         def failure = thrown(IllegalArgumentException)
@@ -75,7 +76,7 @@ class CheckResultSpec extends Specification {
     // FR4: CheckResult is inert value data compared by content
     def "is value-equal by content"() {
         given: 'two results built from equal components'
-        def ref = new CheckRef(0, 'builtin:x')
+        def ref = new CheckRef(0, UntrustedText.manifest('builtin:x'))
 
         expect: 'they are equal'
         new CheckResult(ref, new Verdict.Pass(), Duration.ofMillis(5)) ==

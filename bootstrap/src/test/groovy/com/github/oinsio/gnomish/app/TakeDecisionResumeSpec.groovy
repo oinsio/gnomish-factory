@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -38,7 +39,10 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
@@ -71,7 +75,10 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
@@ -81,13 +88,15 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             reply('go ahead', '2026-07-18T09:00:00Z')
         ]
         def callOrder = []
-        tracker.acknowledgeDecision(REF, 'go ahead') >> { callOrder << 'ack' }
+        tracker.acknowledgeDecision(REF, fenced('go ahead')) >> {
+            callOrder << 'ack'
+        }
         // fetchTask is called by the engine's revocation/abort machinery once the run is under way,
         // so its first invocation after resume() starts is a reliable "engine has begun" marker.
         tracker.fetchTask(_) >> {
             callOrder << 'engine-started'
             new TrackerTask(
-                    REF, new TaskSnapshot('PROJ-2', 'title', 'body'),
+                    REF, new TaskSnapshot('PROJ-2', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                     new TrackerTaskState.Working(INSTANCE.value()),
                     AbortFacts.none(), false)
         }
@@ -112,7 +121,10 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
@@ -130,9 +142,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, 'freshest reply')
-        0 * tracker.acknowledgeDecision(REF, 'first reply')
-        0 * tracker.acknowledgeDecision(REF, 'second reply')
+        1 * tracker.acknowledgeDecision(REF, fenced('freshest reply'))
+        0 * tracker.acknowledgeDecision(REF, fenced('first reply'))
+        0 * tracker.acknowledgeDecision(REF, fenced('second reply'))
     }
 
     // D12: AttemptsExhausted with no pending reply still resumes the engine (the return itself is
@@ -190,7 +202,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, 'try again')
+        1 * tracker.acknowledgeDecision(REF, fenced('try again'))
         result instanceof TakeResult.Delivered
 
         and: 'the reply text was appended durably via GitTaskRepository#appendDecision'
@@ -215,7 +227,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.CannotVerify(
-                new CheckRef(0, 'tests'), 'boom', '')
+                new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('boom'), UntrustedText.subprocess(''))
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
         def runner = newTakeResumeRunner()
@@ -229,5 +241,10 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         then:
         thrown(IllegalStateException)
+    }
+
+    /** The comment exit's rendering of one reply, as the acknowledge now publishes it. */
+    private static String fenced(String text) {
+        UntrustedText.tracker(text).forComment()
     }
 }

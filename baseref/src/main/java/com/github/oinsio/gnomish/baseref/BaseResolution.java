@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.baseref;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Objects;
 
@@ -33,11 +34,16 @@ public sealed interface BaseResolution {
      * material: the human who fixes this reads the values found and the allowed bases that rejected them.
      *
      * @param cause which of the causes it is — what the caller routes on
-     * @param values the designator values found on the task, in the order the adapter reported them;
-     *     empty when the cause is not a designator one
-     * @param reason one sentence naming what was found and what the configuration allows
+     * @param values the values found on the task, in the order the adapter reported them — a
+     *     tracker's designator values, or the operator's own {@code --base} argument when that is
+     *     what no grammar accepted; empty when the cause names none. Carried rather than rendered:
+     *     the park report chooses the exit (task 6.1 of type-untrusted-text)
+     * @param reason one sentence naming what was found and what the configuration allows;
+     *     factory-authored prose, whose quoted values enter it through the carrier's
+     *     {@code toString()} — the log exit — so it needs no neutralizing of its own
      */
-    record Underdetermined(UnderdeterminedCause cause, List<String> values, String reason) implements BaseResolution {
+    record Underdetermined(UnderdeterminedCause cause, List<UntrustedText> values, String reason)
+            implements BaseResolution {
 
         /** Copies the values, so a report built later reads what resolution actually saw. */
         public Underdetermined {

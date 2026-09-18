@@ -1,13 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Path
@@ -28,17 +21,6 @@ class HostRoundEnvironmentSourceSpec extends Specification {
     @TempDir
     Path decisionRoot
 
-    private StageExecutor.Request request() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
-    }
-
     // FR2, FR4: the round's decision-file path is the transport's, never null — the executor
     // wires it into the CLI flags' pinpoint Write allowance and the process env fragment.
     def "openRound exposes the transport's decision-file path and the matching env fragment"() {
@@ -47,7 +29,7 @@ class HostRoundEnvironmentSourceSpec extends Specification {
                 new DecisionFileTransport(decisionRoot), new VirtualClock(), ChildEnvAllowlist.none())
 
         when:
-        def round = source.openRound(request())
+        def round = source.openRound(StageExecutorRequests.request(workspaceDir))
 
         then:
         round.environment() instanceof HostTaskExecutionEnvironment

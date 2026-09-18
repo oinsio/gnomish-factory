@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
@@ -65,10 +66,10 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
     def "resolves the tracker from --dir's config, minting an InstanceId passed to the factory, and calls only listReady/listOpen"() {
         given:
         def ready = [
-            new ReadyTask(new TaskRef('t-1'), AbortFacts.none(), false, false, 'Add widgets')
+            new ReadyTask(new TaskRef('t-1'), AbortFacts.none(), false, false, UntrustedText.tracker('Add widgets'))
         ]
         def open = [
-            new OpenTask(new TaskRef('t-2'), new TrackerTaskState.Working('someone'), null, 'Fix gizmos')
+            new OpenTask(new TaskRef('t-2'), new TrackerTaskState.Working('someone'), null, UntrustedText.tracker('Fix gizmos'))
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)
         def factory = new RecordingTrackerAdapterFactory(tracker)
@@ -104,7 +105,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
     def "marks the window truncated only when the fetched ready count equals the limit"() {
         given:
         def ready = (1..readyCount).collect {
-            new ReadyTask(new TaskRef("r-$it".toString()), AbortFacts.none(), false, false, "t-$it".toString())
+            new ReadyTask(new TaskRef("r-$it".toString()), AbortFacts.none(), false, false, UntrustedText.tracker("t-$it".toString()))
         }
         def command = newCommand(new RecordingReadOnlyTracker(ready, []))
 
@@ -128,7 +129,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
         given:
         def command = newCommand(new RecordingReadOnlyTracker(
                         [
-                            new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, 'Add widgets')
+                            new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, UntrustedText.tracker('Add widgets'))
                         ], []))
 
         when: 'run once with --json and once without'
@@ -154,10 +155,10 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
     def "output is a smoke-testable summary containing ready/working ids and titles"() {
         given:
         def ready = [
-            new ReadyTask(new TaskRef('ready-42'), AbortFacts.none(), false, false, 'Add widgets')
+            new ReadyTask(new TaskRef('ready-42'), AbortFacts.none(), false, false, UntrustedText.tracker('Add widgets'))
         ]
         def open = [
-            new OpenTask(new TaskRef('working-7'), new TrackerTaskState.Working('someone'), null, 'Fix gizmos')
+            new OpenTask(new TaskRef('working-7'), new TrackerTaskState.Working('someone'), null, UntrustedText.tracker('Fix gizmos'))
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)
         def command = newCommand(tracker)
@@ -186,7 +187,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
         def title = 'Add widgets \u202Enow'
         def tracker = new RecordingReadOnlyTracker(
                 [
-                    new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, title)
+                    new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, UntrustedText.tracker(title))
                 ], [])
         def console = new ScriptedConsoleIO()
         def command = commandBackedBy(new RecordingTrackerAdapterFactory(tracker), console)

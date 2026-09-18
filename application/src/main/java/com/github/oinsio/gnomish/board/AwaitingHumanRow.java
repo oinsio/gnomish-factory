@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.board;
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Objects;
 
 /**
@@ -17,7 +18,7 @@ import java.util.Objects;
  * @param title the task's title; never null
  * @param reason why the task was parked; never null
  */
-public record AwaitingHumanRow(TaskRef ref, String title, ParkReason reason) {
+public record AwaitingHumanRow(TaskRef ref, UntrustedText title, ParkReason reason) {
 
     public AwaitingHumanRow {
         Objects.requireNonNull(ref, "ref");

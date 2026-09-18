@@ -25,7 +25,7 @@ final class ScriptedDockerCli extends DockerCli {
         if (declared != null) {
             return declared
         }
-        args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+        args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', '')
     }
 
     @Override

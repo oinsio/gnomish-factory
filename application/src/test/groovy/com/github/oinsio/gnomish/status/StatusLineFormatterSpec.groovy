@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -60,8 +61,8 @@ class StatusLineFormatterSpec extends Specification {
     def "checkHighlight reports the exact summed millisecond total across all checks"() {
         given:
         def checks = [
-            new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(120)),
-            new CheckResult(new CheckRef(1, 'command:./gradlew test'), new Verdict.Pass(), Duration.ofMillis(380))
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(120)),
+            new CheckResult(new CheckRef(1, UntrustedText.manifest('command:./gradlew test')), new Verdict.Pass(), Duration.ofMillis(380))
         ]
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, checks, ExecutorUsage.none(), JudgeUsage.none(), [])
 

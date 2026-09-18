@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
@@ -152,9 +153,10 @@ final class TakeDisposition {
                         working.holder());
             case TrackerTaskState.AwaitingHuman awaitingHuman -> refuseParked(awaitingHuman.reason());
             case TrackerTaskState.Finished ignored ->
-                new TakeResult.Skipped("Task " + ref.id() + " is already done (Finished) — nothing to take.");
+                new TakeResult.Skipped(
+                        UntrustedText.tracker("Task " + ref.id() + " is already done (Finished) — nothing to take."));
             case TrackerTaskState.Gone ignored ->
-                new TakeResult.Skipped("Task " + ref.id() + " is closed or does not exist.");
+                new TakeResult.Skipped(UntrustedText.tracker("Task " + ref.id() + " is closed or does not exist."));
         };
     }
 
@@ -162,7 +164,8 @@ final class TakeDisposition {
     private static TakeResult refuseFinished(TaskRef ref, Tracker tracker) {
         log.info("declining reopened finished task {} refused under an explicit take <ref> mandate", ref.id());
         tracker.declineFinished(ref, DeclineFinishedMessage.forTask(ref));
-        return new TakeResult.Skipped("Task " + ref.id() + " is already finished — nothing to take.");
+        return new TakeResult.Skipped(
+                UntrustedText.tracker("Task " + ref.id() + " is already finished — nothing to take."));
     }
 
     private static TakeResult refuseParked(ParkReason reason) {
@@ -178,6 +181,7 @@ final class TakeDisposition {
                 };
         // The original park report text is not retrievable here (the Tracker port exposes no "read
         // report" operation), so UX2/FR9 are met by naming the reason and return path honestly.
-        return new TakeResult.Skipped("Task is parked awaiting a human (" + reason + "). " + returnPath);
+        return new TakeResult.Skipped(
+                UntrustedText.tracker("Task is parked awaiting a human (" + reason + "). " + returnPath));
     }
 }

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.board.AwaitingHumanRow
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.board.ReadySummary
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -61,7 +62,7 @@ class DashboardAttentionBlockSpec extends Specification {
     def "a #reason row carries its own park-reason glyph and label"() {
         given:
         def rows = [
-            new AwaitingHumanRow(new TaskRef('task-7'), 'Parked title', reason)
+            new AwaitingHumanRow(new TaskRef('task-7'), UntrustedText.tracker('Parked title'), reason)
         ]
         def model = new BoardModel([], [], rows, ReadySummary.tally([]), false, GENERATED_AT)
 

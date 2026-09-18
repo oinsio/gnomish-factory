@@ -51,9 +51,9 @@ class ContainerEnvironmentDisposalSpec extends Specification {
         given:
         docker.onRun = { args ->
             if (args == DockerCommands.removeContainer('gnomish-box-k9')) {
-                throw new DockerUnavailableException('down', null)
+                throw new DockerUnavailableException('down', null as Throwable)
             }
-            new DockerResult(0, '', '')
+            DockerResult.of(0, '', '')
         }
 
         when:
@@ -74,9 +74,9 @@ class ContainerEnvironmentDisposalSpec extends Specification {
         def capture = LogCaptureSupport.attach(ContainerEnvironmentDisposal, Level.DEBUG)
         docker.onRun = { args ->
             if (args == DockerCommands.removeVolume('gnomish-vol-k9')) {
-                throw new DockerUnavailableException('down', null)
+                throw new DockerUnavailableException('down', null as Throwable)
             }
-            new DockerResult(0, '', '')
+            DockerResult.of(0, '', '')
         }
 
         when:

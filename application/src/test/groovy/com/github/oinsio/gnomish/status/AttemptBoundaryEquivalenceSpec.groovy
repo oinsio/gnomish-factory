@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -57,7 +58,7 @@ class AttemptBoundaryEquivalenceSpec extends Specification {
     }
 
     private static TaskContext context() {
-        new TaskContext(TASK_ID, 'Fix flaky OrderServiceSpec', 'body text',
+        new TaskContext(TASK_ID, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body text'),
                 [
                     new Decision('patch in place', 'plan', 'operator', STARTED)
                 ])
@@ -72,7 +73,7 @@ class AttemptBoundaryEquivalenceSpec extends Specification {
         def ctx = context()
 
         and: 'the check result and round that AttemptFinished will carry'
-        def checkRef = new CheckRef(0, 'command:./gradlew test')
+        def checkRef = new CheckRef(0, UntrustedText.manifest('command:./gradlew test'))
         def checkResult = new CheckResult(checkRef, new Verdict.Pass(), Duration.ofMillis(41250))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [checkResult],
         ExecutorUsage.none(), JudgeUsage.none(), [])

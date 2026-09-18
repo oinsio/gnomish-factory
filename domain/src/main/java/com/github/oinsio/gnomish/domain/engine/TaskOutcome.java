@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * The terminal result the engine returns for one task run: either {@link Completed}
  * — the pipeline end was reached — {@link Paused} — a {@code manual} checkpoint —
@@ -106,7 +108,7 @@ public sealed interface TaskOutcome
      * @param failedAt the attempt key of the round whose persist failed; never null
      * @param cause the failure detail, stack trace preserved; never blank
      */
-    record Aborted(TaskState finalState, AttemptKey failedAt, String cause) implements TaskOutcome {
+    record Aborted(TaskState finalState, AttemptKey failedAt, UntrustedText cause) implements TaskOutcome {
 
         public Aborted {
             cause = requireNonBlank(cause, "cause");
@@ -118,7 +120,7 @@ public sealed interface TaskOutcome
          * rather than inline in the compact constructor for the same PIT
          * mutation-gate reason as {@link Paused}.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException("TaskOutcome.Aborted." + component + " must not be blank");
             }

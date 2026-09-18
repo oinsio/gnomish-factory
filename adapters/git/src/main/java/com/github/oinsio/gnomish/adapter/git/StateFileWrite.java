@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -67,7 +68,8 @@ final class StateFileWrite {
      */
     private static @Nullable EgressCursorDto currentCursor(Path stateJson) {
         try {
-            return StateJsonMapper.readDto(Files.readString(stateJson)).egressCursor();
+            return StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
+                    .egressCursor();
         } catch (IOException | RuntimeException e) {
             log.debug(
                     "no committed denial cursor to carry forward from {}: absent or unreadable;"

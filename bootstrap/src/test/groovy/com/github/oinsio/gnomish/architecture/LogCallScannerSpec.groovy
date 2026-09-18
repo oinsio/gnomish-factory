@@ -6,7 +6,7 @@ import spock.lang.Specification
 
 /**
  * The scanner behind both convention gates of harden-logging-observability (D9): FR6's
- * {@link UntrustedLogTextGateSpec} and FR7's {@link ThrowableConventionGateSpec} judge only the
+ * {@link UntrustedTextSinkGateSpec} and FR7's {@link ThrowableConventionGateSpec} judge only the
  * call sites this scanner hands them, so a site it drops is a site neither gate checks — a green
  * run that means nothing for that line.
  *

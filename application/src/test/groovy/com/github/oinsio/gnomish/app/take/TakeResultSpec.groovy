@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -18,11 +19,11 @@ class TakeResultSpec extends Specification {
     // D2, D3: Delivered exposes its final state and summary exactly as constructed
     def "Delivered exposes finalState and summary exactly as constructed"() {
         when:
-        def result = new TakeResult.Delivered(STATE, 'done')
+        def result = new TakeResult.Delivered(STATE, UntrustedText.tracker('done'))
 
         then:
         result.finalState() == STATE
-        result.summary() == 'done'
+        result.summary() == UntrustedText.tracker('done')
     }
 
     // D3: AwaitingHuman exposes its final state, park reason and report exactly as constructed
@@ -48,10 +49,10 @@ class TakeResultSpec extends Specification {
     // D2: Skipped carries no TaskState — there is none, since no engine run happened
     def "Skipped exposes only its reason"() {
         when:
-        def result = new TakeResult.Skipped('lost claim race')
+        def result = new TakeResult.Skipped(UntrustedText.tracker('lost claim race'))
 
         then:
-        result.reason() == 'lost claim race'
+        result.reason() == UntrustedText.tracker('lost claim race')
     }
 
     // FR18: every free-text field must describe what happened, since a caller renders
@@ -66,12 +67,16 @@ class TakeResultSpec extends Specification {
 
         where:
         component | factory
-        'summary' | { -> new TakeResult.Delivered(STATE, '   ') }
+        'summary' | {
+            -> new TakeResult.Delivered(STATE, UntrustedText.tracker('   '))
+        }
         'report' | {
             -> new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, '')
         }
-        'cause' | { -> new TakeResult.Aborted(STATE, '') }
-        'note' | { -> new TakeResult.Revoked(STATE, '') }
-        'reason' | { -> new TakeResult.Skipped('') }
+        'cause' | {
+            -> new TakeResult.Aborted(STATE, UntrustedText.subprocess(''))
+        }
+        'note' | { -> new TakeResult.Revoked(STATE, UntrustedText.tracker('')) }
+        'reason' | { -> new TakeResult.Skipped(UntrustedText.tracker('')) }
     }
 }

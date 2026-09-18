@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -97,10 +98,11 @@ final class CommitBaseFetch {
         if (fetch.termination() != Termination.EXITED || !probe.answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail("commit fetch of " + sha));
         }
-        return new BaseRefreshOutcome.Refused("The base commit " + sha + " is not in this clone and origin, which "
-                + "is reachable, did not serve it: " + fetch.failureDetail("commit fetch") + ". A server on git "
-                + "protocol v0 without 'uploadpack.allowAnySHA1InWant' refuses to serve a commit by name; name a "
-                + "branch or a tag instead, or enable it on the server.");
+        return new BaseRefreshOutcome.Refused(
+                UntrustedText.subprocess("The base commit " + sha + " is not in this clone and origin, which "
+                        + "is reachable, did not serve it: " + fetch.failureDetail("commit fetch") + ". A server on "
+                        + "git protocol v0 without 'uploadpack.allowAnySHA1InWant' refuses to serve a commit by "
+                        + "name; name a branch or a tag instead, or enable it on the server."));
     }
 
     /**

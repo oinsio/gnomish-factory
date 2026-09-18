@@ -37,8 +37,8 @@ class DecisionFileReaderSpec extends Specification {
 
         then: 'FR3: agent decision-file JSON is lifted into question + options'
         decision.isPresent()
-        decision.get().question() == 'Refactor or patch?'
-        decision.get().options() == ['refactor', 'patch']
+        decision.get().question().forLog() == 'Refactor or patch?'
+        decision.get().options()*.forLog() == ['refactor', 'patch']
     }
 
     def "valid JSON with empty options list is preserved"() {
@@ -50,8 +50,8 @@ class DecisionFileReaderSpec extends Specification {
         def decision = reader.read(Optional.of(raw))
 
         then:
-        decision.get().question() == 'Proceed?'
-        decision.get().options() == []
+        decision.get().question().forLog() == 'Proceed?'
+        decision.get().options()*.forLog() == []
     }
 
     def "garbage content becomes the question verbatim with empty options"() {
@@ -64,8 +64,8 @@ class DecisionFileReaderSpec extends Specification {
 
         then: 'FR3: unparseable content is not lost — it becomes the question'
         decision.isPresent()
-        decision.get().question() == raw
-        decision.get().options() == []
+        decision.get().question().forLog() == raw
+        decision.get().options()*.forLog() == []
     }
 
     def "garbage content logs the raw text at WARN"() {
@@ -96,7 +96,7 @@ class DecisionFileReaderSpec extends Specification {
         then: 'FR3: empty file falls back to a stand-in question text'
         decision.isPresent()
         !decision.get().question().isBlank()
-        decision.get().options() == []
+        decision.get().options()*.forLog() == []
     }
 
     def "blank (whitespace-only) file content is treated the same as empty"() {
@@ -109,7 +109,7 @@ class DecisionFileReaderSpec extends Specification {
         then:
         decision.isPresent()
         !decision.get().question().isBlank()
-        decision.get().options() == []
+        decision.get().options()*.forLog() == []
     }
 
     def "empty file content also logs at WARN"() {
@@ -184,7 +184,7 @@ class DecisionFileReaderSpec extends Specification {
         events[0].formattedMessage.length() < 1_000
 
         and:
-        reader.read(Optional.of(huge)).get().question() == huge
+        reader.read(Optional.of(huge)).get().question().forConsole() == huge
     }
 
     def "JSON missing the question field is treated as unparseable"() {
@@ -196,7 +196,7 @@ class DecisionFileReaderSpec extends Specification {
         def decision = reader.read(Optional.of(raw))
 
         then: 'FR3: shape mismatch is parse trouble, raw text becomes the question'
-        decision.get().question() == raw
-        decision.get().options() == []
+        decision.get().question().forLog() == raw
+        decision.get().options()*.forLog() == []
     }
 }

@@ -58,15 +58,15 @@ class EnvironmentSelfCheckSpec extends Specification {
     private EnvironmentSelfCheck selfCheck(List<String> allowlist = [ALLOWED]) {
         docker.onRun = { List<String> args ->
             if (args == GuardCommands.inspectGuardRunning('k1')) {
-                return new DockerResult(0, 'true\n', '')
+                return DockerResult.of(0, 'true\n', '')
             }
             if (args == GuardCommands.inspectNetworkInternal('k1')) {
-                return new DockerResult(0, 'true\n', '')
+                return DockerResult.of(0, 'true\n', '')
             }
             if (args == GuardCommands.inspectRuntime('k1')) {
-                return new DockerResult(0, 'runc\n', '')
+                return DockerResult.of(0, 'runc\n', '')
             }
-            new DockerResult(0, '', '')
+            DockerResult.of(0, '', '')
         }
         environment.onExec = probes
         def guard = new EgressGuard(
@@ -315,7 +315,7 @@ class EnvironmentSelfCheckSpec extends Specification {
         def check = selfCheck()
         def base = docker.onRun
         docker.onRun = { List<String> args ->
-            args == GuardCommands.inspectNetworkInternal('k1') ? new DockerResult(0, 'false\n', '') : base.call(args)
+            args == GuardCommands.inspectNetworkInternal('k1') ? DockerResult.of(0, 'false\n', '') : base.call(args)
         }
 
         when:
@@ -331,7 +331,7 @@ class EnvironmentSelfCheckSpec extends Specification {
         def check = selfCheck()
         def base = docker.onRun
         docker.onRun = { List<String> args ->
-            args == GuardCommands.inspectRuntime('k1') ? new DockerResult(0, 'runsc\n', '') : base.call(args)
+            args == GuardCommands.inspectRuntime('k1') ? DockerResult.of(0, 'runsc\n', '') : base.call(args)
         }
 
         when:
@@ -360,8 +360,8 @@ class EnvironmentSelfCheckSpec extends Specification {
         def check = selfCheck()
         docker.onRun = { List<String> args ->
             args == GuardCommands.inspectGuardRunning('k1')
-            ? new DockerResult(0, 'false\n', '')
-            : new DockerResult(0, '', '')
+            ? DockerResult.of(0, 'false\n', '')
+            : DockerResult.of(0, '', '')
         }
 
         when:

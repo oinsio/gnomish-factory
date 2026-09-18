@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -64,9 +65,9 @@ abstract class EngineEventListenerContract extends Specification implements Port
             new EngineEvent.RunStarted('TASK-1', new Position.AtStage('build'), 0),
             new EngineEvent.AttemptStarted(key),
             new EngineEvent.ExecutionFinished(key, ExecutorUsage.none()),
-            new EngineEvent.CheckStarted(key, new CheckRef(0, 'files_exist')),
+            new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
             new EngineEvent.CheckFinished(key,
-            new CheckResult(new CheckRef(0, 'files_exist'), new Verdict.Pass(), Duration.ZERO)),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)),
             new EngineEvent.AttemptFinished(key, state, trace),
             new EngineEvent.TaskFinished('TASK-1', new TaskOutcome.Completed(state)),
         ]

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +143,10 @@ final class VerifyOrchestrator {
             };
         } catch (RuntimeException ex) {
             log.error(OperatorEvent.CHECK_ADAPTER_THREW.head() + "check adapter threw for {}", ref, ex);
-            return new Verdict.CannotVerify("check adapter threw", StackTraces.render(ex));
+            // The trace quotes whatever the failing adapter captured — a command's stderr, a
+            // daemon's refusal — so `StackTraces.render` hands it over carried (design D4); the
+            // factory-authored reason beside it is minted here to match the field's type.
+            return new Verdict.CannotVerify(UntrustedText.subprocess("check adapter threw"), StackTraces.render(ex));
         }
     }
 }

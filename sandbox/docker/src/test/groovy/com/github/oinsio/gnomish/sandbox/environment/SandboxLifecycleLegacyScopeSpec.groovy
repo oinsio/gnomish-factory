@@ -133,7 +133,7 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
         given: 'the stamped listing succeeds and finds work; the legacy listing fails'
         docker.onRun = { List<String> args ->
             if (args == DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY)) {
-                return new DockerResult(1, '', 'Cannot connect to the Docker daemon')
+                return DockerResult.of(1, '', 'Cannot connect to the Docker daemon')
             }
             if (args == DockerLifecycleCommands.listFactoryVolumesWithLabels(NORMALIZED)) {
                 return ok(volumeLine('new'))

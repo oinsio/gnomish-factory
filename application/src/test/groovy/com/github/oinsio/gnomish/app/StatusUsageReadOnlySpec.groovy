@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -59,7 +60,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
     private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
         new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(repo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+                new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []), TaskStart.commit(repo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def worktree = taskWorktrees.resolve(repo.fileName.toString()).resolve(taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
@@ -71,8 +72,8 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
     private Map snapshot() {
         [
-            branch : runner.run(clone, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
-            head : runner.run(clone, 'rev-parse', 'HEAD').stdout().trim(),
+            branch : runner.run(clone, 'symbolic-ref', '--short', 'HEAD').stdout().forParsing().trim(),
+            head : runner.run(clone, 'rev-parse', 'HEAD').stdout().forParsing().trim(),
             porcelain : runner.run(clone, 'status', '--porcelain').stdout(),
             localRefs : runner.run(clone, 'for-each-ref', 'refs/heads/').stdout(),
             worktrees : runner.run(clone, 'worktree', 'list', '--porcelain').stdout(),
@@ -141,7 +142,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
         given:
         runner.run(clone, 'fetch', 'origin', 'gnomish/PROJ-1:refs/remotes/origin/gnomish/PROJ-1')
         assert trackingRefExists()
-        def trackingShaBefore = runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().trim()
+        def trackingShaBefore = runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().forParsing().trim()
         def fetchHeadFile = clone.resolve('.git').resolve('FETCH_HEAD').toFile()
         def fetchHeadBefore = fetchHeadFile.exists() ? fetchHeadFile.lastModified() : -1L
         Thread.sleep(20)
@@ -155,7 +156,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         then: 'no new fetch happened: FETCH_HEAD is untouched and the tracking ref sha is unchanged'
         (fetchHeadFile.exists() ? fetchHeadFile.lastModified() : -1L) == fetchHeadBefore
-        runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().trim() == trackingShaBefore
+        runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().forParsing().trim() == trackingShaBefore
 
         and:
         def after = snapshot()

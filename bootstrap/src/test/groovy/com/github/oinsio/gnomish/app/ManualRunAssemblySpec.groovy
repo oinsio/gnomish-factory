@@ -13,9 +13,7 @@ import com.github.oinsio.gnomish.adapter.console.InteractiveJudgeVoter
 import com.github.oinsio.gnomish.adapter.console.InteractiveStageExecutor
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.*
@@ -89,10 +87,6 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         new PipelineDefinition('1', new AutonomyLimits(3), [stage('build')])
     }
 
-    private static TaskContext context() {
-        new TaskContext('task-1', 'title', 'body', List.<Decision> of())
-    }
-
     private static TaskState initialState() {
         TaskState.atStageStart('build')
     }
@@ -104,7 +98,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                definition(), context('task-1'), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -124,7 +118,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                definition(), context('task-1'), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -146,7 +140,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+        def run = assembly.assemble(definition(), context('task-1'), initialState(), RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
@@ -169,7 +163,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
                 'instructions.md', [],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
         def request = new StageExecutor.Request(
-                context(), stage, new DirectoryWorkspace(workspaceDir), 0, [])
+                context('task-1'), stage, new DirectoryWorkspace(workspaceDir), 0, [])
 
         when:
         def loggedEvents = capture {
@@ -203,7 +197,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+        def run = assembly.assemble(definition(), context('task-1'), initialState(), RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
@@ -213,7 +207,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def loggedEvents = capture {
-            run.ports().judgeVoter().vote(check, context(), new DirectoryWorkspace(workspaceDir))
+            run.ports().judgeVoter().vote(check, context('task-1'), new DirectoryWorkspace(workspaceDir))
         }
 
         then:

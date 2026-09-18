@@ -36,9 +36,9 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         result.results.size() == 1
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.CannotVerify
-        verdict.reason() == 'check adapter threw'
-        verdict.details().contains('IllegalStateException')
-        verdict.details().contains('builtin adapter kaboom')
+        verdict.reason().forLog() == 'check adapter threw'
+        verdict.details().forConsole().contains('IllegalStateException')
+        verdict.details().forConsole().contains('builtin adapter kaboom')
 
         and: 'the non-Pass verdict stopped the chain — the later command never ran'
         commandRunner.calls.isEmpty()
@@ -62,8 +62,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         result.results.size() == 1
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.CannotVerify
-        verdict.reason() == 'check adapter threw'
-        verdict.details().contains('command adapter kaboom')
+        verdict.reason().forLog() == 'check adapter threw'
+        verdict.details().forConsole().contains('command adapter kaboom')
 
         and: 'the chain stopped — the later builtin never ran'
         builtinRunner.calls.isEmpty()
@@ -90,8 +90,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         result.results.size() == 1
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.CannotVerify
-        verdict.reason() == 'check adapter threw'
-        verdict.details().contains('external adapter kaboom')
+        verdict.reason().forLog() == 'check adapter threw'
+        verdict.details().forConsole().contains('external adapter kaboom')
 
         and: 'the chain stopped — the later builtin never ran'
         builtinRunner.calls.isEmpty()
@@ -118,8 +118,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         result.results.size() == 1
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.CannotVerify
-        verdict.reason() == 'check adapter threw'
-        verdict.details().contains('judge adapter kaboom')
+        verdict.reason().forLog() == 'check adapter threw'
+        verdict.details().forConsole().contains('judge adapter kaboom')
 
         and: 'the chain stopped — the later builtin never ran'
         builtinRunner.calls.isEmpty()

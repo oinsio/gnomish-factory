@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -45,7 +46,7 @@ class StandingReaperSpec extends Specification {
     }, new SystemClock())
 
     private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version, 'fixture title')
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version, UntrustedText.tracker('fixture title'))
     }
 
     private static ClaimVersion version() {

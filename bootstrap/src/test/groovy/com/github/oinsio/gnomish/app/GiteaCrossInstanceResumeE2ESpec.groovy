@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -78,10 +76,6 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
             stage('build'),
             stage('verify')
         ])
-    }
-
-    private static TaskContext context(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     /** A single Enter is the dominant literal at this spec's call sites — just enough buffered

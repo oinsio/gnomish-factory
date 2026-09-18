@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -21,7 +22,7 @@ import spock.lang.Specification
 class StageExecutorRequestSpec extends Specification {
 
     private static TaskContext sampleContext() {
-        new TaskContext('TASK-1', 'title', 'body', [])
+        new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 
     private static StageDefinition sampleStage() {
@@ -37,7 +38,7 @@ class StageExecutorRequestSpec extends Specification {
     }
 
     private static CheckResult sampleFeedback(String label) {
-        new CheckResult(new CheckRef(0, label), new Verdict.Fail([]), Duration.ZERO)
+        new CheckResult(new CheckRef(0, UntrustedText.manifest(label)), new Verdict.Fail([]), Duration.ZERO)
     }
 
     // FR1: construction exposes every component exactly as supplied

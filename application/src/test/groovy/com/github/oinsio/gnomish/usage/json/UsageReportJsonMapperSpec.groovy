@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -29,7 +30,7 @@ class UsageReportJsonMapperSpec extends Specification {
     def "FR14, NFR-C1: the envelope carries its own version:1 and full per-model/per-vote granularity"() {
         given:
         def checks = [
-            new CheckResult(new CheckRef(0, 'tests'), new Verdict.Fail([
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('tests')), new Verdict.Fail([
                 new Finding('boom', 'Foo.java:10', null)
             ]), Duration.ofMillis(500))
         ]

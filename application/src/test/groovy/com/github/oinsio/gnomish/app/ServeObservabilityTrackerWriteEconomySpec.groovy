@@ -35,6 +35,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -96,7 +97,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         List<ReadyTask> listReady(int limit) {
             calls << "listReady($limit)".toString()
             finishedCount.get() == 0 ? [
-                new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
+                new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
             ] : []
         }
 
@@ -145,7 +146,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
     }
 
     private static TakeResult.Delivered scriptedResult() {
-        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none()), 'shipped it')
+        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none()), UntrustedText.tracker('shipped it'))
     }
 
     /** The bare {@code SlotRunner} every daemon slot ran before task 5.1: fetch, finish, nothing else. */

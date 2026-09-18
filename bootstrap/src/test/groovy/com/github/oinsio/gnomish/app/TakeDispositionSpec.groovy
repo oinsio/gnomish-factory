@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -85,15 +86,15 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
-        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt, new ClaimEpoch(1)), 'fixture title')
+        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt, new ClaimEpoch(1)), UntrustedText.tracker('fixture title'))
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
-        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
+        new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, boolean finished, String taskId = 'PROJ-1') {
-        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), finished)
+        new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), finished)
     }
 
     // Scenario: Mandate overrides readiness and backoff — a Ready task with no prior branch is
@@ -363,7 +364,10 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -438,7 +442,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(
-                taskId, new TaskOutcome.Aborted(state, new AttemptKey(taskId, 'build', 0), 'disk full'))
+                taskId, new TaskOutcome.Aborted(state, new AttemptKey(taskId, 'build', 0), UntrustedText.subprocess('disk full')))
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
@@ -574,7 +578,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, UntrustedText.tracker('fixture title'))
         ]
         def confirmation = { r, h, a ->
             TakeoverConfirmation.Decision.CONFIRMED
@@ -605,7 +609,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, UntrustedText.tracker('fixture title'))
         ]
         def confirmation = Mock(TakeoverConfirmation)
         def disposition = newTakeoverDisposition(confirmation, true)
@@ -652,7 +656,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         given:
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, UntrustedText.tracker('fixture title'))
         ]
         tracker.removeStaleClaim(REF, new ClaimFacts.Live('gnomish-dead-x1', observed)) >>
                 new RemoveStaleClaimResult.Mismatch(observed)
@@ -687,8 +691,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.Skipped
         def reason = (result as TakeResult.Skipped).reason()
         reason.contains('ESCALATION')
-        reason.toLowerCase().contains('reply')
-        reason.toLowerCase().contains('ready')
+        reason.forLog().toLowerCase().contains('reply')
+        reason.forLog().toLowerCase().contains('ready')
         0 * tracker.claim(*_)
     }
 
@@ -705,7 +709,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.Skipped
         def reason = (result as TakeResult.Skipped).reason()
         reason.contains('CHECKPOINT')
-        reason.toLowerCase().contains('ready')
+        reason.forLog().toLowerCase().contains('ready')
         0 * tracker.claim(*_)
     }
 
@@ -722,7 +726,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.Skipped
         def reason = (result as TakeResult.Skipped).reason()
         reason.contains('INFRA')
-        reason.toLowerCase().contains('fix')
+        reason.forLog().toLowerCase().contains('fix')
         0 * tracker.claim(*_)
     }
 
@@ -738,7 +742,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then:
         result instanceof TakeResult.Skipped
-        (result as TakeResult.Skipped).reason().toLowerCase().contains('already done')
+        (result as TakeResult.Skipped).reason().forLog().toLowerCase().contains('already done')
         0 * tracker.claim(*_)
         0 * tracker.finish(*_)
     }
@@ -757,7 +761,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then:
         result instanceof TakeResult.Skipped
-        (result as TakeResult.Skipped).reason().toLowerCase().contains('already finished')
+        (result as TakeResult.Skipped).reason().forLog().toLowerCase().contains('already finished')
         1 * tracker.declineFinished(REF, _)
         0 * tracker.claim(*_)
     }
@@ -794,7 +798,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then:
         result instanceof TakeResult.Skipped
-        def reason = (result as TakeResult.Skipped).reason().toLowerCase()
+        def reason = (result as TakeResult.Skipped).reason().forLog().toLowerCase()
         reason.contains('closed') || reason.contains('exist')
         0 * tracker.claim(*_)
     }

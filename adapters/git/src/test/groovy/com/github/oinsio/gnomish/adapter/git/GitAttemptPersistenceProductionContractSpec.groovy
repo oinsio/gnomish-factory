@@ -44,7 +44,7 @@ class GitAttemptPersistenceProductionContractSpec extends AttemptPersistenceCont
 
     @Override
     protected List<PersistedEntry> retained(Object adapter) {
-        List<String> shas = runner.run(repo, 'log', '--reverse', '--format=%H').stdout().trim().readLines()
+        List<String> shas = runner.run(repo, 'log', '--reverse', '--format=%H').stdout().forParsing().trim().readLines()
         // Drop the initial seed commit made in arrange(): only round commits remain.
         shas = shas.drop(1)
 

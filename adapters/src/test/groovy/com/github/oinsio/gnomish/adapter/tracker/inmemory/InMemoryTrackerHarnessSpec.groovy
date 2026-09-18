@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -36,7 +37,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def abortFacts = new AbortFacts(0, Instant.parse('2026-07-20T10:00:00Z'))
 
         when: 'the task is seeded'
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), abortFacts)
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), abortFacts)
 
         then: 'the seeded task reports zero aborts — recordAbort was never replayed'
         tracker.fetchTask(ref).abortFacts().count() == 0
@@ -51,7 +52,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def ref = new TaskRef('fixture:seed-categories')
 
         when: 'three attempts are seeded, one of them a failed branch repair'
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(),
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(),
                 new AbortFacts(3, Instant.parse('2026-07-20T10:00:00Z'), 1))
 
         then:
@@ -66,7 +67,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:seed-reply-unlock')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
 
         when: 'seedReply returns'
         harness.seedReply(tracker, ref, new HumanReply('proceed', Instant.parse('2026-07-20T09:00:00Z')))
@@ -80,7 +81,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:return-to-ready')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), AbortFacts.none())
 
         when: 'a human returns the task to ready'
         harness.returnToReady(ref)
@@ -95,7 +96,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:reopen-finished')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Finished(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Finished(), AbortFacts.none())
 
         when: 'a human reopens the finished task'
         harness.reopenFinished(ref)
@@ -110,7 +111,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:close')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'a human closes the task'
         harness.close(ref)
@@ -127,7 +128,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:edit')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 'original title', 'original body'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('original title'), UntrustedText.tracker('original body')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
 
         when: 'a human edits the issue title and body'
         harness.edit(ref, 'rewritten title', 'rewritten body')
@@ -135,8 +136,8 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         then: 'fetchTask reflects the new title and body, the id is unchanged, and the lock is free'
         def snapshot = tracker.fetchTask(ref).snapshot()
         snapshot.id() == ref.id()
-        snapshot.title() == 'rewritten title'
-        snapshot.body() == 'rewritten body'
+        snapshot.title().forLog() == 'rewritten title'
+        snapshot.body().forLog() == 'rewritten body'
         lockIsFreeFromAnotherThread(tracker)
     }
 
@@ -150,7 +151,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:edit-mid-task')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 'claim-time title', 'claim-time body'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('claim-time title'), UntrustedText.tracker('claim-time body')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
 
         and: 'the snapshot the factory froze at first claim — the value that flows into task.json'
         def claimTimeSnapshot = tracker.fetchTask(ref).snapshot()
@@ -160,13 +161,13 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
 
         then: 'the live tracker reflects the edit'
         def live = tracker.fetchTask(ref).snapshot()
-        live.title() == 'edited title'
-        live.body() == 'edited body'
+        live.title().forLog() == 'edited title'
+        live.body().forLog() == 'edited body'
 
         and: 'the claim-time snapshot is untouched — a frozen copy, immune to the later edit'
         claimTimeSnapshot.id() == ref.id()
-        claimTimeSnapshot.title() == 'claim-time title'
-        claimTimeSnapshot.body() == 'claim-time body'
+        claimTimeSnapshot.title().forLog() == 'claim-time title'
+        claimTimeSnapshot.body().forLog() == 'claim-time body'
     }
 
     def "thread fully releases the store lock on exit"() {
@@ -174,7 +175,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-unlock')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'thread returns'
         harness.thread(ref)
@@ -191,7 +192,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-order')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'the task is claimed, parked, and finished'
         tracker.claim(ref, 'instance-a')
@@ -215,13 +216,13 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-abort-ack')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
         harness.reply(ref, 'go ahead')
 
         when: 'the task is released, then acknowledged, then aborted'
         tracker.release(ref)
         tracker.acknowledgeDecision(ref, 'go ahead')
-        tracker.recordAbort(ref, new AbortRecord('network blip', 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
+        tracker.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('network blip'), 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
 
         then: 'release appends nothing; acknowledgeDecision and recordAbort each appear once, in order'
         harness.thread(ref)*.kind() == [
@@ -238,7 +239,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-note')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'a note is posted'
         tracker.postNote(ref, 'still working on it')
@@ -254,7 +255,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-text')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'the task is claimed and then finished with a summary'
         tracker.claim(ref, 'instance-a')
@@ -271,7 +272,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-as-strings')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'the task is claimed and then finished with a summary'
         tracker.claim(ref, 'instance-a')
@@ -291,7 +292,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:seed-designators')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         expect: 'before the operation, every kind is absent'
         tracker.fetchTask(ref).designators().forKind('base') == new Designator.Absent()
@@ -324,7 +325,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def tracker = new InMemoryTracker()
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:seed-designators-lock')
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when:
         harness.seedDesignators(ref, TaskDesignators.of('base', Designator.single('main')))

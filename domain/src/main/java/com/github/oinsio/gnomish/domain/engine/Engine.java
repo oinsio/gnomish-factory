@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -108,7 +109,11 @@ public final class Engine {
             String stageName) {
         var stage = findStage(definition, stageName);
         if (stage == null) {
-            return new TaskOutcome.Escalated(state, new EscalationReport.PipelineMismatch(stageName));
+            // The branch-document mint (design D3): the name came off a recorded position some
+            // instance wrote, and no stage in the current pipeline vouches for it — which is
+            // exactly what this report says.
+            return new TaskOutcome.Escalated(
+                    state, new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(stageName)));
         }
         int limit = stage.limits().attemptLimit();
         if (state.attemptsUsed() >= limit) {

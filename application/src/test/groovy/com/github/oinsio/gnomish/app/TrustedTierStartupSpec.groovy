@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.nio.file.Paths
 import spock.lang.Specification
@@ -107,8 +108,8 @@ class TrustedTierStartupSpec extends Specification {
         where:
         outcome | fragment
         new DefaultBranchDiscovery.NoRemote() | "no 'origin' remote"
-        new DefaultBranchDiscovery.Undetermined('empty repository') | 'empty repository'
-        new DefaultBranchDiscovery.Unavailable('connection refused') | 'connection refused'
+        new DefaultBranchDiscovery.Undetermined(UntrustedText.subprocess('empty repository')) | 'empty repository'
+        new DefaultBranchDiscovery.Unavailable(UntrustedText.subprocess('connection refused')) | 'connection refused'
     }
 
     // FR5, FR6, FR9, D14: a discovered branch that cannot be refreshed — a deterministic refusal
@@ -139,8 +140,8 @@ class TrustedTierStartupSpec extends Specification {
 
         where:
         outcome | fragment
-        new BaseRefreshOutcome.Refused('ref does not exist') | 'ref does not exist'
-        new BaseRefreshOutcome.Unavailable('timed out') | 'timed out'
+        new BaseRefreshOutcome.Refused(UntrustedText.subprocess('ref does not exist')) | 'ref does not exist'
+        new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('timed out')) | 'timed out'
     }
 
     // FR12 of add-manual-run, unchanged: a definition that fails to load at the refreshed tip

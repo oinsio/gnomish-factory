@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 /**
  * FR13, FR18, D12 of add-tracker-port and FR7 of add-claim-heartbeat: a fresh {@code Paused}
@@ -21,7 +22,7 @@ class TakePauseExitSpec extends Specification {
 
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
-    static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'Fix the widget', 'body', List.<Decision> of())
+    static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body'), List.<Decision> of())
     static final TaskState STATE = TaskState.atStageStart('verify')
     static final String BRANCH = 'gnomish/PROJ-1'
 

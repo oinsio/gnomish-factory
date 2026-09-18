@@ -37,18 +37,10 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     def suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
-    }
-
-    private String currentHead() {
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        addRemote(repo, 'origin', bareRepo.toString())
     }
 
     private void gnomeCommit(String fileName = 'gnome.txt', String content = 'gnome work') {
@@ -77,8 +69,8 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         listener.onProgress(toolEvent)
 
         then:
-        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
-        remoteHead == currentHead()
+        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
+        remoteHead == currentHead(repo)
     }
 
     def "FR11: a second event with an unchanged tip does not push again"() {
@@ -86,7 +78,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         gnomeCommit()
         listener.onProgress(toolEvent)
-        def firstPushedHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
+        def firstPushedHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
 
         when: 'the remote branch is force-updated out of band, so a repeated push would be observable'
         runner.run(repo, 'checkout', '-q', '-b', 'scratch')
@@ -94,7 +86,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         listener.onProgress(toolEvent)
 
         then: 'no additional push attempt happened - the remote tip is unchanged'
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() == firstPushedHead
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() == firstPushedHead
     }
 
     def "NFR-S1: push is skipped when HEAD moved but is off the expected branch"() {
@@ -183,7 +175,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         listener.onProgress(toolEvent)
 
         then: 'the movement away from the adopted baseline is pushed'
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() == currentHead()
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() == currentHead(repo)
     }
 
     def "FR4: a tip resolution that works again closes the streak with one INFO"() {

@@ -17,14 +17,16 @@ package com.github.oinsio.gnomish.untrustedtext;
  *       ({@link LineFlattening}), so <b>one event is one line</b>;
  *   <li>{@link #forConsole} renders the same table <em>visibly</em> instead of removing it
  *       ({@link ConsoleNotation}), because an operator being attacked must see the attempt;
- *   <li>{@link #capRecord} bounds one whole rendered record at the sink, keeping the head.
+ *   <li>{@link #capRecord} bounds one whole rendered record at the sink, keeping the head;
+ *   <li>{@link #forLog} and {@link #forComment} compose the log-plane and tracker-comment exits.
  * </ul>
  *
- * <p>The compositions are the callers': the log plane's {@code strip → capTail → flatten} lives in
- * {@code logtext.LogText#forLog}, the findings funnel's {@code strip → capTail} in
- * {@code app.findings.FindingsSanitizer#forLog}. Both are facades over this class and hold no
- * character table of their own, which is what makes "one table" a property of the build rather than
- * of two javadoc markers — {@code TextSafetyOwnerSpec} in {@code :bootstrap} asserts it.
+ * <p>The log plane's {@code strip → capTail → flatten} is {@link #forLog}, owned here because
+ * {@link UntrustedText} renders through it and may reach nothing above this leaf
+ * (type-untrusted-text FR2); {@code logtext.LogText} delegates. The findings funnel's
+ * {@code strip → capTail} stays its own in {@code app.findings.FindingsSanitizer#forLog}. Both
+ * facades hold no character table, which is what makes "one table" a property of the build rather
+ * than of two javadoc markers — {@code TextSafetyOwnerSpec} in {@code :bootstrap} asserts it.
  *
  * <p>Cap before flatten deliberately, in every caller that does both: the truncation marker is
  * written with a newline in it, and flattening last neutralizes that newline too. The cap therefore
@@ -46,22 +48,16 @@ public final class TextSafety {
     public static final int DEFAULT_CAP_CHARS = 2_000;
 
     /**
-     * Max characters {@link #capRecord} lets one whole rendered record occupy: 16 KB (design D2 of
-     * harden-untrusted-text-sinks). Derivation — the log plane's widest output is one
-     * {@value #DEFAULT_CAP_CHARS}-character cap of six-character escapes, about 12 KB, so a
-     * choke-point-prepared message can never reach this bound however many arguments a line
-     * carries; and it is two orders of magnitude above the longest legitimate record the factory
-     * emits (the per-task summary), while staying inside the async appender's queue budget.
+     * Max characters {@link #capRecord} lets one whole rendered record occupy, from
+     * {@link RecordCap} where the bound and its derivation live.
      */
-    public static final int RECORD_CAP_CHARS = 16_384;
+    public static final int RECORD_CAP_CHARS = RecordCap.CAP_CHARS;
 
     /**
      * Characters {@link #capRecord} reserves inside {@link #RECORD_CAP_CHARS} for its truncation
-     * marker, so the marked result still fits the cap and a second pass is a no-op. Sized for the
-     * widest marker the format can produce — both counts at {@code Integer.MAX_VALUE} — which
-     * {@code TextSafetyRecordCapSpec} pins rather than leaving to arithmetic in a comment.
+     * marker; {@link RecordCap}'s value, so the bound has one home.
      */
-    static final int TRUNCATION_MARKER_RESERVE = 64;
+    static final int TRUNCATION_MARKER_RESERVE = RecordCap.MARKER_RESERVE;
 
     private TextSafety() {}
 
@@ -145,32 +141,41 @@ public final class TextSafety {
     }
 
     /**
-     * Bounds one whole rendered record, the sink's cap rather than the choke point's. Unlike
-     * {@link #capTail}, which keeps the tail because the error is at the end of command output,
-     * this one keeps the <b>head</b>: the timestamp, the level, the logger and the operator-event
-     * code live there, and a record that lost them is not findable at all. Over-cap text is cut to
-     * the head and a visible marker naming the drop is appended, within the same bound — so the
-     * result is never longer than the cap and a second pass finds nothing to do (FR2).
+     * Prepares {@code text} for a log line — {@link #strip}, {@link #capTail} at {@code cap},
+     * {@link #flatten} — so one event is one line, inert and bounded.
      *
-     * <p>{@value #RECORD_CAP_CHARS} sits above anything the log plane can produce — its widest
-     * output is one default cap of six-character escapes, about 12 KB — so a message the choke
-     * point prepared passes here byte for byte, whatever else the record carries.
+     * @param text the raw untrusted text; never null
+     * @param cap the maximum characters kept before flattening; positive
+     * @return one inert line's worth of text; never null, never containing a line break
+     * @throws IllegalArgumentException if {@code cap} is not positive
+     */
+    public static String forLog(String text, int cap) {
+        return flatten(capTail(strip(text), cap));
+    }
+
+    /**
+     * Prepares {@code text} for a tracker comment ({@link CommentFencing}): stripped, mentions and
+     * issue references broken, fenced under a label naming it machine output. Line structure kept,
+     * no cap — a comment is read by a person, and a report is long by design.
+     *
+     * @param text the raw untrusted text; never null
+     * @return the labeled, fenced, escaped block; never null
+     */
+    public static String forComment(String text) {
+        return CommentFencing.render(text);
+    }
+
+    /**
+     * Bounds one whole rendered record, the sink's cap rather than the choke point's
+     * ({@link RecordCap}): unlike {@link #capTail} it keeps the <b>head</b>, where the timestamp,
+     * the level, the logger and the operator-event code live. {@value #RECORD_CAP_CHARS} sits
+     * above anything the log plane can produce, so a message the choke point prepared passes here
+     * byte for byte, whatever else the record carries.
      *
      * @param text the rendered record to bound; never null
      * @return {@code text} unchanged when within the cap, else its marked head; never null
      */
     public static String capRecord(String text) {
-        if (text.length() <= RECORD_CAP_CHARS) {
-            return text;
-        }
-        int headChars = RECORD_CAP_CHARS - TRUNCATION_MARKER_RESERVE;
-        // The head can end between the two halves of an astral character; a kept high half is an
-        // unpaired surrogate every UTF-8 sink renders as a replacement character — evidence the
-        // reader cannot tell from a real one.
-        if (Character.isHighSurrogate(text.charAt(headChars - 1))) {
-            headChars--;
-        }
-        return text.substring(0, headChars)
-                + " [record truncated, dropped %d of %d chars]".formatted(text.length() - headChars, text.length());
+        return RecordCap.render(text);
     }
 }

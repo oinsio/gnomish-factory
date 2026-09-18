@@ -60,11 +60,11 @@ public final class LoggingEventListener implements EngineEventListener {
             case EngineEvent.AttemptStarted started -> log.info("attempt started: {}", started.key());
             case EngineEvent.ExecutionFinished finished -> logExecutionFinished(finished.usage());
             case EngineEvent.CheckStarted started ->
-                log.info("check started: {}", LogText.forLog(started.check().label()));
+                log.info("check started: {}", started.check().label().forLog());
             case EngineEvent.CheckFinished finished ->
                 log.info(
                         "check finished: {} -> {}",
-                        LogText.forLog(finished.result().checkRef().label()),
+                        finished.result().checkRef().label().forLog(),
                         finished.result().verdict().getClass().getSimpleName());
             case EngineEvent.AttemptFinished finished ->
                 log.info(

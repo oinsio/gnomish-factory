@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -55,7 +54,7 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
      */
     public boolean hasLeftovers() {
         GitCommandResult status = runner.run(worktreeRoot, "status", "--porcelain");
-        return !status.stdout().trim().isEmpty();
+        return !status.stdout().isBlank();
     }
 
     /**
@@ -153,7 +152,7 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
                             + "discard step 'git {}' exited {}; uncommitted leftovers stay in the worktree: {}",
                     step,
                     result.exitCode(),
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
         }
     }
 }

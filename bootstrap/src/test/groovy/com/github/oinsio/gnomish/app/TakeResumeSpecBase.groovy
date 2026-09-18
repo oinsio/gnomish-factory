@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 
 /**
@@ -57,7 +58,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         addOrigin(cloneDir, tempDir)
         tracker.fetchTask(_) >> {
             new TrackerTask(
-            REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+            REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
             new TrackerTaskState.Working(workingHolder), AbortFacts.none(), false)
         }
         tracker.listOpen() >> { openFronts }

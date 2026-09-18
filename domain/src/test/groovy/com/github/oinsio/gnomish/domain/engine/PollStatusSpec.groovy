@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -84,26 +85,27 @@ class PollStatusSpec extends Specification {
     // FR3: CannotVerify exposes its reason and details as constructed
     def "CannotVerify exposes reason and details as constructed"() {
         when: 'a CannotVerify is created'
-        def cv = new PollStatus.CannotVerify('service unavailable', 'HTTP 503')
+        def cv = new PollStatus.CannotVerify(
+                UntrustedText.tracker('service unavailable'), UntrustedText.tracker('HTTP 503'))
 
         then: 'both components are exposed exactly as constructed'
-        cv.reason() == 'service unavailable'
-        cv.details() == 'HTTP 503'
+        cv.reason().forLog() == 'service unavailable'
+        cv.details().forLog() == 'HTTP 503'
     }
 
     // FR3: details holds the preserved detail, but may be empty when there is none
     def "CannotVerify accepts empty details"() {
         when: 'a CannotVerify is created with no underlying detail'
-        def cv = new PollStatus.CannotVerify('check id unknown', '')
+        def cv = new PollStatus.CannotVerify(UntrustedText.tracker('check id unknown'), UntrustedText.tracker(''))
 
         then: 'the empty details are exposed as constructed'
-        cv.details() == ''
+        cv.details().forLog() == ''
     }
 
     // FR3: reason is the human-facing short cause — a blank reason is meaningless and rejected
     def "CannotVerify rejects a blank reason with the component name in the message"() {
         when: 'a CannotVerify is created with a blank reason'
-        new PollStatus.CannotVerify(reason, 'details')
+        new PollStatus.CannotVerify(UntrustedText.tracker(reason), UntrustedText.tracker('details'))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -123,7 +125,7 @@ class PollStatusSpec extends Specification {
         new PollStatus.Pass() || 'pass'
         new PollStatus.Fail([]) || 'fail'
         new PollStatus.Running() || 'running'
-        new PollStatus.CannotVerify('r', '') || 'cannot-verify'
+        new PollStatus.CannotVerify(UntrustedText.tracker('r'), UntrustedText.tracker('')) || 'cannot-verify'
     }
 
     private static String label(PollStatus status) {

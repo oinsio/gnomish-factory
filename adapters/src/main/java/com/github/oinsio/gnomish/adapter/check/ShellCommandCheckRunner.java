@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -60,6 +61,13 @@ public record ShellCommandCheckRunner(
         implements CommandCheckRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ShellCommandCheckRunner.class);
+
+    /**
+     * The empty {@code details} of a verdict with no captured output to quote. Minted in this
+     * check's own family — the command is a subprocess whichever medium runs it — so the two
+     * components of a verdict always share one provenance.
+     */
+    private static final UntrustedText NO_DETAILS = UntrustedText.subprocess("");
 
     /**
      * How much of a check's command stands in for its identity in a log line. A {@code command}
@@ -148,7 +156,8 @@ public record ShellCommandCheckRunner(
                             + "command check '{}' cannot be verified: no environment to run it in",
                     identityOf(check),
                     e);
-            return new Verdict.CannotVerify(e.getMessage() != null ? e.getMessage() : e.toString(), "");
+            return new Verdict.CannotVerify(
+                    UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()), NO_DETAILS);
         }
         try (acquired) {
             TaskExecutionEnvironment environment = acquired.environment();
@@ -162,7 +171,8 @@ public record ShellCommandCheckRunner(
                         OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head()
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
-                return new Verdict.CannotVerify("failed to start command: " + check.command(), "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("failed to start command: " + check.command()), NO_DETAILS);
             }
 
             // The termination decides first (FR6, FR12 of bound-subprocess-commands): a run that
@@ -197,7 +207,9 @@ public record ShellCommandCheckRunner(
             return new Verdict.Fail(List.of(new Finding(
                     "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
         }
-        return new Verdict.CannotVerify("command run was interrupted before a verdict existed", outcome.outputTail());
+        return new Verdict.CannotVerify(
+                UntrustedText.subprocess("command run was interrupted before a verdict existed"),
+                UntrustedText.subprocess(outcome.outputTail()));
     }
 
     /**
@@ -218,7 +230,8 @@ public record ShellCommandCheckRunner(
         }
         if (exitCode == 126 || exitCode == 127) {
             String reason = exitCode == 126 ? "command not executable (exit 126)" : "command not found (exit 127)";
-            return new Verdict.CannotVerify(reason, outcome.outputTail());
+            return new Verdict.CannotVerify(
+                    UntrustedText.subprocess(reason), UntrustedText.subprocess(outcome.outputTail()));
         }
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
         List<Finding> parsed = FindingsFileReader.read(checkIdentity, findingsContent);

@@ -7,7 +7,13 @@ package com.github.oinsio.gnomish.app.take;
  * take} summary (task 6.3) — so the wording stays identical between the two sibling reports
  * instead of drifting via two independent switches.
  *
- * <p>Implements NFR-O2 of add-factory-serve.
+ * <p>Every free-text field it names is untrusted text (design D4 of type-untrusted-text), and this
+ * description is read on the log plane — a drain summary, a batch summary, a slot line — so each
+ * carrier leaves through the log exit here: one line, capped, inert. {@code AwaitingHuman.report}
+ * is the exception and needs none: it is a report builder's finished output, already rendered once
+ * through the comment exit for its two readers (design D6).
+ *
+ * <p>Implements NFR-O2 of add-factory-serve; FR5 of type-untrusted-text.
  */
 public final class TakeResultDescription {
 
@@ -21,15 +27,17 @@ public final class TakeResultDescription {
      */
     public static String describe(TakeResult result) {
         return switch (result) {
-            case TakeResult.Delivered delivered -> "delivered: " + delivered.summary();
+            case TakeResult.Delivered delivered ->
+                "delivered: " + delivered.summary().forLog();
             case TakeResult.AwaitingHuman awaitingHuman ->
                 "parked (" + awaitingHuman.reason() + "): " + awaitingHuman.report();
-            case TakeResult.Aborted aborted -> "aborted: " + aborted.cause();
-            case TakeResult.Revoked revoked -> "revoked: " + revoked.note();
-            case TakeResult.Skipped skipped -> "skipped: " + skipped.reason();
+            case TakeResult.Aborted aborted -> "aborted: " + aborted.cause().forLog();
+            case TakeResult.Revoked revoked -> "revoked: " + revoked.note().forLog();
+            case TakeResult.Skipped skipped -> "skipped: " + skipped.reason().forLog();
             case TakeResult.EmptyQueue _ -> "unexpected empty-queue result";
             case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
-                "released (infrastructure unavailable): " + infrastructureUnavailable.reason();
+                "released (infrastructure unavailable): "
+                        + infrastructureUnavailable.reason().forLog();
         };
     }
 }

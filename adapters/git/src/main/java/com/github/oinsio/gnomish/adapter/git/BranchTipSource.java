@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 
 /**
@@ -26,9 +27,9 @@ public interface BranchTipSource {
      * Reads one file as it stands at the tip.
      *
      * @param path the repository-relative path, e.g. {@code .gnomish-task/task.json}
-     * @return the file's text, or empty when the tip does not carry it
+     * @return the file's text as it stands on the branch, or empty when the tip does not carry it
      */
-    Optional<String> readAtTip(String path);
+    Optional<UntrustedText> readAtTip(String path);
 
     /**
      * Whether the cleanup commit appears anywhere in the branch's history — the delivery test,

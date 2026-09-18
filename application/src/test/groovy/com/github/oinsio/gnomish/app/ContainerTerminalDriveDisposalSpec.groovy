@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -29,7 +30,7 @@ import spock.lang.Specification
  */
 class ContainerTerminalDriveDisposalSpec extends Specification implements RunChainFakes {
 
-    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
+    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     SandboxRunSupport support = Mock(SandboxRunSupport)
     ScriptedExecutor executor = new ScriptedExecutor([completedRound()])

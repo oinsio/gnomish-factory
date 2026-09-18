@@ -63,7 +63,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         then:
         verdict instanceof Verdict.CannotVerify
         def cannotVerify = verdict as Verdict.CannotVerify
-        cannotVerify.reason().contains('126')
+        cannotVerify.reason().forLog().contains('126')
     }
 
     def "run(...) maps exit 127 to CannotVerify"() {
@@ -76,7 +76,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         then:
         verdict instanceof Verdict.CannotVerify
         def cannotVerify = verdict as Verdict.CannotVerify
-        cannotVerify.reason().contains('127')
+        cannotVerify.reason().forLog().contains('127')
     }
 
     def "a workspace that is not a DirectoryWorkspace yields CannotVerify"() {

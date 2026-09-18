@@ -51,6 +51,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
 /**
@@ -149,7 +150,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
 
     /** A tracker task in {@code state} — the one shape the three named inputs below differ within. */
     TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
-        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
+        new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
     }
 
     /** A {@code Ready} tracker task — the ordinary explicit-mode input. */
@@ -287,7 +288,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * (FR7, NFR-S2 of add-base-ref-resolution, task 6.4).
      */
     TrackerTask heldByUsNamingConflictingBase(String taskId = 'PROJ-1') {
-        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'),
+        new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false,
                 TaskDesignators.of('base', Designator.conflict(['hostile/one', 'hostile/two'])))
     }

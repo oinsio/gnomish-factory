@@ -73,7 +73,8 @@ final class GithubWorkflowPollLog {
                 announceRecovery(subject);
                 log.debug("GitHub Actions check {} still running: run {}", subject, runId);
             }
-            case PollStatus.CannotVerify cannotVerify -> cannotVerify(subject, cannotVerify.reason());
+            case PollStatus.CannotVerify cannotVerify ->
+                cannotVerify(subject, cannotVerify.reason().forLog());
         }
     }
 

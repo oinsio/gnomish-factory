@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -33,11 +34,11 @@ public final class HarvestRefusedException extends RuntimeException {
 
     /**
      * @param branch the task branch whose harvest was refused
-     * @param stderr git's own refusal output, for the log trail
+     * @param stderr git's own refusal output, for the log trail; rendered through its log exit
      */
-    public HarvestRefusedException(String branch, String stderr) {
+    public HarvestRefusedException(String branch, UntrustedText stderr) {
         super("harvest refused for branch \"" + branch + "\": history was rewritten inside the environment"
-                + " (non-fast-forward): " + stderr.strip());
+                + " (non-fast-forward): " + stderr);
     }
 
     /**

@@ -115,7 +115,7 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         guard.ensureRunning()
 
         then: 'it is running'
-        docker.run(GuardCommands.inspectGuardRunning(key)).stdout().strip() == 'true'
+        docker.run(GuardCommands.inspectGuardRunning(key)).stdout().forParsing().strip() == 'true'
 
         when: 'the environment (and with it the guard) is disposed'
         env.dispose()
@@ -148,7 +148,7 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
     private Set<String> volumeNames() {
         def result = docker.run(['volume', 'ls', '-q'])
         assert result.ok(): "docker volume ls failed: ${result.stderr()}"
-        result.stdout().readLines()*.strip().findAll { it }.toSet()
+        result.stdout().forParsing().readLines()*.strip().findAll { it }.toSet()
     }
 
     /** The box's own view of what is mounted at {@code path} — the tmpfs proof from inside. */

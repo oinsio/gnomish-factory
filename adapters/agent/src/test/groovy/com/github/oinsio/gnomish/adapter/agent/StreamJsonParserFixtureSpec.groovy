@@ -40,7 +40,7 @@ class StreamJsonParserFixtureSpec extends Specification {
 
         and: 'the result event carries usage and a non-null modelUsage'
         def result = events[4] as AgentEvent.ResultEvent
-        result.result() == 'Stage complete: output.txt written.'
+        result.result().forLog()== 'Stage complete: output.txt written.'
         result.usage() != null
         result.modelUsage() != null
         result.modelUsage()['claude-fake-main-1'] != null
@@ -55,7 +55,7 @@ class StreamJsonParserFixtureSpec extends Specification {
 
         then: 'top-level events carry a null parentToolUseId, nested ones carry the top-level tool_use id'
         def topLevelInit = events[0] as AgentEvent.InitEvent
-        topLevelInit.sessionId() == 'fake-session-subagent-1'
+        topLevelInit.sessionId().forLog()== 'fake-session-subagent-1'
 
         def topLevelAssistant = events[1] as AgentEvent.AssistantEvent
         topLevelAssistant.parentToolUseId() == null

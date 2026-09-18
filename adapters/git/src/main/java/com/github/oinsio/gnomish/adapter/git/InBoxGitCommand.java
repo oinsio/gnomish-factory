@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
@@ -44,7 +45,7 @@ final class InBoxGitCommand {
      * @param exitCode the code the command chose, or {@code -1} when it never got to choose one
      * @param output everything the command wrote, or the interrupt's message when it was cut short
      */
-    record Outcome(Termination termination, int exitCode, String output) {
+    record Outcome(Termination termination, int exitCode, UntrustedText output) {
 
         /** Whether the command ran to its own exit and reported success. */
         boolean succeeded() {
@@ -69,7 +70,8 @@ final class InBoxGitCommand {
             return new Outcome(Termination.EXITED, captured.exitCode(), captured.output());
         } catch (UncheckedIOException e) {
             if (e.getCause() instanceof InterruptedIOException interrupted) {
-                return new Outcome(Termination.INTERRUPTED, -1, String.valueOf(interrupted.getMessage()));
+                return new Outcome(
+                        Termination.INTERRUPTED, -1, UntrustedText.container(String.valueOf(interrupted.getMessage())));
             }
             throw e;
         }

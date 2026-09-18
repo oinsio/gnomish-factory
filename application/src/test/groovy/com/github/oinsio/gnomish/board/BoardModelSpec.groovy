@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -22,15 +23,15 @@ class BoardModelSpec extends Specification {
     private static final Instant GENERATED_AT = Instant.parse('2026-08-05T09:00:00Z')
 
     private static ReadyTask ready(String id, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, false, "title-$id")
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, false, UntrustedText.tracker("title-$id"))
     }
 
     private static OpenTask working(String id, String holder, ClaimVersion version = null) {
-        new OpenTask(new TaskRef(id), new TrackerTaskState.Working(holder), version, "title-$id")
+        new OpenTask(new TaskRef(id), new TrackerTaskState.Working(holder), version, UntrustedText.tracker("title-$id"))
     }
 
     private static OpenTask awaitingHuman(String id, ParkReason reason) {
-        new OpenTask(new TaskRef(id), new TrackerTaskState.AwaitingHuman(reason), null, "title-$id")
+        new OpenTask(new TaskRef(id), new TrackerTaskState.AwaitingHuman(reason), null, UntrustedText.tracker("title-$id"))
     }
 
     // FR2, FR3: a model is built from a listReady result and a listOpen result, with the queued count reflecting the ready window
@@ -193,7 +194,7 @@ class BoardModelSpec extends Specification {
     def "rejects a listOpen entry carrying an out-of-contract #state state"() {
         given: 'an open task in a state the listOpen contract forbids'
         def openTasks = [
-            new OpenTask(new TaskRef('github:o/r#9'), state, null, 'title')
+            new OpenTask(new TaskRef('github:o/r#9'), state, null, UntrustedText.tracker('title'))
         ]
 
         when: 'the model is built'
@@ -218,7 +219,7 @@ class BoardModelSpec extends Specification {
         def model = BoardModel.build([ready('github:o/r#1')], [], false, GENERATED_AT)
 
         when: 'a caller tries to mutate the exposed Ready column'
-        model.readyRows().add(new ReadyRow(new TaskRef('github:o/r#2'), 'x', false, null))
+        model.readyRows().add(new ReadyRow(new TaskRef('github:o/r#2'), UntrustedText.tracker('x'), false, null))
 
         then: 'the mutation is rejected'
         thrown(UnsupportedOperationException)

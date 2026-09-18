@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeDeathAndRecoverySpecBase} (task
@@ -27,8 +28,8 @@ class InMemoryTakeDeathAndRecoverySpec extends TakeDeathAndRecoverySpecBase {
     List seededReadyTrackerAndFactory() {
         InMemoryTracker inMemoryTracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(inMemoryTracker)
-        harness.seed(X, new TaskSnapshot(X.id(), 'Add widgets', 'please add widgets'), new TrackerTaskState.Ready(), AbortFacts.none())
-        harness.seed(Y, new TaskSnapshot(Y.id(), 'Add gadgets', 'please add gadgets'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(X, new TaskSnapshot(X.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(Y, new TaskSnapshot(Y.id(), UntrustedText.tracker('Add gadgets'), UntrustedText.tracker('please add gadgets')), new TrackerTaskState.Ready(), AbortFacts.none())
         [
             inMemoryTracker,
             new FixedTrackerAdapterFactory({ inMemoryTracker })

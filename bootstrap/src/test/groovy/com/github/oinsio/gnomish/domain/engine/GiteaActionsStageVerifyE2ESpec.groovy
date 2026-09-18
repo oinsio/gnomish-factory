@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -49,7 +50,7 @@ reason = 'Docker daemon unreachable — see GiteaAvailability; Docker is a dev/C
 class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRepoFixture {
 
     private static final String CHECK_ID = '.gitea/workflows/ci.yml'
-    private static final TaskContext CONTEXT = new TaskContext('CI-1', 'title', 'body', [])
+    private static final TaskContext CONTEXT = new TaskContext('CI-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     private static final AttemptKey KEY = new AttemptKey('CI-1', 'verify', 0)
 
     private static final String GREEN_YAML = '''\
@@ -191,7 +192,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         Files.writeString(work.resolve(CHECK_ID), yaml)
         git.run(work, 'add', '.')
         git.run(work, '-c', 'user.email=e2e@example.invalid', '-c', 'user.name=e2e', 'commit', '-q', '-m', message)
-        def sha = git.run(work, 'rev-parse', 'HEAD').stdout().trim()
+        def sha = git.run(work, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def push = git.run(work, 'push', 'origin', 'main')
         assert push.exitCode() == 0: "push failed: ${push.stderr()}"
         sha

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
@@ -98,7 +97,7 @@ public final class ParkDeliveryFence {
                     "park delivery push failed, re-attempting once: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
             result = push.push(cloneDir, branch);
         }
         if (result.termination() != Termination.EXITED) {
@@ -110,7 +109,7 @@ public final class ParkDeliveryFence {
                             + "park delivery fence exhausted, parking anyway: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
             return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.behind(branch));
         }
         return new ParkDeliveryVerdict.Delivered();

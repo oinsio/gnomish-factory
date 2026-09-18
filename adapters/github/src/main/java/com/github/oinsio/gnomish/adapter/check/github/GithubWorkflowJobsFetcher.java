@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check.github;
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,7 +18,13 @@ import java.util.stream.Collectors;
  *
  * <p>Implements FR6, NFR-C1 of add-external-check-github-actions; FR15, NFR-C1 of
  * add-sandbox-core.
+ *
+ * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): a findings-funnel entry. The
+ * text it puts in a {@code Finding} passes the funnel's own sanitizer — a distinct control at a
+ * distinct trust boundary, which deliberately keeps line structure — so it reads the carrier's
+ * raw text rather than a log exit's flattened line.
  */
+@UntrustedExit
 public record GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, String owner, String repo) {
 
     private static final String SUCCESS_CONCLUSION = "success";

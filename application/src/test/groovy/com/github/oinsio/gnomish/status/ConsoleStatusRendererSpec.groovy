@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.status
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -15,7 +16,7 @@ import spock.lang.Specification
 class ConsoleStatusRendererSpec extends Specification {
 
     private static TaskContext context() {
-        new TaskContext('manual-20260716-143502-x7', 'Fix flaky spec', 'body text', [])
+        new TaskContext('manual-20260716-143502-x7', UntrustedText.tracker('Fix flaky spec'), UntrustedText.tracker('body text'), [])
     }
 
     // FR10, UX2: render(false) returns the full text render of the current snapshot

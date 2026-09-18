@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -69,7 +70,7 @@ class TaskRepositorySpec extends Specification {
     def "createTask records the task context and its base reference"() {
         given: 'a repository and a fresh task context'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
 
         when: 'the task is created from a base ref'
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
@@ -85,7 +86,7 @@ class TaskRepositorySpec extends Specification {
     def "createTask records the initial state alongside the task context (FR3)"() {
         given: 'a repository and a fresh task context'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         def initialState = TaskState.atStageStart('build')
 
         when: 'the task is created'
@@ -98,7 +99,7 @@ class TaskRepositorySpec extends Specification {
     def "appendDecision accumulates decisions for a task"() {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
 
         when: 'a resume decision is appended'
@@ -112,10 +113,10 @@ class TaskRepositorySpec extends Specification {
     def "appendDecision resets a previously recorded outcome to null (D9, FR5)"() {
         given: 'a task escalated in a prior visit'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
-        def escalation = new EscalationReport.DecisionNeeded('needs input', [])
+        def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('needs input'), [])
         repository.recordOutcome('TASK-1', new TaskOutcome.Escalated(state, escalation))
 
         expect: 'the outcome is recorded before resume'
@@ -134,7 +135,7 @@ class TaskRepositorySpec extends Specification {
     def "appendDecision records the attempt-counter reset with the decision (FR4)"() {
         given: 'a task whose stage burned its attempts before parking'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def exhausted = TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
@@ -152,7 +153,7 @@ class TaskRepositorySpec extends Specification {
     def "recordOutcome durably records the terminal outcome for a task"() {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
-        def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
 

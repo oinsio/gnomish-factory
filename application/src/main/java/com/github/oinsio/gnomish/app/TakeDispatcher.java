@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
 import com.github.oinsio.gnomish.status.WallTime;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
@@ -98,7 +99,7 @@ record TakeDispatcher(
         // never silently acted on. Adapters whose refs carry no repo binding return empty.
         Optional<String> foreignRefusal = factory.refuseForeignRef(secretsProvider, trackerConfig, ref);
         if (foreignRefusal.isPresent()) {
-            return new TakeResult.Skipped(foreignRefusal.get());
+            return new TakeResult.Skipped(UntrustedText.tracker(foreignRefusal.get()));
         }
         TrackerTask trackerTask = tracker.fetchTask(ref);
         var disposition = new TakeDisposition(

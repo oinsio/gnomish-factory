@@ -22,6 +22,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -61,7 +62,7 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
 
     /** The task as the tracker reports it, carrying {@code facts} as its recovery accounting. */
     private static TrackerTask taskWith(AbortFacts facts) {
-        new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Ready(), facts, false)
+        new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Ready(), facts, false)
     }
 
     /** Task git whose branch exists and classifies to {@code shape}. */

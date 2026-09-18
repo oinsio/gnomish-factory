@@ -28,11 +28,11 @@ abstract class SandboxLifecycleSweepSpecBase extends Specification {
     def sweep = new SandboxLifecycleSweep(docker, disposal, listener)
 
     protected static DockerResult ok(String stdout) {
-        new DockerResult(0, stdout, '')
+        DockerResult.of(0, stdout, '')
     }
 
     protected static DockerResult gone() {
-        new DockerResult(1, '', 'Error: No such object')
+        DockerResult.of(1, '', 'Error: No such object')
     }
 
     /** The key-triple dispose reads its outcome back with an existence probe: non-zero means gone. */

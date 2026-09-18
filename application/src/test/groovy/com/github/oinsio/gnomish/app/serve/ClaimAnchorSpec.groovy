@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.logtext.MdcAwareThread
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -101,7 +102,7 @@ class ClaimAnchorSpec extends Specification {
     private static ReadyTask ready(String id) {
         // returned() == true short-circuits the open-front gate: this spec is about anchor
         // ordering, not about eligibility (FeedCycleSpec owns that).
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, UntrustedText.tracker('fixture title'))
     }
 
     private static FeedCycle cycle(Tracker tracker, SlotLedger ledger, SlotRunner runner) {

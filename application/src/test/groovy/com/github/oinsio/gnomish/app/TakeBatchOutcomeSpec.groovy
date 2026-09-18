@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -17,7 +18,7 @@ class TakeBatchOutcomeSpec extends Specification {
 
     def "an ordinary result carries its own exit code and description"() {
         given:
-        def outcome = new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it'))
+        def outcome = new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped it')))
 
         expect:
         outcome.result() != null
@@ -48,7 +49,7 @@ class TakeBatchOutcomeSpec extends Specification {
 
     def "rejects both result and toolFailure being set"() {
         when:
-        new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped'),
+        new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped')),
                 new TakeBatchOutcome.ToolFailure(2, 'bad'))
 
         then:

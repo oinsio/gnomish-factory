@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 
@@ -70,7 +71,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
         def delivery = { workspace ->
             new AttemptDelivery.Outcome.Undeliverable(
-            'attempt commit could not be delivered to the remote', 'push failed twice')
+            UntrustedText.subprocess('attempt commit could not be delivered to the remote'), UntrustedText.subprocess('push failed twice'))
         } as AttemptDelivery
         def check = external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3))
 
@@ -82,7 +83,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
         then: 'the check is CannotVerify — an infrastructure failure, never a poll-timeout Fail'
         result.results[0].verdict instanceof Verdict.CannotVerify
-        ((Verdict.CannotVerify) result.results[0].verdict).reason().contains('delivered')
+        ((Verdict.CannotVerify) result.results[0].verdict).reason().forLog().contains('delivered')
 
         and: 'no poll was issued and no time passed'
         externalClient.pollCount == 0
@@ -165,8 +166,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         result.results.size() == 1
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.CannotVerify
-        verdict.reason().contains('ci/flaky-runner')
-        verdict.reason().contains(timeout.toString())
+        verdict.reason().forLog().contains('ci/flaky-runner')
+        verdict.reason().forLog().contains(timeout.toString())
 
         and: 'the loop stopped rather than polling forever, having slept up to the timeout'
         externalClient.pollCount == 4
@@ -198,7 +199,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
     def "maps an external CannotVerify straight through to CannotVerify without sleeping"() {
         given: 'a poller that cannot verify immediately'
         def externalClient = new ScriptedExternalCheckClient([
-            new PollStatus.CannotVerify('check id unknown', 'no such check')
+            new PollStatus.CannotVerify(UntrustedText.tracker('check id unknown'), UntrustedText.tracker('no such check'))
         ])
         def check = external('ci/missing', Duration.ofSeconds(1), Duration.ofSeconds(3))
 
@@ -208,8 +209,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
         then: 'the verdict is a CannotVerify with the same reason and details, reached without sleeping'
         result.results[0].verdict instanceof Verdict.CannotVerify
-        result.results[0].verdict.reason() == 'check id unknown'
-        result.results[0].verdict.details() == 'no such check'
+        result.results[0].verdict.reason().forLog() == 'check id unknown'
+        result.results[0].verdict.details().forLog() == 'no such check'
         externalClient.pollCount == 1
         sleeper.slept.isEmpty()
     }

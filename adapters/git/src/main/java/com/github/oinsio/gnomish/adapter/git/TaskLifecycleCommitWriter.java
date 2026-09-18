@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
 import com.github.oinsio.gnomish.gitobjects.TreeEdit;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -68,7 +69,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
         } catch (RuntimeException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
-        return TaskJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8));
+        return TaskJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
     List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto) {
@@ -124,7 +125,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     EgressCursorDto tipStateCursor(String taskId, ObjectId tip) {
         try {
             byte[] bytes = gitObjects.readBlob(tip, STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
-            return StateJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8))
+            return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)))
                     .egressCursor();
         } catch (RuntimeException e) {
             log.debug(

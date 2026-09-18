@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -25,7 +26,7 @@ class BoardModelEligibilitySpec extends Specification {
     private static final Instant BACKED_OFF_DEADLINE = BACKED_OFF_FACTS.lastAbortAt() + BackoffPolicy.delay(1, BASE, CAP)
 
     private static ReadyTask task(AbortFacts abortFacts, boolean returned, boolean finished) {
-        new ReadyTask(new TaskRef('github:o/r#1'), abortFacts, returned, finished, 'title')
+        new ReadyTask(new TaskRef('github:o/r#1'), abortFacts, returned, finished, UntrustedText.tracker('title'))
     }
 
     // FR2, D7: eligibility precedence — backoff, then finished, then WIP-held — over every reason combination

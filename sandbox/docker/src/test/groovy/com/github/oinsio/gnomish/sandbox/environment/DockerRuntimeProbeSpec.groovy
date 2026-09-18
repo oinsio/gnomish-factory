@@ -17,7 +17,7 @@ class DockerRuntimeProbeSpec extends Specification {
 
     def "dockerAvailable is #available when the docker version probe exits #exit"() {
         given: 'a runtime whose version probe exits with the scripted code'
-        docker.onRun = { args -> new DockerResult(exit, '', '') }
+        docker.onRun = { args -> DockerResult.of(exit, '', '') }
 
         expect:
         DockerRuntimeProbe.dockerAvailable(docker) == available
@@ -38,7 +38,7 @@ class DockerRuntimeProbeSpec extends Specification {
     def "dockerAvailable is false when the docker runtime is unreachable"() {
         given:
         docker.onRun = { List<String> args ->
-            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null as Throwable)
         } as Closure<DockerResult>
 
         expect:
@@ -72,17 +72,17 @@ class DockerRuntimeProbeSpec extends Specification {
         where:
         label | carriesCause | answer
         'non-zero' | false | { List<String> args ->
-            new DockerResult(1, '', '')
+            DockerResult.of(1, '', '')
         }
         'unreachable' | true | { List<String> args ->
-            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null as Throwable)
         } as Closure<DockerResult>
     }
 
     // FR5: a runtime that answers ok says nothing — a healthy start produces no output.
     def "FR5: a probe that answers ok is silent"() {
         given:
-        docker.onRun = { List<String> args -> new DockerResult(0, '', '') }
+        docker.onRun = { List<String> args -> DockerResult.of(0, '', '') }
         def logs = LogCaptureSupport.attach(DockerRuntimeProbe)
 
         when:

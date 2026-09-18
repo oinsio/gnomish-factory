@@ -6,8 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity;
 import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,7 +133,7 @@ final class GuardDenialLog {
         } catch (JsonProcessingException e) {
             // throwable-not-subject: the aggregate carries the reason as text because one line
             //     stands for many drops; a stack per malformed guard line is the flood D4 removes.
-            drops.malformed(LogText.forLog(String.valueOf(e.getOriginalMessage())));
+            drops.malformed(UntrustedText.container(String.valueOf(e.getOriginalMessage())));
             return null;
         }
         String host = DenialFieldCap.capped(event.path("host").asText(""));

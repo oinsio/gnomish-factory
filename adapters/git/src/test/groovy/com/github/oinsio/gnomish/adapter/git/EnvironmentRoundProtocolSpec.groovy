@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -111,8 +112,8 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         persistence.persist(TASK, sampleState(), sampleTrace(1))
 
         then: 'state.json records both the position and the source it belongs to'
-        def committed = StateJsonMapper.readDto(
-                gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json'))
+        def committed = StateJsonMapper.readDto(UntrustedText.branchDocument(
+                        gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json')))
         committed.egressCursor().source() == 'sha256:guard-container'
         committed.egressCursor().position() == '2026-08-19T10:00:00.000000001Z'
     }
@@ -123,7 +124,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         persistence.persist(TASK, sampleState(), sampleTrace(1))
 
         then:
-        StateJsonMapper.readDto(gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json'))
+        StateJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json')))
                 .egressCursor() == null
     }
 

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -56,11 +57,11 @@ public final class DecisionAck implements TerminalEffect {
 
     private final Tracker tracker;
     private final TaskRef ref;
-    private final String decisionText;
+    private final UntrustedText decisionText;
     private final DecisionIntent intent;
     private @Nullable TaskContext decided;
 
-    private DecisionAck(Tracker tracker, TaskRef ref, String decisionText, DecisionIntent intent) {
+    private DecisionAck(Tracker tracker, TaskRef ref, UntrustedText decisionText, DecisionIntent intent) {
         this.tracker = tracker;
         this.ref = ref;
         this.decisionText = decisionText;
@@ -79,7 +80,7 @@ public final class DecisionAck implements TerminalEffect {
      */
     public static TaskContext appendThenAcknowledge(
             Tracker tracker, TaskRef ref, String decisionText, DecisionIntent intent) {
-        var ack = new DecisionAck(tracker, ref, decisionText, intent);
+        var ack = new DecisionAck(tracker, ref, UntrustedText.tracker(decisionText), intent);
         TerminalEffectDrive.deliverFresh(ack);
         return ack.decidedContext();
     }
@@ -95,7 +96,7 @@ public final class DecisionAck implements TerminalEffect {
      * @param decisionText the recorded decision to acknowledge; never blank
      */
     public static void redriveAcknowledge(Tracker tracker, TaskRef ref, TaskContext decided, String decisionText) {
-        var ack = new DecisionAck(tracker, ref, decisionText, ALREADY_COMMITTED);
+        var ack = new DecisionAck(tracker, ref, UntrustedText.tracker(decisionText), ALREADY_COMMITTED);
         ack.decided = decided;
         TerminalEffectDrive.redeliver(ack);
     }
@@ -151,7 +152,11 @@ public final class DecisionAck implements TerminalEffect {
     @DoNotMutate
     @Override
     public boolean deliver() {
-        tracker.acknowledgeDecision(ref, decisionText);
+        // The reply is the human's own words, read back off the tracker and echoed to it: the
+        // write is where the plane is known, so the exit sits here (design D7 of
+        // type-untrusted-text) — fenced and mention-escaped, so a reply quoting @team never pings
+        // and an injected instruction reads as data to the next model on the thread.
+        tracker.acknowledgeDecision(ref, decisionText.forComment());
         return true;
     }
 

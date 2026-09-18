@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.status.AnchorLog;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -84,8 +85,8 @@ record BareTakeClaimWalk(
             // claim attempt — fall through to the next eligible candidate (see class javadoc).
         }
         return new TakeResult.Skipped(
-                "every eligible task in the queue was already claimed by another instance — nothing to take"
-                        + " this run");
+                UntrustedText.tracker("every eligible task in the queue was already claimed by another instance —"
+                        + " nothing to take this run"));
     }
 
     /**
@@ -102,8 +103,8 @@ record BareTakeClaimWalk(
         if (backoffEligible.isEmpty()) {
             return new TakeResult.EmptyQueue();
         }
-        return new TakeResult.Skipped("WIP limit reached: " + openFrontCount + " open front(s) at or above the"
-                + " configured limit of " + wipLimit + " — " + backoffEligible.size()
-                + " fresh task(s) waiting for a front to close; no returned tasks are ready");
+        return new TakeResult.Skipped(UntrustedText.tracker("WIP limit reached: " + openFrontCount
+                + " open front(s) at or above the configured limit of " + wipLimit + " — " + backoffEligible.size()
+                + " fresh task(s) waiting for a front to close; no returned tasks are ready"));
     }
 }

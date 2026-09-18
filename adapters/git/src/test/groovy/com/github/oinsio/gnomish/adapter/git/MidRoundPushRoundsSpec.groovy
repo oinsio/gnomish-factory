@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
@@ -38,14 +39,10 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def toolEvent = new AgentProgressEvent.ToolStarted('Bash')
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(repo, 'origin', bareRepo.toString())
     }
 
     /** A request over the spec's own working repo — the undisturbed case. */
@@ -61,7 +58,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
                 'instructions.md', [],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
         new StageExecutor.Request(
-                new TaskContext('PROJ-1', 'title', 'body', []),
+                new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 stage, new DirectoryWorkspace(workspace), attempt, [])
     }
 
@@ -84,8 +81,8 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         round.roundListener().onProgress(toolEvent)
 
         then:
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() ==
-                runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() ==
+                currentHead(repo)
     }
 
     // FR1: one fresh listener per round (the listener's documented lifecycle): each openRound

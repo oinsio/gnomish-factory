@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -21,8 +22,8 @@ class TakeBatchSummarySpec extends Specification {
     def "names every ref and its outcome, in order"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it')),
-            new TakeBatchOutcome('43', new TakeResult.Skipped('held by another instance')),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped it'))),
+            new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('held by another instance'))),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
         ]
 
@@ -37,7 +38,7 @@ class TakeBatchSummarySpec extends Specification {
     def "names a tool-failure outcome alongside ordinary outcomes"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it')),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped it'))),
             TakeBatchOutcome.toolFailure('43', new UsageException('cannot resolve ref')),
         ]
 

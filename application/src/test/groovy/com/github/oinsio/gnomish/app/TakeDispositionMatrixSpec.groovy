@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -63,7 +64,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
     }
 
     private static TrackerTask taskIn(TrackerTaskState state, boolean finished = false) {
-        new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none(), finished)
+        new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), finished)
     }
 
     // FR5: a REOPENED finished task is refused through the decline protocol, never claimed — the

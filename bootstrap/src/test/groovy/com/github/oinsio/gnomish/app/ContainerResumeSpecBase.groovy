@@ -12,11 +12,9 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -79,10 +77,6 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     protected static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
-    }
-
-    protected static TaskContext context(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     protected static TaskState pipelineEndState() {

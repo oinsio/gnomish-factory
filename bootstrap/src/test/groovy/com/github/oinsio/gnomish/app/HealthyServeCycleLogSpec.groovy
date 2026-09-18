@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.logtext.MdcAwareThread
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -90,7 +91,7 @@ tracker:
         worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
         new InMemoryTrackerHarness(tracker).seed(
-                REF, new TaskSnapshot(REF.id(), 'Add widgets', 'please add widgets'),
+                REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')),
                 new TrackerTaskState.Ready(), AbortFacts.none())
     }
 

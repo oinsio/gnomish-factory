@@ -90,11 +90,16 @@ dependencies {
     testImplementation project(':test-fixtures')
     testImplementation project(':adapters:github')
     testImplementation project(':baseref')
-    // Test scope, both leafs (design D3/D8 of split-logtext-leaves): the owner spec names
-    // `TextSafety`, the log-contract and expectation gates name the catalog; no production
-    // source here names either — `LogText` is this module's only reach into the text leaf.
-    testImplementation project(':untrustedtext')
+    // Production scope since type-untrusted-text: the composition root's own sources name the
+    // carrier, so the edge is no longer test-only — the architecture gates that name `TextSafety`,
+    // `UntrustedExit` and `UntrustedParser` inherit it rather than declaring a second scope.
+    implementation project(':untrustedtext')
+    // Test scope (design D3/D8 of split-logtext-leaves): the log-contract and expectation gates
+    // name the catalog; no production source here does.
     testImplementation project(':operatorevent')
+    // Test scope: the process-spawn boundary gate and the subprocess-backed harnesses name
+    // `:subprocess`'s own types, which the gate asks be declared rather than inherited.
+    testImplementation project(':subprocess')
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
 

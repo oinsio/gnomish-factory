@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -141,7 +142,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         given:
         def l = listener(environment({
             advanceBranch()
-            throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+            throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         }))
 
         when:
@@ -155,7 +156,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     def "FR4, UX3: an environment that cannot be harvested all round is announced once, then counted"() {
         given: 'a harvest that fails on every poll of the round'
         def l = listener(environment({
-            throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+            throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         }))
         def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
 
@@ -225,7 +226,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     def "FR15: a harvest still failing past the roll-up interval is announced again, with its count"() {
         given: 'a harvest that fails on every poll of the round'
         def l = listener(environment({
-            throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+            throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         }))
         def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
 
@@ -259,7 +260,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         def otherBranch = 'gnomish/PROJ-10'
         gitOutput(clone, 'branch', otherBranch)
         def failing = environment({
-            throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+            throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         })
 
         and: 'the first round has already spent a failure'
@@ -291,7 +292,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         def refuse = true
         def l = listener(environment({
             if (refuse) {
-                throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+                throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
             }
         }))
         def logs = LogCaptureSupport.attach(MidRoundHarvestListener)

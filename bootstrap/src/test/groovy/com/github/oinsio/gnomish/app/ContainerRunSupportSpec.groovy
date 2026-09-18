@@ -41,6 +41,7 @@ import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -92,7 +93,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     }
 
     private void createTask(ContainerRunSupport support, String taskId = 'T-1') {
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
     }
 
     // D19: the aborted boundary commits the outcome on the branch tip and pushes it best-effort.
@@ -103,7 +104,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
         when:
         support.recordAborted(new TaskOutcome.Aborted(
-                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), 'durability broke'))
+                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), UntrustedText.subprocess('durability broke')))
 
         then: 'the branch tip carries the aborted outcome'
         gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json').contains('"aborted"')
@@ -139,7 +140,7 @@ exit 0
 
         when: 'the whole boundary runs, as both drives run it: record, then keep the box stopped'
         support.recordAborted(new TaskOutcome.Aborted(
-                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), 'durability broke'))
+                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), UntrustedText.subprocess('durability broke')))
         support.keepStopped()
 
         then: 'origin still ends at the local tip — delivered by the reconciliation, not the push'
@@ -406,12 +407,12 @@ exit 0
         when: 'the round dies before its close and the park records the escalation it earned'
         support.recordPark(new TaskOutcome.Escalated(
                         TaskState.atStageStart('build'),
-                        new EscalationReport.CannotExecute('round timed out', [
+                        new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
                             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
                         ])))
 
         then: 'task.json carries the escalation, its denials, and the position they were read up to'
-        def dto = TaskJsonMapper.readDto(taskJsonAtTip())
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(taskJsonAtTip()))
         dto.lastEscalation().denials()*.message() == [
             'egress denied: paste.example.com:443'
         ]
@@ -428,13 +429,13 @@ exit 0
         when:
         support.recordPark(new TaskOutcome.Escalated(
                         TaskState.atStageStart('build'),
-                        new EscalationReport.CannotExecute('round timed out', [
+                        new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
                             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
                         ])))
 
         then:
         noExceptionThrown()
-        def dto = TaskJsonMapper.readDto(taskJsonAtTip())
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(taskJsonAtTip()))
         dto.lastEscalation().denials().size() == 1
         dto.egressCursor() == null
     }
@@ -656,7 +657,7 @@ exit 0
         gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
         Path taskJson = cloneDir.resolve('.gnomish-task/task.json')
         Files.writeString(taskJson, TaskStateJson.mapper().writeValueAsString(
-                        TaskJsonMapper.readDto(Files.readString(taskJson)).withEgressCursor(cursor)))
+                        TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).withEgressCursor(cursor)))
         gitOutput(cloneDir, 'add', '.gnomish-task/task.json')
         gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'park')
         gitOutput(cloneDir, 'checkout', originalBranch)

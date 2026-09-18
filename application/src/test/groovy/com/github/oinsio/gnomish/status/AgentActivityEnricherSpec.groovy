@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.status
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -28,7 +29,7 @@ class AgentActivityEnricherSpec extends Specification {
         def enricher = new AgentActivityEnricher(holder)
 
         when:
-        enricher.onProgress(new AgentProgressEvent.RoundStarted('claude-x', 'session-1'))
+        enricher.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-x'), UntrustedText.agent('session-1')))
 
         then:
         holder.activity().activity() == new Activity.Executing(SINCE)
@@ -46,7 +47,7 @@ class AgentActivityEnricherSpec extends Specification {
         then:
         def activity = holder.activity().activity()
         activity.since() == SINCE
-        activity.currentTool() == 'run_tests'
+        activity.currentTool().forLog() == 'run_tests'
         activity.toolCalls() == 1
     }
 
@@ -63,14 +64,14 @@ class AgentActivityEnricherSpec extends Specification {
         then:
         def activity = holder.activity().activity()
         activity.since() == SINCE
-        activity.currentTool() == 'edit_file'
+        activity.currentTool().forLog() == 'edit_file'
         activity.toolCalls() == 2
     }
 
     def "ToolStarted is a no-op when current activity is not Executing (judge round under Verifying)"() {
         given:
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('build'), 3)
-        def verifying = new Activity.Verifying(new CheckRef(0, 'judge:acceptance'), SINCE)
+        def verifying = new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('judge:acceptance')), SINCE)
         holder.updateActivity(verifying)
         def enricher = new AgentActivityEnricher(holder)
 
@@ -96,11 +97,11 @@ class AgentActivityEnricherSpec extends Specification {
     def "RoundFinished clears currentTool and resets toolCalls, preserving since"() {
         given:
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('build'), 3)
-        holder.updateActivity(new Activity.Executing(SINCE, 'run_tests', 3))
+        holder.updateActivity(new Activity.Executing(SINCE, UntrustedText.agent('run_tests'), 3))
         def enricher = new AgentActivityEnricher(holder)
 
         when:
-        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], 'done'))
+        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], UntrustedText.agent('done')))
 
         then:
         holder.activity().activity() == new Activity.Executing(SINCE)
@@ -109,12 +110,12 @@ class AgentActivityEnricherSpec extends Specification {
     def "RoundFinished is a no-op when current activity is not Executing"() {
         given:
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('build'), 3)
-        def verifying = new Activity.Verifying(new CheckRef(0, 'judge:acceptance'), SINCE)
+        def verifying = new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('judge:acceptance')), SINCE)
         holder.updateActivity(verifying)
         def enricher = new AgentActivityEnricher(holder)
 
         when:
-        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], 'done'))
+        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], UntrustedText.agent('done')))
 
         then:
         holder.activity().activity().is(verifying)

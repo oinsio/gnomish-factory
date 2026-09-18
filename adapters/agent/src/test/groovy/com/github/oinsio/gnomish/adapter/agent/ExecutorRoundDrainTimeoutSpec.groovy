@@ -4,16 +4,9 @@ import static com.github.oinsio.gnomish.adapter.agent.NonEndingStreams.nonEnding
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -95,20 +88,9 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
                 { event -> },
                 new AgentRoundResultExtractor(),
                 new DecisionFileReader(),
-                request(),
+                StageExecutorRequests.request(workspaceDir),
                 'prompt',
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
-    }
-
-    private StageExecutor.Request request() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
     }
 }
 

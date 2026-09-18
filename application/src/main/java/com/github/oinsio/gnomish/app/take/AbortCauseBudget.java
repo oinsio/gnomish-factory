@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * The bound every abort-cause text passes before it reaches a tracker write
  * (design D1-D4 of cap-abort-cause-length). The dominant cause producer renders
@@ -12,7 +14,8 @@ package com.github.oinsio.gnomish.app.take;
  * how many characters were dropped: for a rendered exception the head carries
  * the top-level message and throw site, the tail the deepest {@code Caused by:}
  * — the two ends an operator opens the report for. Never a silent cut, and
- * never a cut that drops the end.
+ * never a cut that drops the end. That mechanism is the carrier's own
+ * {@code cappedTo}; this class owns the number it is applied with.
  *
  * <p>This is not the {@code LogText}/{@code FindingsSanitizer} rule at a third
  * site: those cap log lines and plugin findings tail-only, this caps tracker
@@ -31,78 +34,22 @@ final class AbortCauseBudget {
      */
     static final int BUDGET_CHARS = 28_000;
 
-    /** Fraction of the kept characters given to the head; the tail takes the rest (design D3). */
-    private static final int HEAD_NUMERATOR = 2;
-
-    private static final int HEAD_DENOMINATOR = 3;
-
-    /**
-     * How far either cut may travel to land on a line boundary. Readability only — the length
-     * bound and the marker are what correctness rests on — so the window is small enough that a
-     * text without line breaks nearby simply cuts where it was going to.
-     */
-    private static final int LINE_SNAP_WINDOW = 200;
-
     private AbortCauseBudget() {}
 
     /**
-     * Bounds {@code cause} to {@link #BUDGET_CHARS} characters.
+     * Bounds {@code cause} to {@link #BUDGET_CHARS} characters, keeping the head and the tail.
      *
-     * @param cause the raw cause text; never null
-     * @return {@code cause} itself when within the budget, else its head and tail joined by the
-     *     omission marker, never longer than the budget
+     * <p>Carrier in, carrier out (design D13 of type-untrusted-text): the truncation itself belongs
+     * to {@link com.github.oinsio.gnomish.untrustedtext.UntrustedText#cappedTo(int)}, because a
+     * transformation that keeps the text inside the carrier is not a way out of it and must not
+     * widen the exit allowlist. What stays here is the one thing this class owns — the budget the
+     * tracker's comment limit dictates — and the single point every tracker-bound cause passes.
+     *
+     * @param cause the raw cause text, carried; never null
+     * @return {@code cause} itself when within the budget, else a carrier of the same provenance
+     *     holding its head and tail joined by the omission marker
      */
-    static String cap(String cause) {
-        if (cause.length() <= BUDGET_CHARS) {
-            return cause;
-        }
-        // The marker's own length depends on the omitted count, which depends on how much the
-        // marker leaves for the halves. Sizing the reservation from the whole text's length
-        // breaks the circle: the omitted count is always smaller, so it never needs more digits,
-        // and the finished text lands at or (by at most a digit) under the budget.
-        int kept = BUDGET_CHARS - marker(cause.length()).length();
-        String head = head(cause, kept * HEAD_NUMERATOR / HEAD_DENOMINATOR);
-        String tail = tail(cause, kept - head.length());
-        return head + marker(cause.length() - head.length() - tail.length()) + tail;
-    }
-
-    /** The kept head, cut back to a nearby line boundary when one is in reach. */
-    private static String head(String cause, int length) {
-        int boundary = cause.lastIndexOf('\n', length);
-        int cut = boundary >= length - LINE_SNAP_WINDOW ? boundary : withoutSplitPair(cause, length);
-        return cause.substring(0, cut);
-    }
-
-    /**
-     * The kept tail, advanced to start after a nearby line boundary when one is in reach. The
-     * search runs backwards from the far end of the window, so the boundary it finds is the last
-     * one inside it — the least text given up for the snap — and a hit before {@code start} means
-     * the window held none at all.
-     */
-    private static String tail(String cause, int length) {
-        int start = cause.length() - length;
-        int boundary = cause.lastIndexOf('\n', start + LINE_SNAP_WINDOW);
-        int cut = boundary >= start ? boundary + 1 : afterSplitPair(cause, start);
-        return cause.substring(cut);
-    }
-
-    /**
-     * Pulls a cut back off the low half of an astral character. The budget counts UTF-16 units, so
-     * a boundary can land inside a surrogate pair; keeping one half emits an unpaired surrogate,
-     * which every UTF-8 sink downstream renders as a replacement character the reader cannot tell
-     * from a real one.
-     */
-    private static int withoutSplitPair(String cause, int index) {
-        return Character.isLowSurrogate(cause.charAt(index)) ? index - 1 : index;
-    }
-
-    /** The same guard from the other side: a tail never opens on an orphaned low surrogate. */
-    private static int afterSplitPair(String cause, int index) {
-        return Character.isLowSurrogate(cause.charAt(index)) ? index + 1 : index;
-    }
-
-    /** The omission marker, on its own line between the two halves (UX1). */
-    private static String marker(int omitted) {
-        return "\n… [" + omitted + " characters omitted] …\n";
+    static UntrustedText cap(UntrustedText cause) {
+        return cause.cappedTo(BUDGET_CHARS);
     }
 }

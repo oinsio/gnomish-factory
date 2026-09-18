@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -70,7 +71,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
 
     private StageExecutor.Request request(int attempt = 1) {
         new StageExecutor.Request(
-                new TaskContext(TASK, 'title', 'body', []),
+                new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 stageDefinition(), new DirectoryWorkspace(tempDir), attempt, [])
     }
 

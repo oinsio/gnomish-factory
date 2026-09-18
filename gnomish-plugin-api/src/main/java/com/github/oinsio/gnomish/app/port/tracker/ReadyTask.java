@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Objects;
 
 /**
@@ -43,13 +44,14 @@ import java.util.Objects;
  *     worked and given back (park report or holder-transition marker)
  * @param finished true when the task's recorded history contains a finish
  *     report, making the task terminal
- * @param title the task's title, populated from the adapter's list response; never null
+ * @param title the task's title, populated from the adapter's list response — the tracker's own
+ *     text, carried (design D4 of type-untrusted-text); never null
  * @param claim the entry's claim footprint, resolved from the enrichment read the feed already
  *     performs — a ready-labeled task still carrying one is a ghost the sweep repairs, never a
  *     cleanly claimable task; never null
  */
 public record ReadyTask(
-        TaskRef ref, AbortFacts abortFacts, boolean returned, boolean finished, String title, ClaimFacts claim) {
+        TaskRef ref, AbortFacts abortFacts, boolean returned, boolean finished, UntrustedText title, ClaimFacts claim) {
 
     public ReadyTask {
         Objects.requireNonNull(title, "title");
@@ -65,7 +67,7 @@ public record ReadyTask(
      * @param finished whether the task's history contains a finish report
      * @param title the task's title; never null
      */
-    public ReadyTask(TaskRef ref, AbortFacts abortFacts, boolean returned, boolean finished, String title) {
+    public ReadyTask(TaskRef ref, AbortFacts abortFacts, boolean returned, boolean finished, UntrustedText title) {
         this(ref, abortFacts, returned, finished, title, new ClaimFacts.None());
     }
 }

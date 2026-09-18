@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,9 +43,9 @@ final class TerminalWriteMarker {
      */
     static void clearPending(Path worktree, String taskId) {
         Path taskJson = worktree.resolve(".gnomish-task").resolve("task.json");
-        String json;
+        UntrustedText json;
         try {
-            json = Files.readString(taskJson);
+            json = UntrustedText.branchDocument(Files.readString(taskJson));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.RESUMED, "reading task.json", e);
         }

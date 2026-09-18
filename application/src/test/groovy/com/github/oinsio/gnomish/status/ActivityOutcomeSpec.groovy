@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -33,18 +34,18 @@ class ActivityOutcomeSpec extends Specification {
     // FR7, UX1, D10, D12 of add-agent-executor: Executing can carry live tool detail
     def "Executing carries currentTool and toolCalls when specified"() {
         given:
-        def activity = new Activity.Executing(SINCE, 'run_tests', 2)
+        def activity = new Activity.Executing(SINCE, UntrustedText.agent('run_tests'), 2)
 
         expect:
         activity.since() == SINCE
-        activity.currentTool() == 'run_tests'
+        activity.currentTool().forLog() == 'run_tests'
         activity.toolCalls() == 2
     }
 
     // FR11: Activity.Verifying carries a checkRef and a since instant
     def "Verifying carries the checkRef and since instant"() {
         given:
-        def checkRef = new CheckRef(0, 'command:./gradlew test')
+        def checkRef = new CheckRef(0, UntrustedText.manifest('command:./gradlew test'))
 
         when:
         def activity = new Activity.Verifying(checkRef, SINCE)
@@ -57,10 +58,10 @@ class ActivityOutcomeSpec extends Specification {
     // FR11: Activity.AwaitingInput carries a prompt and a since instant
     def "AwaitingInput carries the prompt text and since instant"() {
         when:
-        def activity = new Activity.AwaitingInput('Refactor or patch? ', SINCE)
+        def activity = new Activity.AwaitingInput(UntrustedText.agent('Refactor or patch? '), SINCE)
 
         then:
-        activity.prompt() == 'Refactor or patch? '
+        activity.prompt().forLog() == 'Refactor or patch? '
         activity.since() == SINCE
     }
 
@@ -93,10 +94,10 @@ class ActivityOutcomeSpec extends Specification {
     def "Outcome.from maps TaskOutcome.Aborted to Outcome.Aborted carrying failedAt and cause"() {
         given:
         def failedAt = new AttemptKey('t1', 'implement', 0)
-        def outcome = new TaskOutcome.Aborted(TaskState.atStageStart('implement'), failedAt, 'disk full')
+        def outcome = new TaskOutcome.Aborted(TaskState.atStageStart('implement'), failedAt, UntrustedText.subprocess('disk full'))
 
         expect:
-        Outcome.from(outcome) == new Outcome.Aborted(failedAt, 'disk full')
+        Outcome.from(outcome) == new Outcome.Aborted(failedAt, UntrustedText.subprocess('disk full'))
     }
 
     // D7: LiveActivity.idle produces null activity, null escalation and null outcome

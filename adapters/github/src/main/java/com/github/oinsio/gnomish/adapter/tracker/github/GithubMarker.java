@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -182,14 +183,26 @@ public final class GithubMarker {
             warnDropped(json, "its kind or timestamp is not a value this version understands");
             return Optional.empty();
         }
+        // The instance id is an identity, not prose: it is compared against this process's own
+        // id and against the claim holder, so it stays a String behind a named syntax gate rather
+        // than becoming a carrier (design D11 of type-untrusted-text, InstanceIdSyntax). A marker
+        // whose id has a shape no operator name can take is dropped like one whose kind is
+        // unreadable — a forged holder is worse than a missing marker.
+        Optional<String> instance = InstanceIdSyntax.of(fields.instance());
+        if (instance.isEmpty()) {
+            warnDropped(json, "its instance id holds characters an identity may not carry");
+            return Optional.empty();
+        }
         String rest = matcher.group("rest");
         String humanText = rest == null ? "" : rest;
         return Optional.of(new ParsedMarker(
                 kind,
-                fields.instance(),
+                instance.get(),
                 at,
                 fields.version(),
-                humanText,
+                // The tracker mint (design D3): whatever a commenter wrote after the marker's own
+                // structural prefix is their text, and it travels as the carrier from here.
+                UntrustedText.tracker(humanText),
                 fields.reason(),
                 fields.identity().orElse(null),
                 fields.epoch() == null ? null : new ClaimEpoch(fields.epoch())));

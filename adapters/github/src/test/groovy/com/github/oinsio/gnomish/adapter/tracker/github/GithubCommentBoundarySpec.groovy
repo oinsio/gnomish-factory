@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -19,21 +20,21 @@ import spock.lang.Specification
 class GithubCommentBoundarySpec extends Specification {
 
     private static ParsedMarker claimMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.CLAIM, instance, Instant.parse(at), 1, 'claimed', null, null, null)
+        new ParsedMarker(GithubMarkerKind.CLAIM, instance, Instant.parse(at), 1, UntrustedText.tracker('claimed'), null, null, null)
     }
 
     private static ParsedMarker abortMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, 'aborted', null, null, null)
+        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, UntrustedText.tracker('aborted'), null, null, null)
     }
 
     /** An ABORT marker categorized as a failed branch repair (FR14 of harden-task-branch-contract). */
     private static ParsedMarker recoveryAbortMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, 'aborted',
+        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, UntrustedText.tracker('aborted'),
                 RecoveryCause.RECOVERY_FAILURE.wireValue(), null, null)
     }
 
     private static ParsedMarker progressMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.PROGRESS, instance, Instant.parse(at), 1, 'progressed', null, null, null)
+        new ParsedMarker(GithubMarkerKind.PROGRESS, instance, Instant.parse(at), 1, UntrustedText.tracker('progressed'), null, null, null)
     }
 
     def "abortFactsSinceBoundary returns AbortFacts.none when there is no boundary marker at all"() {

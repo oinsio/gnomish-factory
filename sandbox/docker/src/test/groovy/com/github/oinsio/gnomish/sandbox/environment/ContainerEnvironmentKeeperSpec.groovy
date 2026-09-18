@@ -32,7 +32,7 @@ class ContainerEnvironmentKeeperSpec extends Specification {
     def "stopKeeping is best-effort on a runtime outage"() {
         given:
         docker.onRun = { List<String> args ->
-            throw new DockerUnavailableException('down', null)
+            throw new DockerUnavailableException('down', null as Throwable)
         } as Closure<DockerResult>
 
         when:
@@ -50,7 +50,7 @@ class ContainerEnvironmentKeeperSpec extends Specification {
     def "FR3: a stop the daemon refuses reports as not kept, without throwing"() {
         given:
         docker.onRun = { args ->
-            new DockerResult(1, '', 'No such container: gnomish-box-k1')
+            DockerResult.of(1, '', 'No such container: gnomish-box-k1')
         }
 
         when:
@@ -83,7 +83,7 @@ class ContainerEnvironmentKeeperSpec extends Specification {
     def "the best-effort failure path still swallows, and announces nothing kept"() {
         given:
         docker.onRun = { List<String> args ->
-            throw new DockerUnavailableException('down', null)
+            throw new DockerUnavailableException('down', null as Throwable)
         } as Closure<DockerResult>
         def capture = LogCaptureSupport.attach(ContainerEnvironmentKeeper, Level.DEBUG)
 

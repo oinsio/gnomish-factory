@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -23,7 +24,7 @@ public final class WorktreeCreationFailedException extends RuntimeException {
      * @param branchName the branch {@code git worktree add} was asked to check out
      * @param gitStderr the failed git command's captured stderr
      */
-    public WorktreeCreationFailedException(String taskId, String branchName, String gitStderr) {
+    public WorktreeCreationFailedException(String taskId, String branchName, UntrustedText gitStderr) {
         super("failed to create worktree for taskId \"" + taskId + "\" (branch " + branchName + "): " + gitStderr);
     }
 }

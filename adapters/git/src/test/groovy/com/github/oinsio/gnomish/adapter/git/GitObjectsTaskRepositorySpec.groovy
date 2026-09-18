@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.port.tracker.fake.TrackerFixtureText
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -31,6 +32,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -82,7 +84,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     }
 
     private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
-        new TaskContext(taskId, 'Fix the thing', 'Body text', decisions)
+        new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), decisions)
     }
 
     private static String refFor(String taskId) {
@@ -109,7 +111,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 'gnomish-factory <gnomish-factory@localhost> / gnomish-factory <gnomish-factory@localhost>'
 
         and: 'task.json round-trips the context, with baseCommit = base tip and null outcome'
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         content.context() == sampleContext()
         content.outcome() == null
         content.lastEscalation() == null
@@ -130,7 +132,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.createTask(sampleContext(), baseCommit(), CONFIGURED_PIN, TaskState.atStageStart('implement'))
 
         then:
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         content.pin().ref() == 'base'
         content.pin().rule() == BaseRule.CONFIGURED_DEFAULT
     }
@@ -146,7 +148,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 TaskState.atStageStart('implement'))
 
         then:
-        def afterDecision = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def afterDecision = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         afterDecision.pin().ref() == 'base'
         afterDecision.pin().rule() == BaseRule.CONFIGURED_DEFAULT
 
@@ -154,7 +156,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
 
         then:
-        def afterOutcome = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def afterOutcome = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         afterOutcome.pin().ref() == 'base'
         afterOutcome.pin().rule() == BaseRule.CONFIGURED_DEFAULT
     }
@@ -198,8 +200,8 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         files.contains('.gnomish-task/state.json')
 
         and: 'the recorded state is the pipeline\'s first stage with nothing burned yet'
-        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(
-                        gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json")))
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(UntrustedText.branchDocument(
+                        gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json"))))
         (state.position() as Position.AtStage).name() == 'implement'
         state.attemptsUsed() == 0
         state.attempts().isEmpty()
@@ -223,9 +225,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         (gitOutput(bareDir, 'rev-list', '--count', refFor('PROJ-1')) as Integer) == before + 1
 
         and: 'that one commit carries the decision and the reset counter together'
-        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1'))).context().decisions().size() == 1
-        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(
-                        gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json")))
+        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))).context().decisions().size() == 1
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(UntrustedText.branchDocument(
+                        gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json"))))
         state.attemptsUsed() == 0
         (state.position() as Position.AtStage).name() == 'implement'
     }
@@ -239,7 +241,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def parking = parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:00:00.000000001Z'))
         })
-        def report = new EscalationReport.CannotExecute('round timed out',
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'),
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
@@ -249,7 +251,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
         then: 'one commit carries the escalation, its denials, and the position they were read up to'
-        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))
         dto.lastEscalation().denials()*.message() == [
             'egress denied: paste.example.com:443'
         ]
@@ -263,7 +265,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def parking = parkingRepository({
             throw new IllegalStateException('no environment leased yet')
         })
-        def report = new EscalationReport.CannotExecute('round timed out',
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'),
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
@@ -277,7 +279,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
         then: 'the escalation and its denials are recorded; only the position is missing'
         noExceptionThrown()
-        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))
         dto.lastEscalation().denials().size() == 1
         dto.egressCursor() == null
 
@@ -301,12 +303,15 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
 
         then:
-        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() == null
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))).egressCursor() == null
 
         where:
         escalation << [
-            new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']),
-            new EscalationReport.CannotExecute('round timed out', [])
+            new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                UntrustedText.agent('yes'),
+                UntrustedText.agent('no')
+            ]),
+            new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [])
         ]
     }
 
@@ -319,7 +324,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         })
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.CannotExecute('round timed out',
+                new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'),
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
@@ -331,9 +336,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 TaskState.atStageStart('implement'))
 
         then: 'both positions survive the rewrite, so the restore still has them to compare'
-        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))).egressCursor() ==
                 new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
-        StateJsonMapper.readDto(gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json"))
+        StateJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json")))
                 .egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z')
     }
 
@@ -345,7 +350,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         })
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.CannotExecute('round timed out',
+                new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'),
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
@@ -355,7 +360,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.confirmTerminalWrite('PROJ-1')
 
         then:
-        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))
         dto.trackerWritePending() == null
         dto.egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
     }
@@ -368,7 +373,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         }).recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-        new EscalationReport.CannotExecute('round timed out',
+        new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'),
         [
             Denial.unidentified(
                     new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
@@ -379,20 +384,23 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
 
         then: 'the committed position stands: this park had none to replace it with'
-        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))).egressCursor() ==
                 new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
 
         where: 'neither a denial-less escalation nor an unanswerable environment erases it'
         scenario | escalation | source
-        'a decision request' | new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']) |
+        'a decision request' | new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ]) |
         ({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T11:00:00Z'))
         } as DenialCursorSource)
-        'an escalation with no denials' | new EscalationReport.CannotExecute('round timed out', []) |
+        'an escalation with no denials' | new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), []) |
         ({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T11:00:00Z'))
         } as DenialCursorSource)
-        'an environment that cannot answer' | new EscalationReport.CannotExecute('round timed out', [
+        'an environment that cannot answer' | new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
         ]) | ({
             throw new IllegalStateException('no environment leased yet')
@@ -418,7 +426,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         gitOutput(tempDir, 'clone', bareDir.toString(), work.toString())
         gitOutput(work, 'checkout', '-B', 'gnomish/' + taskId, 'origin/gnomish/' + taskId)
         Path stateJson = work.resolve('.gnomish-task').resolve('state.json')
-        def dto = StateJsonMapper.readDto(Files.readString(stateJson))
+        def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
                         new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor)))
         commitAll(work, 'round state')
@@ -501,7 +509,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 ServiceCommitMessages.taskEvent(TaskLifecycleEvent.RESUMED)
 
         and:
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         content.context().decisions() == [decision]
         content.outcome() == null
     }
@@ -526,7 +534,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 == ServiceCommitMessages.taskEvent(expectedEvent)
 
         and: 'task.json at the tip shows the recorded outcome type — Completed included, since its cleanup is a separate step (FR10 of harden-task-branch-contract)'
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         expectedKind.isInstance(content.outcome())
 
         where:
@@ -534,21 +542,27 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         new TaskOutcome.Completed(TaskState.atStageStart('implement')) | TaskLifecycleEvent.COMPLETED | RecordedOutcome.Completed
         new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement') | TaskLifecycleEvent.PAUSED | RecordedOutcome.Paused
         new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])) | TaskLifecycleEvent.ESCALATED | RecordedOutcome.Escalated
+                new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                    UntrustedText.agent('yes'),
+                    UntrustedText.agent('no')
+                ])) | TaskLifecycleEvent.ESCALATED | RecordedOutcome.Escalated
         new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), 'boom') | TaskLifecycleEvent.ABORTED | RecordedOutcome.Aborted
+                new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')) | TaskLifecycleEvent.ABORTED | RecordedOutcome.Aborted
     }
 
     def "FR25: recordOutcome for Escalated populates lastEscalation and the tracker-write pending marker"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
 
         when:
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
         then:
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         content.lastEscalation() == report
         content.trackerWritePending()
     }
@@ -561,10 +575,10 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.recordOutcome(
                 'PROJ-1',
                 new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), 'boom'))
+                new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')))
 
         then:
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         !content.trackerWritePending()
         content.outcome() instanceof RecordedOutcome.Aborted
     }
@@ -589,14 +603,17 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     def "FR10: confirmTerminalWrite clears the pending marker a park recorded"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
         when:
         repository.confirmTerminalWrite('PROJ-1')
 
         then: 'the marker is cleared while the recorded park and its report are preserved verbatim'
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         !content.trackerWritePending()
         content.outcome() instanceof RecordedOutcome.Escalated
         content.lastEscalation() == report
@@ -669,7 +686,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 ServiceCommitMessages.taskEvent(TaskLifecycleEvent.COMPLETED)
 
         and: 'the completed task.json is still readable from the parent commit — history preserved'
-        def historical = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1', '~1')))
+        def historical = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1', '~1'))))
         historical.outcome() instanceof RecordedOutcome.Completed
 
         and: 'exactly two commits were appended (outcome + cleanup)'
@@ -691,9 +708,12 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         outcome << [
             new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'),
             new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-            new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])),
+            new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                UntrustedText.agent('yes'),
+                UntrustedText.agent('no')
+            ])),
             new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-            new AttemptKey('PROJ-1', 'implement', 0), 'boom'),
+            new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')),
         ]
     }
 

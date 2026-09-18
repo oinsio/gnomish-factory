@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The essential outcome of one parsed round, extracted from a round's {@link
@@ -34,7 +35,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
  *     ExecutorUsage#none()} whenever derivation is not yet possible or ran
  *     into trouble (NFR-R2)
  */
-public record AgentRoundResult(String sessionId, String result, ExecutorUsage usage) {
+public record AgentRoundResult(UntrustedText sessionId, UntrustedText result, ExecutorUsage usage) {
 
     public AgentRoundResult {
         requireNonNull(result, "result");

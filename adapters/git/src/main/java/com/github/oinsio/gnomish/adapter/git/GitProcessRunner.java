@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -46,10 +48,15 @@ import org.slf4j.LoggerFactory;
  * (NG3): a {@code commit} or a {@code rev-parse} that hangs is a broken machine, not a broken
  * remote. An interrupted wait is likewise a named outcome, not exit {@code -1} (design D1, D6).
  *
- * <p>Every captured stderr passes through {@link CredentialScrub} before it is handed back, so a
- * remote URL's embedded credentials cannot reach an operator log or a tracker-published report
- * through any of this package's call sites (NFR-S2 of fix-lifecycle-push) — including the partial
- * stderr of a command killed on its deadline.
+ * <p>Every capture leaves this runner as {@link UntrustedText} through
+ * {@link GitCommandResult#of}, which is also where stderr passes through {@link CredentialScrub},
+ * so a remote URL's embedded credentials cannot reach an operator log or a tracker-published
+ * report through any of this package's call sites (NFR-S2 of fix-lifecycle-push) — including the
+ * partial stderr of a command killed on its deadline.
+ *
+ * <p>It is a parser of one answer of its own: {@code rev-parse --git-common-dir}, whose standard
+ * output it turns into the {@link Path} the mutation lock keys on (design D11 of
+ * type-untrusted-text). Nothing else here reads captured text.
  *
  * <p>A bound that fires says so once, here: the runner is the only place that knows both how long
  * the command actually ran and what deadline it was given, so the WARN naming the command class,
@@ -57,8 +64,9 @@ import org.slf4j.LoggerFactory;
  * about what the command was for.
  *
  * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
- * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands.
+ * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text.
  */
+@UntrustedParser
 public final class GitProcessRunner {
 
     private static final Logger log = LoggerFactory.getLogger(GitProcessRunner.class);
@@ -130,7 +138,7 @@ public final class GitProcessRunner {
      */
     GitCommandResult run(Path cwd, String... args) {
         if (!cwd.toFile().isDirectory()) {
-            return new GitCommandResult(128, "", "fatal: cwd does not exist: " + cwd);
+            return GitCommandResult.of(128, "", "fatal: cwd does not exist: " + cwd);
         }
 
         if (!isRepoLevelMutating(args)) {
@@ -181,7 +189,7 @@ public final class GitProcessRunner {
         if (commonDir.exitCode() != 0) {
             return canonicalize(cwd);
         }
-        Path resolved = Path.of(commonDir.stdout().trim());
+        Path resolved = Path.of(commonDir.stdout().forParsing().trim());
         Path gitCommonDir = resolved.isAbsolute() ? resolved : cwd.resolve(resolved);
         return canonicalize(gitCommonDir);
     }
@@ -221,14 +229,13 @@ public final class GitProcessRunner {
         long startedAt = System.nanoTime();
         Captured captured = capture(builder, deadline);
         report(captured.termination(), args, deadline, Duration.ofNanos(System.nanoTime() - startedAt));
-        // The single choke point for git's diagnostics (NFR-S2 of fix-lifecycle-push): stderr is
-        // scrubbed of any remote-URL credentials here, before a caller can log it or carry it into
-        // a report a tracker publishes — the partial stderr of a killed command included, since a
-        // timed-out push is exactly where a credential-bearing URL tends to be half-printed.
-        // Stdout is deliberately left raw — `remote get-url origin` answers through it, and
-        // OriginRemote's caller needs the real URL.
-        String stderr = CredentialScrub.scrub(captured.stderr());
-        return new GitCommandResult(captured.exitCode(), captured.stdout(), stderr, captured.termination());
+        // The single choke point for git's text (design D3 of type-untrusted-text): both streams
+        // become UntrustedText here, at the first factory reader, and stderr is scrubbed of any
+        // remote-URL credentials on the way — before a caller can log it or carry it into a report
+        // a tracker publishes, the partial stderr of a killed command included, since a timed-out
+        // push is exactly where a credential-bearing URL tends to be half-printed. Both are
+        // GitCommandResult.of's business now, so a result built anywhere else is scrubbed too.
+        return GitCommandResult.of(captured.exitCode(), captured.stdout(), captured.stderr(), captured.termination());
     }
 
     /**

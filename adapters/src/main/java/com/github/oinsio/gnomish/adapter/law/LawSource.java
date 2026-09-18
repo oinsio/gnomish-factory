@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.util.List;
 
@@ -42,12 +43,14 @@ public interface LawSource {
     record Text(String text) implements Read {}
 
     /**
-     * The law file could not be read — absent, refused by the traversal guard, over the read cap,
-     * or an I/O fault.
+     * Why one law file could not be read. The reason is {@link UntrustedText}: it quotes the
+     * target repository's own paths and whatever the filesystem or the object store said about
+     * them, and it travels into an exception message and a cannot-verify verdict (design D4, D5
+     * of type-untrusted-text).
      *
-     * @param reason a human-readable reason, carried to the point of use
+     * @param reason the captured cause, as manifest-family text
      */
-    record Unreadable(String reason) implements Read {}
+    record Unreadable(UntrustedText reason) implements Read {}
 
     /** What a path is, as far as reading law from it goes. */
     enum FileStatus {

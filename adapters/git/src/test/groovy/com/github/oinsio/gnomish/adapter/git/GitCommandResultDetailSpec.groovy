@@ -17,7 +17,7 @@ class GitCommandResultDetailSpec extends Specification {
 
     def "FR6: the cannot-verify detail is flattened and stripped"() {
         when:
-        def detail = new GitCommandResult(128, '', HOSTILE).cannotVerifyDetail()
+        def detail = GitCommandResult.of(128, '', HOSTILE).cannotVerifyDetail()
 
         then: 'one fault stays one line, and no escape sequence drives the operator terminal'
         !detail.contains('\n')
@@ -30,7 +30,7 @@ class GitCommandResultDetailSpec extends Specification {
 
     def "FR6: a non-exiting invocation names its termination in the same shape"() {
         expect:
-        new GitCommandResult(0, '', HOSTILE, Termination.TIMED_OUT)
+        GitCommandResult.of(0, '', HOSTILE, Termination.TIMED_OUT)
                 .cannotVerifyDetail()
                 .contains(Termination.TIMED_OUT.toString())
     }
@@ -41,7 +41,7 @@ class GitCommandResultDetailSpec extends Specification {
     // through one detail and not the other.
     def "NFR-S2: a credential-bearing URL in stderr is masked in both details"() {
         given:
-        def result = new GitCommandResult(128, '',
+        def result = GitCommandResult.of(128, '',
                 'fatal: unable to access https://ghp_SECRETTOKEN@github.com/owner/repo.git/: timed out')
 
         expect:

@@ -12,8 +12,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -82,8 +82,9 @@ final class TrustedTierStartup {
             case LoadOutcome.Loaded(var definition) ->
                 new StartupLaw(definition, bound.base(), branch, bound.lawCommit());
             case LoadOutcome.Invalid(List<ConfigError> errors) ->
-                throw new PipelineLoadFailedException(
-                        errors.stream().map(ConfigError::render).toList());
+                throw new PipelineLoadFailedException(errors.stream()
+                        .map(error -> error.render().forConsole())
+                        .toList());
         };
     }
 
@@ -96,8 +97,8 @@ final class TrustedTierStartup {
                         "the clone has no 'origin' remote to read the default branch from; an autonomous"
                                 + " mode binds its configuration from origin's default branch, never from the"
                                 + " clone's local state");
-            case DefaultBranchDiscovery.Undetermined(String reason) -> throw unbound(dir, reason);
-            case DefaultBranchDiscovery.Unavailable(String reason) ->
+            case DefaultBranchDiscovery.Undetermined(UntrustedText reason) -> throw unbound(dir, reason.forLog());
+            case DefaultBranchDiscovery.Unavailable(UntrustedText reason) ->
                 throw unbound(dir, "origin did not answer the default-branch read: " + reason);
         };
     }
@@ -108,8 +109,8 @@ final class TrustedTierStartup {
         // whichever path the adapter took.
         return switch (baseRefs.refresh(dir, branch.name())) {
             case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _, var _) -> commit;
-            case BaseRefreshOutcome.Refused(String report) -> throw unbound(dir, report);
-            case BaseRefreshOutcome.Unavailable(String reason) ->
+            case BaseRefreshOutcome.Refused(UntrustedText report) -> throw unbound(dir, report.forLog());
+            case BaseRefreshOutcome.Unavailable(UntrustedText reason) ->
                 throw unbound(
                         dir, "origin did not answer the refresh of default branch '" + branch.name() + "': " + reason);
         };
@@ -121,7 +122,7 @@ final class TrustedTierStartup {
                 OperatorEvent.STARTUP_DEFAULT_BRANCH_UNBOUND.head()
                         + "startup cannot bind the configuration of {} from origin's default branch: {}",
                 dir,
-                LogText.forLog(cause));
+                cause);
         return new DefaultBranchUnboundException(
                 "cannot bind the configuration of " + dir + " from origin's default branch: " + cause);
     }

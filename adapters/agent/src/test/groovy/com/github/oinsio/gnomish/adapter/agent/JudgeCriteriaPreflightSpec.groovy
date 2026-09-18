@@ -42,7 +42,7 @@ class JudgeCriteriaPreflightSpec extends Specification {
         result.isPresent()
         def verdict = result.get()
         !verdict.reason().isBlank()
-        verdict.reason().contains('missing-criteria.md')
+        verdict.reason().forLog().contains('missing-criteria.md')
         verdict.details() != null
     }
 }

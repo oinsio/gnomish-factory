@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
@@ -47,11 +48,16 @@ import org.jspecify.annotations.Nullable;
  *     AwaitingHuman}); never null
  * @param claimVersion the live claim version, or {@code null} when the task
  *     carries no observable claim marker
- * @param title the task's title, populated from the adapter's list response; never null
+ * @param title the task's title, populated from the adapter's list response — the tracker's own
+ *     text, carried (design D4 of type-untrusted-text); never null
  * @param facts the raw tracker facts the core classifier maps to a shape; never null
  */
 public record OpenTask(
-        TaskRef ref, TrackerTaskState state, @Nullable ClaimVersion claimVersion, String title, TrackerFacts facts) {
+        TaskRef ref,
+        TrackerTaskState state,
+        @Nullable ClaimVersion claimVersion,
+        UntrustedText title,
+        TrackerFacts facts) {
 
     public OpenTask {
         Objects.requireNonNull(title, "title");
@@ -69,7 +75,7 @@ public record OpenTask(
      * @param claimVersion the live claim version, or {@code null} when none is observable
      * @param title the task's title; never null
      */
-    public OpenTask(TaskRef ref, TrackerTaskState state, @Nullable ClaimVersion claimVersion, String title) {
+    public OpenTask(TaskRef ref, TrackerTaskState state, @Nullable ClaimVersion claimVersion, UntrustedText title) {
         this(ref, state, claimVersion, title, derivedFacts(state, claimVersion));
     }
 

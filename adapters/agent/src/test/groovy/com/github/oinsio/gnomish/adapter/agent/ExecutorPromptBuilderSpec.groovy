@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -141,7 +142,7 @@ class ExecutorPromptBuilderSpec extends Specification {
     }
 
     private StageExecutor.Request requestFor(StageDefinition stage, int attempt, List feedback) {
-        def context = new TaskContext('task-1', 'Fix the widget', '', [])
+        def context = new TaskContext('task-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker(''), [])
         new StageExecutor.Request(context, stage, new DirectoryWorkspace(workspaceRoot), attempt, feedback)
     }
 }

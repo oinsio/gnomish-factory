@@ -222,7 +222,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":2')
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 2')
-        def tipBefore = runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().trim()
+        def tipBefore = runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().forParsing().trim()
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'VERSION-2')
 
         when:
@@ -235,7 +235,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('state.json declaring version 2 where this factory supports 1')
 
         and: 'nothing was mutated — the branch tip is where it was'
-        runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().trim() == tipBefore
+        runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().forParsing().trim() == tipBefore
     }
 
     def "FR16: --json renders the refusing shape as JSON with its diagnosis"() {

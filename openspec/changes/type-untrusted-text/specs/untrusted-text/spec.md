@@ -15,9 +15,19 @@ Text from outside the trust boundary — subprocess output, in-container command
 output, agent output, tracker-sourced strings, the target repository's
 manifest, and values read back from a task-branch document — SHALL be carried
 by one value type from the moment it enters the process, tagged with its
-provenance. The type SHALL expose the raw text only through one accessor
+provenance. One further provenance SHALL exist for text that is *not* from
+outside the trust boundary: an operator's own command-line argument, for the
+case where a syntax gate has refused it and the refusal is published to the
+tracker — a refused ref name is refused precisely for holding whitespace or a
+control character, so quoting it back needs an exit like any other text. The
+provenance set SHALL otherwise stay closed: text with no family here has no
+mint. The type SHALL expose the raw text only through one accessor
 reserved for exit owners, and SHALL render itself by default in the log-safe
-form, so string concatenation of the value yields neutralized text.
+form, so string concatenation of the value yields neutralized text. Equality
+SHALL be by the text alone: provenance is evidence a report may name, never a
+policy input and never part of the value's identity, so a carrier written to a
+durable medium and read back — under the provenance of the medium it was read
+from — equals the carrier that was written.
 <!-- implements FR1, FR4 of type-untrusted-text -->
 
 #### Scenario: Concatenation is safe by default
@@ -25,6 +35,21 @@ form, so string concatenation of the value yields neutralized text.
   concatenated into a factory-authored message
 - **THEN** the resulting string contains the sequence and the newline only as
   inert visible escapes, identical to the carrier's log exit
+
+#### Scenario: A value read back from a document equals the value written
+- **WHEN** a carrier minted at capture is written to a task-branch document
+  and the reader mints the value it lifts back out with the document's own
+  provenance
+- **THEN** the two carriers are equal, hash alike, and render byte-identically
+  through every exit
+
+#### Scenario: A refused operator argument is quoted back through an exit
+- **WHEN** a base-ref resolution refuses the operator's `--base` argument
+  because it is not a well-formed ref name, and the park report names the
+  offending value
+- **THEN** the value reaches the report as a carrier under the operator
+  provenance and is published through the comment exit, so a control character
+  the grammar refused cannot reach the tracker comment raw
 
 #### Scenario: Provenance travels with the value
 - **WHEN** a carrier minted from git stderr reaches a report three calls away
@@ -60,7 +85,10 @@ an annotation the carrier's module defines: the three exits, the writers that
 carry raw bytes to a machine medium (state and ledger JSON), and the findings
 funnel entry. An architecture gate SHALL fail the build on any other caller;
 the gate SHALL key on the annotation, never on a list of class names kept in
-build logic.
+build logic. The set SHALL NOT be widened to admit code that reads captured
+text in order to parse it — that is a separate way out with a separate
+allowlist — and the gate SHALL pin the set, so a class joining it fails the
+build until the growth is acknowledged.
 <!-- implements FR3, FR7, NFR-R2, NFR-S1 of type-untrusted-text -->
 
 #### Scenario: A raw read outside an exit fails the build
@@ -74,6 +102,57 @@ build logic.
   as an exit, and reading the same document back mints a branch-document
   carrier; a document written before the carrier existed reads back the same
   way, because the wire format is unchanged
+
+### Requirement: Machine-readable capture is parsed through its own annotated way out
+Captured text that the factory reads to answer a question about its own
+machinery — a commit id, a ref list, a remote URL, a container's state — SHALL
+stay carried by the type, and SHALL be read for parsing through a dedicated
+accessor callable only from classes marked by a second annotation the
+carrier's module defines. A class so marked SHALL convert the text into a
+value that is no longer untrusted text: a typed value, a string that passed a
+named syntax gate, or a carrier re-minted with another provenance. Returning
+the text unchanged as a plain string SHALL NOT qualify; a reader that yields a
+document's content rather than an answer about it SHALL carry the carrier
+onward to the machine writer that consumes it. Where a parser's converted
+value is itself a string — a commit id, a ref name — it SHALL state what makes
+that string inert: a named syntax gate it applies, or the fixed shape it
+checks. The carrier SHALL additionally
+answer emptiness, substring and length questions to any caller, since those
+yield no text. Both annotated sets SHALL be pinned by the architecture gate
+with seeded-violation coverage.
+<!-- implements FR3, FR10, NFR-S1 of type-untrusted-text -->
+
+#### Scenario: A parser reads the captured bytes and yields a value
+- **WHEN** the commit-id reader takes the standard output of a revision
+  resolution and returns a verified commit id
+- **THEN** it reads through the parsing accessor, is marked as a parser, and
+  the bytes it parsed are the bytes git wrote — uncapped and unflattened
+
+#### Scenario: A parser that hands the text back unchanged fails the gate
+- **WHEN** a class marked as a parser returns the captured text as a plain
+  string instead of converting it
+- **THEN** the gate fails naming the method, and points at carrying the
+  carrier onward instead
+
+#### Scenario: Reading a branch document is not parsing
+- **WHEN** a branch file's content is read at a tip and handed to the
+  task-branch document reader
+- **THEN** the content travels as a carrier the whole way, and only the
+  document reader — a machine writer, annotated as an exit — takes the raw
+  text out, minting each field it lifts as a branch-document value
+
+#### Scenario: A transformation inside the carrier needs no annotation
+- **WHEN** a carrier longer than a caller's budget is capped through the
+  carrier's own truncation, which keeps the head and the tail and marks what
+  it dropped
+- **THEN** the result is a carrier of the same provenance, the caller needed
+  no exit-owner or parser annotation, and the exit allowlist is unchanged
+
+#### Scenario: A question about the text needs no annotation
+- **WHEN** a caller asks whether captured output is blank, or contains a
+  known marker
+- **THEN** it answers without any annotation, because a boolean carries no
+  text out of the carrier
 
 ### Requirement: Sinks receive untrusted text only through an exit
 No logging call, throwable constructor, console print, or tracker write SHALL

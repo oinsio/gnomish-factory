@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * Task creation as a kill-point table row (FR7, design D13 of harden-task-branch-contract): the
@@ -66,7 +67,7 @@ final class CreationKillPoints {
     private static void step(CreationWorld world, int index) {
         if (index == 0) {
             world.creating.createTask(
-                    new TaskContext(world.taskId, 'title', 'body', []),
+                    new TaskContext(world.taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                     TaskStart.commit(world.creatingClone, 'HEAD'),
                     TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                     TaskState.atStageStart('build'))
@@ -86,7 +87,7 @@ final class CreationKillPoints {
             return
         }
         world.recovering.createTask(
-                new TaskContext(world.taskId, 'title', 'body', []),
+                new TaskContext(world.taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 TaskStart.commit(world.recoveringClone, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('build'))

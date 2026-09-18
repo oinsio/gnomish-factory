@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -14,7 +15,7 @@ import spock.lang.Specification
 abstract class JudgeVotingSpecBase extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     static VerifyCheck.Judge judge(int votes) {
         new VerifyCheck.Judge('criteria.md', 'model', [:], votes)
@@ -29,7 +30,7 @@ abstract class JudgeVotingSpecBase extends Specification {
     }
 
     static JudgeVoter.Vote cannotVerify(String reason, String details, Map<String, TokenUsage> tokensByModel = [:]) {
-        new JudgeVoter.Vote(new Verdict.CannotVerify(reason, details), tokensByModel)
+        new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess(reason), UntrustedText.subprocess(details)), tokensByModel)
     }
 
     JudgeVoting voting(ScriptedJudgeVoter voter) {

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeLifecycleEscalateResumeSpecBase}
@@ -26,7 +27,7 @@ class InMemoryTakeLifecycleEscalateResumeSpec extends TakeLifecycleEscalateResum
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
         InMemoryTracker inMemoryTracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(inMemoryTracker)
-        harness.seed(ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
         [
             inMemoryTracker,
             new FixedTrackerAdapterFactory({ inMemoryTracker })

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -36,6 +37,7 @@ import java.util.List;
  * <p>Implements FR21, FR23 of add-sandbox-core; FR13 of
  * harden-logging-observability.
  */
+@UntrustedParser
 public final class HarvestedBoundaryCheck {
 
     private final GitProcessRunner runner;
@@ -75,6 +77,7 @@ public final class HarvestedBoundaryCheck {
         }
         String allowed = decisionPath(key);
         List<String> touched = diff.stdout()
+                .forParsing()
                 .lines()
                 .map(String::strip)
                 .filter(HarvestedBoundaryCheck::isNonEmpty)

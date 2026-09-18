@@ -5,16 +5,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.patch
 import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor
-import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
-import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
@@ -22,14 +17,10 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
 import com.github.oinsio.gnomish.app.port.tracker.StateLabels
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.github.tomakehurst.wiremock.client.WireMock
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
 import java.time.Instant
 import spock.lang.Specification
 
@@ -42,81 +33,13 @@ import spock.lang.Specification
  * transitions) — this spec proves those delegate correctly, using real collaborators over
  * WireMock (the collaborator classes are {@code final}, so mocking them is not an option; their
  * own behavior is already covered in depth by {@code GithubStateWritesSpec}/{@code
- * GithubCorrespondenceSpec}, whose exact stubbing pattern this spec reuses).
+ * GithubCorrespondenceSpec}, whose exact stubbing pattern this spec reuses). The WireMock/tracker
+ * scaffolding is shared with {@code GithubTrackerDelegationSpec} via {@link
+ * GithubTrackerWireMockFixture}.
  *
  * <p>Implements FR1, FR4, NFR-R1 of add-tracker-port.
  */
-class GithubTrackerSpec extends Specification {
-
-    private static final int ISSUE_NUMBER = 50
-
-    WireMockServer wireMock
-
-    def setup() {
-        wireMock = new WireMockServer(0)
-        wireMock.start()
-        // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
-        // the thread first. Specs that need a populated thread add their own, more recent stub.
-        wireMock.stubFor(get(urlMatching('.*/comments\\?per_page=100'))
-                .willReturn(aResponse()
-                .withStatus(200).withBody('[]')))
-    }
-
-    def cleanup() {
-        wireMock.stop()
-    }
-
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                // Matches everything rather than naming the adapter's package-private
-                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
-                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
-                // exception this predicate ever actually sees is a real transport failure.
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
-    }
-
-    private void stubLabelTransition(String removedLabelEncoded) {
-        wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/labels"))
-                .willReturn(aResponse().withStatus(200).withBody('[]')))
-        wireMock.stubFor(delete(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/labels/${removedLabelEncoded}"))
-                .willReturn(aResponse().withStatus(200).withBody('[]')))
-    }
-
-    private void stubComment() {
-        wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"))
-                .willReturn(aResponse().withStatus(201).withBody('{"id":1,"body":"whatever"}')))
-    }
-
-    private static final GithubStateLabels LABELS =
-    new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered')
-
-    private GithubTracker newTracker() {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        def labelOps = new GithubLabelOps(httpClient)
-        def cache = new GithubConditionalRequestCache(httpClient)
-        new GithubTracker(
-                new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
-                GithubDesignatorRules.none()),
-                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
-                new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
-                'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
-                new GithubCorrespondence(markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
-                new GithubDecisions(httpClient, markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
-                new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1'),
-                new GithubOpenQuery(cache, 'acme', 'widgets', LABELS),
-                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
-                'gnomish:working', 'gnomish:ready'),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'), LABELS))
-    }
-
-    private TaskRef ref() {
-        new TaskRef(GithubTaskId.build(wireMock.baseUrl(), 'acme', 'widgets', ISSUE_NUMBER).canonicalId())
-    }
+class GithubTrackerSpec extends Specification implements GithubTrackerWireMockFixture {
 
     def "park delegates to GithubStateWrites, posting a structural park marker"() {
         given:
@@ -168,7 +91,7 @@ class GithubTrackerSpec extends Specification {
         given:
         stubLabelTransition('gnomish%3Aworking')
         stubComment()
-        def record = new AbortRecord('boom', 'gnomish-factory-x7k2q1', Instant.parse('2026-07-20T10:00:00Z'))
+        def record = new AbortRecord(UntrustedText.subprocess('boom'), 'gnomish-factory-x7k2q1', Instant.parse('2026-07-20T10:00:00Z'))
 
         when:
         newTracker().recordAbort(ref(), record)
@@ -244,9 +167,5 @@ class GithubTrackerSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"index_repair"'))))
         wireMock.verify(postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/labels"))
                 .withRequestBody(WireMock.containing('gnomish:ready')))
-    }
-
-    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -45,7 +46,7 @@ public sealed interface Activity permits Activity.Executing, Activity.Verifying,
      * @param toolCalls the count of top-level tool calls started so far this round; {@code 0}
      *     before the first tool or once the round finishes
      */
-    record Executing(Instant since, @Nullable String currentTool, int toolCalls) implements Activity {
+    record Executing(Instant since, @Nullable UntrustedText currentTool, int toolCalls) implements Activity {
 
         /**
          * Convenience constructor for the common case of no live tool detail yet — round
@@ -79,5 +80,5 @@ public sealed interface Activity permits Activity.Executing, Activity.Verifying,
      * @param prompt the prompt text the operator is being asked; never null
      * @param since the moment the prompt was issued; never null
      */
-    record AwaitingInput(String prompt, Instant since) implements Activity {}
+    record AwaitingInput(UntrustedText prompt, Instant since) implements Activity {}
 }

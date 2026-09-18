@@ -9,6 +9,12 @@ import java.nio.file.Path
  * can exercise real {@code git} subprocess behavior against a real repo.
  *
  * <p>Supports FR2 of add-git-workflow.
+ *
+ * <p>Kept in sync with {@link com.github.oinsio.gnomish.gitobjects.LocalGitRepoFixture}:
+ * {@code initBareRepo}, {@code initWorkingRepo}, {@code commitAll}, {@code addRemote} and
+ * {@code gitOutput} must keep matching names and signatures there, since the {@code gitobjects}
+ * module cannot depend on this adapter-owned trait (design D19 of add-sandbox-core) and instead
+ * re-implements the same calls under the same names for its specs.
  */
 trait BareGitRepoFixture {
 
@@ -70,6 +76,33 @@ trait BareGitRepoFixture {
     void addRemote(Path repo, String name, String url) {
         def result = new GitProcessRunner().run(repo, 'remote', 'add', name, url)
         assert result.exitCode() == 0: "git remote add failed: ${result.stderr()}"
+    }
+
+    /**
+     * Builds a minimal working repo with one commit ({@code a.txt} = {@code first}) and checks
+     * out the task branch named after {@code taskId} — the standard "give me a repo on a task
+     * branch" step shared by push-adjacent specs (revocation's best-effort push, mid-round push,
+     * post-round push, attempt persistence) that only need a small seeded history to push or
+     * commit from, not the full {@link #initBaseRefTopology} shape.
+     *
+     * @param tempDir the temp directory the repo is created under; never null
+     * @param taskId the task id the branch name is derived from; defaults to {@code PROJ-1}
+     * @return the working repo's path, checked out on {@code gnomish/<taskId>}
+     */
+    Path initTaskWorkingRepo(Path tempDir, String taskId = 'PROJ-1') {
+        Path repo = initWorkingRepo(tempDir)
+        new File(repo.toFile(), 'a.txt').text = 'first'
+        commitAll(repo)
+        gitOutput(repo, 'checkout', '-q', '-b', "gnomish/${taskId}")
+        repo
+    }
+
+    /**
+     * The commit hash {@code repo}'s {@code HEAD} currently resolves to — the standard "read the
+     * local tip" step shared by push specs comparing a remote branch's tip against the local one.
+     */
+    String currentHead(Path repo) {
+        gitOutput(repo, 'rev-parse', 'HEAD')
     }
 
     /**
@@ -232,7 +265,7 @@ trait BareGitRepoFixture {
     String gitOutput(Path repo, String... args) {
         def result = new GitProcessRunner().run(repo, args)
         assert result.exitCode() == 0: "git ${args.join(' ')} failed: ${result.stderr()}"
-        result.stdout().trim()
+        result.stdout().forParsing().trim()
     }
 
     /**

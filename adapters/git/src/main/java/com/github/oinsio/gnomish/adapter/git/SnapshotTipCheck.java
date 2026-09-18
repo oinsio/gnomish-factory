@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -28,11 +29,14 @@ import org.slf4j.LoggerFactory;
 // Not a record: a behavior-bearing reader over the git seam, kept a plain final class for parity
 // with its siblings in this package (see GitShowTip, VerifiedTip).
 @SuppressWarnings("ClassCanBeRecord")
+@UntrustedParser
 public final class SnapshotTipCheck {
 
     private static final Logger log = LoggerFactory.getLogger(SnapshotTipCheck.class);
 
-    private static final String SUBJECT_PREFIX = "gnomish: snapshot ";
+    // Single owner: reads ServiceCommitMessages#SNAPSHOT_PREFIX rather than repeating the
+    // literal, so the writer and this parser cannot drift (manual-sync-pairs.md, preference 1).
+    private static final String SUBJECT_PREFIX = ServiceCommitMessages.SNAPSHOT_PREFIX;
 
     private final GitProcessRunner runner;
     private final Path cloneDir;
@@ -59,10 +63,13 @@ public final class SnapshotTipCheck {
                     "snapshot-tip check could not read {} (git exited {}): {}",
                     branch,
                     tip.exitCode(),
-                    LogText.forLog(tip.stderr()));
+                    tip.stderr().forLog());
             return Optional.empty();
         }
-        String[] parts = tip.stdout().strip().split("\u0000", 2);
+        // @UntrustedParser warrant (design D11): what leaves the split is a commit id and a commit
+        //     subject the factory itself wrote (ServiceCommitMessages), from which only the stage
+        //     name and the round number are lifted — and a malformed subject is refused below.
+        String[] parts = tip.stdout().forParsing().strip().split("\u0000", 2);
         if (parts.length < 2 || !parts[1].startsWith(SUBJECT_PREFIX)) {
             return Optional.empty();
         }

@@ -1,14 +1,17 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.pipeline.ConfigError
+import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Path
 import org.slf4j.Logger
 import spock.lang.Specification
 
 /**
  * {@link TakeCommandSupport} (task 5.13): direct unit coverage of the startup sandbox-lifecycle
- * sweep {@link TakeCommandSupport#sweepSandboxLifecycle}. Tracker-adapter resolution moved to
+ * sweep {@link TakeCommandSupport#sweepSandboxLifecycle} and of the pipeline load's invalid arm. Tracker-adapter resolution moved to
  * {@link TrackerResolutionSpec} alongside the class it now covers, {@link TrackerResolution}.
  *
  * <p>Implements FR9, FR17 of add-tracker-port.
@@ -71,5 +74,34 @@ class TakeCommandSupportSpec extends Specification {
                 liveness
             ]
         ]
+    }
+
+    // FR12 of add-manual-run; FR5, design D10 of type-untrusted-text: a manifest is a target-repo
+    //     file, so a loader error quotes text the factory did not write. The console is this
+    //     caller's reader — the exception's lines are printed for an operator — so each error
+    //     leaves its carrier through the console exit, which keeps the line structure and the
+    //     length a manifest diagnostic needs while showing a hostile control character rather than
+    //     acting on it.
+    def "loadPipeline renders every invalid-manifest error through the console exit"() {
+        given: 'a loader that reports two problems, one of them quoting a hostile manifest value'
+        def hostile = 'stage \u001B[2Kname'
+        def errors = [
+            new ConfigError('.gnomish/pipeline.yaml', 'stages[0].name', hostile),
+            new ConfigError('.gnomish/pipeline.yaml', 'stages[1]', 'missing name')
+        ]
+
+        when:
+        TakeCommandSupport.loadPipeline(
+                Path.of('/projects/widgets'), { dir ->
+                    new LoadOutcome.Invalid(errors)
+                } as PipelineSource)
+
+        then:
+        def failure = thrown(PipelineLoadFailedException)
+        failure.renderedErrors() == errors.collect { it.render().forConsole() }
+
+        and: 'the escape reached the operator as visible notation, never as a live control sequence'
+        failure.renderedErrors()[0].contains('^[')
+        !failure.renderedErrors()[0].contains('\u001B')
     }
 }

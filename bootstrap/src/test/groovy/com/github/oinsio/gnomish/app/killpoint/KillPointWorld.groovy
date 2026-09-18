@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
 /**
@@ -80,7 +81,7 @@ class KillPointWorld implements BareGitRepoFixture {
     TaskJsonDto tipTask() {
         String blob = "gnomish/${taskId}:${TASK_JSON}"
         gitExitCode(repoDir, 'cat-file', '-e', blob) == 0
-                ? TaskJsonMapper.readDto(gitOutput(repoDir, 'show', blob))
+                ? TaskJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(repoDir, 'show', blob)))
                 : null
     }
 

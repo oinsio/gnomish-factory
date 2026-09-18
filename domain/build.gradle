@@ -33,6 +33,13 @@ dependencies {
     // configuration changes who compiles against it, not who resolves it.
     implementation project(':operatorevent')
 
+    // The untrusted-text leaf (FR1, design D3/D4 of type-untrusted-text): the domain's own
+    // value model names the carrier — `Verdict.CannotVerify` carries what a failed check said,
+    // and a check's words are the medium's, not the factory's. `api`, not `implementation`:
+    // the type sits on this module's public surface, so every consumer compiles against it —
+    // and, like `:operatorevent`, it is a JDK-only leaf, so the domain stays framework-free.
+    api project(':untrustedtext')
+
     // Version management only (no artifacts): slf4j-api, logback and the JUnit
     // BOM behind opentest4j are all BOM-pinned in this project rather than
     // versioned in the catalog, so every module that uses them imports the same
@@ -65,5 +72,8 @@ dependencies {
 layering {
     allowedProjects = [
         ':operatorevent',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, design D4 of
+        // type-untrusted-text): named directly by the domain's own value model.
+        ':untrustedtext',
     ]
 }

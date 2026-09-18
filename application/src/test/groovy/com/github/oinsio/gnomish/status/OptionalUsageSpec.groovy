@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -60,7 +61,7 @@ class OptionalUsageSpec extends Specification {
                 0,
                 [attempt],
                 ExecutorUsage.none() + humanRound)
-        def context = new TaskContext("manual-task-1", "Human-only task", "body", [])
+        def context = new TaskContext("manual-task-1", UntrustedText.tracker("Human-only task"), UntrustedText.tracker("body"), [])
 
         and: "a realistic StatusReport, mirroring StatusReportJsonMapperSpec's construction pattern"
         def report = StatusReport.build(context, state, 3, LiveActivity.idle())

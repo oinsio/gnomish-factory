@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -46,12 +47,12 @@ class AbortHandlerSpec extends Specification {
         def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
-        def result = handler.handle(REF, STATE, 'connection reset', facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('connection reset'), facts, THRESHOLD, INSTANCE)
 
         then:
-        1 * tracker.recordAbort(REF, new AbortRecord('connection reset', INSTANCE.value(), CLOCK.instant()))
+        1 * tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('connection reset'), INSTANCE.value(), CLOCK.instant()))
         0 * tracker.park(*_)
-        result == new TakeResult.Aborted(STATE, 'connection reset')
+        result == new TakeResult.Aborted(STATE, UntrustedText.subprocess('connection reset'))
 
         and: 'FR15 of harden-logging-observability: every abort announces itself as a coded ERROR naming the task'
         def event = logs.list.find {
@@ -76,7 +77,7 @@ class AbortHandlerSpec extends Specification {
         def crash = new IllegalStateException('the box died mid-round')
 
         when:
-        handler.handle(REF, STATE, 'uncaught exception during the take run', facts, THRESHOLD, INSTANCE,
+        handler.handle(REF, STATE, UntrustedText.subprocess('uncaught exception during the take run'), facts, THRESHOLD, INSTANCE,
                 RecoveryCause.INSTANCE_CRASH, crash)
 
         then: 'the with-throwable twin code, with the throwable attached and not merely printed'
@@ -106,7 +107,7 @@ class AbortHandlerSpec extends Specification {
         def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
-        handler.handle(REF, STATE, 'persist failed: disk full', facts, THRESHOLD, INSTANCE,
+        handler.handle(REF, STATE, UntrustedText.subprocess('persist failed: disk full'), facts, THRESHOLD, INSTANCE,
                 RecoveryCause.INSTANCE_CRASH, null)
 
         then:
@@ -129,7 +130,7 @@ class AbortHandlerSpec extends Specification {
         def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-17T09:00:00Z'))
 
         when:
-        def result = handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('disk full'), facts, THRESHOLD, INSTANCE)
 
         then:
         0 * tracker.recordAbort(*_)
@@ -154,7 +155,7 @@ class AbortHandlerSpec extends Specification {
         }
 
         when:
-        handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+        handler.handle(REF, STATE, UntrustedText.subprocess('disk full'), facts, THRESHOLD, INSTANCE)
 
         then: 'the report carries the streak count, the threshold, the prior abort time, and points to the per-abort entries'
         captured.contains('3 consecutive automatic attempts')
@@ -179,7 +180,7 @@ class AbortHandlerSpec extends Specification {
         }
 
         when:
-        handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+        handler.handle(REF, STATE, UntrustedText.subprocess('disk full'), facts, THRESHOLD, INSTANCE)
 
         then:
         !captured.toLowerCase().contains('previous abort')
@@ -199,7 +200,7 @@ class AbortHandlerSpec extends Specification {
         }
 
         when:
-        def result = handler.handle(REF, STATE, 'reconcile failed', facts, THRESHOLD, INSTANCE,
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('reconcile failed'), facts, THRESHOLD, INSTANCE,
                 RecoveryCause.RECOVERY_FAILURE)
 
         then: 'the same threshold trips, and the report splits the streak by cause'
@@ -214,12 +215,11 @@ class AbortHandlerSpec extends Specification {
     // the next instance reconstructs the streak with its causes intact
     def "a failed repair below the fuse records its category on the marker"() {
         when:
-        handler.handle(REF, STATE, 'reconcile failed', AbortFacts.none(), THRESHOLD, INSTANCE,
+        handler.handle(REF, STATE, UntrustedText.subprocess('reconcile failed'), AbortFacts.none(), THRESHOLD, INSTANCE,
                 RecoveryCause.RECOVERY_FAILURE)
 
         then:
-        1 * tracker.recordAbort(REF, new AbortRecord(
-                        'reconcile failed', INSTANCE.value(), CLOCK.instant(), RecoveryCause.RECOVERY_FAILURE))
+        1 * tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('reconcile failed'), INSTANCE.value(), CLOCK.instant(), RecoveryCause.RECOVERY_FAILURE))
     }
 
     // NFR-R2: "a dead tracker never blocks the abort itself" applies at the fuse
@@ -234,7 +234,7 @@ class AbortHandlerSpec extends Specification {
         def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
-        def result = handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('disk full'), facts, THRESHOLD, INSTANCE)
 
         then:
         noExceptionThrown()
@@ -266,11 +266,11 @@ class AbortHandlerSpec extends Specification {
         def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
-        def result = handler.handle(REF, STATE, 'tracker down', facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('tracker down'), facts, THRESHOLD, INSTANCE)
 
         then:
         noExceptionThrown()
-        result == new TakeResult.Aborted(STATE, 'tracker down')
+        result == new TakeResult.Aborted(STATE, UntrustedText.subprocess('tracker down'))
 
         and: 'FR15: the unrecorded attempt under-counts the fuse, so the swallow leaves a coded ERROR'
         def event = logs.list.find {
@@ -293,14 +293,14 @@ class AbortHandlerSpec extends Specification {
         def facts = AbortFacts.none()
 
         when:
-        def result = handler.handle(REF, STATE, 'tracker outage', facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess('tracker outage'), facts, THRESHOLD, INSTANCE)
 
         then: 'recordAbort is called exactly once — no bounded retry loop on the abort path'
         1 * tracker.recordAbort(*_) >> {
             throw new TrackerUnavailableException('tracker unreachable')
         }
         noExceptionThrown()
-        result == new TakeResult.Aborted(STATE, 'tracker outage')
+        result == new TakeResult.Aborted(STATE, UntrustedText.subprocess('tracker outage'))
     }
 
     // D3: both abort triggers (engine Aborted outcome, uncaught run exception)
@@ -311,11 +311,11 @@ class AbortHandlerSpec extends Specification {
         def facts = new AbortFacts(0, null)
 
         when: 'the engine-outcome-derived cause is handled'
-        def fromEngineOutcome = handler.handle(REF, STATE, 'persist failed: disk full', facts, THRESHOLD, INSTANCE)
+        def fromEngineOutcome = handler.handle(REF, STATE, UntrustedText.subprocess('persist failed: disk full'), facts, THRESHOLD, INSTANCE)
 
         and: 'an uncaught-exception-derived cause is handled the same way'
         def fromUncaughtException =
-                handler.handle(REF, STATE, 'uncaught: NullPointerException', facts, THRESHOLD, INSTANCE)
+                handler.handle(REF, STATE, UntrustedText.subprocess('uncaught: NullPointerException'), facts, THRESHOLD, INSTANCE)
 
         then: 'both reach the below-fuse Aborted branch via the same protocol'
         2 * tracker.recordAbort(*_)

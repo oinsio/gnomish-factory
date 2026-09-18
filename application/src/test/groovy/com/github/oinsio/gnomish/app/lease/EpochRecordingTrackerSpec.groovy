@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -91,7 +92,7 @@ class EpochRecordingTrackerSpec extends Specification {
         where:
         operation | write
         'recordAbort' | { Tracker t ->
-            t.recordAbort(REF, new AbortRecord('infra', 'gnomish-a-1', Instant.EPOCH))
+            t.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('infra'), 'gnomish-a-1', Instant.EPOCH))
         }
         'park' | { Tracker t ->
             t.park(REF, ParkReason.ESCALATION, 'report')
@@ -102,7 +103,7 @@ class EpochRecordingTrackerSpec extends Specification {
     def "forwards the terminal writes to the live tracker unchanged"() {
         given:
         holdTenure()
-        def record = new AbortRecord('infra', 'gnomish-a-1', Instant.EPOCH)
+        def record = new AbortRecord(UntrustedText.subprocess('infra'), 'gnomish-a-1', Instant.EPOCH)
 
         when:
         tracker.recordAbort(REF, record)
@@ -159,15 +160,15 @@ class EpochRecordingTrackerSpec extends Specification {
     def "forwards the reading operations and returns the tracker's own answers"() {
         given:
         def ready = [
-            new ReadyTask(REF, AbortFacts.none(), false, false, 'title')
+            new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('title'))
         ]
-        def task = new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'),
+        def task = new TrackerTask(REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false)
         def replies = [
             new HumanReply('do it', Instant.EPOCH)
         ]
         def open = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-a-1'), VERSION, 'title')
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-a-1'), VERSION, UntrustedText.tracker('title'))
         ]
         def mismatch = new RemoveStaleClaimResult.Mismatch(VERSION)
         def repaired = new RepairIndexResult.Repaired(FACTS)

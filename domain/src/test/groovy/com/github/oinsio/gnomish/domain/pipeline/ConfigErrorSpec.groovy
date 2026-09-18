@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -28,7 +29,12 @@ class ConfigErrorSpec extends Specification {
         def error = new ConfigError('config.yaml', 'schemaVersion', 'missing required field')
 
         expect: 'the rendering names the file, the locator and the problem'
-        error.render() == 'config.yaml: schemaVersion: missing required field'
+        error.render().forLog() == 'config.yaml: schemaVersion: missing required field'
+
+        and: 'and it IS the manifest family\'s mint of that joined line — one mint, in the record'
+        // Design D10 of type-untrusted-text: the record's three components stay factory-authored
+        // Strings, and this one line is where the manifest fragment they quote leaves the loader.
+        error.render() == UntrustedText.manifest('config.yaml: schemaVersion: missing required field')
     }
 
     // NFR-O1: an error that cannot name its location or problem is useless — rejected

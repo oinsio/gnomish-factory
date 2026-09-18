@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The scripted
@@ -19,20 +20,20 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
  */
 class ScriptedBuiltinCheckRunnerContractSpec extends CheckRunnerContract {
 
-    private static Verdict scriptedVerdict(CheckRunnerContract.VerdictVariant variant) {
-        switch (variant) {
-                    case CheckRunnerContract.VerdictVariant.PASS -> new Verdict.Pass()
-                    case CheckRunnerContract.VerdictVariant.FAIL_WITH_FINDINGS ->
+    private static Verdict scriptedVerdict(VerdictVariant variant) {
+        return switch (variant) {
+                    case VerdictVariant.PASS -> new Verdict.Pass()
+                    case VerdictVariant.FAIL_WITH_FINDINGS ->
                     new Verdict.Fail([
                         new Finding('a file is missing', 'src/Foo.java', null)
                     ])
-                    case CheckRunnerContract.VerdictVariant.CANNOT_VERIFY ->
-                    new Verdict.CannotVerify('check id unknown', '')
+                    case VerdictVariant.CANNOT_VERIFY ->
+                    new Verdict.CannotVerify(UntrustedText.subprocess('check id unknown'), UntrustedText.subprocess(''))
                 }
     }
 
     @Override
-    protected Optional<Verdict> arrange(CheckRunnerContract.VerdictVariant variant) {
+    protected Optional<Verdict> arrange(VerdictVariant variant) {
         def runner = ScriptedBuiltinCheckRunner.fixed(scriptedVerdict(variant))
         Optional.of(runner.run(new VerifyCheck.Builtin('files_exist', [:]), new FakeWorkspace()))
     }

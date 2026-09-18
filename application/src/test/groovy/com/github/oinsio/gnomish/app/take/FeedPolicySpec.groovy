@@ -1,8 +1,12 @@
 package com.github.oinsio.gnomish.app.take
 
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.fresh
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.returned
+
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -34,20 +38,12 @@ class FeedPolicySpec extends Specification {
                 }
     }
 
-    private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
-    }
-
-    private static ReadyTask returned(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
-    }
-
     private static ReadyTask backedOff(String id) {
-        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, 'fixture title')
+        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, UntrustedText.tracker('fixture title'))
     }
 
     private static ReadyTask finished(String id, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, true, 'fixture title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, true, UntrustedText.tracker('fixture title'))
     }
 
     // FR10, D10 (delegate correctness): backed-off entries never appear among candidates

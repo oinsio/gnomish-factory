@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -16,7 +17,7 @@ class ReadyTaskSpec extends Specification {
         def facts = new AbortFacts(1, null)
 
         when:
-        def readyTask = new ReadyTask(ref, facts, false, false, 'fixture title')
+        def readyTask = new ReadyTask(ref, facts, false, false, UntrustedText.tracker('fixture title'))
 
         then:
         readyTask.ref() == ref
@@ -30,8 +31,8 @@ class ReadyTaskSpec extends Specification {
         def facts = AbortFacts.none()
 
         expect:
-        new ReadyTask(ref, facts, true, false, 'fixture title').returned()
-        !new ReadyTask(ref, facts, false, false, 'fixture title').returned()
+        new ReadyTask(ref, facts, true, false, UntrustedText.tracker('fixture title')).returned()
+        !new ReadyTask(ref, facts, false, false, UntrustedText.tracker('fixture title')).returned()
     }
 
     // FR1: ready tasks are values — equal content means equal entries
@@ -40,12 +41,12 @@ class ReadyTaskSpec extends Specification {
         def ref = new TaskRef('github:owner/repo#42')
 
         expect:
-        new ReadyTask(ref, AbortFacts.none(), false, false, 'fixture title') == new ReadyTask(ref, AbortFacts.none(), false, false, 'fixture title')
+        new ReadyTask(ref, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title')) == new ReadyTask(ref, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
 
         and: 'a differing abortFacts makes them unequal'
-        new ReadyTask(ref, AbortFacts.none(), false, false, 'fixture title') != new ReadyTask(ref, new AbortFacts(1, null), false, false, 'fixture title')
+        new ReadyTask(ref, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title')) != new ReadyTask(ref, new AbortFacts(1, null), false, false, UntrustedText.tracker('fixture title'))
 
         and: 'FR7: a differing returned makes them unequal'
-        new ReadyTask(ref, AbortFacts.none(), false, false, 'fixture title') != new ReadyTask(ref, AbortFacts.none(), true, false, 'fixture title')
+        new ReadyTask(ref, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title')) != new ReadyTask(ref, AbortFacts.none(), true, false, UntrustedText.tracker('fixture title'))
     }
 }

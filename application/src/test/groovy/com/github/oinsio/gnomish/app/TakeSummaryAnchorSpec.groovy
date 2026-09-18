@@ -23,6 +23,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -140,7 +141,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     def "a bare take that delivers ends in the same summary line"() {
         given:
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), true, false, 'title')
+            new ReadyTask(REF, AbortFacts.none(), true, false, UntrustedText.tracker('title'))
         ]
         tracker.listOpen() >> []
         tracker.fetchTask(REF) >>> [

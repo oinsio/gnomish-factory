@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Thrown when a round's stream-json output carries no {@link
@@ -54,12 +56,15 @@ public final class MissingResultEventException extends RuntimeException {
     /** Passed as {@code bytesRead} when the caller has no byte accounting to report. */
     static final long UNKNOWN_VOLUME = -1L;
 
+    /** What the message names when even the init event is absent, so no session id was read. */
+    private static final String UNKNOWN_SESSION = "unknown";
+
     /**
-     * @param sessionId the round's session id read from the init event, or a
-     *     placeholder describing the round when even the init event is absent;
-     *     never null, folded into the exception message for diagnosability
+     * @param sessionId the round's session id read from the init event, as the agent wrote it, or
+     *     {@code null} when even the init event is absent; folded into the exception message
+     *     through its log exit, since the message is rendered into a log record
      */
-    public MissingResultEventException(String sessionId) {
+    public MissingResultEventException(@Nullable UntrustedText sessionId) {
         this(sessionId, UNKNOWN_VOLUME, 0);
     }
 
@@ -69,8 +74,9 @@ public final class MissingResultEventException extends RuntimeException {
      *     #UNKNOWN_VOLUME} when the caller kept no byte accounting
      * @param eventCount how many stream-json events were parsed out of them
      */
-    public MissingResultEventException(String sessionId, long bytesRead, int eventCount) {
-        super("stream-json carried no result event for round (session: " + sessionId + ")"
+    public MissingResultEventException(@Nullable UntrustedText sessionId, long bytesRead, int eventCount) {
+        super("stream-json carried no result event for round (session: "
+                + (sessionId == null ? UNKNOWN_SESSION : sessionId) + ")"
                 + volume(bytesRead, eventCount) + truncationHint(bytesRead));
     }
 

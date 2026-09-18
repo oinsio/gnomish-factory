@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -19,8 +20,10 @@ class BranchTipFactsReaderSpec extends Specification {
         Map<String, String> files = [:]
         boolean cleaned = false
 
-        Optional<String> readAtTip(String path) {
-            Optional.ofNullable(files[path])
+        Optional<UntrustedText> readAtTip(String path) {
+            Optional.ofNullable(files[path]).map {
+                UntrustedText.branchDocument(it)
+            }
         }
 
         boolean cleanupCommitInHistory() {

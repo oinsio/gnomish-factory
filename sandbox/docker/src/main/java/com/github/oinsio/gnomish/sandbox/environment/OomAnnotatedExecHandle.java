@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
  * runtime/cgroup combinations an OOM kill of an exec'd child leaves the container's
  * own flag {@code false}, so a missing annotation is the status quo, never a denial.
  */
+@UntrustedParser
 final class OomAnnotatedExecHandle implements ExecHandle {
 
     /** The exit code a SIGKILL'd process reports — 128 + 9; also what an OOM kill looks like. */
@@ -88,7 +90,9 @@ final class OomAnnotatedExecHandle implements ExecHandle {
     private void annotate(int exitCode) {
         try {
             DockerResult state = docker.run(DockerCommands.inspectContainerState(container));
-            if (state.ok() && DockerCommands.oomKilled(state.stdout())) {
+            // @UntrustedParser warrant (design D11): the inspect line becomes one boolean — did
+            //     the container's cgroup OOM killer fire — and no text leaves the carrier.
+            if (state.ok() && DockerCommands.oomKilled(state.stdout().forParsing())) {
                 log.warn(
                         OperatorEvent.CONTAINER_EXEC_LIKELY_OOM_KILLED.head()
                                 + "a process in container {} exited {} and the container reports OOMKilled:"

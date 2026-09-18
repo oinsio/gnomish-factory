@@ -49,7 +49,7 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         given:
         def repo = initWorkingRepo(tempDir, 'salvage-me')
         commit(repo, 'a.txt', 'first')
-        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         Files.writeString(repo.resolve('leftover.txt'), 'half-done work')
         def salvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
 
@@ -57,9 +57,9 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         salvage.salvage('PROJ-1')
 
         then: 'a new commit landed with the fixed salvage message'
-        def tipAfter = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipAfter = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         tipAfter != tipBefore
-        runner.run(repo, 'log', '-1', '--format=%s').stdout().trim() == 'gnomish: salvage'
+        runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == 'gnomish: salvage'
 
         and: 'the leftover is committed, not discarded'
         Files.exists(repo.resolve('leftover.txt'))
@@ -88,15 +88,15 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE).salvage('PROJ-1')
 
         then: 'the gnome\'s work file is committed'
-        runner.run(repo, 'show', 'HEAD:work.txt').stdout().trim() == 'half-done work'
+        runner.run(repo, 'show', 'HEAD:work.txt').stdout().forParsing().trim() == 'half-done work'
 
         and: 'the factory\'s state.json is the tip\'s, not the dirty one, and the stray never landed'
-        runner.run(repo, 'show', 'HEAD:.gnomish-task/state.json').stdout().trim() == '{"recorded":true}'
+        runner.run(repo, 'show', 'HEAD:.gnomish-task/state.json').stdout().forParsing().trim() == '{"recorded":true}'
         runner.run(repo, 'cat-file', '-e', 'HEAD:.gnomish-task/task.json').exitCode() != 0
         !Files.exists(repo.resolve('.gnomish-task/task.json'))
 
         and: 'the one gnome-writable path under .gnomish-task/ is salvaged like any work file'
-        runner.run(repo, 'show', 'HEAD:.gnomish-task/decisions/build-a0.json').stdout().trim() == '{"asked":true}'
+        runner.run(repo, 'show', 'HEAD:.gnomish-task/decisions/build-a0.json').stdout().forParsing().trim() == '{"asked":true}'
     }
 
     // FR5: when the ONLY dirt was a factory file, the restore leaves nothing to salvage — and an
@@ -108,14 +108,14 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{"recorded":true}')
         runner.run(repo, 'add', '-A')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
-        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{ truncated')
 
         when:
         new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE).salvage('PROJ-1')
 
         then: 'no salvage commit, and the tip\'s state.json is back in the worktree'
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim() == tipBefore
+        runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim() == tipBefore
         Files.readString(repo.resolve('.gnomish-task/state.json')) == '{"recorded":true}'
     }
 
@@ -123,21 +123,21 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         given:
         def repo = initWorkingRepo(tempDir, 'clean-salvage')
         commit(repo, 'a.txt', 'first')
-        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def salvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
 
         when:
         salvage.salvage('PROJ-2')
 
         then:
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim() == tipBefore
+        runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim() == tipBefore
     }
 
     def "discard() resets tracked and untracked leftovers to HEAD, leaving HEAD unchanged"() {
         given:
         def repo = initWorkingRepo(tempDir, 'discard-me')
         commit(repo, 'a.txt', 'first')
-        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
 
         and: 'a modified tracked file plus a new untracked file — both uncommitted leftovers'
         Files.writeString(repo.resolve('a.txt'), 'modified content')
@@ -148,7 +148,7 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         salvage.discard()
 
         then: 'HEAD is unchanged — the last recorded round is still the tip'
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim() == tipBefore
+        runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim() == tipBefore
 
         and: 'the tracked file is back to its committed content'
         Files.readString(repo.resolve('a.txt')) == 'first'
@@ -205,14 +205,14 @@ exec git "\$@"
         given:
         def repo = initWorkingRepo(tempDir, 'clean-discard')
         commit(repo, 'a.txt', 'first')
-        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def salvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
 
         when:
         salvage.discard()
 
         then:
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim() == tipBefore
+        runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim() == tipBefore
     }
 
     // FR5: the restore is what makes the branch — not the dirty worktree — the source of truth for
@@ -244,7 +244,7 @@ exec git "\$@"
         ex.message.contains('PROJ-4')
 
         and: 'and the truncated state.json never reached a commit'
-        runner.run(repo, 'show', 'HEAD:.gnomish-task/state.json').stdout().trim() == '{"recorded":true}'
+        runner.run(repo, 'show', 'HEAD:.gnomish-task/state.json').stdout().forParsing().trim() == '{"recorded":true}'
 
         cleanup:
         Files.setPosixFilePermissions(stateDir, original)

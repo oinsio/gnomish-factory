@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -82,10 +80,6 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
     private GitModeRunner newRunner() {
         def assembly = newAssembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')))
         new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
-    }
-
-    private static TaskContext context(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     // FR11: after a git-mode round commits, the round commit itself (design D11's push scope is

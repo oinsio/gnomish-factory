@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.InvalidTreePathException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -45,6 +46,13 @@ import org.jspecify.annotations.Nullable;
  */
 public final class FilesExistCheckRunner implements BuiltinCheckRunner {
 
+    /**
+     * The empty {@code details} of a verdict with no underlying cause to preserve. Minted in this
+     * check's own family — every sentence it writes is about paths its {@code .gnomish/} manifest
+     * named — so the two components of a verdict always share one provenance.
+     */
+    private static final UntrustedText NO_DETAILS = UntrustedText.manifest("");
+
     private final @Nullable GitObjects attemptReader;
 
     /** The host-modes runner: filesystem existence only, no factory-clone reader bound. */
@@ -75,7 +83,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         try {
             files = readFiles(check.params());
         } catch (MalformedParamsException e) {
-            return new Verdict.CannotVerify(e.reason(), "");
+            return new Verdict.CannotVerify(UntrustedText.manifest(e.reason()), NO_DETAILS);
         }
 
         if (workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace) {
@@ -90,7 +98,8 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         for (String file : files) {
             PathSafety.Resolution resolution = PathSafety.resolveWithinRoot(root, file);
             if (resolution instanceof PathSafety.Escapes(String ref)) {
-                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + ref, "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + ref), NO_DETAILS);
             }
             PathSafety.Within within = (PathSafety.Within) resolution;
             if (!Files.exists(within.path())) {
@@ -111,7 +120,8 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     private Verdict runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
         if (attemptReader == null) {
             return new Verdict.CannotVerify(
-                    "files_exist has no factory-clone reader bound for the sandboxed workspace", "");
+                    UntrustedText.manifest("files_exist has no factory-clone reader bound for the sandboxed workspace"),
+                    NO_DETAILS);
         }
         ObjectId commit = ObjectId.of(workspace.attemptCommitSha());
         List<Finding> findings = new ArrayList<>();
@@ -121,7 +131,8 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
                     findings.add(new Finding("missing file: " + file, file, null));
                 }
             } catch (InvalidTreePathException e) {
-                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + file, "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + file), NO_DETAILS);
             }
         }
         return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
@@ -142,9 +153,9 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     @DoNotMutate
     private static Verdict opaqueWorkspaceVerdict(Workspace workspace) {
         return new Verdict.CannotVerify(
-                "files_exist requires a DirectoryWorkspace, got "
-                        + workspace.getClass().getName(),
-                "");
+                UntrustedText.manifest("files_exist requires a DirectoryWorkspace, got "
+                        + workspace.getClass().getName()),
+                NO_DETAILS);
     }
 
     /**

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -62,7 +63,9 @@ class GithubMarkerSpec extends Specification {
         parsed.get().instance() == 'gnomish-factory-x7k2q1'
         parsed.get().at() == at
         parsed.get().version() == 1
-        parsed.get().humanText() == humanText
+        // Compared as a carrier: the round trip is about the bytes, and the human text is
+        // legitimately multi-line, which the log exit would flatten.
+        parsed.get().humanText() == UntrustedText.tracker(humanText)
 
         where:
         kind << GithubMarkerKind.values()
@@ -78,7 +81,9 @@ class GithubMarkerSpec extends Specification {
         def parsed = GithubMarker.parse(body)
 
         then:
-        parsed.get().humanText() == humanText
+        // Compared as a carrier: the round trip is about the bytes, and the human text is
+        // legitimately multi-line, which the log exit would flatten.
+        parsed.get().humanText() == UntrustedText.tracker(humanText)
     }
 
     def "parse returns empty for a comment with no gnomish structural marker (an operator's own comment)"() {
@@ -134,6 +139,11 @@ class GithubMarkerSpec extends Specification {
         'missing fields' | '<!-- gnomish {"version":1} -->\nhello' | 'missing kind, instance or at'
         'unknown kind' | '<!-- gnomish {"kind":"reticulate-splines","instance":"gnomish-factory-x7k2q1",' +
                 '"at":"2026-07-20T12:00:00Z","version":1} -->\nhello' | 'not a value this version understands'
+        // FR10 of type-untrusted-text: the instance id is an identity held to InstanceIdSyntax, so
+        // a forged one is dropped exactly like an unreadable kind — a marker naming a holder the
+        // factory cannot vouch for is worse than a missing marker.
+        'forged instance id' | '<!-- gnomish {"kind":"claim","instance":"@everyone",' +
+                '"at":"2026-07-20T12:00:00Z","version":1} -->\nhello' | 'an identity may not carry'
     }
 
     // FR5: an operator's own reply is not a degradation — warning on every human comment of every

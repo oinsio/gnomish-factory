@@ -40,7 +40,7 @@ public final class StatusTextRenderer {
         out.append("Task: ")
                 .append(report.taskId())
                 .append(" — ")
-                .append(report.title())
+                .append(report.title().forConsole())
                 .append('\n');
         appendStage(out, report);
         appendAttempts(out, report);

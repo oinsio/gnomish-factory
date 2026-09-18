@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
@@ -21,7 +22,7 @@ class ToolTraceBuilderSpec extends Specification {
     // FR6, D3: plain-round fixture — one top-level Write call, duration = read-time gap tool_use -> tool_result
     def "builds a single top-level ToolCall for the plain-round fixture with duration to its tool_result"() {
         given: 'the plain-round fixture parsed into timestamped events'
-        def events = parser.parse(readerOf('plain-round'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
         def toolUseReadAt = events.find {
             it.event() instanceof AgentEvent.AssistantEvent &&
             (it.event() as AgentEvent.AssistantEvent).content().any { c ->
@@ -46,7 +47,7 @@ class ToolTraceBuilderSpec extends Specification {
     // FR6, D3: subagent-round fixture — only the top-level Task call enters the trace, nested Grep excluded
     def "excludes nested subagent tool calls, keeping only the top-level Task call"() {
         given: 'the subagent-round fixture parsed into timestamped events'
-        def events = parser.parse(readerOf('subagent-round'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
 
         when: 'the trace is built'
         def trace = builder.buildTrace(events, events.last().readAt())
@@ -60,7 +61,7 @@ class ToolTraceBuilderSpec extends Specification {
     // FR6, D3: premature-death fixture — an orphaned top-level tool_use gets duration to roundEnd, no exception
     def "computes an orphaned top-level tool call's duration to the supplied roundEnd"() {
         given: 'the premature-death fixture parsed into timestamped events (no tool_result ever arrives)'
-        def events = parser.parse(readerOf('premature-death'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('premature-death'))
         def toolUseReadAt = events.find {
             it.event() instanceof AgentEvent.AssistantEvent
         }.readAt()
@@ -181,11 +182,5 @@ class ToolTraceBuilderSpec extends Specification {
         then: 'the top-level call is still open (orphaned), duration measured to roundEnd'
         trace.size() == 1
         trace[0].duration() == Duration.ofSeconds(30)
-    }
-
-    private static BufferedReader readerOf(String scenario) {
-        def resource = ToolTraceBuilderSpec.getResource("/fake-agent/scenarios/${scenario}/stdout.jsonl")
-        assert resource != null: "fixture not found for scenario '${scenario}'"
-        new BufferedReader(new InputStreamReader(resource.openStream(), 'UTF-8'))
     }
 }

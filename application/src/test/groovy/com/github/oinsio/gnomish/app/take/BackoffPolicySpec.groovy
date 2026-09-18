@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.take
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -87,9 +88,9 @@ class BackoffPolicySpec extends Specification {
     // backed-off entries
     def "filterEligible preserves order and drops only backed-off entries"() {
         given: 'a mix of fresh, backed-off, and expired-backoff tasks in queue order'
-        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, false, 'fixture title')
-        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, 'fixture title')
-        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW - Duration.ofMinutes(5)), false, false, 'fixture title')
+        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
+        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, UntrustedText.tracker('fixture title'))
+        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW - Duration.ofMinutes(5)), false, false, UntrustedText.tracker('fixture title'))
         def tasks = [fresh, backedOff, expired]
 
         when:

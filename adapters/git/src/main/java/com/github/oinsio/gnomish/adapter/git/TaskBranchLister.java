@@ -9,8 +9,9 @@ import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,6 +51,7 @@ import org.slf4j.LoggerFactory;
  * <p>Implements FR13 of add-git-workflow; FR16, FR2 of harden-task-branch-contract; FR13 of
  * harden-logging-observability.
  */
+@UntrustedParser
 public final class TaskBranchLister {
 
     private static final Logger log = LoggerFactory.getLogger(TaskBranchLister.class);
@@ -105,11 +107,15 @@ public final class TaskBranchLister {
                     "ref enumeration of {} exited {}: {}",
                     pattern + "gnomish/*",
                     result.exitCode(),
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
             throw new TaskListingFailedException(
-                    pattern + "gnomish/*", result.exitCode(), LogText.forLog(result.stderr()));
+                    pattern + "gnomish/*", result.exitCode(), result.stderr().forLog());
         }
+        // @UntrustedParser warrant (design D11): every line kept is a ref name for-each-ref
+        //     printed, held to the factory's own gnomish/ prefix below, and used only as a git
+        //     revision argument — the rows a reader sees are rendered by the board renderer.
         return result.stdout()
+                .forParsing()
                 .lines()
                 .filter(line -> !line.isBlank() && line.startsWith(prefix))
                 .toList();
@@ -124,12 +130,12 @@ public final class TaskBranchLister {
         String branchName = ref.substring(prefix.length());
         return switch (tipEnvelopeReader.read(source)) {
             case TipEnvelopeRead.NoState(BranchShape shape) -> new TaskListRow(branchName, null, 0, null, shape);
-            case TipEnvelopeRead.Loaded(BranchShape shape, String taskJson, String stateJson) ->
+            case TipEnvelopeRead.Loaded(BranchShape shape, UntrustedText taskJson, UntrustedText stateJson) ->
                 contentRow(shape, taskJson, stateJson);
         };
     }
 
-    private static TaskListRow contentRow(BranchShape shape, String taskJson, String stateJson) {
+    private static TaskListRow contentRow(BranchShape shape, UntrustedText taskJson, UntrustedText stateJson) {
         var taskContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(taskJson));
         TaskState state = StateJsonMapper.fromDto(StateJsonMapper.readDto(stateJson));
         return new TaskListRow(

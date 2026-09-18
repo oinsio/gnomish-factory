@@ -1,8 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
-import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -41,8 +40,9 @@ final class GitShowTip {
         this.revision = revision;
     }
 
-    Optional<String> readAtTip(String path) {
-        GitCommandResult result = answered("show", runner.run(repo, "show", revision + ":" + path));
+    Optional<UntrustedText> readAtTip(String path) {
+        GitCommandResult result =
+                GitReadGate.answered(revision, "show", runner.run(repo, "show", revision + ":" + path));
         if (result.exitCode() != 0) {
             warnAbsent(path, result);
             return Optional.empty();
@@ -64,7 +64,7 @@ final class GitShowTip {
                 subject,
                 revision,
                 result.exitCode(),
-                LogText.forLog(result.stderr()));
+                result.stderr().forLog());
     }
 
     /**
@@ -77,7 +77,8 @@ final class GitShowTip {
      * exactly as a clean no-match does, and the two need no distinction here.
      */
     boolean cleanupCommitInHistory() {
-        GitCommandResult result = answered(
+        GitCommandResult result = GitReadGate.answered(
+                revision,
                 "rev-list",
                 runner.run(
                         repo,
@@ -87,21 +88,5 @@ final class GitShowTip {
                         "--grep=" + ServiceCommitMessages.cleanup(),
                         revision));
         return !result.stdout().isBlank();
-    }
-
-    /**
-     * The one gate every read above passes through: a result is a fact about the tip only when the
-     * invocation ran to its own exit. An interrupted read's capture may also be a prefix of the
-     * real output ({@code CaptureRunner} reports a clean exit under a set interrupt flag as
-     * {@link Termination#INTERRUPTED}), so a truncated envelope cannot reach the parser and be
-     * diagnosed as corruption either.
-     */
-    private GitCommandResult answered(String command, GitCommandResult result) {
-        return switch (result.termination()) {
-            case EXITED -> result;
-            case TIMED_OUT, INTERRUPTED ->
-                throw new BranchTipUnavailableException(
-                        revision, command, result.termination().name());
-        };
     }
 }

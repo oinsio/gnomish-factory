@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -39,12 +40,14 @@ public final class WorkingTreeLawSource implements LawSource {
     @Override
     public Read read(String ref) {
         return switch (LawPathWalk.walk(root, ref, tree)) {
-            case LawPathWalk.Escapes escapes -> new Unreadable("path escapes the configuration root: " + escapes.ref());
+            case LawPathWalk.Escapes escapes ->
+                new Unreadable(UntrustedText.manifest("path escapes the configuration root: " + escapes.ref()));
             case LawPathWalk.Symlinked symlinked ->
-                new Unreadable("a symlink is not a law file at '" + symlinked.segment() + "' under " + root);
+                new Unreadable(UntrustedText.manifest(
+                        "a symlink is not a law file at '" + symlinked.segment() + "' under " + root));
             case LawPathWalk.File file -> readFile(root.resolve(file.relative()));
             case LawPathWalk.Absent absent ->
-                new Unreadable("no law file at '" + root.resolve(absent.relative()) + "'");
+                new Unreadable(UntrustedText.manifest("no law file at '" + root.resolve(absent.relative()) + "'"));
             case LawPathWalk.Directory directory -> notARegularFile(root.resolve(directory.relative()));
             case LawPathWalk.Other other -> notARegularFile(root.resolve(other.relative()));
             case LawPathWalk.Root _ -> notARegularFile(root);
@@ -88,12 +91,12 @@ public final class WorkingTreeLawSource implements LawSource {
         try {
             return new Text(Files.readString(path));
         } catch (IOException e) {
-            return new Unreadable(e.getClass().getSimpleName() + ": " + e.getMessage());
+            return new Unreadable(UntrustedText.manifest(e.getClass().getSimpleName() + ": " + e.getMessage()));
         }
     }
 
     private static Unreadable notARegularFile(Path path) {
-        return new Unreadable("not a regular file, so not a law file: '" + path + "'");
+        return new Unreadable(UntrustedText.manifest("not a regular file, so not a law file: '" + path + "'"));
     }
 
     private static List<LawEntry> entries(Path directory) throws IOException {

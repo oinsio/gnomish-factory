@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.adapter.law.LawEntry;
 import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.law.WorkingTreeLawSource;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -120,7 +121,9 @@ public final class GnomishFiles {
     private static String readRequired(LawSource law, String name) throws IOException {
         return switch (law.read(name)) {
             case LawSource.Text(String text) -> text;
-            case LawSource.Unreadable(String reason) ->
+            case LawSource.Unreadable(UntrustedText reason) ->
+                // The reason quotes the target repository's own paths and its filesystem's words,
+                // so it reaches this message through the carrier's log exit (design D5).
                 throw new IOException("required file '" + name + "' cannot be read: " + reason);
         };
     }

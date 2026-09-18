@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,11 @@ import org.slf4j.LoggerFactory;
  * line per read, whatever the volume: the count is what tells an operator whether they are
  * looking at one odd event or a guard whose whole output the factory no longer parses. The
  * first malformed line's reason rides along so the aggregate is still diagnosable.
+ *
+ * <p>That reason is Jackson's echo of the offending bytes, so it is held as {@link UntrustedText}
+ * from the catch that produced it until the aggregate line renders it through the log exit — the
+ * text is stored here and logged later, which is exactly the shape an accessor-name gate at the
+ * log call could never see (design D5 of type-untrusted-text).
  */
 final class GuardDenialDrops {
 
@@ -20,9 +26,14 @@ final class GuardDenialDrops {
 
     private int malformed;
     private int withoutHost;
-    private @Nullable String firstReason;
+    private @Nullable UntrustedText firstReason;
 
-    void malformed(String reason) {
+    /**
+     * Counts one line the parser refused, keeping the first reason as the carrier it arrived in.
+     *
+     * @param reason why the line did not parse, as the malformed bytes' own carrier
+     */
+    void malformed(UntrustedText reason) {
         malformed++;
         if (firstReason == null) {
             firstReason = reason;
@@ -45,6 +56,6 @@ final class GuardDenialDrops {
                 key,
                 malformed,
                 withoutHost,
-                firstReason == null ? "none" : firstReason);
+                firstReason == null ? "none" : firstReason.forLog());
     }
 }

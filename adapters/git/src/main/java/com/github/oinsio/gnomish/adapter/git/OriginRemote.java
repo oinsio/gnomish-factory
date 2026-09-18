@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -19,6 +20,7 @@ import java.util.Optional;
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
+@UntrustedParser
 public final class OriginRemote {
 
     /** The remote name the factory pushes to and reads from; the factory never uses another. */
@@ -45,7 +47,10 @@ public final class OriginRemote {
         if (result.exitCode() != 0) {
             return Optional.empty();
         }
-        String url = result.stdout().trim();
+        // @UntrustedParser warrant (design D11): the origin URL is remote-controlled text, and it
+        //     leaves here only as a git argument and as CredentialScrub's subject — every caller
+        //     that shows it to a reader renders it through an exit first.
+        String url = result.stdout().forParsing().trim();
         return url.isEmpty() ? Optional.empty() : Optional.of(url);
     }
 

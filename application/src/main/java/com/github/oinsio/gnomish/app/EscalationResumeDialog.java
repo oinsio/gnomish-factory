@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.findings.TrackerFence;
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -9,8 +8,10 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Handles an {@code Escalated} outcome on behalf of {@link RunnerOutcomeLoop} (task 7.5,
@@ -76,10 +77,12 @@ public final class EscalationResumeDialog {
      * block by an exhaustive switch — no {@code default} arm — so a new variant fails to compile
      * here until its render is added (FR9): the text doubles as both the resume-dialog prompt
      * and the internal-error message for {@code PipelineMismatch}, and — via the take exits —
-     * as the tracker park report. {@code CannotVerify.details} is the one field carrying
-     * check-produced machine output (a judge's raw message, a command's output tail), so it is
-     * published only through the findings funnel's fence: sanitized, mention-escaped, and
-     * labeled untrusted (FR15 of add-sandbox-core); the other fields are factory-authored.
+     * as the tracker park report. Every field it renders is untrusted text — a check's own label
+     * derived from the target repository's manifest, a judge's raw message, a command's output
+     * tail, a stage name another instance recorded, an executor's failure cause — so each leaves
+     * its carrier through the comment exit: fenced, mention-escaped and labeled untrusted, with
+     * only the factory's own sentences outside the fences (FR15 of add-sandbox-core; design D6, D7
+     * of type-untrusted-text). The attempt limit is the one component that is a number.
      *
      * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core.
      *
@@ -97,15 +100,20 @@ public final class EscalationResumeDialog {
             case EscalationReport.AttemptsExhausted attemptsExhausted ->
                 "Attempt limit (" + attemptsExhausted.limit() + ") reached — every attempt failed quality.";
             case EscalationReport.DecisionNeeded decisionNeeded ->
-                "The gnome asked: " + decisionNeeded.question() + "\nOptions: "
-                        + String.join(", ", decisionNeeded.options());
+                "The gnome asked:\n" + decisionNeeded.question().forComment() + "\nOptions:\n"
+                        + decisionNeeded.options().stream()
+                                .map(UntrustedText::forComment)
+                                .collect(Collectors.joining("\n"));
             case EscalationReport.CannotVerify cannotVerify ->
-                "Could not verify check " + cannotVerify.check().label() + ": " + cannotVerify.reason() + "\n"
-                        + TrackerFence.fence(cannotVerify.details());
+                "Could not verify a check named:\n"
+                        + cannotVerify.check().label().forComment() + "\n"
+                        + cannotVerify.reason().forComment() + "\n"
+                        + cannotVerify.details().forComment();
             case EscalationReport.PipelineMismatch pipelineMismatch ->
-                "Stage '" + pipelineMismatch.staleStage() + "' is no longer defined in the pipeline.";
+                "A stage this task recorded is no longer defined in the pipeline:\n"
+                        + pipelineMismatch.staleStage().forComment();
             case EscalationReport.CannotExecute cannotExecute ->
-                "Executor infrastructure failure: " + cannotExecute.cause();
+                "Executor infrastructure failure:\n" + cannotExecute.cause().forComment();
         };
     }
 

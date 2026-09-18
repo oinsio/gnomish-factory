@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ResourceLimits;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +26,7 @@ import org.slf4j.LoggerFactory;
  * gnomish-box-<key>}) beside the environment key, so an operator pastes it into {@code docker
  * logs} / {@code docker cp} without deriving it by hand (FR2, UX1 of polish-sandbox-forensics).
  */
+@UntrustedParser
 final class ContainerMaterializer {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerMaterializer.class);
@@ -51,7 +54,9 @@ final class ContainerMaterializer {
         // named — the surviving volume may hold the only copy of unrecorded work, so "reattached"
         // and "created" mean very different things about what the run started from.
         log.info("container environment {} reattached for branch {} (image {})", key, branch, image);
-        boolean running = inspect.stdout().strip().startsWith("true");
+        // @UntrustedParser warrant (design D11): the inspect answer becomes one boolean — is the
+        //     surviving container already running — and no text leaves the carrier.
+        boolean running = inspect.stdout().forParsing().strip().startsWith("true");
         if (!running) {
             management(docker, key, DockerCommands.startContainer(name), "start container");
         }
@@ -81,9 +86,8 @@ final class ContainerMaterializer {
         // any other network-create failure is real. Volume create is idempotent by docker itself.
         DockerResult network = docker.run(DockerCommands.createNetwork(key, ownership));
         if (!network.ok() && !network.stderr().contains("already exists")) {
-            throw new IllegalStateException("docker create network for " + key + " (container "
-                    + FactoryDockerLabels.containerName(key) + ") failed: "
-                    + network.stderr().strip());
+            throw new DockerCommandFailedException(
+                    "create network", key, FactoryDockerLabels.containerName(key), network.stderr());
         }
         management(docker, key, DockerCommands.createVolume(key, ownership), "create volume");
         // Seed the volume before the task container exists: the clone runs in a one-shot helper
@@ -149,10 +153,14 @@ final class ContainerMaterializer {
         try {
             return DeclaredVolumeOverrides.resolve(
                     docker, image, Set.of(ContainerTaskExecutionEnvironment.WORKING_COPY));
-        } catch (IllegalStateException e) {
-            throw new IllegalStateException(
-                    "docker read declared volumes for " + key + " (container " + FactoryDockerLabels.containerName(key)
-                            + ") failed: " + e.getMessage(),
+        } catch (DockerCommandFailedException e) {
+            // The lower message is already inert — it was composed from the carrier docker wrote
+            // (design D5) — so it is folded as text and the original stays attached as the cause.
+            throw new DockerCommandFailedException(
+                    "read declared volumes",
+                    key,
+                    FactoryDockerLabels.containerName(key),
+                    UntrustedText.subprocess(String.valueOf(e.getMessage())),
                     e);
         }
     }
@@ -167,9 +175,7 @@ final class ContainerMaterializer {
     private static void management(DockerCli docker, String key, List<String> argv, String what) {
         DockerResult result = docker.run(argv);
         if (!result.ok()) {
-            throw new IllegalStateException("docker " + what + " for " + key + " (container "
-                    + FactoryDockerLabels.containerName(key) + ") failed: "
-                    + result.stderr().strip());
+            throw new DockerCommandFailedException(what, key, FactoryDockerLabels.containerName(key), result.stderr());
         }
     }
 }

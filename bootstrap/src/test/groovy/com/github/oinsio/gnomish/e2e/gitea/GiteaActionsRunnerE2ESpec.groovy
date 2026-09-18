@@ -84,7 +84,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         git.run(work, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
 
         when: 'the commit is pushed'
-        def headSha = git.run(work, 'rev-parse', 'HEAD').stdout().trim()
+        def headSha = git.run(work, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def pushResult = git.run(work, 'push', 'origin', 'main')
 
         then: 'the push itself succeeds'

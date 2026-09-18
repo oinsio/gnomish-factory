@@ -39,7 +39,7 @@ abstract class SandboxLifecycleDecisionSpecBase extends Specification {
         // The key-triple dispose path reads its outcome back with an existence probe; the Mock
         // disposal removes nothing, so the probe is scripted as "gone" for the happy-path features.
         docker.onRun = { List<String> args ->
-            existenceProbe(args) ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+            existenceProbe(args) ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', '')
         }
     }
 

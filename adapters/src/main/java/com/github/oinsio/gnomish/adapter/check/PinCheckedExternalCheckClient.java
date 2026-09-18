@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -103,16 +104,17 @@ public final class PinCheckedExternalCheckClient implements ExternalCheckClient 
 
         if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
-                    "pin-check requires the attempt-commit workspace",
-                    "external check '" + check.checkId() + "' declares pin paths " + pins
+                    UntrustedText.manifest("pin-check requires the attempt-commit workspace"),
+                    UntrustedText.manifest("external check '" + check.checkId() + "' declares pin paths " + pins
                             + " but the workspace is " + workspace.getClass().getName()
-                            + ", which carries no attempt commit to compare against");
+                            + ", which carries no attempt commit to compare against"));
         }
         if (lawCommit == null) {
             return new PollStatus.CannotVerify(
-                    "pin-check has no law commit to compare against",
-                    "the run's law is bound to no commit — its repository root resolves no checkout — so"
-                            + " pinned definition files " + pins + " cannot be compared");
+                    UntrustedText.manifest("pin-check has no law commit to compare against"),
+                    UntrustedText.manifest(
+                            "the run's law is bound to no commit — its repository root resolves no checkout — so"
+                                    + " pinned definition files " + pins + " cannot be compared"));
         }
         ObjectId attempt = ObjectId.of(attemptWorkspace.attemptCommitSha());
 
@@ -122,9 +124,9 @@ public final class PinCheckedExternalCheckClient implements ExternalCheckClient 
             PinnedBlob attemptBlob = read(attempt, path);
             if (baseBlob.tooLarge() || attemptBlob.tooLarge()) {
                 return new PollStatus.CannotVerify(
-                        "pin-check cannot compare an oversized pinned file",
-                        "pinned definition file '" + path + "' exceeds " + PIN_READ_CAP_BYTES
-                                + " bytes and cannot be byte-compared");
+                        UntrustedText.manifest("pin-check cannot compare an oversized pinned file"),
+                        UntrustedText.manifest("pinned definition file '" + path + "' exceeds " + PIN_READ_CAP_BYTES
+                                + " bytes and cannot be byte-compared"));
             }
             diff(path, baseBlob, attemptBlob).ifPresent(diffs::add);
         }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Map;
 
 /**
@@ -33,7 +34,8 @@ public final class PipelineLaw {
 
     record Content(String text) implements Entry {}
 
-    record Unreadable(String reason) implements Entry {}
+    /** Why one frozen law file could not be read, as the carrier it was captured in. */
+    record Unreadable(UntrustedText reason) implements Entry {}
 
     private final Map<String, Entry> byRef;
 
@@ -74,7 +76,9 @@ public final class PipelineLaw {
         return switch (entry) {
             case Content present -> present.text();
             case Unreadable unreadable -> throw new UnreadableLawFileException(ref, unreadable.reason());
-            case null -> throw new UnreadableLawFileException(ref, "not part of the frozen pipeline law");
+            case null ->
+                throw new UnreadableLawFileException(
+                        ref, UntrustedText.manifest("not part of the frozen pipeline law"));
         };
     }
 }

@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -165,7 +166,7 @@ class GithubStateWritesSpec extends Specification {
         stubLabelTransition(wireMock, 42, 'gnomish%3Aworking')
         stubComment(wireMock, 42)
         def writes = newWrites()
-        def record = new AbortRecord('agent CLI crashed', 'gnomish-factory-a', Instant.parse('2026-07-23T10:00:00Z'))
+        def record = new AbortRecord(UntrustedText.subprocess('agent CLI crashed'), 'gnomish-factory-a', Instant.parse('2026-07-23T10:00:00Z'))
 
         when:
         writes.recordAbort(refFor(42), record)
@@ -295,7 +296,7 @@ class GithubStateWritesSpec extends Specification {
             w.finish(ref, 'summary')
         }
         'recordAbort' | 62 | 'abort' | { GithubStateWrites w, TaskRef ref ->
-            w.recordAbort(ref, new AbortRecord('crashed', 'gnomish-factory-a', Instant.parse('2026-07-23T10:00:00Z')))
+            w.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('crashed'), 'gnomish-factory-a', Instant.parse('2026-07-23T10:00:00Z')))
         }
     }
 
@@ -312,7 +313,7 @@ class GithubStateWritesSpec extends Specification {
 
         when:
         newWritesHolding(4242).recordAbort(refFor(61),
-                new AbortRecord('build failed', 'gnomish-factory-x7k2q1', abortedAt))
+                new AbortRecord(UntrustedText.subprocess('build failed'), 'gnomish-factory-x7k2q1', abortedAt))
 
         then: 'the marker carries the tenure epoch and is keyed by it, and keeps the record\'s own time'
         def parsed = GithubMarker.parse(postedMarkerOn(61)).get()

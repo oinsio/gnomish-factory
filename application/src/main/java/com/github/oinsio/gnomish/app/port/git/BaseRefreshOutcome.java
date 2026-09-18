@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * What one base refresh established: the commit the task branch may start from, or which of the two
  * failure classes stopped it.
@@ -34,9 +36,13 @@ public sealed interface BaseRefreshOutcome {
      * A deterministic refusal: the task parks with this report, no stage attempt burned, and no
      * amount of retrying would change the answer.
      *
-     * @param report one operator-facing paragraph naming the ref and what stood in the way
+     * @param report one operator-facing paragraph naming the ref and what stood in the way. Carried
+     *     rather than rendered at its composition (design D4 of type-untrusted-text): git's own
+     *     account of the refusal is quoted inside it, and the park report publishes the paragraph to
+     *     the tracker through the comment exit, where a fenced block is what tells an operator which
+     *     words were the factory's and which were the remote's
      */
-    record Refused(String report) implements BaseRefreshOutcome {}
+    record Refused(UntrustedText report) implements BaseRefreshOutcome {}
 
     /**
      * The remote never answered, so the base's freshness could not be established. Fail-closed: no
@@ -44,5 +50,5 @@ public sealed interface BaseRefreshOutcome {
      *
      * @param reason one sentence naming what the invocation did, credentials already scrubbed
      */
-    record Unavailable(String reason) implements BaseRefreshOutcome {}
+    record Unavailable(UntrustedText reason) implements BaseRefreshOutcome {}
 }

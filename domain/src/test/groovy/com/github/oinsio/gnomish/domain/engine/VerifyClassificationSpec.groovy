@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 
 /**
@@ -42,7 +43,7 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
         ]) | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter() || Verdict.Fail
         // M4 row 2 — command binary not found / cannot start -> CannotVerify
         'command binary not found' | command('missing-bin') | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner([
-            new Verdict.CannotVerify('binary not found', 'no such file')
+            new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such file'))
         ]) | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter() || Verdict.CannotVerify
         // M4 row 3 — external poll returns failure -> Fail (quality)
         'external poll returns failure' | external('ci/gate', SEC, TIMEOUT) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient([
@@ -59,7 +60,7 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
         ]) | new ScriptedJudgeVoter() || Verdict.Fail
         // M4 row 5 — external check id unknown to the service -> CannotVerify
         'external check id unknown' | external('ci/missing', SEC, TIMEOUT) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient([
-            new PollStatus.CannotVerify('check id unknown', 'no such check')
+            new PollStatus.CannotVerify(UntrustedText.tracker('check id unknown'), UntrustedText.tracker('no such check'))
         ]) | new ScriptedJudgeVoter() || Verdict.CannotVerify
         // M4 row 6 — judge majority of votes negative -> Fail (quality)
         'judge majority negative' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
@@ -69,12 +70,12 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
         ]) || Verdict.Fail
         // M4 row 7 — judge model reply unparseable as verdict -> CannotVerify
         'judge reply unparseable' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.CannotVerify('unparseable verdict', 'not JSON'), [:])
+            new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('unparseable verdict'), UntrustedText.subprocess('not JSON')), [:])
         ]) || Verdict.CannotVerify
         // M4 row 8 — judge any single vote CannotVerify -> CannotVerify (whole check)
         'judge any single vote CannotVerify' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
             passVote(),
-            new JudgeVoter.Vote(new Verdict.CannotVerify('service down', 'timeout'), [:]),
+            new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('service down'), UntrustedText.subprocess('timeout')), [:]),
             passVote()
         ]) || Verdict.CannotVerify
         // M4 row 9 — any check adapter throws -> CannotVerify (caught, stack trace kept)

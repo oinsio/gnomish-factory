@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -14,7 +15,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     // FR5: bytes and event count travel in the message.
     def "message carries the bytes and events read"() {
         when:
-        def e = new MissingResultEventException('s-1', 4096L, 12)
+        def e = new MissingResultEventException(UntrustedText.agent('s-1'), 4096L, 12)
 
         then:
         e.message.contains('session: s-1')
@@ -24,7 +25,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     // UX2: the observed repro read 65 528 of 65 536 bytes — one buffered line short of the boundary.
     def "adds the truncation hint when the volume sits at a pipe-buffer boundary: #bytes bytes"() {
         expect:
-        new MissingResultEventException('s-1', bytes, 3).message.contains('probably truncated')
+        new MissingResultEventException(UntrustedText.agent('s-1'), bytes, 3).message.contains('probably truncated')
 
         where:
         bytes << [
@@ -39,7 +40,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     // UX2: an ordinary short or mid-buffer volume must not cry truncation.
     def "omits the truncation hint away from a boundary: #bytes bytes"() {
         expect:
-        !new MissingResultEventException('s-1', bytes, 3).message.contains('probably truncated')
+        !new MissingResultEventException(UntrustedText.agent('s-1'), bytes, 3).message.contains('probably truncated')
 
         where:
         bytes << [0L, 512L, 40_000L, 100_000L]
@@ -49,13 +50,13 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     // diagnostic, distinct from a caller that kept no accounting.
     def "reports a zero-byte read rather than treating it as unknown"() {
         expect:
-        new MissingResultEventException('s-1', 0L, 0).message.contains('read 0 bytes, 0 event(s)')
+        new MissingResultEventException(UntrustedText.agent('s-1'), 0L, 0).message.contains('read 0 bytes, 0 event(s)')
     }
 
     // FR5: callers with no byte accounting keep the plain message.
     def "omits the volume clause when the read volume is unknown"() {
         when:
-        def e = new MissingResultEventException('s-1')
+        def e = new MissingResultEventException(UntrustedText.agent('s-1'))
 
         then:
         e.message == 'stream-json carried no result event for round (session: s-1)'
@@ -65,7 +66,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     def "the extractor reports the drain's volume for a result-less event list"() {
         given:
         def events = [
-            new TimestampedEvent(new AgentEvent.InitEvent('s-9', 'm-1'), Instant.EPOCH)
+            new TimestampedEvent(new AgentEvent.InitEvent(UntrustedText.agent('s-9'), UntrustedText.agent('m-1')), Instant.EPOCH)
         ]
 
         when:

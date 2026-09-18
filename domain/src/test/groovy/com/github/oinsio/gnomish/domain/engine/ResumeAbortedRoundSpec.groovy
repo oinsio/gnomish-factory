@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The resume matrix — aborted-round resume, task 5.9 (M3): when a round's persist THROWS the
@@ -24,7 +25,7 @@ class ResumeAbortedRoundSpec extends ResumeMatrixSpecBase {
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
         def priorBuiltin = new ScriptedBuiltinCheckRunner()
         priorBuiltin.scripted << fail('findingA')
-        priorBuiltin.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        priorBuiltin.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         def priorPersistence = new InMemoryAttemptPersistence()
         priorPersistence.failOnCall = 2 // round 0 persists; round 1's persist throws
         def prior = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE,

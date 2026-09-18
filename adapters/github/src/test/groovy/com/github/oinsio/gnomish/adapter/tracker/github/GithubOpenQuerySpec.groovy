@@ -249,10 +249,10 @@ class GithubOpenQuerySpec extends Specification {
         then:
         result.find {
             it.ref().id() == 'github:localhost/acme/widgets#7'
-        }.title() == 'Fix the widget'
+        }.title().forLog() == 'Fix the widget'
         result.find {
             it.ref().id() == 'github:localhost/acme/widgets#9'
-        }.title() == 'Escalated widget'
+        }.title().forLog() == 'Escalated widget'
         // one working-label feed call, one needs-human-label feed call, one comments call per issue —
         // no issue-detail (GET /issues/{n}) request added by title enrichment
         wireMock.verify(1, getRequestedFor(urlEqualTo(WORKING_URL)))

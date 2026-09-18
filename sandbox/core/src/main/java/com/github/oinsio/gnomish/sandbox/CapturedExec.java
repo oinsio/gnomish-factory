@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
@@ -31,13 +32,21 @@ import java.util.concurrent.CompletionException;
  * interrupt landing in the instant after a clean exit is conservatively
  * classified the same way, which at worst re-runs work that did complete.
  *
- * <p>Implements FR2, FR11 of bound-subprocess-commands.
+ * <p>The output is {@link UntrustedText}: a command run inside a box speaks for
+ * whatever the gnome put there, so what it wrote is attacker-influenced from the
+ * moment it crosses back over the box boundary — which is where {@link #of} mints
+ * it (design D3 of type-untrusted-text). It reaches logs, reports and {@code
+ * task.json} through an exit; the probes and self-checks that read it for an
+ * answer read it through {@code forParsing()}.
+ *
+ * <p>Implements FR2, FR11 of bound-subprocess-commands; FR1, FR7 of
+ * type-untrusted-text.
  *
  * @param exitCode the exit code the wait reported; meaningful only because an
  *     interrupted wait never reaches a {@code CapturedExec} at all
  * @param output everything the command wrote to the captured stream, as UTF-8
  */
-public record CapturedExec(int exitCode, String output) {
+public record CapturedExec(int exitCode, UntrustedText output) {
 
     /**
      * Runs the capture over an already-started handle: starts the drain, waits
@@ -46,7 +55,8 @@ public record CapturedExec(int exitCode, String output) {
      *
      * @param handle the started command's handle; its output stream is consumed and closed
      * @param what the operation for failure messages, e.g. {@code "in-box state commit"}
-     * @return the exit code and the complete captured output; never null
+     * @return the exit code and the complete captured output, minted as in-container
+     *     text; never null
      * @throws UncheckedIOException if the wait was interrupted (cause {@link
      *     InterruptedIOException}, flag left set) or the output stream broke mid-read
      */
@@ -61,7 +71,7 @@ public record CapturedExec(int exitCode, String output) {
             throw new UncheckedIOException(new InterruptedIOException(
                     what + " did not complete: the wait was interrupted and the process tree was killed"));
         }
-        return new CapturedExec(exitCode, join(drain));
+        return new CapturedExec(exitCode, UntrustedText.container(join(drain)));
     }
 
     private static String read(InputStream in, String what) {

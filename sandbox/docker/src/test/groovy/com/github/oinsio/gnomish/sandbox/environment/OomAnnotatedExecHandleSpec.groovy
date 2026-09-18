@@ -28,7 +28,7 @@ class OomAnnotatedExecHandleSpec extends Specification {
     }
 
     private static DockerResult state(String oomKilled) {
-        new DockerResult(0, "false 2026-08-07T10:00:00Z ${oomKilled}\n", '')
+        DockerResult.of(0, "false 2026-08-07T10:00:00Z ${oomKilled}\n", '')
     }
 
     // FR1, UX2, M1: the OOM-killed exec is the whole point — the annotation names the container
@@ -101,9 +101,9 @@ class OomAnnotatedExecHandleSpec extends Specification {
 
         where:
         failing << ([
-            { List<String> args -> new DockerResult(1, '', 'No such object') },
+            { List<String> args -> DockerResult.of(1, '', 'No such object') },
             { List<String> args ->
-                throw new DockerUnavailableException('daemon down', null)
+                throw new DockerUnavailableException('daemon down', null as Throwable)
             }
         ] as List<Closure<DockerResult>>)
     }

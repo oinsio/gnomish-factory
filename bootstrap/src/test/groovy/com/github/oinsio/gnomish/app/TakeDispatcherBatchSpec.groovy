@@ -197,7 +197,7 @@ tracker:
 
         and: 'the Finished ref was skipped as already done, and the run continued to it regardless'
         outcomes[2].result() instanceof TakeResult.Skipped
-        (outcomes[2].result() as TakeResult.Skipped).reason().toLowerCase().contains('already done')
+        (outcomes[2].result() as TakeResult.Skipped).reason().forLog().toLowerCase().contains('already done')
     }
 
     // FR4, design D6: batch is unconditionally non-interactive — a Working ref is skipped without

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -75,13 +76,13 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
         where:
         family | engineOutcome | takeResult
         'delivered' | new TaskOutcome.Completed(state()) |
-                new TakeResult.Delivered(state(), 'done')
+                new TakeResult.Delivered(state(), UntrustedText.tracker('done'))
         'checkpoint park' | new TaskOutcome.Paused(state(), 'implement') |
                 new TakeResult.AwaitingHuman(state(), ParkReason.CHECKPOINT, 'paused at a checkpoint')
         'escalation park' | new TaskOutcome.Escalated(state(), new EscalationReport.AttemptsExhausted(3)) |
                 new TakeResult.AwaitingHuman(state(), ParkReason.ESCALATION, 'attempts exhausted')
-        'aborted' | new TaskOutcome.Aborted(state(), new AttemptKey(TASK_ID, 'implement', 2), 'push failed') |
-                new TakeResult.Aborted(state(), 'push failed')
+        'aborted' | new TaskOutcome.Aborted(state(), new AttemptKey(TASK_ID, 'implement', 2), UntrustedText.subprocess('push failed')) |
+                new TakeResult.Aborted(state(), UntrustedText.subprocess('push failed'))
     }
 
     // D8: the pair's shape invariant, not just its wording — a task that finished the pipeline
@@ -94,7 +95,7 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.PipelineEnd(), 0))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state(new Position.PipelineEnd()))))
         AnchorLog.taskSummary(TaskSummaryAssembler.assemble(
-                        new TakeResult.Delivered(state(new Position.PipelineEnd()), 'done'), Duration.ofSeconds(9)))
+                        new TakeResult.Delivered(state(new Position.PipelineEnd()), UntrustedText.tracker('done')), Duration.ofSeconds(9)))
 
         then:
         capture.list.size() == 2

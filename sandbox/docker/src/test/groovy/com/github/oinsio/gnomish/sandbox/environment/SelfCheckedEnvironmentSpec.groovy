@@ -26,7 +26,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     def "FR8: materialize delegates and then self-checks — a failing probe propagates and no process ran"() {
         given: 'a self-check that fails at its first probe (guard cannot come up)'
-        docker.onRun = { args -> new DockerResult(1, '', 'no daemon') }
+        docker.onRun = { args -> DockerResult.of(1, '', 'no daemon') }
         def selfCheck = new EnvironmentSelfCheck(
                 delegate, guard, docker, 'k1', 'runc', [], { d -> })
         def environment = new SelfCheckedEnvironment(delegate, selfCheck, guard)
@@ -75,7 +75,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     def "NFR-R1: a keep-stop the runtime refuses is warned about, and still does not mask the rejection"() {
         given: 'the guard is up, the probe fails, and the stop is refused by the daemon'
         docker.onRun = { List<String> args ->
-            args[0] == 'stop' ? new DockerResult(1, '', 'daemon gone') : runningGuard.call(args)
+            args[0] == 'stop' ? DockerResult.of(1, '', 'daemon gone') : runningGuard.call(args)
         }
         delegate.exec(_) >> probeHandle(0, '0')
         def capture = LogCaptureSupport.attach(SelfCheckedEnvironment)
@@ -168,9 +168,9 @@ class SelfCheckedEnvironmentSpec extends Specification {
         given: 'a guard whose log holds one denied destination'
         docker.onRun = { List<String> args ->
             args[0] == 'logs'
-            ? new DockerResult(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
+            ? DockerResult.of(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
             + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
-            : new DockerResult(0, '', '')
+            : DockerResult.of(0, '', '')
         }
         TaskExecutionEnvironment environment = checkedEnvironment()
 
@@ -186,12 +186,12 @@ class SelfCheckedEnvironmentSpec extends Specification {
         given: 'a guard container with a known identity and one denial'
         docker.onRun = { List<String> args ->
             if (args == GuardCommands.inspectGuardId('k1')) {
-                return new DockerResult(0, 'sha256:container-1\n', '')
+                return DockerResult.of(0, 'sha256:container-1\n', '')
             }
             args[0] == 'logs'
-                    ? new DockerResult(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
+                    ? DockerResult.of(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
                     + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
-                    : new DockerResult(0, '', '')
+                    : DockerResult.of(0, '', '')
         }
         TaskExecutionEnvironment environment = checkedEnvironment()
 
@@ -244,12 +244,12 @@ class SelfCheckedEnvironmentSpec extends Specification {
     /** A daemon that reports the guard running and accepts everything else. */
     def runningGuard = { List<String> args ->
         args == GuardCommands.inspectGuardRunning('k1')
-        ? new DockerResult(0, 'true\n', '')
+        ? DockerResult.of(0, 'true\n', '')
         : (args == GuardCommands.inspectNetworkInternal('k1')
-        ? new DockerResult(0, 'true\n', '')
+        ? DockerResult.of(0, 'true\n', '')
         : (args == GuardCommands.inspectRuntime('k1')
-        ? new DockerResult(0, 'runc\n', '')
-        : new DockerResult(0, '', '')))
+        ? DockerResult.of(0, 'runc\n', '')
+        : DockerResult.of(0, '', '')))
     }
 
     private static ExecHandle probeHandle(int code, String out) {
@@ -260,7 +260,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     def "NFR-R1: an unreadable guard log degrades to an empty list, never a failure"() {
         given: 'the guard container is gone'
         docker.onRun = { List<String> args ->
-            new DockerResult(1, '', 'No such container')
+            DockerResult.of(1, '', 'No such container')
         }
         TaskExecutionEnvironment environment = checkedEnvironment()
 

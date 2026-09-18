@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 
 /**
@@ -39,6 +40,7 @@ import java.nio.file.Path;
  *
  * <p>Implements FR12, NFR-S1 of add-git-workflow; FR13 of harden-logging-observability.
  */
+@UntrustedParser
 final class RoundBoundaryCheck {
 
     private final GitProcessRunner runner;
@@ -103,7 +105,8 @@ final class RoundBoundaryCheck {
      */
     boolean isOnExpectedBranch() {
         GitCommandResult result = runner.run(worktreeRoot, "symbolic-ref", "--short", "HEAD");
-        return result.exitCode() == 0 && expectedBranch.equals(result.stdout().trim());
+        return result.exitCode() == 0
+                && expectedBranch.equals(result.stdout().forParsing().trim());
     }
 
     /**
@@ -140,7 +143,7 @@ final class RoundBoundaryCheck {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "round boundary diff", result.cannotVerifyDetail());
         }
-        if (!result.stdout().trim().isEmpty()) {
+        if (!result.stdout().forParsing().trim().isEmpty()) {
             throw new RoundBoundaryViolationException(taskId, ".gnomish-task/ was modified by the gnome");
         }
     }

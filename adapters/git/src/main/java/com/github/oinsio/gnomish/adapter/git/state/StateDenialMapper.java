@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git.state;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.sandbox.environment.ContainerIdSyntax;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -50,9 +51,26 @@ final class StateDenialMapper {
      * RecordedDenialIdentities}, which reads the same field out of the same DTOs without needing
      * the findings around it. Two copies of this line are two places a renamed DTO field can be
      * fixed in only one.
+     *
+     * <p>The restored {@code source} is held to {@link ContainerIdSyntax} here (task 5.3, design
+     * D11 of type-untrusted-text): it is the same denial-source id {@code DenialCursor} carries,
+     * read back off a document another instance wrote, and the gate its producer applied at the
+     * daemon is what this reader owes it — the id stays a {@code String} because it is compared,
+     * not rendered. An identity whose source fails the gate is dropped, which reads exactly as an
+     * entry that carries none: "unknown, keep", so the merge keeps the denial rather than
+     * filtering it on an identity the factory cannot vouch for.
+     *
+     * <p>{@code eventAt} deliberately takes no gate (design D3's branch-document row): it is a
+     * source-assigned stamp the factory stores and compares and no sink renders — {@code
+     * RecordedDenialMerge} logs counts only — so there is nothing for a gate to protect.
      */
     static @Nullable DenialIdentity fromIdentity(@Nullable DenialIdentityDto dto) {
-        return dto == null ? null : new DenialIdentity(dto.source(), dto.at());
+        if (dto == null) {
+            return null;
+        }
+        return ContainerIdSyntax.of(dto.source())
+                .map(source -> new DenialIdentity(source, dto.at()))
+                .orElse(null);
     }
 
     /**

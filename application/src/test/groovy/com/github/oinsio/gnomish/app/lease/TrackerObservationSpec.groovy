@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -86,6 +87,6 @@ class TrackerObservationSpec extends Specification {
     }
 
     private static ReadyTask readyEntry(TaskRef ref, ClaimFacts claim, boolean returned, boolean finished) {
-        new ReadyTask(ref, AbortFacts.none(), returned, finished, 'fixture title', claim)
+        new ReadyTask(ref, AbortFacts.none(), returned, finished, UntrustedText.tracker('fixture title'), claim)
     }
 }

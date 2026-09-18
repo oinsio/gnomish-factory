@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.util.List;
 
@@ -129,7 +130,8 @@ final class ExternalPolling {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
             case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
-            case INFRASTRUCTURE -> new Verdict.CannotVerify(message, message);
+            case INFRASTRUCTURE ->
+                new Verdict.CannotVerify(UntrustedText.manifest(message), UntrustedText.manifest(message));
         };
     }
 }

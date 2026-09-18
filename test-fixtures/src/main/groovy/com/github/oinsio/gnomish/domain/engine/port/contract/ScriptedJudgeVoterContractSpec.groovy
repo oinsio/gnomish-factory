@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The scripted
@@ -22,27 +23,27 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
  */
 class ScriptedJudgeVoterContractSpec extends JudgeVoterContract {
 
-    private static JudgeVoter.Vote scriptedVote(JudgeVoterContract.VoteShape shape) {
-        switch (shape) {
-                    case JudgeVoterContract.VoteShape.PASS_WITH_TOKENS ->
+    private static JudgeVoter.Vote scriptedVote(VoteShape shape) {
+        return switch (shape) {
+                    case VoteShape.PASS_WITH_TOKENS ->
                     new JudgeVoter.Vote(new Verdict.Pass(), ['model-a': new TokenUsage(100, 50, 0, 0)])
-                    case JudgeVoterContract.VoteShape.PASS_WITHOUT_TOKENS ->
+                    case VoteShape.PASS_WITHOUT_TOKENS ->
                     new JudgeVoter.Vote(new Verdict.Pass(), [:])
-                    case JudgeVoterContract.VoteShape.FAIL ->
+                    case VoteShape.FAIL ->
                     new JudgeVoter.Vote(new Verdict.Fail([
                         new Finding('criteria not met', null, null)
                     ]), [:])
-                    case JudgeVoterContract.VoteShape.CANNOT_VERIFY ->
-                    new JudgeVoter.Vote(new Verdict.CannotVerify('unparseable judge output', ''), [:])
+                    case VoteShape.CANNOT_VERIFY ->
+                    new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('unparseable judge output'), UntrustedText.subprocess('')), [:])
                 }
     }
 
     @Override
-    protected Optional<JudgeVoterContract.VoteOutcome> arrange(
-            JudgeVoterContract.VoteShape shape, TaskContext context) {
+    protected Optional<VoteOutcome> arrange(
+            VoteShape shape, TaskContext context) {
         def voter = new ScriptedJudgeVoter([scriptedVote(shape)])
         def check = new VerifyCheck.Judge('criteria.md', 'model', [:], 1)
         def vote = voter.vote(check, context, new FakeWorkspace())
-        Optional.of(new JudgeVoterContract.VoteOutcome(vote, voter.contexts.first()))
+        Optional.of(new VoteOutcome(vote, voter.contexts.first()))
     }
 }

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The resume matrix — valid-state resumes, task 5.9 (M3): the engine resumes correctly at
@@ -127,7 +128,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
     def "a resume after a CannotVerify round carries that result into the next feedback"() {
         given: 'a stage whose first round cannot verify — recorded unburned, then escalated'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
-        def cannotVerify = new Verdict.CannotVerify('binary not found', 'no such tool')
+        def cannotVerify = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         def priorBuiltin = new ScriptedBuiltinCheckRunner()
         priorBuiltin.scripted << cannotVerify
         def priorPersistence = new InMemoryAttemptPersistence()

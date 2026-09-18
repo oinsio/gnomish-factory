@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -17,7 +18,7 @@ class AttemptRecordSpec extends Specification {
     private static final Instant STARTED = Instant.parse('2026-07-16T14:35:10Z')
 
     private static CheckResult passResult() {
-        new CheckResult(new CheckRef(0, 'command:./gradlew test'), new Verdict.Pass(), Duration.ofMillis(200))
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), new Verdict.Pass(), Duration.ofMillis(200))
     }
 
     private static Finding denial() {

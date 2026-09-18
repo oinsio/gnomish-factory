@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -21,12 +22,12 @@ class TaskContextSpec extends Specification {
         ]
 
         when: 'a task context is created'
-        def context = new TaskContext('TASK-42', 'Add caching', 'Cache the results.', decisions)
+        def context = new TaskContext('TASK-42', UntrustedText.tracker('Add caching'), UntrustedText.tracker('Cache the results.'), decisions)
 
         then: 'each component is exposed exactly as constructed'
         context.taskId() == 'TASK-42'
-        context.title() == 'Add caching'
-        context.body() == 'Cache the results.'
+        context.title().forLog() == 'Add caching'
+        context.body().forLog() == 'Cache the results.'
         context.decisions() == decisions
     }
 
@@ -38,7 +39,7 @@ class TaskContextSpec extends Specification {
         ]
 
         when: 'a task context is created and the source is then mutated'
-        def context = new TaskContext('TASK-1', 'Title', 'Body', source)
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), source)
         source.add(new Decision('sneaked in', null, null, null))
 
         then: 'the context keeps its original single decision'
@@ -49,7 +50,7 @@ class TaskContextSpec extends Specification {
     // FR7: the exposed decisions list is unmodifiable — no one edits it in place
     def "the exposed decisions list is unmodifiable"() {
         given: 'a task context'
-        def context = new TaskContext('TASK-1', 'Title', 'Body', [
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), [
             new Decision('a', null, null, null)
         ])
 
@@ -63,7 +64,7 @@ class TaskContextSpec extends Specification {
     // FR7: a task may carry no decisions yet — an empty list is valid
     def "a task context accepts an empty decisions list"() {
         when: 'a task context is created with no decisions'
-        def context = new TaskContext('TASK-1', 'Title', 'Body', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), [])
 
         then: 'the decisions list is empty'
         context.decisions().isEmpty()
@@ -72,7 +73,7 @@ class TaskContextSpec extends Specification {
     // FR7: taskId is the opaque key — a blank key is meaningless and rejected
     def "blank taskId is rejected with the component name in the message"() {
         when: 'a task context is created with a blank taskId'
-        new TaskContext(taskId, 'Title', 'Body', [])
+        new TaskContext(taskId, UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), [])
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -85,20 +86,20 @@ class TaskContextSpec extends Specification {
     // FR7: title/body are description, may be empty text, but never null
     def "an empty title and body are accepted"() {
         when: 'a task context is created with empty description strings'
-        def context = new TaskContext('TASK-1', '', '', [])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker(''), UntrustedText.tracker(''), [])
 
         then: 'the empty description is exposed as constructed'
-        context.title() == ''
-        context.body() == ''
+        context.title().forLog() == ''
+        context.body().forLog() == ''
     }
 
     // FR7: task contexts are values — equal content means equal contexts
     def "task contexts with the same components are equal values"() {
         expect: 'two independently constructed contexts with equal components are equal'
-        new TaskContext('TASK-1', 'Title', 'Body', [
+        new TaskContext('TASK-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), [
             new Decision('a', null, null, null)
         ]) ==
-        new TaskContext('TASK-1', 'Title', 'Body', [
+        new TaskContext('TASK-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'), [
             new Decision('a', null, null, null)
         ])
     }

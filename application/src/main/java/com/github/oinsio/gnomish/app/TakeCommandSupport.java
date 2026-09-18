@@ -46,8 +46,9 @@ final class TakeCommandSupport {
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> definition;
             case LoadOutcome.Invalid(List<ConfigError> errors) ->
-                throw new PipelineLoadFailedException(
-                        errors.stream().map(ConfigError::render).toList());
+                throw new PipelineLoadFailedException(errors.stream()
+                        .map(error -> error.render().forConsole())
+                        .toList());
         };
     }
 

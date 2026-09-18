@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -58,7 +59,7 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
         def repository = repositoryFor(mode, cloneDir)
 
         when: 'the whole lifecycle runs — creation, then the terminal outcome and its cleanup commit'
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def tipAfterStart = remoteTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup(TASK_ID)
@@ -86,7 +87,7 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
 
         when:
         List<ILoggingEvent> events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []),
+            repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []),
             TaskStart.commit(local, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
             TaskState.atStageStart('implement'))
             repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))

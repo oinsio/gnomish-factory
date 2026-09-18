@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.gitobjects
+package com.github.oinsio.gnomish.testfixtures.concurrency
 
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors

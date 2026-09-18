@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -593,7 +594,7 @@ advancement: auto
     private void bootstrapGitTask(String taskId) {
         def gitRunner = new GitProcessRunner()
         def repository = new GitTaskRepository(gitRunner, projectRoot, worktreesRoot, ClaimEpochSource.NONE)
-        def context = new TaskContext(taskId, 'title', 'body', List.<Decision> of())
+        def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         repository.createTask(context, TaskStart.commit(projectRoot, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve(taskId)
         def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)

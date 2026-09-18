@@ -33,8 +33,14 @@ funnel: a log line carrying untrusted text uses the log exit even where the
 same raw value also flows into findings — the judge-verdict extraction
 warning included. The mechanical gate that enforces the rule SHALL be
 type-level: a capture accessor returning a plain string, a raw read outside an
-annotated exit, and a carrier passed to a log call without an exit each fail
-the build; the accessor-name scan that preceded it is retired. No secret
+annotated exit, a read for parsing outside an annotated parser, and a carrier
+passed to a log call without an exit each fail the build. The accessor-name
+scan that preceded it is retargeted rather than retired: names no longer guard
+sinks — the type does — and the scan instead guards the capture point, failing
+the build where production code outside the declared mint owners reads a
+subprocess stream, an HTTP response body, or a document file into a plain
+`String`. The scan asserts it reached every file it claims to cover, and its
+allowlist names each mint owner with the family it mints. No secret
 values appear in any log line.
 
 The log exit is the second of three layers. The first is capture: the seven
@@ -56,7 +62,7 @@ corpus, for the message path, the exception path and the MDC path.
 <!-- implements FR16 of add-subprocess-access-log -->
 <!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
 <!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
-<!-- implements FR4, FR7, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
+<!-- implements FR4, FR7, FR10, FR11, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is
@@ -79,6 +85,12 @@ corpus, for the message path, the exception path and the MDC path.
   and passed without an exit, or prepared by the findings sanitizer outside
   the findings funnel
 - **THEN** the type gate fails the build naming the offending site
+
+#### Scenario: A capture source that never mints fails the build
+- **WHEN** production code outside the declared mint owners reads a subprocess
+  stream, an HTTP response body, or a document file into a plain `String`
+- **THEN** the capture-point scan fails the build naming the file, because no
+  type rule can see text that was never carried
 
 #### Scenario: A laundered string is neutralized at the sink
 - **WHEN** a production log call carries a string that was assembled from

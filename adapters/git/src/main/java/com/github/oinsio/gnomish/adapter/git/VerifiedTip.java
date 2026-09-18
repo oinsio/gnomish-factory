@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.util.Optional;
 
 /**
@@ -26,6 +26,7 @@ import java.util.Optional;
  *
  * <p>Implements FR13 of harden-logging-observability.
  */
+@UntrustedParser
 final class VerifiedTip {
 
     private VerifiedTip() {}
@@ -40,7 +41,10 @@ final class VerifiedTip {
         if (result.termination() != Termination.EXITED || result.exitCode() != 0) {
             return Optional.empty();
         }
-        String tip = result.stdout().trim();
+        // @UntrustedParser warrant (design D11): the value this yields is git's own object id for
+        //     a revision the factory named; it travels as a revision argument and an equality
+        //     subject, and the reports that name it render it through an exit.
+        String tip = result.stdout().forParsing().trim();
         return tip.isEmpty() ? Optional.empty() : Optional.of(tip);
     }
 
@@ -74,8 +78,7 @@ final class VerifiedTip {
      * @return a one-line reason naming the termination, the exit status and git's own stderr
      */
     static String failureReason(GitCommandResult result) {
-        return "git rev-parse " + result.termination() + ", exit " + result.exitCode() + ": "
-                + result.stderr().trim();
+        return "git rev-parse " + result.termination() + ", exit " + result.exitCode() + ": " + result.stderr();
     }
 
     /**
@@ -90,9 +93,6 @@ final class VerifiedTip {
                     revision, command, result.termination().name());
         }
         return new BranchTipUnavailableException(
-                revision,
-                command,
-                result.exitCode(),
-                LogText.forLog(result.stderr().trim()));
+                revision, command, result.exitCode(), result.stderr().forLog());
     }
 }

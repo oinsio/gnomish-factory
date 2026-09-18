@@ -131,7 +131,7 @@ public final class TaskBranchLocator {
     }
 
     private static String why(GitCommandResult fetch) {
-        return fetch.failureDetail("fetch");
+        return fetch.failureDetail("fetch").forLog();
     }
 
     private boolean refExists(Path cloneDir, String ref) {

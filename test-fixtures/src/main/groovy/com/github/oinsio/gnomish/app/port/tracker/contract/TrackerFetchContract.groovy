@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -61,7 +62,7 @@ abstract class TrackerFetchContract extends TrackerMarkerContract {
         assumeProducible(tracker, 'Tracker', 'fetchTask snapshot title/body fixture')
         def adapter = tracker.get()
         def ref = new TaskRef('fixture:fetch-snapshot-text')
-        def snapshot = new TaskSnapshot(ref.id(), 'implement the widget', 'acceptance: the widget renders')
+        def snapshot = new TaskSnapshot(ref.id(), UntrustedText.tracker('implement the widget'), UntrustedText.tracker('acceptance: the widget renders'))
         seedTask(adapter, ref, snapshot, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
 
         when: 'fetchTask is called'

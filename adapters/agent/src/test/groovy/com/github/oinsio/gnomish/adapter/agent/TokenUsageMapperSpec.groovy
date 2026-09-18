@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -91,11 +92,8 @@ class TokenUsageMapperSpec extends Specification {
     // FR5, D4: modelUsage entirely absent (older CLI) — fall back to flat usage keyed by the init event's model
     def "falls back to the flat usage object keyed by the init event's model when modelUsage is absent"() {
         given: 'a synthetic result event with usage present but modelUsage null (key omitted from the wire)'
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-fallback-1', 'success', 'done',
-                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
-                null)
-        def initEvent = new AgentEvent.InitEvent('fake-session-fallback-1', 'claude-fake-legacy-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-fallback-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-fallback-1'), UntrustedText.agent('claude-fake-legacy-1'))
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -107,8 +105,8 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: neither modelUsage nor usage present/interpretable — degrade to empty map, never throw
     def "degrades to an empty tokensByModel when neither modelUsage nor usage is present"() {
         given: 'a synthetic result event with neither usage nor modelUsage'
-        def resultEvent = new AgentEvent.ResultEvent('fake-session-empty-1', 'success', 'done', null, null)
-        def initEvent = new AgentEvent.InitEvent('fake-session-empty-1', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-1'), 'success', UntrustedText.agent('done'), null, null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-empty-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -122,8 +120,8 @@ class TokenUsageMapperSpec extends Specification {
     // round that genuinely spent nothing. The per-entry skips stay DEBUG; this one is a WARN.
     def "FR5: an extraction that yields nothing at all warns that the round's cost is unreported"() {
         given:
-        def resultEvent = new AgentEvent.ResultEvent('fake-session-empty-2', 'success', 'done', null, null)
-        def initEvent = new AgentEvent.InitEvent('fake-session-empty-2', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-2'), 'success', UntrustedText.agent('done'), null, null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-empty-2'), UntrustedText.agent('claude-fake-main-1'))
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
         when:
@@ -144,11 +142,8 @@ class TokenUsageMapperSpec extends Specification {
     // FR5: a round that DID report usage says nothing — a healthy round produces no console output.
     def "FR5: a round that reported usage warns about nothing"() {
         given:
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-ok-1', 'success', 'done',
-                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
-                null)
-        def initEvent = new AgentEvent.InitEvent('fake-session-ok-1', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-ok-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-ok-1'), UntrustedText.agent('claude-fake-main-1'))
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
         when:
@@ -164,10 +159,7 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: modelUsage absent, usage present, but no init event available to key the fallback
     def "degrades to an empty tokensByModel when the fallback usage cannot be keyed (no init event)"() {
         given: 'a synthetic result event with a usable flat usage but no init event supplied'
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-no-init-1', 'success', 'done',
-                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
-                null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-no-init-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
 
         when: 'tokens are mapped with a null init event'
         def tokensByModel = mapper.toTokensByModel(resultEvent, null)
@@ -179,14 +171,11 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: a malformed modelUsage entry (missing a field) is skipped per-entry, siblings still map
     def "skips a malformed modelUsage entry but keeps mapping the other well-formed entries"() {
         given: 'a synthetic result event where one model entry is missing a required field'
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-partial-1', 'success', 'done',
-                null,
-                [
-                    'claude-fake-good-1': [inputTokens: 100, outputTokens: 20, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-                    'claude-fake-bad-1' : [inputTokens: 100, outputTokens: 'not-a-number', cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-                ])
-        def initEvent = new AgentEvent.InitEvent('fake-session-partial-1', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-partial-1'), 'success', UntrustedText.agent('done'), null, [
+            'claude-fake-good-1': [inputTokens: 100, outputTokens: 20, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+            'claude-fake-bad-1' : [inputTokens: 100, outputTokens: 'not-a-number', cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+        ])
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -198,14 +187,11 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: a modelUsage entry whose value is not even a map degrades that entry only
     def "skips a modelUsage entry that is not a map at all"() {
         given: 'a synthetic result event with one entry a plain string instead of a map'
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-notmap-1', 'success', 'done',
-                null,
-                [
-                    'claude-fake-good-1': [inputTokens: 5, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-                    'claude-fake-weird-1': 'oops',
-                ])
-        def initEvent = new AgentEvent.InitEvent('fake-session-notmap-1', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-notmap-1'), 'success', UntrustedText.agent('done'), null, [
+            'claude-fake-good-1': [inputTokens: 5, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+            'claude-fake-weird-1': 'oops',
+        ])
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-notmap-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -217,16 +203,45 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: flat usage missing a required field degrades the whole fallback to empty
     def "degrades the fallback to empty when the flat usage is missing a required field"() {
         given: 'a synthetic result event with usage missing output_tokens'
-        def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-partial-usage-1', 'success', 'done',
-                [input_tokens: 120, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
-                null)
-        def initEvent = new AgentEvent.InitEvent('fake-session-partial-usage-1', 'claude-fake-main-1')
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-partial-usage-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-usage-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
 
         then: 'the fallback degrades to empty rather than a partially-filled TokenUsage, no exception'
         tokensByModel == [:]
+    }
+
+    // FR10, design D11 of type-untrusted-text: the keys of this map reach state.json and the
+    //     dashboard, so a hostile model id must never travel as it arrived — on either path.
+    def "FR10: a hostile model id is held to ModelIdSyntax on the modelUsage path"() {
+        given: 'a result event whose modelUsage names a model with an escape sequence in it'
+        def hostile = "claude-x\u001B[2J\n2026-01-01 ERROR forged"
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-1'), 'success', UntrustedText.agent('done'), null, [
+            (hostile): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+        ])
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-1'), UntrustedText.agent('claude-fake-main-1'))
+
+        when:
+        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+
+        then: 'the tokens are still reported, under the placeholder rather than under the escape'
+        tokensByModel == [(ModelIdSyntax.UNUSABLE): new TokenUsage(7, 3, 0, 0)]
+    }
+
+    // FR10: and the same on the flat-usage fallback, which keys on the init event's model instead
+    def "FR10: a hostile init model is held to ModelIdSyntax on the flat-usage fallback"() {
+        given: 'an init event whose model carries a line break and a forged record'
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-2'), 'success', UntrustedText.agent('done'),
+                [input_tokens: 120, output_tokens: 20, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-2'),
+                UntrustedText.agent("claude-x\n2026-01-01 ERROR forged"))
+
+        when:
+        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+
+        then:
+        tokensByModel == [(ModelIdSyntax.UNUSABLE): new TokenUsage(120, 20, 10, 5)]
     }
 }

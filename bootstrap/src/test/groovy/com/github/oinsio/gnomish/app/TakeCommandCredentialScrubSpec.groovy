@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -179,7 +180,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         }
         tracker.fetchTask(_) >> {
             new TrackerTask(
-            REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+            REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
             AbortFacts.none(), false)
         }
@@ -211,7 +212,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         }
         tracker.fetchTask(_) >> {
             new TrackerTask(
-            REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+            REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
             AbortFacts.none(), false)
         }

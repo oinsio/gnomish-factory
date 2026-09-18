@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 
 /**
@@ -26,30 +27,35 @@ final class StatusLineFormatter {
         return switch (activity) {
             case Activity.Executing executing -> executingLine(executing);
             case Activity.Verifying verifying ->
-                "verifying " + verifying.checkRef().label() + " (since " + verifying.since() + ")";
+                "verifying " + verifying.checkRef().label().forConsole() + " (since " + verifying.since() + ")";
             case Activity.AwaitingInput awaitingInput ->
-                "awaiting input: \"" + awaitingInput.prompt() + "\" (since " + awaitingInput.since() + ")";
+                "awaiting input: \"" + awaitingInput.prompt().forConsole() + "\" (since " + awaitingInput.since() + ")";
         };
     }
 
     // FR7, D10, D12 of add-agent-executor: appends live tool detail when present
     private static String executingLine(Activity.Executing executing) {
         String base = "executing (since " + executing.since() + ")";
-        if (executing.currentTool() == null && executing.toolCalls() == 0) {
+        UntrustedText tool = executing.currentTool();
+        if (tool == null && executing.toolCalls() == 0) {
             return base;
         }
-        return base + " [tool: " + executing.currentTool() + ", toolCalls: " + executing.toolCalls() + "]";
+        return base + " [tool: " + (tool == null ? "null" : tool.forConsole()) + ", toolCalls: " + executing.toolCalls()
+                + "]";
     }
 
     static String escalationLine(EscalationReport escalation) {
         return switch (escalation) {
             case EscalationReport.AttemptsExhausted exhausted -> "attempts exhausted (limit " + exhausted.limit() + ")";
-            case EscalationReport.DecisionNeeded decisionNeeded -> "decision needed: " + decisionNeeded.question();
+            case EscalationReport.DecisionNeeded decisionNeeded ->
+                "decision needed: " + decisionNeeded.question().forConsole();
             case EscalationReport.CannotVerify cannotVerify ->
-                "cannot verify " + cannotVerify.check().label() + ": " + cannotVerify.reason();
+                "cannot verify " + cannotVerify.check().label().forConsole() + ": "
+                        + cannotVerify.reason().forConsole();
             case EscalationReport.PipelineMismatch pipelineMismatch ->
-                "pipeline mismatch: stage \"" + pipelineMismatch.staleStage() + "\" not found";
-            case EscalationReport.CannotExecute cannotExecute -> "cannot execute: " + cannotExecute.cause();
+                "pipeline mismatch: stage \"" + pipelineMismatch.staleStage().forConsole() + "\" not found";
+            case EscalationReport.CannotExecute cannotExecute ->
+                "cannot execute: " + cannotExecute.cause().forConsole();
         };
     }
 

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR5, D4 of add-agent-executor.
  */
+@UntrustedParser
 final class TokenUsageMapper {
 
     private static final Logger log = LoggerFactory.getLogger(TokenUsageMapper.class);
@@ -66,10 +68,13 @@ final class TokenUsageMapper {
         modelUsage.forEach((model, rawEntry) -> {
             TokenUsage tokens = toTokenUsage(
                     rawEntry, "inputTokens", "outputTokens", "cacheCreationInputTokens", "cacheReadInputTokens");
+            // The keys are whatever the agent wrote, and they travel into state.json and onto the
+            // dashboard, so each is held to ModelIdSyntax before it becomes a key (design D11).
+            String id = ModelIdSyntax.of(model);
             if (tokens == null) {
-                log.debug("stream-json: skipping modelUsage entry for model '{}' (unusable shape)", model);
+                log.debug("stream-json: skipping modelUsage entry for model '{}' (unusable shape)", id);
             } else {
-                tokensByModel.put(model, tokens);
+                tokensByModel.put(id, tokens);
             }
         });
         return tokensByModel;
@@ -86,7 +91,10 @@ final class TokenUsageMapper {
             log.debug("stream-json: skipping flat usage fallback (unusable shape)");
             return Map.of();
         }
-        return Map.of(initEvent.model(), tokens);
+        // @UntrustedParser warrant (design D11): the init event's model id becomes a telemetry
+        //     key, held to ModelIdSyntax — which is what makes it inert enough for state.json and
+        //     the dashboard, where it is displayed.
+        return Map.of(ModelIdSyntax.of(initEvent.model().forParsing()), tokens);
     }
 
     private @Nullable TokenUsage toTokenUsage(

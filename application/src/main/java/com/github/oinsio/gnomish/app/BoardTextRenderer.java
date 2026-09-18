@@ -46,7 +46,10 @@ final class BoardTextRenderer {
             out.append(" [").append(marker).append(']');
         }
         for (ReadyRow row : model.readyRows()) {
-            out.append("\n  ").append(row.ref().id()).append(" - ").append(row.title());
+            out.append("\n  ")
+                    .append(row.ref().id())
+                    .append(" - ")
+                    .append(row.title().forConsole());
             if (row.returned()) {
                 out.append(" (returned)");
             }
@@ -76,7 +79,7 @@ final class BoardTextRenderer {
             out.append("\n  ")
                     .append(row.ref().id())
                     .append(" - ")
-                    .append(row.title())
+                    .append(row.title().forConsole())
                     .append(" (holder=")
                     .append(row.holder())
                     .append(", ")
@@ -91,7 +94,7 @@ final class BoardTextRenderer {
             out.append("\n  ")
                     .append(row.ref().id())
                     .append(" - ")
-                    .append(row.title())
+                    .append(row.title().forConsole())
                     .append(" (reason=")
                     .append(BoardLabels.parkReasonLabel(row.reason()))
                     .append(')');

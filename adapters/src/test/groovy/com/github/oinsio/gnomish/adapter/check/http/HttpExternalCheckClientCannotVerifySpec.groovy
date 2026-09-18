@@ -48,7 +48,7 @@ class HttpExternalCheckClientCannotVerifySpec extends Specification implements H
         then:
         status instanceof PollStatus.CannotVerify
         status.reason().contains('169.254.169.254')
-        status.details() == 'address class'
+        status.details().forLog() == 'address class'
     }
 
     // FR11, NFR-S1: an unresolvable credential is fail-closed — no request is sent, and the reason

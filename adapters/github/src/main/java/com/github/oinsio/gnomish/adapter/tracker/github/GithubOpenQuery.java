@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -112,7 +113,7 @@ public final class GithubOpenQuery {
                 ref,
                 new TrackerTaskState.Working(holder == null ? GithubTrackerFacts.UNKNOWN_HOLDER : holder),
                 facts.claim().liveVersion(),
-                issue.title(),
+                UntrustedText.tracker(issue.title()),
                 facts);
     }
 
@@ -126,7 +127,7 @@ public final class GithubOpenQuery {
                 refFor(issue.number()),
                 new TrackerTaskState.AwaitingHuman(reason),
                 facts.claim().liveVersion(),
-                issue.title(),
+                UntrustedText.tracker(issue.title()),
                 facts);
     }
 

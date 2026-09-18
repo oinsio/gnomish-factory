@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -41,7 +42,7 @@ trait TaskSeedFixture {
     TaskState seedTask(String taskId, String title = 'T') {
         TaskState state = TaskState.atStageStart('implement')
         new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, title, 'B', []),
+                new TaskContext(taskId, UntrustedText.tracker(title), UntrustedText.tracker('B'), []),
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 state)

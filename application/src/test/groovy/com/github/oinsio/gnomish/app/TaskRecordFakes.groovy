@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -36,7 +37,7 @@ trait TaskRecordFakes {
      * harden-task-branch-contract).
      */
     TaskRecord recordWithDecision(String body, String taskId = 'PROJ-1') {
-        new TaskRecord(new TaskContext(taskId, 'title', 'body', [
+        new TaskRecord(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), [
             new Decision(body, 'build', 'tracker', NOW)
         ]),
         'base-sha', NOW, null, null, false, BasePin.UNPINNED)
@@ -49,7 +50,7 @@ trait TaskRecordFakes {
      * rebinds its law from (FR7, FR12, D7 revised 2026-09-10).
      */
     TaskRecord recordPinnedTo(String baseRef, String baseCommit = 'base-sha', String taskId = 'PROJ-1') {
-        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+        new TaskRecord(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 baseCommit, NOW, null, null, false,
                 new BasePin(baseRef, BaseRefKind.BRANCH, BaseRule.CONFIGURED_DEFAULT))
     }
@@ -60,7 +61,7 @@ trait TaskRecordFakes {
      * before the kind existed has, so this is also the legacy-pin fixture.
      */
     TaskRecord recordManuallyPinnedTo(String baseRef, String baseCommit = 'base-sha', String taskId = 'PROJ-1') {
-        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+        new TaskRecord(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 baseCommit, NOW, null, null, false,
                 new BasePin(baseRef, null, BaseRule.EXPLICIT_ARGUMENT))
     }
@@ -71,7 +72,7 @@ trait TaskRecordFakes {
      */
     TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation = null,
             boolean pendingTerminalWrite = false, String taskId = 'PROJ-1') {
-        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+        new TaskRecord(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 'base-sha', NOW, outcome, escalation, pendingTerminalWrite, BasePin.UNPINNED)
     }
 }

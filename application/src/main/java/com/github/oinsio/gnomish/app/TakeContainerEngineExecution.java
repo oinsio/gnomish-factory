@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -99,12 +100,16 @@ record TakeContainerEngineExecution(
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
             support.revocationSalvageAndPush(taskId);
-            String note = "Work stopped: " + RevocationDetectedException.reasonFor(revocation.get())
-                    + ". Uncommitted work was"
-                    + " salvage-committed and the branch left in place for whoever resumes this task.";
+            // The reason names what the tracker held — the new claim's holder, a closure reason —
+            // so it leaves through the comment exit at the write, with the factory's own sentences
+            // outside the fence (design D7 of type-untrusted-text).
+            UntrustedText reason = UntrustedText.tracker(RevocationDetectedException.reasonFor(revocation.get()));
+            String note = "Work stopped:\n" + reason.forComment()
+                    + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
+                    + " this task.";
             tracker.postNote(ref, note);
             tracker.release(ref);
-            return new TakeResult.Revoked(outcome.finalState(), note);
+            return new TakeResult.Revoked(outcome.finalState(), UntrustedText.tracker(note));
         }
 
         settleTerminalBoundary(support, outcome);

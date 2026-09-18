@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.status.Activity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -18,8 +19,14 @@ import org.jspecify.annotations.Nullable;
  * CheckRef.of}, {@code Outcome.from}): a new variant fails to compile here until
  * its mapping is added.
  *
- * <p>Implements FR11, M3 of add-manual-run.
+ * <p>Annotated {@link UntrustedExit} for the same reason {@code AttemptMapper} and {@code
+ * EscalationMapper} beside it are (design D2 of type-untrusted-text): {@code status.json} is a
+ * parser's input, so the tracker's own words go into it byte for byte — rendering them here
+ * would corrupt the document {@code ConsoleIO.printMachine} exists to keep verbatim.
+ *
+ * <p>Implements FR11, M3 of add-manual-run; FR3 of type-untrusted-text.
  */
+@UntrustedExit
 public final class StatusReportJsonMapper {
 
     private final ObjectMapper mapper;
@@ -55,7 +62,7 @@ public final class StatusReportJsonMapper {
     public StatusReportDto toDto(StatusReport report) {
         return new StatusReportDto(
                 1,
-                new TaskDto(report.taskId(), report.title()),
+                new TaskDto(report.taskId(), report.title().raw()),
                 toPosition(report),
                 toActivity(report.activity()),
                 toOutcome(report.outcome()),
@@ -80,17 +87,19 @@ public final class StatusReportJsonMapper {
                 new ActivityDto.Executing(
                         "executing",
                         executing.since().toString(),
-                        executing.currentTool(),
+                        executing.currentTool() == null
+                                ? null
+                                : executing.currentTool().raw(),
                         executing.currentTool() == null && executing.toolCalls() == 0 ? null : executing.toolCalls());
             case Activity.Verifying verifying ->
                 new ActivityDto.Verifying(
                         "verifying",
-                        verifying.checkRef().label(),
+                        verifying.checkRef().label().raw(),
                         verifying.since().toString());
             case Activity.AwaitingInput awaitingInput ->
                 new ActivityDto.AwaitingInput(
                         "awaitingInput",
-                        awaitingInput.prompt(),
+                        awaitingInput.prompt().raw(),
                         awaitingInput.since().toString());
         };
     }
@@ -105,7 +114,10 @@ public final class StatusReportJsonMapper {
             case Outcome.Escalated escalated ->
                 new OutcomeDto.Escalated("escalated", EscalationMapper.toDto(escalated.report()));
             case Outcome.Aborted aborted ->
-                new OutcomeDto.Aborted("aborted", aborted.failedAt().toString(), aborted.cause());
+                new OutcomeDto.Aborted(
+                        "aborted",
+                        aborted.failedAt().toString(),
+                        aborted.cause().raw());
         };
     }
 

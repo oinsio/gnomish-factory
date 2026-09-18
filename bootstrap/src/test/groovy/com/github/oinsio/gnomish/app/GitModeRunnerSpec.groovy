@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -48,10 +46,6 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
-    private static TaskContext context(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
-    }
-
     private static TaskState initialState() {
         TaskState.atStageStart('build')
     }
@@ -80,7 +74,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
 
         when:
-        runner.run(cloneDir, null, pipeline(), context(), initialState(), RunArguments.InteractiveMode.ALL)
+        runner.run(cloneDir, null, pipeline(), context('PROJ-1'), initialState(), RunArguments.InteractiveMode.ALL)
 
         then:
         def output = out.toString('UTF-8')

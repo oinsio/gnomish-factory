@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -25,7 +26,7 @@ public final class GitPersistFailedException extends RuntimeException {
      * @param detail the failing command's captured stderr, or the underlying exception's
      *     message; may be blank
      */
-    public GitPersistFailedException(String taskId, String stage, int round, String reason, String detail) {
+    public GitPersistFailedException(String taskId, String stage, int round, String reason, UntrustedText detail) {
         super("failed to persist round " + stage + "#" + round + " for taskId \"" + taskId + "\" (" + reason + "): "
                 + detail);
     }

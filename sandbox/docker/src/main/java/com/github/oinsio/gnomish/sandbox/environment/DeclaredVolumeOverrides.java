@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.sandbox.environment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ import java.util.Set;
  * @param paths the declared paths to override, in the order the runtime reported
  *     them; never null, already stripped of the factory's explicit destinations
  */
+@UntrustedParser
 record DeclaredVolumeOverrides(List<String> paths) {
 
     /**
@@ -85,14 +87,13 @@ record DeclaredVolumeOverrides(List<String> paths) {
      * @param image the image reference the container will run; never blank
      * @param explicitDestinations the in-container paths this container mounts itself
      * @return the overrides; never null, empty when the image declares nothing new
-     * @throws IllegalStateException if the runtime refused the inspect or answered a
+     * @throws DockerCommandFailedException if the runtime refused the inspect or answered a
      *     shape other than {@code null} or a JSON object of paths
      */
     static DeclaredVolumeOverrides resolve(DockerCli docker, String image, Set<String> explicitDestinations) {
         DockerResult result = docker.run(DockerCommands.inspectImageVolumes(image));
         if (!result.ok()) {
-            throw new IllegalStateException("docker image inspect of " + image + " failed: "
-                    + LogText.forLog(result.stderr().strip()));
+            throw new DockerCommandFailedException("image inspect", image, null, result.stderr());
         }
         List<String> overridden = new ArrayList<>();
         for (String declared : declaredPaths(image, result.stdout())) {
@@ -109,22 +110,31 @@ record DeclaredVolumeOverrides(List<String> paths) {
      * both are normal answers and anything else is a shape this parser refuses to guess at
      * (fail closed, design D4).
      */
-    private static List<String> declaredPaths(String image, String answer) {
+    private static List<String> declaredPaths(String image, UntrustedText answer) {
         JsonNode node;
         try {
-            node = MAPPER.readTree(answer);
+            // @UntrustedParser warrant (design D11): docker's inspect answer becomes the list of
+            //     declared volume paths, which travel into a `docker run` argv as mount
+            //     destinations and are never rendered to a reader; the answer itself leaves this
+            //     class only through the carrier's log exit, in the messages below.
+            node = MAPPER.readTree(answer.forParsing());
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException(
-                    "docker image inspect of " + image + " returned unparseable declared volumes: "
-                            + LogText.forLog(answer),
+            throw new DockerCommandFailedException(
+                    "image inspect",
+                    image,
+                    null,
+                    UntrustedText.subprocess("unparseable declared volumes: " + answer),
                     e);
         }
         if (node.isNull()) {
             return List.of();
         }
         if (!node.isObject()) {
-            throw new IllegalStateException("docker image inspect of " + image
-                    + " returned declared volumes of an unexpected shape: " + LogText.forLog(answer));
+            throw new DockerCommandFailedException(
+                    "image inspect",
+                    image,
+                    null,
+                    UntrustedText.subprocess("declared volumes of an unexpected shape: " + answer));
         }
         List<String> declared = new ArrayList<>();
         for (Map.Entry<String, JsonNode> property : node.properties()) {

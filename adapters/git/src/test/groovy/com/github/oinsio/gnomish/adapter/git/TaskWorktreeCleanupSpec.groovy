@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -62,11 +63,11 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
 
         and: 'git no longer registers it as a worktree'
         def list = runner.run(cloneDir, 'worktree', 'list', '--porcelain')
-        !list.stdout().contains(path.toString())
+        !list.stdout().forParsing().contains(path.toString())
 
         and: 'the branch itself still exists'
         def branches = runner.run(cloneDir, 'branch', '--list', 'gnomish/PROJ-1')
-        branches.stdout().contains('gnomish/PROJ-1')
+        branches.stdout().forParsing().contains('gnomish/PROJ-1')
     }
 
     def "FR6: Paused keeps the worktree untouched"() {
@@ -108,7 +109,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         def failedAt = new AttemptKey('PROJ-4', 'build', 0)
 
         when:
-        cleanup.cleanUp(cloneDir, path, new TaskOutcome.Aborted(sampleState(), failedAt, 'persist failed'))
+        cleanup.cleanUp(cloneDir, path, new TaskOutcome.Aborted(sampleState(), failedAt, UntrustedText.subprocess('persist failed')))
 
         then: 'the hard "always keep" rule holds — no path accidentally matches the removal branch'
         path.toFile().isDirectory()
@@ -153,13 +154,13 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         and: 'the worktree directory is deleted by plain filesystem removal, not git worktree remove'
         path.toFile().deleteDir()
         def before = runner.run(cloneDir, 'worktree', 'list', '--porcelain')
-        assert before.stdout().contains(path.toString())
+        assert before.stdout().forParsing().contains(path.toString())
 
         when:
         cleanup.pruneWorktrees(cloneDir)
 
         then:
         def after = runner.run(cloneDir, 'worktree', 'list', '--porcelain')
-        !after.stdout().contains(path.toString())
+        !after.stdout().forParsing().contains(path.toString())
     }
 }

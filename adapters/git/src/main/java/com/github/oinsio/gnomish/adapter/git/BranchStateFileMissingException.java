@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -30,7 +31,7 @@ public final class BranchStateFileMissingException extends RuntimeException {
      *     ".gnomish-task/task.json"}
      * @param gitError the underlying {@code git show} stderr
      */
-    public BranchStateFileMissingException(String ref, String filePath, String gitError) {
-        super(ref + ": " + filePath + " not found at branch tip (" + gitError.strip() + ")");
+    public BranchStateFileMissingException(String ref, String filePath, UntrustedText gitError) {
+        super(ref + ": " + filePath + " not found at branch tip (" + gitError + ")");
     }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -45,7 +46,8 @@ final class TagBaseFetch {
         // The divergence is decidable before the fetch runs, and deciding it here rather than from
         // git's refusal message keeps the answer independent of git's locale and wording.
         if (before.isPresent() && !before.get().equals(originCommit)) {
-            return new BaseRefreshOutcome.Refused(divergenceReport(name, before.get(), originCommit));
+            return new BaseRefreshOutcome.Refused(
+                    UntrustedText.subprocess(divergenceReport(name, before.get(), originCommit)));
         }
         GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, ref + ":" + ref);
         return RefreshedTip.of(runner, cloneDir, fetch, ref, name, BaseRefKind.TAG);

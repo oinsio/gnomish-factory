@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Optional;
 
@@ -101,7 +102,10 @@ public record GithubTaskFetcher(
             return new TrackerTask(
                     ref, goneSnapshot(ref), new TrackerTaskState.Gone(detail.stateReason()), AbortFacts.none(), false);
         }
-        TaskSnapshot snapshot = new TaskSnapshot(ref.id(), detail.title(), detail.bodyOrEmpty());
+        // The tracker mint (design D3 of type-untrusted-text): an issue's title and body are
+        // written by whoever can open an issue, so they enter the factory as TRACKER carriers.
+        TaskSnapshot snapshot = new TaskSnapshot(
+                ref.id(), UntrustedText.tracker(detail.title()), UntrustedText.tracker(detail.bodyOrEmpty()));
 
         List<ParsedMarker> markers =
                 new GithubAbortFactsReader(cache).fetchMarkers(id.owner(), id.repo(), id.issueNumber());
@@ -167,6 +171,6 @@ public record GithubTaskFetcher(
     }
 
     private static TaskSnapshot goneSnapshot(TaskRef ref) {
-        return new TaskSnapshot(ref.id(), ref.id(), "");
+        return new TaskSnapshot(ref.id(), UntrustedText.tracker(ref.id()), UntrustedText.tracker(""));
     }
 }

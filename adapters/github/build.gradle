@@ -65,6 +65,12 @@ dependencies {
     // constant. `implementation`, not `api`: the enum is named only inside log calls,
     // never in a signature this module exports.
     implementation project(':operatorevent')
+    // The untrusted-text leaf (FR3, design D2 of type-untrusted-text): this module holds
+    // a class marked `@UntrustedExit`, the annotation that allows a machine writer to read
+    // the carrier's raw text. `api`, not `implementation`: the marker has runtime retention
+    // and sits on a public type, so it travels on this module's own surface — which is what
+    // the dependency-analysis gate establishes.
+    api project(':untrustedtext')
 
     implementation libs.slf4j.api
 
@@ -138,10 +144,10 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
-        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
-        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
-        // it; the layering gate walks the transitive graph, so the reach is listed where
-        // it arrives.
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR3, design D2
+        // of type-untrusted-text): reached through `:logtext`, whose `LogText` is a facade
+        // over it, and now declared directly — a class here carries `@UntrustedExit`, the
+        // marker that lets a machine writer read the carrier's raw text.
         ':untrustedtext',
     ]
 }
