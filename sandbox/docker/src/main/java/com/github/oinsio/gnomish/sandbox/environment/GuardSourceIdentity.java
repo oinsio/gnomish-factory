@@ -33,8 +33,14 @@ final class GuardSourceIdentity {
     private final DockerCli docker;
     private final String key;
 
-    /** The live container's runtime id, re-probed after {@link #recreated()}. */
-    private @Nullable String sourceId;
+    /**
+     * The live container's runtime id, re-probed after {@link #recreated()}. Volatile: {@link
+     * GuardDenialReads} calls {@link #current()} with no lock held (lock-scope.md — the probe is a
+     * blocking docker call), so this field's own visibility is what publishes the cached answer
+     * across callers rather than a monitor. A redundant probe from two racing callers is harmless —
+     * the daemon's answer for one container id is idempotent — so no further coordination is owed.
+     */
+    private volatile @Nullable String sourceId;
 
     GuardSourceIdentity(DockerCli docker, String key) {
         this.docker = docker;
