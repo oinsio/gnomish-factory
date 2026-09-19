@@ -532,3 +532,25 @@ group ends with the module gates green; the sink invariant from
       no enforcement — the tree holds 163 mint calls in 71 files, 101 of them captures — and the choice between an ArchUnit class→family map and a revision of
       FR4/NFR-S1 is deliberately left open; this task only makes the table true again, so
       that whichever is chosen counts the right thing.
+- [x] 7.7 The open choice left by 7.6 is settled in favour of revising the requirement
+      (FR4, NFR-S1, design D3, added 2026-09-19). Artifacts only — no code, no new gate.
+      A mint-caller allowlist was rejected on its own terms: after 7.6 the tree holds 151
+      production mints in 72 files, 58 of them `FACTORY`, and a `FACTORY` mint is
+      legitimate in *any* class that composes a sentence. A class→family map would
+      therefore have to admit `FACTORY` everywhere, leaving it able to check only "a
+      capture-family mint sits in one of 52 listed files" — which is the entry-side
+      property `RawCaptureGateSpec` already gates from the other end, since a capture that
+      mints in the wrong file is a capture the gate's allowlist does not name. The gate
+      would restate an existing gate and still not catch the defect 7.6 found, which was a
+      wrong *family*, not a wrong file.
+      So: NFR-S1's second half now asks for the capture gate (`proposal.md`), FR4 drops
+      "no other production code SHALL call a mint" — untrue since `FACTORY` — and states
+      D3's family rule with its enforcement named as a review obligation, and the
+      single-owner table's `Enforced by` cell (`design.md`) names `RawCaptureGateSpec` +
+      `RawCaptureOwners` and says in one line why the family choice is not gated.
+      Verify: `grep -n "a new mint outside the mint table\|no other production code SHALL
+      call a mint" openspec/changes/type-untrusted-text/` returns nothing; NFR-S1 and FR4
+      name only enforcement that exists. NG6 is restated in the same pass: its
+      "outside the mint table" reason predates `FACTORY`, so it now says what is actually
+      true of a `ConfigError` mint — `FACTORY` prose carrying no capture, at 97 sites, some
+      of them in third-party SPI implementations the factory does not own.

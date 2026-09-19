@@ -99,13 +99,14 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                                 taskId,
                                 TaskLifecycleEvent.STARTED,
                                 "creating branch",
-                                "branch \"" + already.branchName() + "\" already exists");
+                                UntrustedText.factory("branch \"" + already.branchName() + "\" already exists"));
                     case BranchCreationResult.BaseCommitMissing missing ->
                         throw new GitTaskRepositoryException(
                                 taskId,
                                 TaskLifecycleEvent.STARTED,
                                 "creating branch",
-                                "base commit \"" + missing.baseCommit() + "\" is not in this clone");
+                                UntrustedText.factory(
+                                        "base commit \"" + missing.baseCommit() + "\" is not in this clone"));
                 };
 
         Path worktree = ensureWorktree(taskId);

@@ -83,7 +83,7 @@ public final class DeliveredBranchReader {
                                 taskId,
                                 TaskLifecycleEvent.COMPLETED,
                                 "locating delivered branch",
-                                "no branch found to reconcile a deferred finish from");
+                                UntrustedText.factory("no branch found to reconcile a deferred finish from"));
                 };
         return tip + "^";
     }

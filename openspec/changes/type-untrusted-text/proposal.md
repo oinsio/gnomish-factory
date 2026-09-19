@@ -113,13 +113,14 @@ can name one type. This change introduces it and moves the codebase onto it.
 - NG5: A Checker Framework or Error Prone taint checker — the type plus an
   ArchUnit gate is the enforcement; a compiler plugin is not added.
 - NG6: `ConfigError` as a carrier. Its three fields stay factory-authored
-  `String`: the message is a template the factory wrote, and the 97
-  constructor sites span `:domain` rules, the `.gnomish/` loader, the vendor
-  bundle and the SPI validator interfaces third parties implement — making
-  each of them a mint would put minting outside the mint table and outside
-  the factory. The manifest fragment a message quotes (a key, a type token,
-  a URL) is minted once, where the loader's outcome leaves the loader:
-  `ConfigError.render()` returns a `MANIFEST` carrier (design D10).
+  `String`: the message is a template the factory wrote, so a mint there would
+  be `FACTORY` prose (FR4) carrying no capture — and the 97 constructor sites
+  span `:domain` rules, the `.gnomish/` loader, the vendor bundle and the SPI
+  validator interfaces third parties implement, so minting at each would put
+  minting outside the factory, in code the factory does not own. The manifest
+  fragment a message quotes (a key, a type token, a URL) is minted once, where
+  the loader's outcome leaves the loader: `ConfigError.render()` returns a
+  `MANIFEST` carrier (design D10).
 
 ## Users & Scenarios
 
@@ -167,9 +168,13 @@ can name one type. This change introduces it and moves the codebase onto it.
   different way out with a different allowlist (FR10), so this set does not
   grow to hold parsers.
 - FR4: Every carrier field in design.md's table SHALL be `UntrustedText`
-  (`List<UntrustedText>` for lists); every mint site in design.md's mint table
-  SHALL construct it with its provenance; no other production code SHALL call
-  a mint.
+  (`List<UntrustedText>` for lists); every capture site in design.md's mint
+  table SHALL construct it with its provenance; every other mint SHALL take
+  the family of the text it first wraps (design D3) — `FACTORY` for a sentence
+  the factory composed, the capture's own family for text interpolated raw.
+  Choosing the right family is a review obligation (`/audit-implementation`),
+  not a build gate; what the build enforces is that no capture escapes a mint
+  (NFR-S1).
 - FR5: Every exception constructor that today concatenates subprocess or
   container output (design.md lists the 37) SHALL take `UntrustedText` and
   render its message from `forLog()`; `WorktreeResync` and the docker
@@ -242,8 +247,13 @@ can name one type. This change introduces it and moves the codebase onto it.
 ### Non-Functional Security
 
 - NFR-S1: A newly added carrier field of type `String` whose accessor name is
-  in the mint families' vocabulary fails the type gate; a new mint outside the
-  mint table fails it; both are asserted with seeded violations.
+  in the mint families' vocabulary fails the type gate; a capture source that
+  reads text from outside the trust boundary without minting fails the capture
+  gate; both are asserted with seeded violations. The gate is on the *capture
+  point*, not on the mint call: since `FACTORY` (FR4) is a family any class may
+  legitimately mint, no allowlist of mint callers can separate a correct mint
+  from a wrong one, so what the build can check is that nothing captures
+  without minting.
 - NFR-S2: The comment exit SHALL neutralize `@user` and `#123` references,
   fence with a run longer than any in the content, label the block, and keep
   line structure; asserted over the corpus plus a mention/fence corpus.

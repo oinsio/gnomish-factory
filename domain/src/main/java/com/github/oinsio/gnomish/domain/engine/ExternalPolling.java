@@ -131,15 +131,13 @@ final class ExternalPolling {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
             case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
-            // One sentence, one carrier: the reason and the detail are the same text here — nothing
-            // was captured, since the timeout is the absence of an answer — so it is minted once and
-            // handed to both fields rather than twice into two carriers that can only ever be equal.
             // MANIFEST, not FACTORY: the sentence interpolates the check id raw, and a capture
-            // quoted raw keeps the capture's family (design D1 of type-untrusted-text).
-            case INFRASTRUCTURE -> {
-                var timedOut = UntrustedText.manifest(message);
-                yield new Verdict.CannotVerify(timedOut, timedOut);
-            }
+            // quoted raw keeps the capture's family (design D1 of type-untrusted-text). The detail
+            // is the empty carrier: a timeout is the absence of an answer, so nothing was captured,
+            // and every renderer prints reason and details in turn — handing the one sentence to
+            // both fields would show the operator the same line twice (design D3, "the empty
+            // details of a verdict that captured nothing" is FACTORY).
+            case INFRASTRUCTURE -> new Verdict.CannotVerify(UntrustedText.manifest(message), UntrustedText.factory(""));
         };
     }
 }

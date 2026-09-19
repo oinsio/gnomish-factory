@@ -22,6 +22,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -121,7 +122,10 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         String ref = refFor(taskId);
         if (gitObjects.resolveRef(ref).isPresent()) {
             throw new GitTaskRepositoryException(
-                    taskId, TaskLifecycleEvent.STARTED, "creating branch", "branch \"" + ref + "\" already exists");
+                    taskId,
+                    TaskLifecycleEvent.STARTED,
+                    "creating branch",
+                    UntrustedText.factory("branch \"" + ref + "\" already exists"));
         }
         // The start point is already an object name (FR15, D12 revised 2026-09-10): this asks only
         // whether the clone holds it, never what a base name would resolve to here.
@@ -131,7 +135,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                         taskId,
                         TaskLifecycleEvent.STARTED,
                         "creating branch",
-                        "base commit \"" + lawCommit.hex() + "\" is not in this clone"));
+                        UntrustedText.factory("base commit \"" + lawCommit.hex() + "\" is not in this clone")));
 
         Instant now = Instant.now(clock);
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);

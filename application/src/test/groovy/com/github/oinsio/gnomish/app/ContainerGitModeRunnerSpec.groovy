@@ -121,7 +121,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
     def "remaps a creation failure into the same usage error the host path raises"() {
         given:
         taskRepository.createTask(_, _, _, _) >> {
-            throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
+            throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('x'))
         }
 
         when:

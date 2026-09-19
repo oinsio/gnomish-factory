@@ -134,7 +134,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> Stub(TaskLifecycleStore) {
                 createTask(_, _, _, _) >> {
-                    throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
+                    throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('x'))
                 }
             }
         }

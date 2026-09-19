@@ -54,9 +54,9 @@ audit, re-verified 2026-09-16 against `67e907cb`; file:line as of that tree):
 **D1 — `UntrustedText` is a final class, not a record, with `toString()` =
 `forLog()`.** A record's canonical `toString()` would print the raw text —
 the exact hole `TakeOutcomeMapper:97` documents. A final class with a private
-constructor, `equals`/`hashCode` over the **raw text alone**, and the seven static
+constructor, `equals`/`hashCode` over the **raw text alone**, and the eight static
 mints (`subprocess`, `container`, `agent`, `tracker`, `manifest`,
-`branchDocument`, `operator`).
+`branchDocument`, `operator`, and the `factory` family D3 adds below).
 
 *The seventh family, added at task 6.1.* `OPERATOR` — an argument the operator
 handed the process on its command line — is the one constant that is not here
@@ -191,7 +191,7 @@ as one". That is a provenance the text does not have, and it is the same
 laundering D5's `BranchTipFactsReader` exemption refuses in the other direction.
 
 So the mint rule is stated in full, and `Provenance.FACTORY` /
-`UntrustedText.factory` is the seventh family:
+`UntrustedText.factory` is the eighth family (after D1's seventh, `OPERATOR`):
 
 - **A mint takes the family of the text it is first wrapping.** Text captured
   from outside the trust boundary keeps its capture family, wherever it is
@@ -665,7 +665,7 @@ the row's invariant is reduced to the commit + state-file sequence.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `UntrustedText` mints (`:untrustedtext`) | `UntrustedText` | the seven capture families in D3's table, by file | `String` fields on every carrier in D4's table — changed to `UntrustedText`; the `String`-typed constructors deleted | the parameter type; gate rule (b) (`UntrustedTextGateSpec`) for accessor return types |
+| `UntrustedText` mints (`:untrustedtext`) | `UntrustedText` | the seven capture families in D3's table, by file | `String` fields on every carrier in D4's table — changed to `UntrustedText`; the `String`-typed constructors deleted | the parameter type; gate rule (b) (`UntrustedTextGateSpec`) for accessor return types; `RawCaptureGateSpec` + `RawCaptureOwners` for the entry side — every capture source either mints or is an allowlisted owner naming its family. *Which* family a mint picks is not gated: `FACTORY` is legitimate in any class, so a mint-caller allowlist would admit every wrong family it was built to catch. The rule above is therefore a review obligation (`/audit-implementation`), and NFR-S1 asks for the capture gate accordingly |
 | `UntrustedText.forLog/forConsole/forComment` (`:untrustedtext`) | `String`, already neutralized | every log call, console print, exception constructor and report builder in D5/D6 | direct `LogText.forLog(...)` calls at sites that now hold a carrier (the `add-base-ref-resolution` per-field calls included) — deleted; `UntrustedLogTextGateSpec` — its accessor pattern narrowed per family as each lands, the spec deleted at task 5.2 when the pattern is empty (no accessor is ever ungated) | gate rules (a) and (c); `UntrustedTextExitIdentitySpec` (FR2) |
 | `TextSafety.forComment` via `TrackerFence` facade (`:untrustedtext` / `:application`) | fenced comment text | callers of the exit: the builders D7 names (`FreshClaimBaseReport`, `ResumeBaseReport`, `BaseLawReport`, `AbortReportBuilder`, `BranchQuarantineReport`, `EscalationResumeDialog`, the `GuardedPark` report functions), `FinishEffect`, `GithubStateWrites` (abort cause), `DecisionAck`, the two stop-note writers; consumers of the value: the eight park writers (D7) | `FindingsSanitizer.strip(...).replace("@", …)` inside `TrackerFence` — moved; ad-hoc report concatenation in the eight writers — routed through builders; `"aborted: " + record.cause()` in `GithubStateWrites` — routed through the exit | gate rule (c) on every text-carrying `Tracker` method; `TrackerPublicationOwnerSpec` scanning every tracker write site and every `AbortRecord` construction for the *wrong* exit (`LogText`, `FindingsSanitizer`) as well as a raw carrier. The `AbortRecord` constructor left rule (c) at task 6.3, when its `cause` became the carrier: a carrier there is the contract being honoured, not laundering — the same reasoning rule (c) already applies to a throwable that declares its detail as untrusted text |
 | `UntrustedText.forParsing()` (`:untrustedtext`) | the captured bytes, for conversion into a value | the 27 `@UntrustedParser` classes D11 lists, by module | direct `raw()` reads from a parser — never introduced; `String`-typed `stdout`/`output` accessors, which let any class parse without declaring it — changed to the carrier | the annotation; gate rule (a2), whose pinned parser set fails on growth and whose seeded offender returns the text unchanged as a `String` |

@@ -25,30 +25,24 @@ public final class GitTaskRepositoryException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     /**
-     * @param taskId the task whose lifecycle event could not be recorded
-     * @param event the lifecycle write that failed
-     * @param reason what failed, e.g. {@code "git add -A"} or {@code "writing task.json"}
-     * @param detail the failing command's captured stderr, or the underlying exception's
-     *     message; may be blank
-     */
-    public GitTaskRepositoryException(String taskId, TaskLifecycleEvent event, String reason, String detail) {
-        super("failed to record task " + event + " for taskId \"" + taskId + "\" (" + reason + "): " + detail);
-    }
-
-    /**
-     * The same write, failed with a subprocess's own words as the detail. Separate from the
-     * {@code String} arm above, which carries factory-authored detail ("no branch found to
-     * reconcile a deferred finish from"): untrusted text leaves its carrier through the log exit
-     * here, at the throw, because an exception message escapes every log-call gate structurally
-     * (design D5 of type-untrusted-text).
+     * The failing write, with its detail as a carrier — a subprocess's own words
+     * ({@code SUBPROCESS}) or the factory's own sentence about what it could not find
+     * ({@code FACTORY}, e.g. "no branch found to reconcile a deferred finish from"). Untrusted
+     * text leaves its carrier through the log exit here, at the throw, because an exception
+     * message escapes every log-call gate structurally (design D5 of type-untrusted-text).
+     *
+     * <p>There is deliberately no {@code String} arm beside this one: a same-arity overload
+     * taking the raw form would let a caller hand over captured text unwrapped and still
+     * compile, which is the escape hatch {@code implementation.md} item 3 forbids. Factory prose
+     * is a family of its own ({@code UntrustedText.factory}), so it needs no second arm.
      *
      * @param taskId the task whose lifecycle event could not be recorded
      * @param event the lifecycle write that failed
-     * @param reason what failed, e.g. {@code "git add -A"}
-     * @param detail the failing command's captured stderr
+     * @param reason what failed, e.g. {@code "git add -A"} or {@code "writing task.json"}
+     * @param detail the failing command's captured stderr, or the factory's own explanation
      */
     public GitTaskRepositoryException(String taskId, TaskLifecycleEvent event, String reason, UntrustedText detail) {
-        this(taskId, event, reason, detail.forLog());
+        super("failed to record task " + event + " for taskId \"" + taskId + "\" (" + reason + "): " + detail.forLog());
     }
 
     /**

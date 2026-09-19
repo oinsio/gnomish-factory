@@ -48,7 +48,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
         and: 'the loop slept exactly twice, each of the interval — so virtual time advanced 2*interval'
         sleeper.slept == [interval, interval]
-        clock.now() == Instant.EPOCH.plus(interval.multipliedBy(2))
+        clock.now() == Instant.EPOCH + interval.multipliedBy(2)
     }
 
     def "a passing poll's run link is preserved into the recorded check result"() {
@@ -140,7 +140,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         and: 'the loop stopped rather than polling forever, having slept up to the timeout'
         externalClient.pollCount == 4
         sleeper.slept.size() == 3
-        sleeper.slept.inject(Duration.ZERO) { acc, d -> acc.plus(d) } >= timeout
+        sleeper.slept.inject(Duration.ZERO) { acc, d -> acc + d } >= timeout
     }
 
     // FR9: an INFRASTRUCTURE-classed timeout escalates as a CannotVerify naming the elapsed
@@ -169,10 +169,13 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         verdict.reason().forLog().contains('ci/flaky-runner')
         verdict.reason().forLog().contains(timeout.toString())
 
+        and: 'the details are empty rather than a second copy of the reason: nothing was captured'
+        verdict.details().raw().isEmpty()
+
         and: 'the loop stopped rather than polling forever, having slept up to the timeout'
         externalClient.pollCount == 4
         sleeper.slept.size() == 3
-        sleeper.slept.inject(Duration.ZERO) { acc, d -> acc.plus(d) } >= timeout
+        sleeper.slept.inject(Duration.ZERO) { acc, d -> acc + d } >= timeout
     }
 
     // FR3: a Fail on the first poll maps straight through to a quality Verdict.Fail — no sleep

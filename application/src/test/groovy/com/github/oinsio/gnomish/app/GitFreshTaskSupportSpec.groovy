@@ -58,7 +58,7 @@ class GitFreshTaskSupportSpec extends Specification {
         given:
         def taskRepository = Stub(TaskRepository) {
             createTask(_, _, _, _) >> {
-                throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'gnomish/PROJ-1')
+                throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('gnomish/PROJ-1'))
             }
         }
         when:

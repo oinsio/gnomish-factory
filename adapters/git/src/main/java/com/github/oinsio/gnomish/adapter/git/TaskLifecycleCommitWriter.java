@@ -53,7 +53,10 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
         return gitObjects
                 .resolveRef(ref)
                 .orElseThrow(() -> new GitTaskRepositoryException(
-                        taskId, event, "locating task branch", "no branch \"" + ref + "\" exists"));
+                        taskId,
+                        event,
+                        "locating task branch",
+                        UntrustedText.factory("no branch \"" + ref + "\" exists")));
     }
 
     /**
