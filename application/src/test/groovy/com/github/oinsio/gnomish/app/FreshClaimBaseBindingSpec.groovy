@@ -324,7 +324,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         when:
         def result = FreshClaimBaseBinding.resolve(baseRefGit, ROOT, request, STATE, tracker, { bound ->
             continuationCalled = true
-            new TakeResult.Delivered(STATE, UntrustedText.tracker('done'))
+            new TakeResult.Delivered(STATE, 'done')
         })
 
         then:
@@ -341,7 +341,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         when:
         def result = FreshClaimBaseBinding.resolve(baseRefGit, ROOT, request, STATE, tracker, { bound ->
             continuationCalled = true
-            new TakeResult.Delivered(STATE, UntrustedText.tracker('done'))
+            new TakeResult.Delivered(STATE, 'done')
         })
 
         then:

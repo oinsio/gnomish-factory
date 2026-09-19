@@ -88,7 +88,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             reply('go ahead', '2026-07-18T09:00:00Z')
         ]
         def callOrder = []
-        tracker.acknowledgeDecision(REF, fenced('go ahead')) >> {
+        tracker.acknowledgeDecision(REF, inert('go ahead')) >> {
             callOrder << 'ack'
         }
         // fetchTask is called by the engine's revocation/abort machinery once the run is under way,
@@ -142,9 +142,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, fenced('freshest reply'))
-        0 * tracker.acknowledgeDecision(REF, fenced('first reply'))
-        0 * tracker.acknowledgeDecision(REF, fenced('second reply'))
+        1 * tracker.acknowledgeDecision(REF, inert('freshest reply'))
+        0 * tracker.acknowledgeDecision(REF, inert('first reply'))
+        0 * tracker.acknowledgeDecision(REF, inert('second reply'))
     }
 
     // D12: AttemptsExhausted with no pending reply still resumes the engine (the return itself is
@@ -202,7 +202,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, fenced('try again'))
+        1 * tracker.acknowledgeDecision(REF, inert('try again'))
         result instanceof TakeResult.Delivered
 
         and: 'the reply text was appended durably via GitTaskRepository#appendDecision'
@@ -243,8 +243,13 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         thrown(IllegalStateException)
     }
 
-    /** The comment exit's rendering of one reply, as the acknowledge now publishes it. */
-    private static String fenced(String text) {
-        UntrustedText.tracker(text).forComment()
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
+     * "untrusted machine output" label would be untrue about.
+     */
+    private static String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

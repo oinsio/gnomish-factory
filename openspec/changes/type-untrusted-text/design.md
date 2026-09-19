@@ -25,7 +25,7 @@ audit, re-verified 2026-09-16 against `67e907cb`; file:line as of that tree):
   the rendered line reaches a park report through `BaseLawReport:40` and the
   console through `PipelineStartup:63`; branch document —
   `TaskJsonMapper:187,225` and the `RecordedOutcome`/escalation DTO readers.
-- Carrier fields (~45) and the 38 exception-constructor sites are enumerated
+- Carrier fields (~45) and the 37 exception-constructor sites are enumerated
   in the tables below.
 - `TrackerFence` (`app/findings`) is JDK-only logic over `FindingsSanitizer`
   and has one consumer (`EscalationResumeDialog:104`); eight components write
@@ -79,7 +79,7 @@ emptiness is a security property.
 best-practices review; the carrier shipped with it inside at task 1.4, and
 task 5.3 takes it back out before the first value crosses a medium). Provenance
 is evidence a report may name — the class's own javadoc says "never a policy
-input", and all seven families render identically. A value that is not a policy
+input", and all eight families render identically. A value that is not a policy
 input has no business deciding identity, and three things break if it does.
 The round trip of D3's branch-document row is the concrete one: a cause minted
 `SUBPROCESS` is written to `task.json` and read back `BRANCH_DOCUMENT`, so the
@@ -176,6 +176,50 @@ table:
 Fakes in `:test-fixtures` and the in-memory tracker mint `TRACKER` for
 fixture titles — a fixture is a tracker.
 
+**The factory's own prose is a family too** (added 2026-09-19, after the
+implementation review counted 67 mints whose argument begins with a string
+literal). The table above is a table of *captures*, and it was read as if those
+were the only mints. They are not: a `reason`, a `cause` or a `summary` is a
+carrier on every path, so the sentence the factory composes for the path where
+nothing was captured has to be a carrier as well. Until this entry, each such
+sentence was minted in whichever family sat beside it — `RemoteAttemptDelivery`
+called its own "no remote to deliver the attempt commit to" `SUBPROCESS`,
+`FilesExistCheckRunner`'s empty `details` was `MANIFEST`, and
+`JudgeVerdictExtractor` recorded the reasoning in its javadoc: the sentence is
+minted "in the judge's own family … so the two components of a verdict render
+as one". That is a provenance the text does not have, and it is the same
+laundering D5's `BranchTipFactsReader` exemption refuses in the other direction.
+
+So the mint rule is stated in full, and `Provenance.FACTORY` /
+`UntrustedText.factory` is the seventh family:
+
+- **A mint takes the family of the text it is first wrapping.** Text captured
+  from outside the trust boundary keeps its capture family, wherever it is
+  re-minted (the branch-document row's re-mint, the fold row).
+- **Text the factory composed is `FACTORY`** — a refusal, a disposition, an
+  explanation, and the empty `details` of a verdict that captured nothing.
+- **A composed sentence may quote a capture and stay `FACTORY`, provided the
+  quote left its own carrier through an exit first** (`forLog()`, `forConsole()`,
+  `forComment()`, or the `toString()` that is the log exit). What the field then
+  holds is the factory's sentence around a neutralized excerpt. A sentence
+  interpolating a capture *raw* is not factory prose: it keeps the capture's
+  family, which is why `TakeCrashAbort`'s `"… : " + crash` stays `SUBPROCESS`
+  and `EgressRefusal.describe()`'s target stays `MANIFEST`.
+
+`FACTORY` changes no rendering — provenance is evidence, and the exits compute
+the same answer for every family — so no report, log line or comment moves a
+byte. What it buys is that the mint table above is once again a description of
+the tree: a mint outside it now means a capture outside it. *Alternative
+rejected:* type the prose fields `String` and leave only captures as carriers,
+the shape D4's `:baseref` row uses. It splits one field into two shapes a reader
+must tell apart, and three sites (`FilesExistCheckRunner:86`,
+`HttpExternalCheckClient:96,98`) put manifest-derived text into the same
+`reason` a sibling path fills with prose, so the split would have to move those
+into `details` to stay true. *Alternative rejected:* record the beside-the-capture
+convention as the rule. It is cheapest, and it keeps the defect this entry
+exists for: `provenance()` would answer "subprocess output" for a sentence no
+subprocess wrote, and every count of a family's mints would be wrong.
+
 **D4 — Carrier table (fields that become `UntrustedText`).**
 
 | Module | Type.field |
@@ -202,7 +246,7 @@ That is what the emptiness and substring checks on captured output use
 `ContainerMaterializer` / `EgressGuard`'s `already exists` retry) — those sites
 need neither an exit nor the parser marker of D11.
 
-**D5 — Exceptions take the carrier; message = `forLog()`.** The 38 sites:
+**D5 — Exceptions take the carrier; message = `forLog()`.** The 37 sites:
 `GitAttemptPersistence:112,120`, `GitTaskRepository:253,261`,
 `WorktreeSalvage:75,84,115,119`, `TaskWorktreeManager:75`,
 `DeliveredBranchReader:93`, `FactoryCloneHardening:66,73`,
@@ -214,7 +258,7 @@ need neither an exit nor the parser marker of D11.
 `JudgeCriteriaPreflight:62`, `ShellCommandCheckRunner:151`,
 `GitObjectsLawSource:128`, `WorkingTreeLawSource:91`,
 `HttpExternalCheckClient:165`, `GithubTransportException:17`,
-`BranchTipFactsReader:102`, `GitFreshTaskSupport:68`. Each exception's
+`GitFreshTaskSupport:68`. Each exception's
 constructor takes `UntrustedText` (or an `UntrustedText`-typed cause
 detail) and composes its message with `toString()`; `WorktreeResync` and
 the docker `IllegalStateException` sites move to `GitResyncFailedException`
@@ -238,6 +282,26 @@ rejected:* per-site `forLog()` calls with `String` parameters kept — that is t
 called honest debt; it leaves the signature as the escape hatch
 (`implementation.md`, item 3).
 
+**One site of the original list is exempt and keeps its `String`:
+`BranchTipFactsReader.faultOf`** (`BranchTipFactsReader:102` in the pre-change
+tree). It is not an exception constructor — it folds a failed envelope read
+into `EnvelopeStatus.Unreadable`, a `:domain` status record the classifier
+turns into `BranchShape.Corrupt`. Its `reason` is the policy-authored prose of
+D4's `:baseref` row, not captured text, and the fold is where that is decided:
+a parse or bind failure arrives as
+`UncheckedIOException("<file>: malformed JSON", cause)` — a message the factory
+wrote, with the parser's own message left as the *cause* and never folded in,
+excerpt and all — and `PinnedRefGate`, the one rule that quotes the document
+at all, renders the offending value through the log exit before it enters the
+message. Typing the record would put an already-neutralized `String` inside a
+carrier, i.e. claim a provenance the text does not have, which is the
+laundering D7's rule-(c) note rejects at the tracker exit. *Enforced by:*
+`BranchTipFactsReaderSpec`'s scenario "the #file unreadable reason never
+carries document content" — four documents carrying a recognizable secret,
+asserting the reason names the file and the failure and leaks no byte of the
+document, Jackson's `at [Source: …]` excerpt included. A later change that
+surfaces the parser's message here fails that spec rather than passing quietly.
+
 **D6 — Report builders and renderers take carriers; the
 `add-base-ref-resolution` per-field calls are removed.** `FreshClaimBaseReport`,
 `ResumeBaseReport`, `BaseLawReport`, `EscalationResumeDialog.renderEscalation`,
@@ -245,11 +309,31 @@ called honest debt; it leaves the signature as the escape hatch
 `UntrustedText` parameters and call the exit matching their consumer:
 `forConsole()` in console renderers, `forComment()` in report text bound for
 the tracker, `toString()`/`forLog()` where the text is bound for a log. A
-report bound for *both* the tracker and the log (`AwaitingHuman.report`) is
-rendered once through `forComment()` — line structure preserved, fenced —
-and the sink backstop flattens it for the log; that is the documented
-division of labor between layers two and three. *Alternative rejected:* two
-renderings of every report — the sink layer exists so this is unnecessary.
+report bound for *both* the tracker and the log (`AwaitingHuman.report`,
+`Delivered.summary`) is rendered once for the comment plane — line structure
+preserved — and the sink backstop flattens it for the log; that is the
+documented division of labor between layers two and three. *Alternative
+rejected:* two renderings of every report — the sink layer exists so this is
+unnecessary.
+
+**Revised 2026-09-19 — the comment plane has two shapes, and an assembled
+report takes the inline one.** `forComment()` labels and fences what it
+renders, which is the right answer for a block that is machine output end to
+end and the wrong one for a report whose prose is the factory's own. The
+implementation of this decision had `StatusTextRenderer` rendering only for the
+console, so the finish path compensated by minting the whole assembled report
+as a carrier and fencing it at `tracker.finish` — every quoted field rendered
+twice, and the factory's own report lines published under an "untrusted machine
+output" label, which is exactly the alternative D7 rejects for the park report.
+So the leaf gains the plane's second shape, `forCommentInline()` (strip and
+mention-breaking, no label and no fence), `StatusTextRenderer` takes a
+`ReportPlane` and renders each quoted field through that plane's exit, and both
+report builders that publish to the tracker — `TakeFinishReport` and
+`TakePauseExit` — build on `ReportPlane.COMMENT`. `Delivered.summary` therefore
+becomes a `String`, joining `AwaitingHuman.report` as a builder's finished
+output. *Alternative rejected:* fencing each field individually — a title
+rendered as a labeled fenced block inside a report line is unreadable, and the
+label would be repeated once per field.
 
 **The cut boundary renders through the console exit, not the log one.** Cut A
 types a capture family whose text then crosses a port cut B types
@@ -278,7 +362,8 @@ consumers of the exit's *value*, not callers of the exit: none of the eight
 calls `forComment()` itself, and `EpochRecordingTracker` is a decorator that
 forwards what it was given. Proposal M3 therefore counts the builders. The
 port's other text-carrying writes are consumers too, not exemptions: `FinishEffect` (the `TakeFinishReport`
-summary), `AbortHandler` → `AbortRecord.cause` (typed, D4; rendered by
+summary — a consumer of the builder's value since D6's 2026-09-19 revision, not
+a caller of the exit), `AbortHandler` → `AbortRecord.cause` (typed, D4; rendered by
 `GithubStateWrites` at the comment), `DecisionAck.acknowledgeDecision` (a
 human reply read from the tracker and echoed back), and the two stop notes
 (`TakeContainerEngineExecution`, `RevocationHandler`, quoting a revocation
@@ -363,7 +448,7 @@ a separate allowlist because it answers a separate question, and the two lists
 are read for separate reasons: `@UntrustedExit` answers "who can put untrusted
 bytes in front of a reader", `@UntrustedParser` answers "who converts untrusted
 bytes into a value". Folding parsers into `@UntrustedExit` — the obvious
-shortcut — would take that first list from seven classes to thirty-three and
+shortcut — would take that first list from twelve classes to thirty-nine and
 leave it meaning nothing, which is the whole reason rule (a) exists.
 
 **Membership is by return type, not by intent** ("parse, don't validate"). An
@@ -394,7 +479,7 @@ they lift out as `BRANCH_DOCUMENT` (D3's branch-document row). The envelope's
 transport provenance is discarded there on purpose: what matters is that the
 value came off a branch another instance wrote.
 
-**Cut A's parser set** (26 classes; the gate pins it exactly as it pins the
+**Cut A's parser set** (27 classes; the gate pins it exactly as it pins the
 exit set, so a class joining it fails the spec until acknowledged):
 
 - `:adapters:git` (16) — `FactoryCloneHardening`, `GitProcessRunner`
@@ -402,12 +487,21 @@ exit set, so a class joining it fails the spec until acknowledged):
   `OriginRemote`, `RemoteBaseRef`, `RemoteBranchTip`, `RemoteDefaultBranch`,
   `ReplicaPairReconciler`, `RoundBoundaryCheck`, `SnapshotTipCheck`,
   `TaskBranchLister`, `TaskWorktreeManager`, `UsageHistoryWalker`,
-  `VerifiedTip`, `WorktreeSalvage`
+  `VerifiedTip`, `ContainerHarvestFetch`
 - `:sandbox:docker` (9) — `ContainerMaterializer`, `DeclaredVolumeOverrides`,
   `EgressGuard`, `EgressSelfCheckProbes`, `EnvironmentSelfCheck`,
   `GuardDenialReads`, `GuardSourceIdentity`, `OomAnnotatedExecHandle`,
   `SandboxLifecycleObjectReader`
 - `:adapters:agent` (1) — `TokenUsageMapper`, below
+- `:baseref` (1) — `BaseDesignator$Single`, which matches a tracker's base
+  label against the allowed bases through `BasePattern.matches`, a
+  `RefNameSyntax` gate (joined at task 6.1, when the designator chain was typed)
+
+Two `:adapters:git` entries moved while the code was written, at no change to
+the count: `WorktreeSalvage` left — its only captured read is the dirty-tree
+question, which the carrier's own `isBlank()` answers with no text leaving it —
+and `ContainerHarvestFetch` joined, because it classifies a fetch's *stderr*
+into a failure class, a stderr parse this stdout-derived list did not consider.
 
 `DockerCli` and `CapturedExec` are absent because they are mint sites: what
 they read is `:subprocess`'s `Captured`, still a `String` at that point (D3).
@@ -574,7 +668,7 @@ the row's invariant is reduced to the commit + state-file sequence.
 | `UntrustedText` mints (`:untrustedtext`) | `UntrustedText` | the seven capture families in D3's table, by file | `String` fields on every carrier in D4's table — changed to `UntrustedText`; the `String`-typed constructors deleted | the parameter type; gate rule (b) (`UntrustedTextGateSpec`) for accessor return types |
 | `UntrustedText.forLog/forConsole/forComment` (`:untrustedtext`) | `String`, already neutralized | every log call, console print, exception constructor and report builder in D5/D6 | direct `LogText.forLog(...)` calls at sites that now hold a carrier (the `add-base-ref-resolution` per-field calls included) — deleted; `UntrustedLogTextGateSpec` — its accessor pattern narrowed per family as each lands, the spec deleted at task 5.2 when the pattern is empty (no accessor is ever ungated) | gate rules (a) and (c); `UntrustedTextExitIdentitySpec` (FR2) |
 | `TextSafety.forComment` via `TrackerFence` facade (`:untrustedtext` / `:application`) | fenced comment text | callers of the exit: the builders D7 names (`FreshClaimBaseReport`, `ResumeBaseReport`, `BaseLawReport`, `AbortReportBuilder`, `BranchQuarantineReport`, `EscalationResumeDialog`, the `GuardedPark` report functions), `FinishEffect`, `GithubStateWrites` (abort cause), `DecisionAck`, the two stop-note writers; consumers of the value: the eight park writers (D7) | `FindingsSanitizer.strip(...).replace("@", …)` inside `TrackerFence` — moved; ad-hoc report concatenation in the eight writers — routed through builders; `"aborted: " + record.cause()` in `GithubStateWrites` — routed through the exit | gate rule (c) on every text-carrying `Tracker` method; `TrackerPublicationOwnerSpec` scanning every tracker write site and every `AbortRecord` construction for the *wrong* exit (`LogText`, `FindingsSanitizer`) as well as a raw carrier. The `AbortRecord` constructor left rule (c) at task 6.3, when its `cause` became the carrier: a carrier there is the contract being honoured, not laundering — the same reasoning rule (c) already applies to a throwable that declares its detail as untrusted text |
-| `UntrustedText.forParsing()` (`:untrustedtext`) | the captured bytes, for conversion into a value | the 26 `@UntrustedParser` classes D11 lists, by module | direct `raw()` reads from a parser — never introduced; `String`-typed `stdout`/`output` accessors, which let any class parse without declaring it — changed to the carrier | the annotation; gate rule (a2), whose pinned parser set fails on growth and whose seeded offender returns the text unchanged as a `String` |
+| `UntrustedText.forParsing()` (`:untrustedtext`) | the captured bytes, for conversion into a value | the 27 `@UntrustedParser` classes D11 lists, by module | direct `raw()` reads from a parser — never introduced; `String`-typed `stdout`/`output` accessors, which let any class parse without declaring it — changed to the carrier | the annotation; gate rule (a2), whose pinned parser set fails on growth and whose seeded offender returns the text unchanged as a `String` |
 | `ConfigError.render()` (`:domain`) | `UntrustedText`, `MANIFEST` | `BaseLawReport`, `PipelineStartup`, `TakeCommandSupport`, `TrustedTierStartup`, `CheckClientConfiguration` (D10) | `LogText.forLog(error.render())` in `BaseLawReport` — deleted; `render()` returning `String` — changed | the return type; rule (b) does not apply (`ConfigError` is not a carrier) |
 
 Identity claims: FR2 (`exit(mint(x)) == primitive(x)`, `toString() ==
@@ -598,7 +692,7 @@ provenance, every exit.
   and the annotated set is enumerated in `UntrustedTextGateSpec`'s own
   expectation (a growth in the set fails the spec until acknowledged).
 - [`@UntrustedParser` becomes the laundering hatch `@UntrustedExit` was kept
-  from being — 26 classes may read the bytes] → membership is checkable, not
+  from being — 27 classes may read the bytes] → membership is checkable, not
   declarative: rule (a2) pins the set as a class-to-conversion map, a seeded
   parser returning the text unchanged fails the spec, and each member's javadoc
   states what makes its output inert (D11) — so the set is reviewable at a
@@ -613,7 +707,7 @@ provenance, every exit.
 ## Migration Plan
 
 Cut A (groups 1–4): leaf type + exits + gate; git/docker/in-box/agent
-families; the 38 exceptions; sink invariant re-run. Build green, shippable.
+families; the 37 exceptions; sink invariant re-run. Build green, shippable.
 Cut B (groups 5–7): tracker/manifest/branch-document families; domain and
 contract carriers; report builders and renderers; fence ownership; 0.8.0;
 documents. Build green.
@@ -635,7 +729,7 @@ no text leaves the carrier — the same reason FR10's three questions need none.
 signature to carrier-in, carrier-out; `AbortHandler` stays the one caller.
 *Rationale:* it is MarkupSafe's invariant — a transformation of branded text
 returns the brand, which is what makes double-escaping unrepresentable there
-and what keeps the exit allowlist at seven classes here. The alternative of
+and what keeps the exit allowlist at twelve classes here. The alternative of
 annotating `AbortCauseBudget` `@UntrustedExit` is an unchecked conversion in
 `google/safe-html-types`' sense: permitted only inside a self-contained library
 whose safety is checkable without reading its callers, which a take-flow helper

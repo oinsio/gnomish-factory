@@ -10,7 +10,7 @@ banners and decision files, issue titles and claim-marker holders, `task.json`
 values, `.gnomish/` manifest strings — and **none of them is a distinct type**:
 each is a `String`, indistinguishable from a string the factory wrote itself.
 That is the root cause of every laundering path the audit listed: fold the
-text into an exception message (38 sites), a record's `toString()`, an MDC
+text into an exception message (37 sites), a record's `toString()`, an MDC
 value or an assembled report, and the name the gate keys on is gone. The
 sink-side backstop (`harden-untrusted-text-sinks`) makes those paths *safe*;
 it does not make them *visible*, and it does nothing for the tracker comment,
@@ -29,10 +29,11 @@ can name one type. This change introduces it and moves the codebase onto it.
 
 - **ADDED** `untrusted-text` capability: the carrier `UntrustedText` — a value
   with provenance (`SUBPROCESS`, `CONTAINER`, `AGENT`, `TRACKER`, `MANIFEST`,
-  `BRANCH_DOCUMENT`), a raw accessor reserved for annotated exit owners, three
-  exits (`forLog`, `forConsole`, `forComment`), and a `toString()` that yields
-  the log-safe form — so concatenation, the classic laundering move, becomes
-  safe by default instead of unsafe by default.
+  `BRANCH_DOCUMENT`), a raw accessor reserved for annotated exit owners, four
+  exits (`forLog`, `forConsole`, `forComment` and its unfenced inline shape
+  `forCommentInline`), and a `toString()` that yields the log-safe form — so
+  concatenation, the classic laundering move, becomes safe by default instead
+  of unsafe by default.
 - **MODIFIED** carrier types across `:domain`, `:gnomish-plugin-api`,
   `:sandbox:core` and the adapters: every field that holds attacker-influenced
   text becomes `UntrustedText` (the full list is design.md's carrier table).
@@ -44,7 +45,7 @@ can name one type. This change introduces it and moves the codebase onto it.
   enters the process: git runner, docker CLI, in-box exec, agent stream/decision
   readers, tracker adapters, the `.gnomish/` loader, the task-branch document
   readers.
-- **MODIFIED** the 38 exception constructors and the three report builders to
+- **MODIFIED** the 37 exception constructors and the three report builders to
   take `UntrustedText`; their messages are built from the log-safe form.
 - **MODIFIED** `factory-logging`: the accessor-name gate is replaced by a
   type-level gate — untrusted accessors return `UntrustedText`; `raw()` is
@@ -87,7 +88,7 @@ can name one type. This change introduces it and moves the codebase onto it.
   without passing an exit: the compiler refuses it where a type mismatch
   exists, and one build gate refuses the residue (`raw()` outside an exit,
   an untrusted accessor returning `String`).
-- G2: The 38 exception-constructor sites and the three report builders are
+- G2: The 37 exception-constructor sites and the three report builders are
   brought under the rule by the type, not by a per-site `LogText` call — the
   "honest debt" section of `logging.md` is closed, not restated.
 - G3: The tracker comment has one owner for untrusted text, with every park
@@ -170,7 +171,7 @@ can name one type. This change introduces it and moves the codebase onto it.
   SHALL construct it with its provenance; no other production code SHALL call
   a mint.
 - FR5: Every exception constructor that today concatenates subprocess or
-  container output (design.md lists the 38) SHALL take `UntrustedText` and
+  container output (design.md lists the 37) SHALL take `UntrustedText` and
   render its message from `forLog()`; `WorktreeResync` and the docker
   `IllegalStateException` sites SHALL move to a typed exception.
 - FR6: The three base reports and every other report builder that quotes
@@ -278,10 +279,13 @@ can name one type. This change introduces it and moves the codebase onto it.
   builder output and never call the exit themselves (design D7).
 - M4: `logging.md` contains no "honest debt" paragraph and no accessor list.
 - M5: PIT 100% in every touched module; `./gradlew check` green.
-- M6: `@UntrustedExit` names exactly the nine classes design D2 lists — it
-  does not grow to admit a parser; `@UntrustedParser` names exactly the 26
+- M6: `@UntrustedExit` names exactly the twelve classes design D2 lists — it
+  does not grow to admit a parser; `@UntrustedParser` names exactly the 27
   design D11 lists, each yielding a converted value. Both sets are pinned in
-  `UntrustedTextGateSpec` and fail the build on growth.
+  `UntrustedTextGateSpec` and fail the build on growth. (Both counts are the
+  ones the pinned sets enforce; the "nine" and "26" this metric carried until
+  task 7.3's sweep predate tasks 2.4, 3.3, 5.0 and 6.1, each of which admitted
+  a class while the metric was already written.)
 
 ## Open Questions
 

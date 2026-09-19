@@ -85,7 +85,7 @@ record BareTakeClaimWalk(
             // claim attempt — fall through to the next eligible candidate (see class javadoc).
         }
         return new TakeResult.Skipped(
-                UntrustedText.tracker("every eligible task in the queue was already claimed by another instance —"
+                UntrustedText.factory("every eligible task in the queue was already claimed by another instance —"
                         + " nothing to take this run"));
     }
 
@@ -103,7 +103,7 @@ record BareTakeClaimWalk(
         if (backoffEligible.isEmpty()) {
             return new TakeResult.EmptyQueue();
         }
-        return new TakeResult.Skipped(UntrustedText.tracker("WIP limit reached: " + openFrontCount
+        return new TakeResult.Skipped(UntrustedText.factory("WIP limit reached: " + openFrontCount
                 + " open front(s) at or above the configured limit of " + wipLimit + " — " + backoffEligible.size()
                 + " fresh task(s) waiting for a front to close; no returned tasks are ready"));
     }

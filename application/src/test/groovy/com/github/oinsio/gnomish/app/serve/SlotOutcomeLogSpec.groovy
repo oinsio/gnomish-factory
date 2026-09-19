@@ -55,7 +55,7 @@ class SlotOutcomeLogSpec extends Specification {
 
         where:
         result || detail
-        new TakeResult.Delivered(state(), UntrustedText.tracker('shipped it')) || 'shipped it'
+        new TakeResult.Delivered(state(), 'shipped it') || 'shipped it'
         new TakeResult.AwaitingHuman(state(), ParkReason.ESCALATION, 'stuck here') || 'stuck here'
         new TakeResult.Aborted(state(), UntrustedText.subprocess('clone failed')) || 'clone failed'
         new TakeResult.Revoked(state(), UntrustedText.tracker('claim taken')) || 'claim taken'
@@ -108,7 +108,7 @@ class SlotOutcomeLogSpec extends Specification {
         def capture = LogCaptureSupport.attach(AnchorLog)
 
         when:
-        outcomeLog.summarize(new TakeResult.Delivered(state(), UntrustedText.tracker('shipped it')), Duration.ofSeconds(90))
+        outcomeLog.summarize(new TakeResult.Delivered(state(), 'shipped it'), Duration.ofSeconds(90))
 
         then:
         capture.list.size() == 1

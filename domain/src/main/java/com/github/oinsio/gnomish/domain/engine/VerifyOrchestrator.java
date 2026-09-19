@@ -146,7 +146,7 @@ final class VerifyOrchestrator {
             // The trace quotes whatever the failing adapter captured — a command's stderr, a
             // daemon's refusal — so `StackTraces.render` hands it over carried (design D4); the
             // factory-authored reason beside it is minted here to match the field's type.
-            return new Verdict.CannotVerify(UntrustedText.subprocess("check adapter threw"), StackTraces.render(ex));
+            return new Verdict.CannotVerify(UntrustedText.factory("check adapter threw"), StackTraces.render(ex));
         }
     }
 }

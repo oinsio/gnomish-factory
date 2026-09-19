@@ -15,7 +15,14 @@ import spock.lang.Specification
  * FR8, design D7 of type-untrusted-text: the comment exit owns tracker publication. Every
  * component that writes prose to the tracker — a park report, a finish summary, an abort marker's
  * cause, a decision acknowledgement, a stop note — publishes text whose untrusted parts left their
- * carrier through {@code UntrustedText.forComment()}, and through nothing else.
+ * carrier through the comment plane, and through nothing else.
+ *
+ * <p>The plane has two shapes and the gate accepts either: {@code UntrustedText.forComment()} for
+ * a block that is machine output end to end, and {@code forCommentInline()} for one field quoted
+ * inside a line the factory wrote itself (design D6, revised 2026-09-19). Both apply the same
+ * neutralization — the strip, the mention break, the issue-reference break — and the choice
+ * between them is about the label's truthfulness, not about safety, which is why it is a review
+ * question and not this scan's.
  *
  * <p>Two questions, one scan, because each alone would pass on a tree that fails the other:
  *

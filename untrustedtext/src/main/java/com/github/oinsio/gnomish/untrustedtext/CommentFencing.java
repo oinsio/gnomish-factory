@@ -40,9 +40,27 @@ final class CommentFencing {
      * @return the labeled, fenced, escaped block; never null
      */
     static String render(String text) {
-        String inert = TextSafety.strip(text).replace("@", "@​").replace("#", "#​");
+        String inert = inert(text);
         String fence = "~".repeat(fenceLength(inert));
         return LABEL + "\n" + fence + "\n" + inert + "\n" + fence;
+    }
+
+    /**
+     * The first two layers alone — stripped, mentions and issue references broken — with no label
+     * and no fence: the shape a single untrusted <em>field</em> takes inside a line the factory
+     * wrote itself (design D6 of type-untrusted-text, revised 2026-09-19).
+     *
+     * <p>The fence exists to say "everything between these markers is machine output". A report
+     * whose prose is the factory's own cannot make that statement about itself — fencing it whole
+     * labels the factory's own instruction lines as untrusted output, which is the alternative D7
+     * rejects. So a report bound for the tracker renders each captured field through this, and the
+     * fence is kept for what it describes: a block that really is machine output end to end.
+     *
+     * @param text the raw untrusted text; never null
+     * @return the stripped, mention-broken text, no label and no fence; never null
+     */
+    static String inert(String text) {
+        return TextSafety.strip(text).replace("@", "@​").replace("#", "#​");
     }
 
     /**

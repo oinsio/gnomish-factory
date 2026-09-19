@@ -65,7 +65,7 @@ final class JudgeRoundExecution {
             return cannotVerify(
                     check,
                     "agent CLI process failed to start",
-                    UntrustedText.agent(factoryProperties.agentCliBinary()),
+                    UntrustedText.factory(factoryProperties.agentCliBinary()),
                     e);
         }
 
@@ -79,7 +79,7 @@ final class JudgeRoundExecution {
                 return cannotVerify(
                         check,
                         "agent round exceeded roundTimeout and was killed",
-                        UntrustedText.agent("roundTimeout: " + roundTimeout));
+                        UntrustedText.factory("roundTimeout: " + roundTimeout));
             }
             if (wait instanceof ExecHandle.Wait.Interrupted) {
                 // The never-throw contract again, and a cause of its own: blaming the budget for a
@@ -88,7 +88,7 @@ final class JudgeRoundExecution {
                 return cannotVerify(
                         check,
                         "agent round wait was interrupted and the process tree was killed",
-                        UntrustedText.agent("roundTimeout: " + roundTimeout));
+                        UntrustedText.factory("roundTimeout: " + roundTimeout));
             }
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
@@ -126,7 +126,7 @@ final class JudgeRoundExecution {
                 check.criteriaFile(),
                 reason,
                 details.forLog());
-        return new Vote(new Verdict.CannotVerify(UntrustedText.agent(reason), details), Map.of());
+        return new Vote(new Verdict.CannotVerify(UntrustedText.factory(reason), details), Map.of());
     }
 
     /** The four exits carrying a throwable, which is passed trailing so the stack survives. */
@@ -137,6 +137,6 @@ final class JudgeRoundExecution {
                 reason,
                 details.forLog(),
                 cause);
-        return new Vote(new Verdict.CannotVerify(UntrustedText.agent(reason), details), Map.of());
+        return new Vote(new Verdict.CannotVerify(UntrustedText.factory(reason), details), Map.of());
     }
 }

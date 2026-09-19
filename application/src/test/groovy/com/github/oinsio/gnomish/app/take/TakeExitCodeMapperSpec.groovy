@@ -20,7 +20,7 @@ class TakeExitCodeMapperSpec extends Specification {
 
         where:
         result | expectedCode
-        new TakeResult.Delivered(STATE, UntrustedText.tracker('done')) | 0
+        new TakeResult.Delivered(STATE, 'done') | 0
         new TakeResult.EmptyQueue() | 0
         new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'decide') | 10
         new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, 'paused') | 11

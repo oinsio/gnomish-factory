@@ -171,6 +171,6 @@ public record GithubTaskFetcher(
     }
 
     private static TaskSnapshot goneSnapshot(TaskRef ref) {
-        return new TaskSnapshot(ref.id(), UntrustedText.tracker(ref.id()), UntrustedText.tracker(""));
+        return new TaskSnapshot(ref.id(), UntrustedText.factory(ref.id()), UntrustedText.factory(""));
     }
 }

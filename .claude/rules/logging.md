@@ -111,12 +111,13 @@ capture: **mint at capture, render at the sink**. A capture accessor returns the
 carrier, not a `String`; the text is neutralized only where it leaves the
 carrier, and which rendering it gets is chosen by the plane it is leaving for.
 
-The carrier has four ways out, each with its own allowlist:
+The carrier has five ways out, each with its own allowlist:
 
 | Way out                                      | Who may call it                       | What it yields                                      |
 |----------------------------------------------|---------------------------------------|-----------------------------------------------------|
 | `isBlank()`, `contains(String)`, `length()`  | anyone                                | a boolean or an int — no text leaves                 |
 | `forLog()` / `forConsole()` / `forComment()` | anyone                                | neutralized text for a human plane                   |
+| `forCommentInline()`                         | anyone                                | the comment plane without the label and the fence    |
 | `forParsing()`                               | classes annotated `@UntrustedParser`  | the bytes as captured, to be turned into a value     |
 | `raw()`                                      | classes annotated `@UntrustedExit`    | the bytes as captured, to be written to a machine medium |
 
@@ -131,6 +132,13 @@ throw new TaskListingFailedException(pattern, exitCode, failure);  // the carrie
   a leak; the gate still asks for the explicit call, so intent stays visible.
 - **`forConsole()`** is the operator console's exit (see `ConsoleIO` below);
   **`forComment()`** is the tracker's, applied by `TrackerFence`.
+- **`forCommentInline()`** is the same tracker rendering — stripped, mentions and
+  issue references broken — without the label and the fence, for a field quoted
+  inside a line the factory wrote itself. The fence says "everything between these
+  markers is machine output", so it belongs to a block that really is; a report the
+  factory assembled takes this exit field by field instead, and is published as it
+  stands. Fencing an assembled report whole labels the factory's own lines untrusted
+  and renders every field twice — the defect `ReportPlane` exists to prevent.
 - **`@UntrustedExit`** marks the few classes that write raw bytes to a *machine*
   medium — the leaf's exit renderers, the JSON/state/ledger/snapshot writers,
   the `--json` mappers, the findings funnel entry. Rendering there would corrupt
@@ -144,6 +152,12 @@ throw new TaskListingFailedException(pattern, exitCode, failure);  // the carrie
   inert.
 - **Queries carry no text**, so they need no annotation: emptiness and substring
   checks use them rather than `forParsing()`.
+- **The factory's own prose mints `UntrustedText.factory`.** A `reason`, a `cause`
+  or an empty `details` is a carrier on every path, so the sentence the factory
+  composes for the path that captured nothing is a carrier too — minted in its own
+  family, never in the family of whatever capture sits beside it. A sentence may
+  quote a capture and stay factory prose *if the quote left its carrier through an
+  exit first*; interpolating a capture raw keeps the capture's family.
 - **Pass-through is not parsing.** A file's content read off a branch is the
   document itself, not an answer about it: it keeps travelling as a carrier down
   to the mapper that lifts fields out of it, and that mapper re-mints each lifted

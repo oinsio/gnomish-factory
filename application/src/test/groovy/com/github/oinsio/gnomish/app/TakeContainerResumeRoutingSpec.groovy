@@ -431,7 +431,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         }, _)
 
         then:
-        1 * tracker.acknowledgeDecision(REF, fenced('go left'))
+        1 * tracker.acknowledgeDecision(REF, inert('go left'))
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
     }
@@ -464,8 +464,13 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         result instanceof TakeResult.AwaitingHuman
     }
 
-    /** The comment exit's rendering of one text, as every tracker write now publishes it. */
-    private static String fenced(String text) {
-        UntrustedText.tracker(text).forComment()
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
+     * "untrusted machine output" label would be untrue about.
+     */
+    private static String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -56,7 +55,7 @@ class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedger
         def finishedAt = Instant.parse('2026-08-03T10:05:30Z')
         def accumulator = new RunSummaryAccumulator()
         accumulator.record(new TakeResult.Delivered(
-                        delivered(['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]), UntrustedText.tracker('shipped it')))
+                        delivered(['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]), 'shipped it'))
 
         when:
         writer(finishedAt).write(accumulator, startedAt)

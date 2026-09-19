@@ -228,11 +228,13 @@ final class FreshClaimBaseBinding {
         releaseBestEffort(tracker, ref);
         // The reason leaves its carrier through the log exit here rather than at each sink: what is
         // built is one message the sinks log whole, and minting the composed line keeps the field a
-        // carrier so no sink can take it raw (design D4 of type-untrusted-text). The resolved ref
+        // carrier so no sink can take it raw (design D4 of type-untrusted-text). The composed line
+        // is the factory's own sentence around an already-neutralized quote, so it is minted in the
+        // factory's family rather than in the one the quote came from (design D3). The resolved ref
         // beside it is not untrusted text at all: it is what BaseRefResolver decided, and every
         // tier of that decision is held to RefNameSyntax (NG4).
         return new TakeResult.InfrastructureUnavailable(
-                UntrustedText.subprocess("Task " + ref.id() + " claim released (the reaper returns it to Ready after"
+                UntrustedText.factory("Task " + ref.id() + " claim released (the reaper returns it to Ready after"
                         + " the claim TTL): origin did not answer the refresh of its resolved base ref '"
                         + resolvedRef + "': " + reason.forLog()));
     }

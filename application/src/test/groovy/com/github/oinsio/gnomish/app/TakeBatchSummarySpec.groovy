@@ -22,7 +22,7 @@ class TakeBatchSummarySpec extends Specification {
     def "names every ref and its outcome, in order"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped it'))),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it')),
             new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('held by another instance'))),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
         ]
@@ -38,7 +38,7 @@ class TakeBatchSummarySpec extends Specification {
     def "names a tool-failure outcome alongside ordinary outcomes"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped it'))),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it')),
             TakeBatchOutcome.toolFailure('43', new UsageException('cannot resolve ref')),
         ]
 

@@ -72,6 +72,34 @@ class GitFreshTaskSupportSpec extends Specification {
         ex.message.contains('--resume')
     }
 
+    // FR5, design D5 of type-untrusted-text: a `getMessage()` fold is a mint site. The lower
+    // exception's message may quote what git said, and this one is built from it and printed to
+    // the operator, so the quote re-enters a carrier at the fold instead of travelling as the
+    // raw String the lower exception happens to hold.
+    def "re-mints the folded detail, so a forged record in it cannot survive the fold"() {
+        given: 'a git-layer failure whose detail forges a second record and drives the terminal'
+        def hostile = "boom\n[2J2026-01-01 00:00:00 ERROR forged record\r"
+        def taskRepository = Stub(TaskRepository) {
+            createTask(_, _, _, _) >> {
+                throw new GitTaskRepositoryException(
+                'PROJ-1', TaskLifecycleEvent.STARTED, 'git commit', UntrustedText.subprocess(hostile))
+            }
+        }
+
+        when:
+        GitFreshTaskSupport.createTask(
+                taskRepository, 'PROJ-1', CONTEXT, LAW_COMMIT, BasePin.UNPINNED, TaskState.atStageStart('build'))
+
+        then: 'the usage error still names the failure'
+        def ex = thrown(UsageException)
+        ex.message.contains('git commit')
+
+        and: 'and nothing in it can open a second record or drive a terminal'
+        !ex.message.contains('\n')
+        !ex.message.contains('\r')
+        !ex.message.contains('')
+    }
+
     // FR7: only the git-layer failure is remapped. Any other fault propagates unchanged.
     def "lets a non-git failure propagate unchanged"() {
         given:

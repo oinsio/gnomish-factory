@@ -68,10 +68,7 @@ final class SlotOutcomeLog {
     void detail(TaskRef claimed, TakeResult result) {
         switch (result) {
             case TakeResult.Delivered delivered ->
-                log.debug(
-                        "slot for task {} delivered: {}",
-                        claimed.id(),
-                        delivered.summary().forLog());
+                log.debug("slot for task {} delivered: {}", claimed.id(), delivered.summary());
             case TakeResult.AwaitingHuman awaitingHuman ->
                 log.debug(
                         "slot for task {} parked ({}): {}",

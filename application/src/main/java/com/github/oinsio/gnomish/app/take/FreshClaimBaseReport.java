@@ -14,13 +14,21 @@ import java.util.stream.Collectors;
  * <p>Pure text assembly, no I/O: the tracker write and the log line are the caller's.
  *
  * <p>Every field this report carries from outside the factory arrives as an {@link UntrustedText}
- * and leaves it through {@link UntrustedText#forComment()} — the exit that matches this report's
- * consumer, since the assembled paragraph is posted as a tracker comment and logged whole (design
- * D6, D7 of type-untrusted-text). The per-field {@code LogText} calls this class carried before are
- * gone with the types: a fence tells the operator, and the next model reading the thread, which
- * words were the factory's and which were the remote's — which flattening to one capped line could
- * not. The factory's own instruction lines stay outside the fence, which is why the report is
- * assembled here rather than wrapped at {@code Tracker.park}.
+ * and leaves it through the comment plane here, since the assembled paragraph is posted as a
+ * tracker comment and logged whole (design D6, D7 of type-untrusted-text). The per-field {@code
+ * LogText} calls this class carried before are gone with the types: the comment plane keeps line
+ * structure and length, which flattening to one capped line could not. The factory's own
+ * instruction lines are why the report is assembled here rather than wrapped at {@code
+ * Tracker.park}.
+ *
+ * <p>The two renders take the plane's two shapes, by what a fence would be describing (design D6,
+ * revised 2026-09-19). {@link #refused} is a heading of the factory's own over <em>one</em> capture
+ * — git's own account — so its detail takes {@link UntrustedText#forComment()} and the label
+ * "untrusted machine output" is the true statement it makes about that block. {@link
+ * #underdetermined} lists <em>every</em> designator value found on the task, so each value takes
+ * {@link UntrustedText#forCommentInline()} instead: the "Values named:" heading already separates
+ * them from the factory's prose, and one labeled fence per value would repeat that heading n times
+ * without any of them describing the report it sits in.
  *
  * <p>The ref names it interpolates are not untrusted text: every ref entering the process is held
  * to {@code RefNameSyntax} first, so they are {@code String} by NG4 of type-untrusted-text.
@@ -49,7 +57,8 @@ public final class FreshClaimBaseReport {
         String named = values.isEmpty()
                 ? ""
                 : "Values named:\n"
-                        + values.stream().map(UntrustedText::forComment).collect(Collectors.joining("\n")) + "\n";
+                        + values.stream().map(UntrustedText::forCommentInline).collect(Collectors.joining("\n"))
+                        + "\n";
         return "Task " + taskId + " is parked: its base could not be determined.\n"
                 + "Cause: " + cause + "\n"
                 + named

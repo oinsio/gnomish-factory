@@ -51,7 +51,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class GithubWorkflowRunPoll {
 
-    private static final UntrustedText CANNOT_VERIFY_REASON = UntrustedText.tracker("GitHub Actions runs query failed");
+    private static final UntrustedText CANNOT_VERIFY_REASON = UntrustedText.factory("GitHub Actions runs query failed");
 
     private final GithubWorkflowRunQuery query;
     private final GithubWorkflowJobsFetcher jobsFetcher;

@@ -52,21 +52,20 @@ class UntrustedTextCappedToSpec extends Specification {
     }
 
     // D13: the result is a carrier of the same provenance — that is what makes this not a way out.
+    //     Driven off Provenance.values(), never a hand-listed subset (.claude/rules/testing.md): the
+    //     table this replaced named six of the eight families, so OPERATOR and FACTORY — both added
+    //     after it was written — were the two whose truncation nothing asserted. The mint switch is
+    //     UntrustedTextExitIdentitySpec's, reused rather than copied, so one exhaustive switch in
+    //     this package fails to compile when a ninth family arrives.
     def "the capped text is still a carrier of the same provenance — #provenance"() {
         given:
-        def carrier = mint.call('z' * (CAP * 2))
+        def carrier = UntrustedTextExitIdentitySpec.mint('z' * (CAP * 2), provenance as Provenance)
 
         expect:
         carrier.cappedTo(CAP).provenance() == provenance
 
         where:
-        provenance | mint
-        Provenance.SUBPROCESS | { UntrustedText.subprocess(it) }
-        Provenance.CONTAINER | { UntrustedText.container(it) }
-        Provenance.AGENT | { UntrustedText.agent(it) }
-        Provenance.TRACKER | { UntrustedText.tracker(it) }
-        Provenance.MANIFEST | { UntrustedText.manifest(it) }
-        Provenance.BRANCH_DOCUMENT | { UntrustedText.branchDocument(it) }
+        provenance << Provenance.values()
     }
 
     def "an over-bound text keeps head and tail and names the omitted count"() {

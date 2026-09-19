@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -76,6 +77,12 @@ public final class HarvestedBoundaryCheck {
                     taskId, key.stage(), key.attempt(), "harvested boundary diff", diff.cannotVerifyDetail());
         }
         String allowed = decisionPath(key);
+        // @UntrustedParser warrant (design D11): the captured bytes are converted into a decision —
+        //     did the gnome touch anything under .gnomish-task/ besides this round's decision file
+        //     — and the paths behind that decision are never handed on as a plain String. They go
+        //     back into a carrier, re-minted from the diff they came out of, and the violation
+        //     message quotes that carrier through the log exit, so what reaches a reader is
+        //     stripped, one line and bounded however the gnome named its files.
         List<String> touched = diff.stdout()
                 .forParsing()
                 .lines()
@@ -84,8 +91,9 @@ public final class HarvestedBoundaryCheck {
                 .filter(line -> !line.equals(allowed))
                 .toList();
         if (!touched.isEmpty()) {
+            UntrustedText paths = UntrustedText.subprocess(String.join(", ", touched));
             throw new RoundBoundaryViolationException(
-                    taskId, ".gnomish-task/ was modified by the gnome: " + String.join(", ", touched));
+                    taskId, ".gnomish-task/ was modified by the gnome: " + paths.forLog());
         }
     }
 

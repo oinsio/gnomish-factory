@@ -75,7 +75,7 @@ public class InMemoryTracker implements Tracker {
             TrackedTask task = store.get(ref);
             if (task == null) {
                 TaskSnapshot gone =
-                        new TaskSnapshot(ref.id(), UntrustedText.tracker(ref.id()), UntrustedText.tracker(""));
+                        new TaskSnapshot(ref.id(), UntrustedText.factory(ref.id()), UntrustedText.factory(""));
                 return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none(), false);
             }
             return new TrackerTask(

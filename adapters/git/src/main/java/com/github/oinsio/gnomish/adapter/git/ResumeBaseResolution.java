@@ -47,8 +47,8 @@ final class ResumeBaseResolution {
             return localTip(cloneDir, ref)
                     .<ResumeBaseOutcome>map(
                             commit -> new ResumeBaseOutcome.Bound(ref, commit, OriginContact.CLONE_ONLY))
-                    .orElseGet(() ->
-                            new ResumeBaseOutcome.Refused(UntrustedText.subprocess(noRemoteUnresolvedReport(ref))));
+                    .orElseGet(
+                            () -> new ResumeBaseOutcome.Refused(UntrustedText.factory(noRemoteUnresolvedReport(ref))));
         }
         return switch (refresh.refresh(cloneDir, ref, kind)) {
             // The remote-backed path takes the refresh's own answer rather than restating one: it

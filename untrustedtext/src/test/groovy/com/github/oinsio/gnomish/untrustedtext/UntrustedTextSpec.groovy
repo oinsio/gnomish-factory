@@ -4,8 +4,9 @@ import spock.lang.Specification
 
 /**
  * FR1, FR4, design D1 of type-untrusted-text: the carrier every piece of text entering the
- * factory from outside its trust boundary travels in. Seven mints, one per capture family, each
- * tagging the text with the provenance that travels with it; one raw accessor reserved for exit
+ * factory from outside its trust boundary travels in. Seven mints, one per capture family, plus
+ * the factory's own for the sentences it composes around them, each tagging the text with the
+ * provenance that travels with it; one raw accessor reserved for exit
  * owners; and — the reason it is a final class rather than a record — a {@code toString()} that
  * is the log exit, so the classic laundering move of concatenating untrusted text into a
  * factory-authored string yields neutralized text instead of a hole.
@@ -28,6 +29,27 @@ class UntrustedTextSpec extends Specification {
         'manifest' | UntrustedText.manifest(TEXT) || Provenance.MANIFEST
         'branch document' | UntrustedText.branchDocument(TEXT) || Provenance.BRANCH_DOCUMENT
         'operator' | UntrustedText.operator(TEXT) || Provenance.OPERATOR
+        'factory' | UntrustedText.factory(TEXT) || Provenance.FACTORY
+    }
+
+    // FR4, design D3: the factory's own sentences are a carrier because the field is one, and the
+    //     family says so — the alternative files factory prose under a source that did not write it.
+    def "a sentence the factory composed is minted in its own family, not in the one it quotes"() {
+        given: 'captured output, and the sentence a report builds around it'
+        def captured = UntrustedText.subprocess(TEXT)
+        def sentence = UntrustedText.factory("the fetch of 'main' was refused: " + captured.forLog())
+
+        expect: 'the quote is named by the family it was captured in'
+        captured.provenance() == Provenance.SUBPROCESS
+
+        and: 'and the sentence built around it by the one that wrote it'
+        sentence.provenance() == Provenance.FACTORY
+
+        and: 'the quote is inert before it enters the sentence, so the sentence carries no raw byte'
+        sentence.raw().contains(captured.forLog())
+
+        and: 'and the sentence still renders through the same exits as any other carrier'
+        sentence.toString() == sentence.forLog()
     }
 
     def "every provenance names itself in words a report can print — #provenance"() {
@@ -159,11 +181,13 @@ class UntrustedTextSpec extends Specification {
 
         where:
         family | mint
-        'subprocess' | { UntrustedText.subprocess(it) }
-        'container' | { UntrustedText.container(it) }
-        'agent' | { UntrustedText.agent(it) }
-        'tracker' | { UntrustedText.tracker(it) }
-        'manifest' | { UntrustedText.manifest(it) }
-        'branch document' | { UntrustedText.branchDocument(it) }
+        'subprocess' | { String it -> UntrustedText.subprocess(it) }
+        'container' | { String it -> UntrustedText.container(it) }
+        'agent' | { String it -> UntrustedText.agent(it) }
+        'tracker' | { String it -> UntrustedText.tracker(it) }
+        'manifest' | { String it -> UntrustedText.manifest(it) }
+        'branch document' | { String it -> UntrustedText.branchDocument(it) }
+        'operator' | { String it -> UntrustedText.operator(it) }
+        'factory' | { String it -> UntrustedText.factory(it) }
     }
 }

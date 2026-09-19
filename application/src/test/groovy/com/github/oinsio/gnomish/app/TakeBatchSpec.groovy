@@ -39,7 +39,7 @@ class TakeBatchSpec extends Specification {
         given:
         def refs = ['a', 'b', 'c']
         def perRef = { String ref ->
-            ref == 'b' ? new TakeResult.Skipped(UntrustedText.tracker('b refused')) : new TakeResult.Delivered(null, UntrustedText.tracker("$ref delivered"))
+            ref == 'b' ? new TakeResult.Skipped(UntrustedText.tracker('b refused')) : new TakeResult.Delivered(null, "$ref delivered")
         }
 
         when:
@@ -65,7 +65,7 @@ class TakeBatchSpec extends Specification {
             maxConcurrent.updateAndGet { Math.max(it, now) }
             Thread.sleep(50)
             concurrent.decrementAndGet()
-            new TakeResult.Delivered(null, UntrustedText.tracker("$ref delivered"))
+            new TakeResult.Delivered(null, "$ref delivered")
         }
 
         when:
@@ -91,7 +91,7 @@ class TakeBatchSpec extends Specification {
                 bothBlockedStarted.countDown()
                 releaseBlocked.await(5, TimeUnit.SECONDS)
             }
-            new TakeResult.Delivered(null, UntrustedText.tracker("$ref delivered"))
+            new TakeResult.Delivered(null, "$ref delivered")
         }
 
         when: 'the batch is driven on its own thread — run() blocks until every ref finishes'
@@ -123,7 +123,7 @@ class TakeBatchSpec extends Specification {
             if (ref == 'b') {
                 throw new UsageException('b is malformed')
             }
-            new TakeResult.Delivered(null, UntrustedText.tracker("$ref delivered"))
+            new TakeResult.Delivered(null, "$ref delivered")
         }
         def logs = LogCaptureSupport.attach(TakeBatch)
 
@@ -158,7 +158,7 @@ class TakeBatchSpec extends Specification {
         given:
         def refs = ['a', 'b']
         def blockForever = { String ref ->
-            Thread.sleep(60_000); new TakeResult.Delivered(null, UntrustedText.tracker('never'))
+            Thread.sleep(60_000); new TakeResult.Delivered(null, 'never')
         }
         def caught = null
         def blockedThread = Thread.ofVirtual().start {

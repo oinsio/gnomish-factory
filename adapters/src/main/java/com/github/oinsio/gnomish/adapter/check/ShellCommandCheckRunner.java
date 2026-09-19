@@ -63,13 +63,6 @@ public record ShellCommandCheckRunner(
     private static final Logger log = LoggerFactory.getLogger(ShellCommandCheckRunner.class);
 
     /**
-     * The empty {@code details} of a verdict with no captured output to quote. Minted in this
-     * check's own family — the command is a subprocess whichever medium runs it — so the two
-     * components of a verdict always share one provenance.
-     */
-    private static final UntrustedText NO_DETAILS = UntrustedText.subprocess("");
-
-    /**
      * How much of a check's command stands in for its identity in a log line. A {@code command}
      * check is identified by nothing but its command text, which a manifest may write as a
      * multi-line block — so the identity goes through {@link LogText} like any other text that
@@ -157,7 +150,8 @@ public record ShellCommandCheckRunner(
                     identityOf(check),
                     e);
             return new Verdict.CannotVerify(
-                    UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()), NO_DETAILS);
+                    UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()),
+                    NoCheckDetails.NO_DETAILS);
         }
         try (acquired) {
             TaskExecutionEnvironment environment = acquired.environment();
@@ -172,7 +166,8 @@ public record ShellCommandCheckRunner(
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
                 return new Verdict.CannotVerify(
-                        UntrustedText.manifest("failed to start command: " + check.command()), NO_DETAILS);
+                        UntrustedText.manifest("failed to start command: " + check.command()),
+                        NoCheckDetails.NO_DETAILS);
             }
 
             // The termination decides first (FR6, FR12 of bound-subprocess-commands): a run that
@@ -208,7 +203,7 @@ public record ShellCommandCheckRunner(
                     "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
         }
         return new Verdict.CannotVerify(
-                UntrustedText.subprocess("command run was interrupted before a verdict existed"),
+                UntrustedText.factory("command run was interrupted before a verdict existed"),
                 UntrustedText.subprocess(outcome.outputTail()));
     }
 

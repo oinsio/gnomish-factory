@@ -77,8 +77,8 @@ group ends with the module gates green; the sink invariant from
       filled by 3.1–3.3). Seeded cases in `architecture.seeded`: an unannotated caller
       of `forParsing()` fails; an annotated one passes; an annotated parser whose
       method returns the text straight back (`return result.stdout().forParsing();`)
-      fails, naming the method. Keep rule (a) unchanged — `raw()` stays the seven-class
-      exit set (M6). Verify: red on each seeded case, green on the tree.
+      fails, naming the method. Keep rule (a) unchanged — `raw()` stays the closed
+      exit set rule (a) already pins (M6); tasks 2.4, 3.3 and 5.0 grow it to twelve. Verify: red on each seeded case, green on the tree.
 
 ## 3. Cut A families: git, docker, in-box, agent
 
@@ -95,7 +95,12 @@ group ends with the module gates green; the sink invariant from
       `GitProcessRunner`, `HarvestedBoundaryCheck`, `LocalBranchTip`, `OriginRemote`,
       `RemoteBaseRef`, `RemoteBranchTip`, `RemoteDefaultBranch`, `ReplicaPairReconciler`,
       `RoundBoundaryCheck`, `SnapshotTipCheck`, `TaskBranchLister`, `TaskWorktreeManager`,
-      `UsageHistoryWalker`, `VerifiedTip`, `WorktreeSalvage`. `GitShowTip.readAtTip` and
+      `UsageHistoryWalker`, `VerifiedTip`, `ContainerHarvestFetch`. (`WorktreeSalvage` stood here
+      when this task was written and left the set while it was being done: its only captured read
+      is the dirty-tree question, which the carrier's own `isBlank()` answers with no text
+      leaving it. `ContainerHarvestFetch` took its place, classifying a fetch's *stderr* into a
+      failure class — a stderr parse D11's stdout-derived list did not consider. The count is
+      unchanged at 16; `PARSER_CONVERSIONS` is the enforced set.) `GitShowTip.readAtTip` and
       `DeliveredBranchReader.show` are **not** parsers: they yield a branch document's
       content, so `BranchTipSource.readAtTip`, `TipEnvelopeRead.Loaded` and
       `TaskJsonMapper`/`StateJsonMapper.readDto` take `UntrustedText` and the mappers —
@@ -147,7 +152,7 @@ group ends with the module gates green; the sink invariant from
       `AgentProgressEvent`) receive `forConsole()` at the boundary until task 5.0: the
       exit that keeps line structure and length, so a stack trace and a question reach a
       human whole and benign text passes byte for byte.
-- [x] 3.4 The 38 exception sites (design D5): constructors take `UntrustedText`; new
+- [x] 3.4 The 37 exception sites (design D5): constructors take `UntrustedText`; new
       `GitResyncFailedException` (landed at 3.1) and `DockerCommandFailedException`
       replace the `IllegalStateException` folds; `getMessage()` folds re-mint at the fold
       (`GithubTransportException`, `HttpExternalCheckClient`, the two law-source reads,
@@ -166,12 +171,16 @@ group ends with the module gates green; the sink invariant from
       (a passport, an allowlist entry, a binary path, a JDK cause, or a fold of a message
       already composed from a carrier), so the overload is not an escape hatch for captured
       text; a caller that acquires one must take the typed constructor beside it.
+      One site the design's first draft listed left the set rather than being converted:
+      `BranchTipFactsReader.faultOf` folds into `EnvelopeStatus.Unreadable`, a domain status
+      record and not an exception, whose `reason` is factory-authored prose — the exemption
+      and its enforcing spec are recorded in D5.
 - [x] 3.5 Cut A gates: `./gradlew :untrustedtext:check :bootstrap:check :domain:check
       :sandbox:core:check :sandbox:docker:check :adapters:git:check :adapters:agent:check`
       — plus `:adapters:check` and `:application:check`, which cut A reaches too (the
       check runners and the `--json` mappers) — and the sink invariant spec (NFR-R1).
       Rules (a), (a2), (b), (c) all green with no allowlist; `@UntrustedExit` names the
-      nine classes of 2.4 as amended at 3.3 and `@UntrustedParser` exactly the 26 of
+      twelve classes of 2.4 as amended at 3.3 and 5.0, and `@UntrustedParser` exactly the 27 of
       3.1–3.3, each pinned with what it converts to (M6). Verify: BUILD SUCCESSFUL,
       PIT 100%.
       **One gate outside this list is red until task 7.1, by construction of the cut:**
@@ -311,8 +320,10 @@ group ends with the module gates green; the sink invariant from
 - [x] 6.3 The eight park writers — `FreshClaimBaseBinding`, `ResumeLawBinding`,
       `TakeDecisionResume`, `TaskTierLaw`, `EpochRecordingTracker`, `AbortHandler`,
       `GuardedPark`, `TakeQuarantinePark` — receive builder output only. The other
-      text-carrying writes are consumers too (design D7): `FinishEffect` renders the
-      `TakeFinishReport` summary's carriers through `forComment()`;
+      text-carrying writes are consumers too (design D7): `FinishEffect` publishes the
+      `TakeFinishReport` summary as the builder handed it over — since D6's 2026-09-19
+      revision the builder renders each quoted field through `forCommentInline()` on
+      `ReportPlane.COMMENT`, so the write neutralizes nothing a second time;
       `AbortRecord(UntrustedText cause, …)` is typed and `GithubStateWrites:128`
       renders it through the exit at the comment; `DecisionAck` renders the echoed
       human reply through the exit; the two stop notes (`TakeContainerEngineExecution`,
@@ -376,7 +387,7 @@ group ends with the module gates green; the sink invariant from
       "forParsing()" --include=*.java` over production sources — every hit is in a class
       annotated `@UntrustedParser` and listed in 2.6's pinned map, and the method it sits
       in converts the text rather than returning it (the review obligation of D11);
-      (5) `grep -rn "@UntrustedExit" --include=*.java` — exactly the seven classes of
+      (5) `grep -rn "@UntrustedExit" --include=*.java` — exactly the twelve classes of
       design D2 (M6). Record all five with their hit lists in the task report. Verify: as
       stated.
       **Sweep report.** All five run over `src/main` only, `/build/` excluded. Three of the
@@ -426,15 +437,16 @@ group ends with the module gates green; the sink invariant from
       mentions only**, the carrier-bearing results pointing their readers at the parsing exit,
       with no call. D11's review obligation holds at every one of the 27: the pinned map states
       the converted value, and ArchUnit rule (a2) fails the build on an unannotated caller.
-      (5) **`@UntrustedExit`** — 11 production classes, not the "seven" the task text says:
+      (5) **`@UntrustedExit`** — 11 production classes plus the carrier itself, twelve in all — the count the task text above now carries, corrected from the "seven" it was written with:
       `JudgeVerdictExtractor`, `GithubWorkflowJobsFetcher`, `StateJsonMapper`, `TaskJsonMapper`,
       `BoardJsonMapper`, `LedgerJsonMapper`, `SnapshotJsonMapper`, `AttemptMapper`,
       `EscalationMapper`, `StatusReportJsonMapper`, `UsageReportJsonMapper` — plus
       `UntrustedText` itself, which is the twelfth entry of `ANNOTATED_EXITS`. Three seeded
-      classes in `:bootstrap` are test sources and outside the scan. The count in this task's
-      text and M6's "nine" both predate tasks 2.4 and 3.3, which amended the list while it was
-      being written; the pinned `ANNOTATED_EXITS` in `UntrustedTextGateSpec` is the enforced
-      set, it fails the build on growth, and it is green. **No sweep found an unlisted old-way
+      classes in `:bootstrap` are test sources and outside the scan. The counts this task's text
+      and M6 were written with — "seven" and "nine" — both predate tasks 2.4, 3.3 and 5.0, which
+      amended the list while it was being written; both were corrected to twelve in place once
+      this sweep established the number. The pinned `ANNOTATED_EXITS` in `UntrustedTextGateSpec`
+      is the enforced set, it fails the build on growth, and it is green. **No sweep found an unlisted old-way
       survivor.**
 - [x] 7.4 Retarget the capture gate (FR11, design D12). `UntrustedLogTextGateSpec` keeps
       its whole-tree scan and changes its subject: instead of accessor names at log calls
@@ -490,3 +502,33 @@ group ends with the module gates green; the sink invariant from
       Verify: three entries present, each with its revisit condition; `grep -n
       "Revisit" docs/adr/0004-logging-policy.md` shows four (the existing Error Prone
       one plus these three).
+- [x] 7.6 Factory prose gets its own family (FR4, NFR-S1, design D3, added 2026-09-19).
+      The 2026-09-18 review of the implementation counted 67 production mints whose
+      argument begins with a string literal: sentences the factory wrote itself, filed
+      under whichever capture family sat beside them — `RemoteAttemptDelivery`'s "no
+      remote to deliver the attempt commit to" as `SUBPROCESS`, `FilesExistCheckRunner`'s
+      empty `details` as `MANIFEST`, `GithubWorkflowRunPoll`'s "GitHub Actions runs query
+      failed" as `TRACKER`. The convention was deliberate and unrecorded
+      (`JudgeVerdictExtractor`'s javadoc stated it), and it contradicted both D4's
+      `:baseref` row and D5's `BranchTipFactsReader` exemption, which refuse exactly this
+      in the other direction. `Provenance.FACTORY` + `UntrustedText.factory` is the
+      answer, with D3 carrying the full mint rule: the family of the text first wrapped;
+      `FACTORY` for what the factory composed; a quote that left its carrier through an
+      exit keeps the sentence factory-composed, a raw interpolation does not.
+      **62 call sites converted** across `:adapters:git` (21), `:application` (16),
+      `:adapters` (12), `:adapters:agent` (7), `:adapters:github` (3),
+      `:gnomish-plugin-api:sample` (2) and `:domain` (1), the shared `NO_DETAILS` constants
+      among them; 101 capture mints remain, which is what the table describes. The sweep's
+      own counter-examples stay in their capture family — `TakeCrashAbort`'s
+      `"… : " + crash` (a raw throwable fold), `EgressRefusal.describe()`'s target,
+      `Engine`'s `stageName` off a recorded position, and the fixture mints D3's closing
+      line already admits. `UntrustedTextExitIdentitySpec`'s exhaustive switch over
+      `Provenance.values()` is what made the new constant impossible to add silently.
+      Verify: `:untrustedtext:check` and every touched module's `check` green; the
+      delta-spec scenario "A factory-composed sentence is not filed under the capture it
+      quotes" satisfied.
+      **Not in this task:** whether a mint site is *pinned* by a gate. FR4's "no other
+      production code SHALL call a mint" and NFR-S1's seeded-violation clause still have
+      no enforcement — the tree holds 163 mint calls in 71 files, 101 of them captures — and the choice between an ArchUnit class→family map and a revision of
+      FR4/NFR-S1 is deliberately left open; this task only makes the table true again, so
+      that whichever is chosen counts the right thing.

@@ -282,7 +282,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         tracker.collectDecisions(REF) >> [
             new HumanReply('use postgres', NOW)
         ]
-        1 * tracker.acknowledgeDecision(REF, fenced('use postgres'))
+        1 * tracker.acknowledgeDecision(REF, inert('use postgres'))
 
         and: 'nothing else is repeated — no decision is appended a second time'
         0 * lifecycleStore.appendDecision(_, _, _)
@@ -324,7 +324,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             new HumanReply('an earlier thought', NOW.minusSeconds(60)),
             new HumanReply('use postgres', NOW),
         ]
-        1 * tracker.acknowledgeDecision(REF, fenced('use postgres'))
+        1 * tracker.acknowledgeDecision(REF, inert('use postgres'))
         1 * lifecycleStore.appendDecision('PROJ-1', {
             it.body() == 'use postgres' && it.author() == 'tracker'
         }, _)
@@ -473,8 +473,13 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         result instanceof TakeResult.AwaitingHuman
     }
 
-    /** The comment exit's rendering of one text, as every tracker write now publishes it. */
-    private static String fenced(String text) {
-        UntrustedText.tracker(text).forComment()
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
+     * "untrusted machine output" label would be untrue about.
+     */
+    private static String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

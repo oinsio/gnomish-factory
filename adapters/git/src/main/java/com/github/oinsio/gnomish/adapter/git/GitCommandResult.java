@@ -88,11 +88,11 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
      * <p>Implements FR5, FR9 of add-base-ref-resolution.
      */
     UntrustedText failureDetail(String what) {
-        return UntrustedText.subprocess(
+        return UntrustedText.factory(
                 switch (termination()) {
                     case TIMED_OUT -> "the " + what + " timed out";
                     case INTERRUPTED -> "the " + what + " was interrupted";
-                    case EXITED -> "the " + what + " exited " + exitCode() + ": " + stderr();
+                    case EXITED -> "the " + what + " exited " + exitCode() + ": " + stderr().forLog();
                 });
     }
 
@@ -108,7 +108,7 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
      * harden-logging-observability; {@code .claude/rules/logging.md}).
      */
     UntrustedText cannotVerifyDetail() {
-        return UntrustedText.subprocess(
-                "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): " + stderr());
+        return UntrustedText.factory("the boundary could not be verified (git " + termination() + ", exit " + exitCode()
+                + "): " + stderr().forLog());
     }
 }

@@ -24,6 +24,25 @@ import org.jspecify.annotations.Nullable;
  */
 public final class StatusTextRenderer {
 
+    private final ReportPlane plane;
+
+    /** A renderer for the operator's terminal — the plane every console caller wants. */
+    public StatusTextRenderer() {
+        this(ReportPlane.CONSOLE);
+    }
+
+    /**
+     * A renderer for {@code plane}: the untrusted fields the report quotes take that plane's exit,
+     * and the assembled block is published as it stands. A report bound for the tracker is built
+     * with {@link ReportPlane#COMMENT} here rather than neutralized again at the write — see that
+     * enum for the double-rendering this replaced.
+     *
+     * @param plane the human plane the rendered block is bound for; never null
+     */
+    public StatusTextRenderer(ReportPlane plane) {
+        this.plane = plane;
+    }
+
     /**
      * Renders {@code report} as a readable multi-line block: task id/title,
      * current stage (or "pipeline complete"), attempts used/limit, a summary line
@@ -40,7 +59,7 @@ public final class StatusTextRenderer {
         out.append("Task: ")
                 .append(report.taskId())
                 .append(" — ")
-                .append(report.title().forConsole())
+                .append(plane.render(report.title()))
                 .append('\n');
         appendStage(out, report);
         appendAttempts(out, report);
@@ -119,7 +138,7 @@ public final class StatusTextRenderer {
         for (Finding denial : denials) {
             out.append(indent)
                     .append("egress denial: ")
-                    .append(StatusLineFormatter.findingLine(denial))
+                    .append(StatusLineFormatter.findingLine(denial, plane))
                     .append('\n');
         }
     }
@@ -152,7 +171,7 @@ public final class StatusTextRenderer {
             return;
         }
         out.append("Activity: ")
-                .append(StatusLineFormatter.activityLine(activity))
+                .append(StatusLineFormatter.activityLine(activity, plane))
                 .append('\n');
     }
 
@@ -161,7 +180,7 @@ public final class StatusTextRenderer {
             return;
         }
         out.append("Last escalation: ")
-                .append(StatusLineFormatter.escalationLine(escalation))
+                .append(StatusLineFormatter.escalationLine(escalation, plane))
                 .append('\n');
         if (escalation instanceof EscalationReport.CannotExecute cannotExecute) {
             // The round that could not execute left no attempt line to hang its denials

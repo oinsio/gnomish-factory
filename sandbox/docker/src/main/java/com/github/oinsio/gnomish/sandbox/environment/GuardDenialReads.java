@@ -133,10 +133,23 @@ final class GuardDenialReads {
      * possible probe (see {@link GuardSourceIdentity#current()}), and every phase below needs the
      * same value, so resolving it twice would cost a second unnecessary daemon round trip on a
      * cold cache.
+     *
+     * <p><b>No claim flag, and why</b> (lock-scope.md, items 3 and 5): the three-phase shape needs
+     * one only where two callers could both start the unlocked work. They cannot here. A
+     * {@code GuardDenialReads} belongs to one {@link EgressGuard}, which belongs to the
+     * {@code ContainerEnvironments} of one environment key — one serve slot's lease — and the only
+     * caller of {@link EgressGuard#readDenials()} is the round's own thread, at the two ends of
+     * {@code ExecutorRoundExecution} (close, or the failure drain), one round at a time. So the
+     * reads of one instance are serial, which is also why phase three needs no revalidation: no
+     * other thread can have moved {@link #since} or the restored position between the phases.
+     * {@link #cursor()}, {@link #restore} and {@link #sourceRecreated} may be called from
+     * elsewhere, and that is exactly what the released monitor is for; none of them starts a read.
+     * A second reader would mean two overlapping windows over the same log, so a caller added
+     * outside that thread adds the claim flag with itself.
      */
     DenialRead read() {
-        @Nullable String liveSource = sourceId();
-        @Nullable String window = beginRead(liveSource);
+        String liveSource = sourceId();
+        String window = beginRead(liveSource);
         DockerResult logs;
         try {
             logs = docker.run(GuardCommands.guardLogs(key, LOG_TAIL_LINES, window));

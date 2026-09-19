@@ -10,12 +10,18 @@ import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
 import com.github.oinsio.gnomish.adapter.git.WorktreeCreationFailedException
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
+import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.sandbox.environment.DockerCommandFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import com.tngtech.archunit.core.domain.JavaClasses
+import com.tngtech.archunit.core.importer.ClassFileImporter
+import com.tngtech.archunit.core.importer.ImportOption
+import spock.lang.Shared
 import spock.lang.Specification
 
 /**
@@ -39,6 +45,37 @@ class TypedExceptionMessageSpec extends Specification {
     /** What an attacker would put in a captured stream to forge a record or drive a terminal. */
     private static final String HOSTILE = "boom\n[2J2026-01-01 00:00:00 ERROR forged record\r"
 
+    @Shared
+    JavaClasses productionClasses = new ClassFileImporter()
+    .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+    .importPackages('com.github.oinsio.gnomish')
+
+    // D5, implementation.md item 1 ("the consumer list, checked off"): a hand-kept table of
+    //     exceptions is exactly the shape that goes quietly stale — the next throwable to take a
+    //     carrier joins the design's set without joining this spec, and the property above is then
+    //     asserted of everything but the newcomer. GitTaskRepositoryException was that newcomer.
+    //     So the table is pinned against the bytecode the sink gate already derives its own
+    //     exemption from ({@link com.github.oinsio.gnomish.testsupport.CarrierConstructors}): the
+    //     two sets are the same set, read two ways.
+    def "FR5: the table names every production throwable that declares a carrier detail"() {
+        given: 'every production throwable with an UntrustedText constructor parameter'
+        def declared = productionClasses
+                .findAll { it.isAssignableTo(Throwable) }
+                .findAll { owner ->
+                    owner.constructors.any {
+                        it.rawParameterTypes*.name.contains(UntrustedText.name)
+                    }
+                }
+                .collect { it.simpleName }
+                .toSet()
+
+        expect: 'the derivation really found the family — an empty answer would pass any table'
+        declared.size() >= 15
+
+        and: 'and the table below covers each one, and names nothing that is not one'
+        declared.toSorted() == tabledExceptions()
+    }
+
     def "FR5: #exception renders its carrier through the log exit, never raw"() {
         given: 'the detail as it was captured'
         def carried = mint.call(HOSTILE) as UntrustedText
@@ -58,102 +95,130 @@ class TypedExceptionMessageSpec extends Specification {
         [exception, mint, build] << carriers()
     }
 
+    /**
+     * The distinct exception types the table exercises. A row's label may carry a parenthetical
+     * naming which constructor arm it drives ({@code HarvestFailedException (partial output)}), so
+     * the type name is the label up to it.
+     */
+    private static List<String> tabledExceptions() {
+        carriers().collect {
+            (it[0] as String).replaceFirst(/ \(.*\)$/, '')
+        }.toUnique().toSorted()
+    }
+
     /** Every exception design D5 gives a carrier, with the family its detail comes from. */
     private static List<List> carriers() {
         [
             [
                 'BranchStateFileMissingException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new BranchStateFileMissingException('refs/heads/x', 'state.json', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new BranchStateFileMissingException('refs/heads/x', 'state.json', carried)
                 }
             ],
             [
                 'FactoryCloneHardeningException',
-                { UntrustedText.subprocess(it) },
-                { new FactoryCloneHardeningException('/clones/x', it) }
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new FactoryCloneHardeningException('/clones/x', carried)
+                }
             ],
             [
                 'GitPersistFailedException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new GitPersistFailedException('T-1', 'verify', 0, 'commit', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new GitPersistFailedException('T-1', 'verify', 0, 'commit', carried)
                 }
             ],
             [
                 'GitResyncFailedException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new GitResyncFailedException('resync', 'git reset', Termination.EXITED, 1, it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new GitResyncFailedException('resync', 'git reset', Termination.EXITED, 1, carried)
+                }
+            ],
+            [
+                'GitTaskRepositoryException',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new GitTaskRepositoryException('T-1', TaskLifecycleEvent.STARTED, 'git commit', carried)
                 }
             ],
             [
                 'GitSalvageFailedException',
-                { UntrustedText.container(it) },
-                {
-                    new GitSalvageFailedException('T-1', 'in-box salvage commit', it)
+                { String raw -> UntrustedText.container(raw) },
+                { UntrustedText carried ->
+                    new GitSalvageFailedException('T-1', 'in-box salvage commit', carried)
                 }
             ],
             [
                 'HarvestFailedException',
-                { UntrustedText.subprocess(it) },
-                { new HarvestFailedException('gnomish/task-x', it) }
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new HarvestFailedException('gnomish/task-x', carried)
+                }
             ],
             [
                 'HarvestFailedException (partial output)',
-                { UntrustedText.container(it) },
-                { new HarvestFailedException('gnomish/task-x', 'fetch', it) }
+                { String raw -> UntrustedText.container(raw) },
+                { UntrustedText carried ->
+                    new HarvestFailedException('gnomish/task-x', 'fetch', carried)
+                }
             ],
             [
                 'HarvestRefusedException',
-                { UntrustedText.subprocess(it) },
-                { new HarvestRefusedException('gnomish/task-x', it) }
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new HarvestRefusedException('gnomish/task-x', carried)
+                }
             ],
             [
                 'WorktreeCreationFailedException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new WorktreeCreationFailedException('T-1', 'gnomish/task-x', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new WorktreeCreationFailedException('T-1', 'gnomish/task-x', carried)
                 }
             ],
             [
                 'DockerCommandFailedException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new DockerCommandFailedException('create network', 'k1', 'gnomish-box-k1', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new DockerCommandFailedException('create network', 'k1', 'gnomish-box-k1', carried)
                 }
             ],
             [
                 'DockerUnavailableException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new DockerUnavailableException('docker daemon is unreachable', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new DockerUnavailableException('docker daemon is unreachable', carried)
                 }
             ],
             [
                 'GuardUnavailableException',
-                { UntrustedText.subprocess(it) },
-                {
-                    new GuardUnavailableException('egress guard for k1 could not be started', it)
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new GuardUnavailableException('egress guard for k1 could not be started', carried)
                 }
             ],
             [
                 'SelfCheckFailedException',
-                { UntrustedText.container(it) },
-                {
-                    new SelfCheckFailedException('non-root', 'could not read the in-box uid, output', it)
+                { String raw -> UntrustedText.container(raw) },
+                { UntrustedText carried ->
+                    new SelfCheckFailedException('non-root', 'could not read the in-box uid, output', carried)
                 }
             ],
             [
                 'MissingResultEventException',
-                { UntrustedText.agent(it) },
-                { new MissingResultEventException(it) }
+                { String raw -> UntrustedText.agent(raw) },
+                { UntrustedText carried ->
+                    new MissingResultEventException(carried)
+                }
             ],
             [
                 'UnreadableLawFileException',
-                { UntrustedText.manifest(it) },
-                {
-                    new UnreadableLawFileException('stages/verify/criteria.md', it)
+                { String raw -> UntrustedText.manifest(raw) },
+                { UntrustedText carried ->
+                    new UnreadableLawFileException('stages/verify/criteria.md', carried)
                 }
             ]
         ]

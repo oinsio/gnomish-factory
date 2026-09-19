@@ -8,6 +8,11 @@ package com.github.oinsio.gnomish.untrustedtext
  * {@code neutralized} predicate in {@link TextSafetyIdempotenceSpec}: both wrap {@link #inTable}, the
  * two planes differing only in whether the line feed counts — the log plane neutralizes it, the
  * console plane is the one plane that keeps it.
+ *
+ * <p>The private {@code commentHostile} predicate in {@link TextSafetyCommentSpec} is deliberately
+ * <em>not</em> a wrapper of {@link #inTable}: the comment plane's mention-breaking layer inserts a
+ * zero-width space into its own output, so its predicate excludes the zero-width, bidi and tag
+ * ranges {@link #inTable} covers, checking only the ESC/C0/C1 subset the comment plane never emits.
  */
 class HostileCodePoints {
 

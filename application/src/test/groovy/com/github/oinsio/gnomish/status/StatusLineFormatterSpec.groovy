@@ -82,7 +82,7 @@ class StatusLineFormatterSpec extends Specification {
     //     was refused, with the locator appended only when the finding actually carries one
     def "findingLine appends the locator only when the finding has one"() {
         expect:
-        StatusLineFormatter.findingLine(new Finding(message, location, 'kind=http method=POST')) == line
+        StatusLineFormatter.findingLine(new Finding(message, location, 'kind=http method=POST'), ReportPlane.CONSOLE) == line
 
         where:
         message | location | line
@@ -104,11 +104,28 @@ class StatusLineFormatterSpec extends Specification {
                 'kind=http method=POST')
 
         when:
-        def line = StatusLineFormatter.findingLine(finding)
+        def line = StatusLineFormatter.findingLine(finding, ReportPlane.CONSOLE)
 
         then:
         !line.contains('\n')
         !line.contains(esc)
         line == 'egress denied (paste.example.com:443/upload\\nfake: allowed)'
+    }
+
+    // D6, D7 of type-untrusted-text: the same finding bound for a tracker comment keeps the
+    //     funnel's one-line rule and gains the comment plane's mention break — a denied host the
+    //     gnome chose must not ping a team from the published report.
+    def "findingLine on the comment plane also breaks mentions and issue references"() {
+        given: 'a denied destination crafted to read as a mention and an issue reference'
+        def finding = new Finding('egress denied: @team', 'paste.example.com/#123\nfake: allowed', 'kind=http')
+
+        when:
+        def line = StatusLineFormatter.findingLine(finding, ReportPlane.COMMENT)
+
+        then: 'one line still, and neither the mention nor the reference is live'
+        !line.contains('\n')
+        !line.contains('@team')
+        !line.contains('#123')
+        line == 'egress denied: @​team (paste.example.com/#​123\\nfake: allowed)'
     }
 }

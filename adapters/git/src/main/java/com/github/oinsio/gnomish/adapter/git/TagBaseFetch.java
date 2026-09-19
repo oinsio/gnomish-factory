@@ -23,13 +23,7 @@ import java.util.Optional;
  *
  * <p>Implements FR6, FR9 of add-base-ref-resolution.
  */
-final class TagBaseFetch {
-
-    private final GitProcessRunner runner;
-
-    TagBaseFetch(GitProcessRunner runner) {
-        this.runner = runner;
-    }
+record TagBaseFetch(GitProcessRunner runner) {
 
     /**
      * Brings tag {@code name} into {@code refs/tags/} and reads back the commit it points at.
@@ -47,7 +41,7 @@ final class TagBaseFetch {
         // git's refusal message keeps the answer independent of git's locale and wording.
         if (before.isPresent() && !before.get().equals(originCommit)) {
             return new BaseRefreshOutcome.Refused(
-                    UntrustedText.subprocess(divergenceReport(name, before.get(), originCommit)));
+                    UntrustedText.factory(divergenceReport(name, before.get(), originCommit)));
         }
         GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, ref + ":" + ref);
         return RefreshedTip.of(runner, cloneDir, fetch, ref, name, BaseRefKind.TAG);

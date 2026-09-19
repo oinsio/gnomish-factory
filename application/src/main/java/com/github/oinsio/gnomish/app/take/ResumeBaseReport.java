@@ -12,9 +12,14 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * <p>Pure text assembly, no I/O: the tracker write and the log line are the caller's.
  *
  * <p>The detail is built around what the remote said, so it arrives as an {@link UntrustedText} and
- * leaves through {@link UntrustedText#forComment()} — the exit that matches this report's consumer
- * (design D6, D7 of type-untrusted-text): the paragraph is posted as a tracker comment, and the
- * fence is what tells the operator which words were the remote's. The pinned ref beside it is not
+ * leaves through the comment plane — the plane that matches this report's consumer, since the
+ * paragraph is posted as a tracker comment (design D6, D7 of type-untrusted-text). It takes the
+ * plane's <em>fenced</em> shape, {@link UntrustedText#forComment()}, and that is a decision the
+ * 2026-09-19 revision of D6 leaves standing rather than one it predates: this report carries one
+ * untrusted field under a heading of the factory's own, so the block the fence spans really is
+ * machine output end to end and the label states something true about it. A report interleaving
+ * several such fields takes {@link UntrustedText#forCommentInline()} instead — see {@link
+ * BaseLawReport} and {@link FreshClaimBaseReport#underdetermined}. The pinned ref beside it is not
  * untrusted text — it is read back through {@code PinnedRefGate}, which holds it to
  * {@code RefNameSyntax} — so it is interpolated as it stands (NG4).
  *

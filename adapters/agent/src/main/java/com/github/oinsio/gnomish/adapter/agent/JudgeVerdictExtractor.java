@@ -160,8 +160,10 @@ public final class JudgeVerdictExtractor {
      * The degradation exit (NFR-R1, NFR-O2): the WARN line carries the raw message through
      * the findings funnel's log sanitization (FR15 of add-sandbox-core), while the returned
      * {@code details} keep it verbatim — data stays full-fidelity, only the log sink is
-     * stripped and capped. The sentence naming the failure is minted in the judge's own family:
-     * it is about what the judge wrote, and the two components of a verdict render as one.
+     * stripped and capped. The sentence naming the failure is the factory's own — it says what the
+     * extraction could not do, not what the judge wrote — so it is minted in the factory's family
+     * while {@code details} keeps the judge's, and the two components of a verdict render as one
+     * either way (design D3).
      */
     private Verdict.CannotVerify cannotVerify(String reason, UntrustedText rawMessage) {
         log.warn(
@@ -169,6 +171,6 @@ public final class JudgeVerdictExtractor {
                         + "judge verdict could not be extracted ({}); raw final message: {}",
                 reason,
                 rawMessage.forLog());
-        return new Verdict.CannotVerify(UntrustedText.agent(reason), rawMessage);
+        return new Verdict.CannotVerify(UntrustedText.factory(reason), rawMessage);
     }
 }

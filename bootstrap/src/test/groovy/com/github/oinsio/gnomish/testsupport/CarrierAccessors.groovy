@@ -67,6 +67,39 @@ class CarrierAccessors {
         carrierNames(classes).intersect(strings)
     }
 
+    /**
+     * Every no-argument carrier accessor qualified by its owner's simple name —
+     * {@code GitCommandResult.stderr}, {@code Outcome.output} — minus the pairs a plain-{@code
+     * String} method of the same owner name also claims.
+     *
+     * <p>This is what lets the source scan decide the names {@link #ambiguousNamesIn} must
+     * otherwise stay silent about, and they are the names that matter most: {@code stderr},
+     * {@code stdout} and {@code output} are the whole git/docker/in-box capture vocabulary, so a
+     * scan keyed on bare names alone was silent over exactly the families rule (c) was written
+     * for. A source cannot ask what type a receiver is, but it can read what the receiver was
+     * <em>declared</em> as a few lines up — the technique {@code CarrierArguments.DECLARATION}
+     * already uses for a carrier-typed local, widened from one type to every named one. Where the
+     * receiver's type is not declared in the same source (a {@code var}, a chained call), the bare
+     * name is all there is and the ambiguity rule still governs.
+     */
+    static Set<String> qualifiedNamesIn(JavaClasses classes) {
+        qualifiedNames(classes) { JavaMethod method ->
+            method.rawParameterTypes.isEmpty() && carrierTyped(method)
+        } -
+        qualifiedNames(classes) { JavaMethod method ->
+            method.rawReturnType.name == String.name
+        }
+    }
+
+    private static Set<String> qualifiedNames(JavaClasses classes, Closure<Boolean> wanted) {
+        classes.collectMany { owner ->
+            owner.methods.findAll(wanted).collect {
+                "${owner.simpleName}.${it.name}".toString()
+            }
+        }
+        .toSet()
+    }
+
     private static Set<String> carrierNames(JavaClasses classes) {
         classes.collectMany { it.methods }
         .findAll { it.rawParameterTypes.isEmpty() && carrierTyped(it) }

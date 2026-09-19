@@ -154,9 +154,9 @@ final class TakeDisposition {
             case TrackerTaskState.AwaitingHuman awaitingHuman -> refuseParked(awaitingHuman.reason());
             case TrackerTaskState.Finished ignored ->
                 new TakeResult.Skipped(
-                        UntrustedText.tracker("Task " + ref.id() + " is already done (Finished) — nothing to take."));
+                        UntrustedText.factory("Task " + ref.id() + " is already done (Finished) — nothing to take."));
             case TrackerTaskState.Gone ignored ->
-                new TakeResult.Skipped(UntrustedText.tracker("Task " + ref.id() + " is closed or does not exist."));
+                new TakeResult.Skipped(UntrustedText.factory("Task " + ref.id() + " is closed or does not exist."));
         };
     }
 
@@ -165,7 +165,7 @@ final class TakeDisposition {
         log.info("declining reopened finished task {} refused under an explicit take <ref> mandate", ref.id());
         tracker.declineFinished(ref, DeclineFinishedMessage.forTask(ref));
         return new TakeResult.Skipped(
-                UntrustedText.tracker("Task " + ref.id() + " is already finished — nothing to take."));
+                UntrustedText.factory("Task " + ref.id() + " is already finished — nothing to take."));
     }
 
     private static TakeResult refuseParked(ParkReason reason) {
@@ -182,6 +182,6 @@ final class TakeDisposition {
         // The original park report text is not retrievable here (the Tracker port exposes no "read
         // report" operation), so UX2/FR9 are met by naming the reason and return path honestly.
         return new TakeResult.Skipped(
-                UntrustedText.tracker("Task is parked awaiting a human (" + reason + "). " + returnPath));
+                UntrustedText.factory("Task is parked awaiting a human (" + reason + "). " + returnPath));
     }
 }

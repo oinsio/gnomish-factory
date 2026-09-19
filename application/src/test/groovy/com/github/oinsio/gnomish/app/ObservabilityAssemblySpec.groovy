@@ -26,7 +26,6 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -222,7 +221,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 RemoteOutageGates.system(
                         BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
-        observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, UntrustedText.tracker('done')))
+        observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 
         then: 'the remoteOutage write point exists too (NFR-O1, NFR-O3 of add-base-ref-resolution)'
         observability.remoteOutageLedgerWriter() != null

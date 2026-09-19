@@ -76,7 +76,7 @@ public final class DecisionFileReader {
         if (raw.isBlank()) {
             log.warn(OperatorEvent.DECISION_FILE_EMPTY.head()
                     + "decision file was empty; falling back to a stand-in question");
-            return Optional.of(new Decision(UntrustedText.agent(FALLBACK_QUESTION), List.of()));
+            return Optional.of(new Decision(UntrustedText.factory(FALLBACK_QUESTION), List.of()));
         }
         try {
             Payload payload = MAPPER.readValue(raw, Payload.class);

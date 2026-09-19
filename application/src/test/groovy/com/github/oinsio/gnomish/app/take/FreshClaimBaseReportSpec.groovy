@@ -28,8 +28,12 @@ class FreshClaimBaseReportSpec extends Specification {
         then:
         report.contains('Values named:')
 
-        and: 'each one inside its own labeled fence, so a label cannot pose as a report line'
-        report.count('Untrusted machine output:') == 2
+        and: 'each one inert under the one heading that names them, not inside a fence of its own'
+        // Design D6 of type-untrusted-text, revised 2026-09-19: a fence states that everything
+        // between its markers is machine output, which "Values named:" already states about the
+        // whole list — so the values take the comment plane's inline shape and the fence is kept
+        // for a block that really is machine output end to end (this report's sibling, refused).
+        report.count('Untrusted machine output:') == 0
         report.contains('release/9')
         report.contains('main')
     }

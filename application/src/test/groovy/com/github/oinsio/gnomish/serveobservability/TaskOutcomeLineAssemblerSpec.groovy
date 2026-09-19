@@ -32,7 +32,7 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
     def "maps Delivered to a delivered line with no parkReason"() {
         given:
         def finalState = stateAt(new Position.AtStage('review'), 2, ExecutorUsage.none())
-        def result = new TakeResult.Delivered(finalState, UntrustedText.tracker('shipped it'))
+        def result = new TakeResult.Delivered(finalState, 'shipped it')
 
         when:
         def line = TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, result, STARTED_AT, FINISHED_AT)
@@ -86,7 +86,7 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
     def "maps a PipelineEnd position to a null stage"() {
         given:
         def finalState = stateAt(new Position.PipelineEnd(), 0, ExecutorUsage.none())
-        def result = new TakeResult.Delivered(finalState, UntrustedText.tracker('shipped it'))
+        def result = new TakeResult.Delivered(finalState, 'shipped it')
 
         when:
         def line = TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, result, STARTED_AT, FINISHED_AT)
@@ -99,7 +99,7 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
         given:
         def tokens = ['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]
         def finalState = stateAt(new Position.AtStage('build'), 0, new ExecutorUsage(null, [], tokens))
-        def result = new TakeResult.Delivered(finalState, UntrustedText.tracker('shipped it'))
+        def result = new TakeResult.Delivered(finalState, 'shipped it')
 
         when:
         def line = TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, result, STARTED_AT, FINISHED_AT)

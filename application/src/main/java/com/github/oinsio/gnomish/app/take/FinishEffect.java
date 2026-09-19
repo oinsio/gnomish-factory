@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.slf4j.Logger;
 
 /**
@@ -27,10 +26,11 @@ import org.slf4j.Logger;
  * @param tracker the tracker port the finish is written through; never null
  * @param ref the task's tracker identity; never null
  * @param instanceId this factory instance's identity, for the pre-write claim check; never null
- * @param summary the operator-facing final report the finish carries, carried rather than
- *     pre-rendered: it is assembled from the task's title, its attempts and whatever the checks
- *     said, so this record is the one that knows which plane it is bound for and renders it through
- *     the comment exit at the write (design D6, D7 of type-untrusted-text); never null
+ * @param summary the operator-facing final report the finish carries, finished text: its builder
+ *     assembled it for the comment plane, quoted field by quoted field, and this record publishes
+ *     what it was handed. Rendering it again here would fence the factory's own report lines as
+ *     machine output — the alternative design D7 rejects (design D6, D7 of type-untrusted-text);
+ *     never blank
  * @param retry the bounded terminal-write retry the finish is made through; never null
  * @param transition the completion's branch-side steps — fresh or recovered; never null
  * @param log the caller's logger, so log lines stay attributed to the calling class; never null
@@ -39,7 +39,7 @@ public record FinishEffect(
         Tracker tracker,
         TaskRef ref,
         InstanceId instanceId,
-        UntrustedText summary,
+        String summary,
         TerminalWriteRetry retry,
         FinishTransition transition,
         Logger log)
@@ -95,7 +95,7 @@ public record FinishEffect(
                     ref.id());
             return false;
         }
-        if (retry.confirm(() -> tracker.finish(ref, summary.forComment())) == TerminalWriteRetry.Result.CONFIRMED) {
+        if (retry.confirm(() -> tracker.finish(ref, summary)) == TerminalWriteRetry.Result.CONFIRMED) {
             return true;
         }
         log.error(

@@ -33,7 +33,7 @@ class DrainReportSpec extends Specification {
         def ref = new TaskRef('github:o/r#1')
 
         when:
-        report.record(ref, new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('shipped it')))
+        report.record(ref, new TakeResult.Delivered(TaskState.atStageStart('build'), 'shipped it'))
 
         then:
         report.entries().size() == 1
@@ -48,7 +48,7 @@ class DrainReportSpec extends Specification {
         def report = new DrainReport()
 
         when:
-        report.record(new TaskRef('github:o/r#1'), new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('done')))
+        report.record(new TaskRef('github:o/r#1'), new TakeResult.Delivered(TaskState.atStageStart('build'), 'done'))
         report.record(
                 new TaskRef('github:o/r#2'),
                 new TakeResult.AwaitingHuman(TaskState.atStageStart('build'), ParkReason.ESCALATION, 'needs a human'))
@@ -71,7 +71,7 @@ class DrainReportSpec extends Specification {
         when:
         (0..<taskCount).each { i ->
             executor.submit {
-                report.record(new TaskRef("github:o/r#${i}" as String), new TakeResult.Delivered(TaskState.atStageStart('build'), UntrustedText.tracker('ok')))
+                report.record(new TaskRef("github:o/r#${i}" as String), new TakeResult.Delivered(TaskState.atStageStart('build'), 'ok'))
                 done.countDown()
             }
         }

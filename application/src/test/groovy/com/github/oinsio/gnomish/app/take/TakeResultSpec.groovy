@@ -19,11 +19,11 @@ class TakeResultSpec extends Specification {
     // D2, D3: Delivered exposes its final state and summary exactly as constructed
     def "Delivered exposes finalState and summary exactly as constructed"() {
         when:
-        def result = new TakeResult.Delivered(STATE, UntrustedText.tracker('done'))
+        def result = new TakeResult.Delivered(STATE, 'done')
 
         then:
         result.finalState() == STATE
-        result.summary() == UntrustedText.tracker('done')
+        result.summary() == 'done'
     }
 
     // D3: AwaitingHuman exposes its final state, park reason and report exactly as constructed
@@ -68,7 +68,7 @@ class TakeResultSpec extends Specification {
         where:
         component | factory
         'summary' | {
-            -> new TakeResult.Delivered(STATE, UntrustedText.tracker('   '))
+            -> new TakeResult.Delivered(STATE, '   ')
         }
         'report' | {
             -> new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, '')

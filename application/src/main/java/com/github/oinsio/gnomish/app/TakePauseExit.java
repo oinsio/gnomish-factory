@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.LiveActivity;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import org.slf4j.Logger;
@@ -123,7 +124,7 @@ final class TakePauseExit {
             TerminalWriteRetry retry,
             ParkTransition transition) {
         var report = StatusReport.build(context, paused.finalState(), null, LiveActivity.idle());
-        String rendered = new StatusTextRenderer().renderFull(report);
+        String rendered = new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report);
         String checkpoint = "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.";
         String head = rendered + "\n" + "Branch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
 

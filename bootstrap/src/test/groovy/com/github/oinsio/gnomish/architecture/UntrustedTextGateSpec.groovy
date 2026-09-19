@@ -9,10 +9,11 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedExit
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.tngtech.archunit.base.DescribedPredicate
+import com.tngtech.archunit.core.domain.AccessTarget
+import com.tngtech.archunit.core.domain.JavaAccess
 import com.tngtech.archunit.core.domain.JavaClass
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.domain.JavaMethod
-import com.tngtech.archunit.core.domain.JavaMethodCall
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import spock.lang.Shared
@@ -147,8 +148,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.ContainerMaterializer':
         'a container inspect answer into whether the surviving container is running (a boolean)',
         'com.github.oinsio.gnomish.sandbox.environment.DeclaredVolumeOverrides':
-        'an image inspect answer into the declared volume paths, which travel back to docker as'
-        + ' mount destinations and are never rendered to a reader',
+        'an image inspect answer into the declared volume paths, which travel back to docker as' +
+        ' mount destinations and are never rendered to a reader',
         'com.github.oinsio.gnomish.sandbox.environment.EgressGuard':
         'a guard inspect answer into whether the guard container is running (a boolean)',
         'com.github.oinsio.gnomish.sandbox.environment.EgressSelfCheckProbes':
@@ -162,14 +163,14 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.OomAnnotatedExecHandle':
         'a container state line into whether the cgroup OOM killer fired (a boolean)',
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':
-        'docker listings and inspect lines into listed objects with their labels, and into the'
-        + ' timing Instants the sweep decides on',
+        'docker listings and inspect lines into listed objects with their labels, and into the' +
+        ' timing Instants the sweep decides on',
         'com.github.oinsio.gnomish.adapter.agent.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
         'com.github.oinsio.gnomish.baseref.BaseDesignator$Single':
-        'a task\'s base designator label into the accepted ref name, held to RefNameSyntax by'
-        + ' BasePattern.matches — a value no pattern accepts is converted into nothing, since the'
-        + ' refusal carries the carrier itself',
+        'a task\'s base designator label into the accepted ref name, held to RefNameSyntax by' +
+        ' BasePattern.matches — a value no pattern accepts is converted into nothing, since the' +
+        ' refusal carries the carrier itself',
     ]
 
     /**
@@ -245,6 +246,28 @@ class UntrustedTextGateSpec extends Specification {
         !failure.message.contains('AnnotatedExitSeed')
     }
 
+    // D2: a method reference reaches the same method as a call and launders exactly as well, so a
+    //     rule phrased over calls alone would be a gate anyone could step around by writing
+    //     `UntrustedText::raw` — two production exits already do (TaskJsonMapper, EscalationMapper).
+    def "FR3: rule (a) fails on a seeded method reference to raw()"() {
+        when: 'the rule runs over the seeded pair'
+        rawAccessRule().check(seededClasses)
+
+        then: 'the class that reaches raw() as a method reference is named too'
+        def failure = thrown(AssertionError)
+        failure.message.contains('MethodReferenceSeed')
+    }
+
+    // D11: same shape for the other way out — the parsing exit is reachable by reference as well.
+    def "FR10: rule (a2) fails on a seeded method reference to forParsing()"() {
+        when: 'the rule runs over the seeded pair'
+        parsingAccessRule().check(seededClasses)
+
+        then: 'the class that reaches forParsing() as a method reference is named too'
+        def failure = thrown(AssertionError)
+        failure.message.contains('MethodReferenceSeed')
+    }
+
     // D2, risk "a machine writer could be misused as a laundering hatch": the allowlist is the
     //     annotation, so the only thing that keeps it honest is noticing when it grows.
     def "FR3: the annotated exit owners are exactly the pinned set"() {
@@ -273,7 +296,7 @@ class UntrustedTextGateSpec extends Specification {
     }
 
     // D11, risk "@UntrustedParser becomes the laundering hatch @UntrustedExit was kept from being":
-    //     26 classes may read the bytes, so the set is only reviewable if it cannot grow quietly.
+    //     27 classes may read the bytes, so the set is only reviewable if it cannot grow quietly.
     def "FR10: the annotated parsers are exactly the pinned set, each with what it converts to"() {
         expect: 'every annotated production class is one design D11 names'
         productionClasses.findAll { it.isAnnotatedWith(UntrustedParser) }
@@ -371,24 +394,28 @@ class UntrustedTextGateSpec extends Specification {
 
     /** Rule (a) as an ArchUnit rule, built per check so the two subjects share no state. */
     private static def rawAccessRule() {
-        def rawRead = new DescribedPredicate<JavaMethodCall>('a read of UntrustedText.raw()') {
-                    @Override
-                    boolean test(JavaMethodCall call) {
-                        call.target.owner.fullName == UntrustedText.name && call.target.name == 'raw'
-                    }
-                }
-        noClasses().that().areNotAnnotatedWith(UntrustedExit).should().callMethodWhere(rawRead)
+        noClasses().that().areNotAnnotatedWith(UntrustedExit).should().accessTargetWhere(reaching('raw'))
     }
 
     /** Rule (a2) as an ArchUnit rule, built per check so the two subjects share no state. */
     private static def parsingAccessRule() {
-        def parsingRead = new DescribedPredicate<JavaMethodCall>('a read of UntrustedText.forParsing()') {
+        noClasses().that().areNotAnnotatedWith(UntrustedParser).should().accessTargetWhere(reaching('forParsing'))
+    }
+
+    /**
+     * Any way one of the carrier's two gated ways out is reached from a class: an ordinary call,
+     * and — the shape a rule phrased over calls alone misses — a method reference
+     * ({@code UntrustedText::raw}), which ArchUnit models as a {@code JavaMethodReference} rather
+     * than a {@code JavaMethodCall}. Both are {@code JavaAccess}es, so the predicate is asked of
+     * the access target and the rule is {@code accessTargetWhere}.
+     */
+    private static DescribedPredicate<JavaAccess<? extends AccessTarget>> reaching(String exit) {
+        new DescribedPredicate<JavaAccess<? extends AccessTarget>>("a read of UntrustedText.${exit}()") {
                     @Override
-                    boolean test(JavaMethodCall call) {
-                        call.target.owner.fullName == UntrustedText.name && call.target.name == 'forParsing'
+                    boolean test(JavaAccess<? extends AccessTarget> access) {
+                        access.target.owner.fullName == UntrustedText.name && access.target.name == exit
                     }
                 }
-        noClasses().that().areNotAnnotatedWith(UntrustedParser).should().callMethodWhere(parsingRead)
     }
 
     /** The no-argument method of that name, which the caller has already asserted exists. */

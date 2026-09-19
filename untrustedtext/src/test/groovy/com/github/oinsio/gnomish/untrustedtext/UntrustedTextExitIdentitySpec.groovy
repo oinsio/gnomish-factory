@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.untrustedtext
 import spock.lang.Specification
 
 /**
- * FR2 of type-untrusted-text: the carrier's three exits are not a second implementation of
+ * FR2 of type-untrusted-text: the carrier's four exits are not a second implementation of
  * anything. Each computes exactly what this module's own primitive computes for the same raw
  * text — for every entry of the adversarial corpus and every provenance, since provenance is
  * evidence and must change no rendering — and the default rendering equals the log exit.
@@ -30,6 +30,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
                     case Provenance.MANIFEST -> UntrustedText.manifest(text)
                     case Provenance.BRANCH_DOCUMENT -> UntrustedText.branchDocument(text)
                     case Provenance.OPERATOR -> UntrustedText.operator(text)
+                    case Provenance.FACTORY -> UntrustedText.factory(text)
                 }
     }
 
@@ -61,6 +62,17 @@ class UntrustedTextExitIdentitySpec extends Specification {
 
         expect:
         mint(input, provenance as Provenance).forComment() == TextSafety.forComment(input)
+
+        where:
+        [label, provenance] << cases()
+    }
+
+    def "the inline comment exit is the owner's inert rendering — #label as #provenance"() {
+        given:
+        def input = AdversarialCorpus.ENTRIES[label]
+
+        expect:
+        mint(input, provenance as Provenance).forCommentInline() == TextSafety.forCommentInline(input)
 
         where:
         [label, provenance] << cases()

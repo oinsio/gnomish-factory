@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.baseref.ResolutionMode;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
@@ -65,7 +66,13 @@ final class GitFreshTaskSupport {
         try {
             taskRepository.createTask(context, lawCommit, pin, initialState);
         } catch (GitTaskRepositoryException e) {
-            throw new UsageException("could not start git-mode task \"" + taskId + "\": " + e.getMessage()
+            // The fold re-mints (design D5 of type-untrusted-text): the message being quoted may
+            // itself quote what git said, so it reaches this message through the carrier's log
+            // exit rather than as the raw String the lower exception happens to hold. The detail
+            // is already inert when the lower arm took a carrier, so the re-mint costs nothing
+            // and keeps the provenance — the shape GithubTransportException uses for its fold.
+            throw new UsageException("could not start git-mode task \"" + taskId + "\": "
+                    + UntrustedText.subprocess(String.valueOf(e.getMessage()))
                     + " — this is a fresh run, not --resume; pick a different --task-id, fix --base, or resume the"
                     + " existing task instead");
         }

@@ -80,9 +80,20 @@ public final class EscalationResumeDialog {
      * as the tracker park report. Every field it renders is untrusted text — a check's own label
      * derived from the target repository's manifest, a judge's raw message, a command's output
      * tail, a stage name another instance recorded, an executor's failure cause — so each leaves
-     * its carrier through the comment exit: fenced, mention-escaped and labeled untrusted, with
-     * only the factory's own sentences outside the fences (FR15 of add-sandbox-core; design D6, D7
-     * of type-untrusted-text). The attempt limit is the one component that is a number.
+     * its carrier through the comment plane before it is assembled into the block (FR15 of
+     * add-sandbox-core; design D6, D7 of type-untrusted-text). The attempt limit is the one
+     * component that is a number.
+     *
+     * <p>Which of the plane's two shapes an arm takes is decided by what its fence would be
+     * describing (design D6, revised 2026-09-19). An arm whose report is a heading of the factory's
+     * own followed by <em>one</em> capture — {@code PipelineMismatch}, {@code CannotExecute} —
+     * takes {@link UntrustedText#forComment()}, because the fenced block really is machine output
+     * end to end and the label is the true statement it makes. An arm that interleaves the
+     * factory's prose with <em>several</em> captures — {@code DecisionNeeded}'s question and its
+     * options, {@code CannotVerify}'s label, reason and detail — takes {@link
+     * UntrustedText#forCommentInline()} field by field: three consecutive labeled fences inside one
+     * assembled report say nothing the headings beside them do not, and the report as a whole is
+     * not machine output, so no fence can honestly span it.
      *
      * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core.
      *
@@ -100,15 +111,15 @@ public final class EscalationResumeDialog {
             case EscalationReport.AttemptsExhausted attemptsExhausted ->
                 "Attempt limit (" + attemptsExhausted.limit() + ") reached — every attempt failed quality.";
             case EscalationReport.DecisionNeeded decisionNeeded ->
-                "The gnome asked:\n" + decisionNeeded.question().forComment() + "\nOptions:\n"
+                "The gnome asked:\n" + decisionNeeded.question().forCommentInline() + "\nOptions:\n"
                         + decisionNeeded.options().stream()
-                                .map(UntrustedText::forComment)
+                                .map(UntrustedText::forCommentInline)
                                 .collect(Collectors.joining("\n"));
             case EscalationReport.CannotVerify cannotVerify ->
                 "Could not verify a check named:\n"
-                        + cannotVerify.check().label().forComment() + "\n"
-                        + cannotVerify.reason().forComment() + "\n"
-                        + cannotVerify.details().forComment();
+                        + cannotVerify.check().label().forCommentInline() + "\n"
+                        + cannotVerify.reason().forCommentInline() + "\n"
+                        + cannotVerify.details().forCommentInline();
             case EscalationReport.PipelineMismatch pipelineMismatch ->
                 "A stage this task recorded is no longer defined in the pipeline:\n"
                         + pipelineMismatch.staleStage().forComment();

@@ -67,13 +67,15 @@ final class AbortReportBuilder {
                 + " failed branch repairs). Most recent cause ("
                 + category.wireValue()
                 + "):\n"
-                // The comment exit (design D6, D7 of type-untrusted-text, task 6.3): this report
-                // is posted as a tracker comment and logged whole, so the one part the factory did
-                // not author lands in a labeled fence with mentions and issue references broken,
-                // while every framing sentence around it stays outside — the division D7's
-                // rejected alternative, fencing the whole park report, would have destroyed. The
-                // fence keeps line structure and length, so the abort-cause budget applied by
-                // AbortHandler stays the only bound on it.
+                // The comment plane's fenced shape (design D6, D7 of type-untrusted-text, task
+                // 6.3; the shape re-decided at D6's 2026-09-19 revision): this report is posted as
+                // a tracker comment and logged whole, and the one part the factory did not author
+                // is a single capture under the heading above it — so the block the fence spans
+                // really is machine output end to end, which is exactly what its label states,
+                // while every framing sentence stays outside. Fencing the whole park report is
+                // what D7 rejects, and a report of several untrusted fields takes the inline shape
+                // instead; neither is this one. The fence keeps line structure and length, so the
+                // abort-cause budget applied by AbortHandler stays the only bound on it.
                 + cause.forComment()
                 + "\n"
                 + priorAttempt(facts.lastAbortAt())

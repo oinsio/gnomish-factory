@@ -86,7 +86,7 @@ public final class BaseRefresh {
             // by SHA. Falling through to the ref namespaces would re-open the very ambiguity the
             // pin closed.
             return commits.fetch(cloneDir, ref)
-                    .orElseGet(() -> new BaseRefreshOutcome.Refused(UntrustedText.subprocess(unheldCommitReport(ref))));
+                    .orElseGet(() -> new BaseRefreshOutcome.Refused(UntrustedText.factory(unheldCommitReport(ref))));
         }
         if (pinnedKind == null && CommitBaseFetch.looksLikeCommit(ref)) {
             Optional<BaseRefreshOutcome> asCommit = commits.fetch(cloneDir, ref);
@@ -102,11 +102,11 @@ public final class BaseRefresh {
             case RemoteBaseRef.Held.Branch _ -> fetchBranch(cloneDir, ref);
             case RemoteBaseRef.Held.Tag(String commit) -> tags.fetch(cloneDir, ref, commit);
             case RemoteBaseRef.Held.Both(String branchCommit, String tagCommit) ->
-                new BaseRefreshOutcome.Refused(UntrustedText.subprocess(collisionReport(ref, branchCommit, tagCommit)));
+                new BaseRefreshOutcome.Refused(UntrustedText.factory(collisionReport(ref, branchCommit, tagCommit)));
             case RemoteBaseRef.Held.Absent _ ->
-                new BaseRefreshOutcome.Refused(UntrustedText.subprocess(absentReport(ref)));
+                new BaseRefreshOutcome.Refused(UntrustedText.factory(absentReport(ref)));
             case RemoteBaseRef.Held.NoRemote _ ->
-                new BaseRefreshOutcome.Refused(UntrustedText.subprocess(noRemoteReport(ref)));
+                new BaseRefreshOutcome.Refused(UntrustedText.factory(noRemoteReport(ref)));
             case RemoteBaseRef.Held.Unanswered(UntrustedText reason) -> new BaseRefreshOutcome.Unavailable(reason);
         };
     }

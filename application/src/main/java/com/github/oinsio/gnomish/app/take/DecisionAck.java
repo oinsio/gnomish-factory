@@ -154,9 +154,13 @@ public final class DecisionAck implements TerminalEffect {
     public boolean deliver() {
         // The reply is the human's own words, read back off the tracker and echoed to it: the
         // write is where the plane is known, so the exit sits here (design D7 of
-        // type-untrusted-text) — fenced and mention-escaped, so a reply quoting @team never pings
-        // and an injected instruction reads as data to the next model on the thread.
-        tracker.acknowledgeDecision(ref, decisionText.forComment());
+        // type-untrusted-text) — stripped and mention-escaped, so a reply quoting @team never pings
+        // on the way back and an injected instruction reads as data to the next model on the
+        // thread. The inline shape, not the fence (design D6, revised 2026-09-19): the fence's
+        // label is the sentence "everything between these markers is machine output", and this
+        // block is the opposite — a person's own reply, quoted back to the person who wrote it.
+        // Labeling it machine output would be the one thing about it that is untrue.
+        tracker.acknowledgeDecision(ref, decisionText.forCommentInline());
         return true;
     }
 

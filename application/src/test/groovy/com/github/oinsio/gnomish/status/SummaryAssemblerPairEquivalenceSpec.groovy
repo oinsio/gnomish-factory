@@ -76,7 +76,7 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
         where:
         family | engineOutcome | takeResult
         'delivered' | new TaskOutcome.Completed(state()) |
-                new TakeResult.Delivered(state(), UntrustedText.tracker('done'))
+                new TakeResult.Delivered(state(), 'done')
         'checkpoint park' | new TaskOutcome.Paused(state(), 'implement') |
                 new TakeResult.AwaitingHuman(state(), ParkReason.CHECKPOINT, 'paused at a checkpoint')
         'escalation park' | new TaskOutcome.Escalated(state(), new EscalationReport.AttemptsExhausted(3)) |
@@ -95,7 +95,7 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.PipelineEnd(), 0))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state(new Position.PipelineEnd()))))
         AnchorLog.taskSummary(TaskSummaryAssembler.assemble(
-                        new TakeResult.Delivered(state(new Position.PipelineEnd()), UntrustedText.tracker('done')), Duration.ofSeconds(9)))
+                        new TakeResult.Delivered(state(new Position.PipelineEnd()), 'done'), Duration.ofSeconds(9)))
 
         then:
         capture.list.size() == 2

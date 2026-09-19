@@ -128,11 +128,11 @@ final class TakeTakeover {
     /** Refuses an unconfirmed takeover, always naming the holder; the headless case also points at the flag. */
     private static TakeResult refuse(TakeoverConfirmation.Decision decision, String holder) {
         if (decision == TakeoverConfirmation.Decision.UNAVAILABLE) {
-            return new TakeResult.Skipped(UntrustedText.tracker("Task is claimed by another instance (" + holder
+            return new TakeResult.Skipped(UntrustedText.factory("Task is claimed by another instance (" + holder
                     + ") — refusing to take it without confirmation. Re-run with --takeover to take it over"
                     + " headlessly."));
         }
         return new TakeResult.Skipped(
-                UntrustedText.tracker("Takeover of the task held by " + holder + " was declined — nothing changed."));
+                UntrustedText.factory("Takeover of the task held by " + holder + " was declined — nothing changed."));
     }
 }

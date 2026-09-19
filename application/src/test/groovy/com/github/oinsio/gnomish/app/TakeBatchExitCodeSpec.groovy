@@ -22,8 +22,8 @@ class TakeBatchExitCodeSpec extends Specification {
     def "exits 0 when every outcome is exit-code 0"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('a', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped a'))),
-            new TakeBatchOutcome('b', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped b'))),
+            new TakeBatchOutcome('a', new TakeResult.Delivered(STATE, 'shipped a')),
+            new TakeBatchOutcome('b', new TakeResult.Delivered(STATE, 'shipped b')),
         ]
 
         expect:
@@ -36,7 +36,7 @@ class TakeBatchExitCodeSpec extends Specification {
     def "mixed batch summarized: the aggregate code comes from the legitimate-outcome family"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped'))),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped')),
             new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('held by another instance'))),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
         ]
@@ -51,9 +51,9 @@ class TakeBatchExitCodeSpec extends Specification {
     def "tool failure dominates: the aggregate code comes from the below-10 family"() {
         given:
         def outcomes = [
-            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped'))),
+            new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped')),
             TakeBatchOutcome.toolFailure('43', new UsageException('cannot resolve ref')),
-            new TakeBatchOutcome('44', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped too'))),
+            new TakeBatchOutcome('44', new TakeResult.Delivered(STATE, 'shipped too')),
         ]
 
         expect:
@@ -83,7 +83,7 @@ class TakeBatchExitCodeSpec extends Specification {
         given:
         def outcomes = [
             new TakeBatchOutcome('42', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
-            new TakeBatchOutcome('43', new TakeResult.Delivered(STATE, UntrustedText.tracker('shipped'))),
+            new TakeBatchOutcome('43', new TakeResult.Delivered(STATE, 'shipped')),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human too')),
         ]
 

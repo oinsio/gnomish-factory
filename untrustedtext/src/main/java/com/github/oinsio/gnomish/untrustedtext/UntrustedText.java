@@ -13,7 +13,8 @@ import java.util.Objects;
  * the type</b>: a signature taking {@code UntrustedText} cannot be handed factory-authored text by
  * accident, and a signature still taking {@code String} after this change is a place the compiler
  * says untrusted text does not reach. <b>Exits, not access</b>: {@link #forLog()},
- * {@link #forConsole()} and {@link #forComment()} are the ways out, one per plane, each exactly
+ * {@link #forConsole()}, {@link #forComment()} and its inline shape {@link #forCommentInline()} are
+ * the ways out, one per plane, each exactly
  * the {@link TextSafety} primitive for the same raw text ({@code UntrustedTextExitIdentitySpec});
  * {@link #raw()} exists for the writers carrying bytes to a machine medium and is confined to
  * {@link UntrustedExit} classes by the architecture gate. <b>Concatenation is safe</b>:
@@ -125,6 +126,26 @@ public final class UntrustedText {
      */
     public static UntrustedText operator(String text) {
         return new UntrustedText(text, Provenance.OPERATOR);
+    }
+
+    /**
+     * Mints a sentence the factory composed itself, for a field whose type is this carrier because
+     * the same field holds captured text on another path — a refusal, a disposition, an
+     * explanation of what failed. Nothing minted here crossed the trust boundary; see
+     * {@link Provenance#FACTORY} for why such text is a carrier at all.
+     *
+     * <p>Quoting captured text in the sentence is allowed and stays factory prose, provided the
+     * quote left its own carrier through an exit ({@link #forLog()}, {@link #forConsole()},
+     * {@link #forComment()}, {@link #forCommentInline()}, or the {@link #toString()} that is the
+     * log exit) before being
+     * concatenated in. What must never be minted here is text the factory only passed along:
+     * that keeps the family it was captured in.
+     *
+     * @param text the factory-composed sentence; never null
+     * @return the carrier; never null
+     */
+    public static UntrustedText factory(String text) {
+        return new UntrustedText(text, Provenance.FACTORY);
     }
 
     /**
@@ -256,6 +277,19 @@ public final class UntrustedText {
      */
     public String forComment() {
         return TextSafety.forComment(raw);
+    }
+
+    /**
+     * The comment exit's inline shape: the same neutralization — stripped, mentions and issue
+     * references broken — without the label and the fence, for a field the factory quotes inside a
+     * line it wrote itself. A whole report assembled by the factory takes this exit field by field;
+     * {@link #forComment()} stays for what it describes, a block that is machine output end to end
+     * (design D6, D7 of type-untrusted-text, revised 2026-09-19).
+     *
+     * @return the inert field rendering, no label and no fence; never null
+     */
+    public String forCommentInline() {
+        return TextSafety.forCommentInline(raw);
     }
 
     /**

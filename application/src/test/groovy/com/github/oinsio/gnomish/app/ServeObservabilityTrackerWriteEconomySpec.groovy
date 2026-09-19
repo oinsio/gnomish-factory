@@ -146,7 +146,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
     }
 
     private static TakeResult.Delivered scriptedResult() {
-        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none()), UntrustedText.tracker('shipped it'))
+        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none()), 'shipped it')
     }
 
     /** The bare {@code SlotRunner} every daemon slot ran before task 5.1: fetch, finish, nothing else. */

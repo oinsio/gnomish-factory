@@ -28,6 +28,16 @@ import java.nio.file.Path;
  * way. None of {@code park}, {@code recordAbort}, or {@code finish} are ever called here: this is
  * not an abort, an escalation, or a delivery.
  *
+ * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.TakeContainerEngineExecution}: both
+ * must end a revoked claim with the same stop note and the same two tracker writes — the "Work
+ * stopped:" heading over the revocation reason taken through the comment plane's fenced shape,
+ * then {@code postNote} followed by {@code release}, and never {@code park}, {@code recordAbort}
+ * or {@code finish} (FR15). Only the salvage mechanics differ by medium: this end salvages against
+ * a worktree path, the sandboxed end calls {@code SandboxRunSupport.revocationSalvageAndPush}. The
+ * note is what a human reads on the thread of a task that stopped without a verdict, so a wording
+ * or an exit that changed on one medium alone would make the two modes report the same event
+ * differently.
+ *
  * <p>Implements FR15, D2 of add-tracker-port.
  *
  * @param tracker the tracker port used for the best-effort {@code postNote} and the {@code
@@ -64,14 +74,16 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
         branchPush.pushBestEffort(worktreeRoot, branch);
 
         // The reason names what the tracker held — the new claim's holder, a closure reason — so it
-        // leaves through the comment exit at the write, with the factory's own sentences outside
-        // the fence (design D7 of type-untrusted-text).
+        // leaves through the comment plane at the write, with the factory's own sentences outside
+        // the fence (design D7 of type-untrusted-text). The fenced shape, not the inline one: the
+        // note is a heading over one capture, so the label "untrusted machine output" describes
+        // the block it spans truthfully (design D6, revised 2026-09-19).
         String note = "Work stopped:\n" + UntrustedText.tracker(reason).forComment()
                 + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
                 + " this task.";
         tracker.postNote(ref, note);
         tracker.release(ref);
 
-        return new TakeResult.Revoked(finalState, UntrustedText.tracker(note));
+        return new TakeResult.Revoked(finalState, UntrustedText.factory(note));
     }
 }

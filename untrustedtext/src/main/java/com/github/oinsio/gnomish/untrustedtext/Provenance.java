@@ -7,10 +7,15 @@ package com.github.oinsio.gnomish.untrustedtext;
  *
  * <p>Provenance is <b>evidence, not policy</b>. It changes no rendering — every exit computes the
  * same answer for the same raw text whatever the family — and no component branches on it to
- * decide how much to trust the text; all six are equally untrusted. What it buys is that a report
- * or an escalation three calls away can name where its text came from without carrying a second
- * field alongside it, and that a reader of a log line knows whether they are looking at a
- * subprocess's complaint or at the target repository's own manifest.
+ * decide how much to trust the text. What it buys is that a report or an escalation three calls
+ * away can name where its text came from without carrying a second field alongside it, and that a
+ * reader of a log line knows whether they are looking at a subprocess's complaint or at the target
+ * repository's own manifest.
+ *
+ * <p>Every family but {@link #FACTORY} names a source outside the trust boundary, and those are
+ * equally untrusted: none is safer than another. {@code FACTORY} is the one family for text the
+ * factory wrote itself, and it exists so that a sentence the factory composed is never filed under
+ * a source that did not write it (design D3).
  *
  * <p>Implements FR1, FR4 of type-untrusted-text.
  */
@@ -46,7 +51,26 @@ public enum Provenance {
      * character, so quoting it back raw is the one place operator text needs an exit like any
      * other (design D1, extended at task 6.1 of type-untrusted-text).
      */
-    OPERATOR("operator-supplied argument");
+    OPERATOR("operator-supplied argument"),
+
+    /**
+     * The factory's own prose: a sentence it composed to explain a refusal, a failure or a
+     * disposition. Nothing here came from outside the trust boundary.
+     *
+     * <p>It is a family of this enum because the field it lands in is a carrier — the same {@code
+     * reason}, {@code cause} or {@code summary} that holds captured text on the next code path —
+     * and a carrier is what keeps every sink honest about it. The alternative, minting the
+     * sentence in the family of the capture it happens to sit beside, files factory prose under a
+     * source that did not write it; the alternative of typing the field {@code String} splits one
+     * field into two shapes a reader has to tell apart. This family is how a composed sentence
+     * stays a carrier without claiming a provenance it does not have.
+     *
+     * <p>A sentence that <em>quotes</em> captured text is factory prose too, as long as the quote
+     * left its own carrier through an exit first: what the field then holds is the factory's
+     * sentence, with a neutralized excerpt inside it, and the excerpt's family belongs to the
+     * carrier it was rendered from rather than to the sentence built around it.
+     */
+    FACTORY("factory-composed text");
 
     private final String description;
 

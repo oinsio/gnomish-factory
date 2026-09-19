@@ -19,9 +19,15 @@ provenance. One further provenance SHALL exist for text that is *not* from
 outside the trust boundary: an operator's own command-line argument, for the
 case where a syntax gate has refused it and the refusal is published to the
 tracker — a refused ref name is refused precisely for holding whitespace or a
-control character, so quoting it back needs an exit like any other text. The
-provenance set SHALL otherwise stay closed: text with no family here has no
-mint. The type SHALL expose the raw text only through one accessor
+control character, so quoting it back needs an exit like any other text. A
+second such provenance SHALL exist for the factory's own prose: a field that
+carries captured text on one path carries a factory-composed sentence on
+another — a refusal, a disposition, an empty detail — and that sentence SHALL
+be minted in its own family rather than in the family of whatever capture sits
+beside it. A sentence that quotes a capture SHALL stay factory-composed only
+when the quote left its carrier through an exit first; a sentence interpolating
+a capture raw SHALL keep the capture's family. The provenance set SHALL
+otherwise stay closed: text with no family here has no mint. The type SHALL expose the raw text only through one accessor
 reserved for exit owners, and SHALL render itself by default in the log-safe
 form, so string concatenation of the value yields neutralized text. Equality
 SHALL be by the text alone: provenance is evidence a report may name, never a
@@ -51,16 +57,24 @@ from — equals the carrier that was written.
   provenance and is published through the comment exit, so a control character
   the grammar refused cannot reach the tracker comment raw
 
+#### Scenario: A factory-composed sentence is not filed under the capture it quotes
+- **WHEN** a check reports that it cannot verify, with a reason the factory
+  wrote and a detail holding the command's captured output
+- **THEN** the reason names the factory as its provenance and the detail names
+  the capture's, and both render through the same exits
+
 #### Scenario: Provenance travels with the value
 - **WHEN** a carrier minted from git stderr reaches a report three calls away
 - **THEN** the report can name its provenance as subprocess output without
   any other source
 
 ### Requirement: Exits render per consumer and equal the owner primitives
-The carrier SHALL offer three exits: a log exit (one line, capped), a console
-exit (visible caret/escape notation, line structure kept), and a comment exit
+The carrier SHALL offer four exits: a log exit (one line, capped), a console
+exit (visible caret/escape notation, line structure kept), a comment exit
 (fenced, labeled, mentions and issue references neutralized, line structure
-kept). Each exit SHALL compute exactly what the untrusted-text owner's
+kept), and the comment exit's inline shape (the same neutralization without
+the label and the fence, for a field quoted inside a line the factory wrote
+itself). Each exit SHALL compute exactly what the untrusted-text owner's
 primitive computes for the same raw text, and the default rendering SHALL
 equal the log exit byte for byte, asserted over a common adversarial corpus
 for every provenance.
@@ -79,9 +93,16 @@ for every provenance.
   the block is fenced with a run longer than five, labeled as untrusted
   machine output, and every original line break is preserved
 
+#### Scenario: A report the factory assembled is published unfenced
+- **WHEN** a report the factory composed — a finish summary, a checkpoint park
+  report — quotes untrusted fields and is published to the tracker
+- **THEN** each quoted field leaves its carrier through the comment exit's
+  inline shape, the assembled block is published as it stands, and no label or
+  fence names the factory's own report lines as machine output
+
 ### Requirement: Raw access is confined to annotated exit owners
 The raw accessor SHALL be callable only from classes marked as exit owners by
-an annotation the carrier's module defines: the three exits, the writers that
+an annotation the carrier's module defines: the exits, the writers that
 carry raw bytes to a machine medium (state and ledger JSON), and the findings
 funnel entry. An architecture gate SHALL fail the build on any other caller;
 the gate SHALL key on the annotation, never on a list of class names kept in

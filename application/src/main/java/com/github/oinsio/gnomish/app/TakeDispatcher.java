@@ -99,7 +99,7 @@ record TakeDispatcher(
         // never silently acted on. Adapters whose refs carry no repo binding return empty.
         Optional<String> foreignRefusal = factory.refuseForeignRef(secretsProvider, trackerConfig, ref);
         if (foreignRefusal.isPresent()) {
-            return new TakeResult.Skipped(UntrustedText.tracker(foreignRefusal.get()));
+            return new TakeResult.Skipped(UntrustedText.factory(foreignRefusal.get()));
         }
         TrackerTask trackerTask = tracker.fetchTask(ref);
         var disposition = new TakeDisposition(

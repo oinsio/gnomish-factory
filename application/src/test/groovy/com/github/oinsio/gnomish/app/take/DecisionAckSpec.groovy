@@ -36,7 +36,7 @@ class DecisionAckSpec extends Specification {
         given:
         def decided = contextWith('go ahead')
         def steps = []
-        tracker.acknowledgeDecision(REF, fenced('go ahead')) >> {
+        tracker.acknowledgeDecision(REF, inert('go ahead')) >> {
             steps << 'acknowledge'
         }
 
@@ -77,7 +77,7 @@ class DecisionAckSpec extends Specification {
         DecisionAck.redriveAcknowledge(tracker, REF, contextWith('go ahead'), 'go ahead')
 
         then:
-        1 * tracker.acknowledgeDecision(REF, fenced('go ahead'))
+        1 * tracker.acknowledgeDecision(REF, inert('go ahead'))
     }
 
     // FR12: an unaskable tracker reads as "not there" — a redundant upsert beats a lost transition.
@@ -94,7 +94,7 @@ class DecisionAckSpec extends Specification {
         DecisionAck.redriveAcknowledge(tracker, REF, contextWith('go ahead'), 'go ahead')
 
         then:
-        1 * tracker.acknowledgeDecision(REF, fenced('go ahead'))
+        1 * tracker.acknowledgeDecision(REF, inert('go ahead'))
 
         and: 'FR15 of harden-logging-observability: the unverifiable probe is a coded WARN naming the task'
         def event = logs.list.find {
@@ -132,8 +132,14 @@ class DecisionAckSpec extends Specification {
                 null
     }
 
-    /** The comment exit's rendering of one text, as every tracker write now publishes it. */
-    private static String fenced(String text) {
-        UntrustedText.tracker(text).forComment()
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, with no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19). The fence's label is the sentence "everything between these markers is machine
+     * output", and a human's own reply quoted back to them is the one thing that is not — the
+     * mention break and the strip are what the acknowledge owes it.
+     */
+    private static String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

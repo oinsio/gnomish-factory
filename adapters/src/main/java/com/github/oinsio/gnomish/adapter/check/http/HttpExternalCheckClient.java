@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
+import com.github.oinsio.gnomish.adapter.check.NoCheckDetails;
 import com.github.oinsio.gnomish.app.CheckRunContext;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
@@ -66,9 +67,6 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
 
     private static final Logger log = LoggerFactory.getLogger(HttpExternalCheckClient.class);
 
-    /** The empty detail of a cannot-verify a declared check produced before any request left. */
-    private static final UntrustedText NO_DETAILS = UntrustedText.manifest("");
-
     /** A client for a run that supplies no variables — every non-interpolating check is unaffected. */
     public HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets) {
         this(exchange, secrets, CheckRunContext.none());
@@ -93,9 +91,9 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
             request = HttpCheckRequest.build(
                     params, secrets, HttpCheckVariables.of(runContext, attemptCommit(workspace)));
         } catch (HttpCheckCredentialException e) {
-            return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NO_DETAILS);
+            return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         } catch (HttpCheckVariableException e) {
-            return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NO_DETAILS);
+            return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         }
         String target = request.uri().toString();
         HttpCheckExchange.Response response;

@@ -166,6 +166,20 @@ public final class TextSafety {
     }
 
     /**
+     * Prepares {@code text} for one untrusted <b>field</b> inside a tracker comment the factory
+     * wrote itself ({@link CommentFencing#inert}): stripped, mentions and issue references broken,
+     * but neither labeled nor fenced. The comment plane's second shape, for a report whose prose is
+     * the factory's own — see {@link CommentFencing#inert} for why fencing such a report whole is
+     * the wrong answer.
+     *
+     * @param text the raw untrusted text; never null
+     * @return the inert field text, no label and no fence; never null
+     */
+    public static String forCommentInline(String text) {
+        return CommentFencing.inert(text);
+    }
+
+    /**
      * Bounds one whole rendered record, the sink's cap rather than the choke point's
      * ({@link RecordCap}): unlike {@link #capTail} it keeps the <b>head</b>, where the timestamp,
      * the level, the logger and the operator-event code live. {@value #RECORD_CAP_CHARS} sits

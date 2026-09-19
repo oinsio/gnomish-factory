@@ -77,8 +77,7 @@ public final class PipelineLaw {
             case Content present -> present.text();
             case Unreadable unreadable -> throw new UnreadableLawFileException(ref, unreadable.reason());
             case null ->
-                throw new UnreadableLawFileException(
-                        ref, UntrustedText.manifest("not part of the frozen pipeline law"));
+                throw new UnreadableLawFileException(ref, UntrustedText.factory("not part of the frozen pipeline law"));
         };
     }
 }

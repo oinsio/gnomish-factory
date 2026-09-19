@@ -59,16 +59,16 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
     public Outcome ensureDelivered(Workspace workspace) {
         if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new Outcome.Undeliverable(
-                    UntrustedText.subprocess("attempt-commit delivery requires the attempt-commit workspace"),
-                    UntrustedText.subprocess(
+                    UntrustedText.factory("attempt-commit delivery requires the attempt-commit workspace"),
+                    UntrustedText.factory(
                             "workspace is " + workspace.getClass().getName() + ", which carries no attempt commit"));
         }
         String attempt = attemptWorkspace.attemptCommitSha();
 
         if (!origin.isConfigured(cloneRoot)) {
             return new Outcome.Undeliverable(
-                    UntrustedText.subprocess("no remote to deliver the attempt commit to"),
-                    UntrustedText.subprocess("no '" + OriginRemote.NAME
+                    UntrustedText.factory("no remote to deliver the attempt commit to"),
+                    UntrustedText.factory("no '" + OriginRemote.NAME
                             + "' remote is configured, but the external check expects CI runs of the pushed"
                             + " attempt commit " + attempt));
         }
@@ -95,8 +95,8 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
                     push.termination() == Termination.TIMED_OUT ? "timed out" : "was interrupted",
                     branch);
             return new Outcome.Undeliverable(
-                    UntrustedText.subprocess("attempt-commit delivery could not be verified"),
-                    UntrustedText.subprocess("push of " + branch
+                    UntrustedText.factory("attempt-commit delivery could not be verified"),
+                    UntrustedText.factory("push of " + branch
                             + (push.termination() == Termination.TIMED_OUT
                                     ? " was cut off on its deadline"
                                     : " was interrupted before it finished")
@@ -105,9 +105,10 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
         }
         if (push.exitCode() != 0) {
             return new Outcome.Undeliverable(
-                    UntrustedText.subprocess("attempt commit could not be delivered to the remote"),
-                    UntrustedText.subprocess("push of " + branch + " failed twice; attempt commit " + attempt
-                            + " is not confirmed on '" + OriginRemote.NAME + "': " + push.stderr()));
+                    UntrustedText.factory("attempt commit could not be delivered to the remote"),
+                    UntrustedText.factory(
+                            "push of " + branch + " failed twice; attempt commit " + attempt + " is not confirmed on '"
+                                    + OriginRemote.NAME + "': " + push.stderr().forLog()));
         }
         return new Outcome.Delivered();
     }

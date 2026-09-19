@@ -126,9 +126,12 @@ public final class GithubStateWrites {
                         GithubMarkerKind.ABORT,
                         scope,
                         // The one untrusted component of the marker leaves its carrier here, at
-                        // the write, through the exit the tracker plane owns (design D7 of
+                        // the write, through the plane the tracker owns (design D7 of
                         // type-untrusted-text): fenced and labeled, so the factory's own
-                        // "aborted:" prefix stays visibly outside what the medium said.
+                        // "aborted:" prefix stays visibly outside what the medium said. The fenced
+                        // shape survives D6's 2026-09-19 revision because the marker is a prefix
+                        // over one capture — the block the label spans really is machine output
+                        // end to end.
                         "🤖 gnomish: aborted:\n" + record.cause().forComment(),
                         // The marker's reason field carries the recovery category, so the fold reads
                         // the two shares of the unified accounting back off the thread (FR14 of

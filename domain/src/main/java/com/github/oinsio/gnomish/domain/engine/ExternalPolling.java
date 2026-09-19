@@ -90,8 +90,9 @@ final class ExternalPolling {
         // delivery of the attempt commit is a verified precondition of the loop — an
         // undeliverable commit resolves as CannotVerify (no attempt burned) instead of being
         // left to expire as a poll-timeout quality failure.
-        if (attemptDelivery.ensureDelivered(workspace) instanceof AttemptDelivery.Outcome.Undeliverable undeliverable) {
-            return new Verdict.CannotVerify(undeliverable.reason(), undeliverable.details());
+        if (attemptDelivery.ensureDelivered(workspace)
+                instanceof AttemptDelivery.Outcome.Undeliverable(UntrustedText reason, UntrustedText details)) {
+            return new Verdict.CannotVerify(reason, details);
         }
         Instant deadline = clock.now().plus(check.timeout());
         while (true) {
@@ -130,8 +131,15 @@ final class ExternalPolling {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
             case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
-            case INFRASTRUCTURE ->
-                new Verdict.CannotVerify(UntrustedText.manifest(message), UntrustedText.manifest(message));
+            // One sentence, one carrier: the reason and the detail are the same text here — nothing
+            // was captured, since the timeout is the absence of an answer — so it is minted once and
+            // handed to both fields rather than twice into two carriers that can only ever be equal.
+            // MANIFEST, not FACTORY: the sentence interpolates the check id raw, and a capture
+            // quoted raw keeps the capture's family (design D1 of type-untrusted-text).
+            case INFRASTRUCTURE -> {
+                var timedOut = UntrustedText.manifest(message);
+                yield new Verdict.CannotVerify(timedOut, timedOut);
+            }
         };
     }
 }

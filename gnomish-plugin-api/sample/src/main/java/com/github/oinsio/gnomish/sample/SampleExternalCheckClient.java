@@ -35,9 +35,8 @@ final class SampleExternalCheckClient implements ExternalCheckClient {
     public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
         if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
-                    UntrustedText.manifest("sample check requires a sandboxed-mode workspace"),
-                    UntrustedText.manifest("got: "
-                            + (workspace == null ? "null" : workspace.getClass().getName())));
+                    UntrustedText.factory("sample check requires a sandboxed-mode workspace"),
+                    UntrustedText.factory("got: " + workspace.getClass().getName()));
         }
         String sha = attemptWorkspace.attemptCommitSha();
         return new PollStatus.Fail(List.of(new Finding(

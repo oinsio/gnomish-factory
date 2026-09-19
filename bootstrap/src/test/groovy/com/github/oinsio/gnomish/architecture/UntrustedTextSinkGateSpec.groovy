@@ -6,9 +6,11 @@ import com.github.oinsio.gnomish.testsupport.CarrierConstructors
 import com.github.oinsio.gnomish.testsupport.JavaCallSites
 import com.github.oinsio.gnomish.testsupport.LogCallSites
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
+import java.lang.reflect.Modifier
 import java.util.regex.Pattern
 import spock.lang.Shared
 import spock.lang.Specification
@@ -86,6 +88,15 @@ class UntrustedTextSinkGateSpec extends Specification {
     Set<String> carrierAccessors = CarrierAccessors.namesIn(productionClasses)
 
     /**
+     * The same accessors as owner-qualified pairs, which is how the scan reaches the names the
+     * bare-name rule must stay silent about — {@code stderr}, {@code stdout} and {@code output}
+     * among them, i.e. the whole git/docker/in-box capture vocabulary (design D2; the silence
+     * itself is pinned below).
+     */
+    @Shared
+    Set<String> qualifiedAccessors = CarrierAccessors.qualifiedNamesIn(productionClasses)
+
+    /**
      * Throwables whose constructor declares the detail as untrusted text (design D5): there the
      * parameter type is the exit contract, so the carrier at the call is the correct form rather
      * than the violation — see {@link CarrierConstructors}.
@@ -107,6 +118,15 @@ class UntrustedTextSinkGateSpec extends Specification {
         and: 'and delimited every one of them — a site the parser drops is a site nobody judges'
         LogCallSites.unparsedProductionCalls() == []
 
+        and: 'and the qualified vocabulary really reaches the names the bare-name rule cannot'
+        qualifiedAccessors.containsAll([
+            'GitCommandResult.stderr',
+            'GitCommandResult.stdout',
+            'DockerResult.stderr',
+            'DockerResult.stdout',
+            'Outcome.output',
+        ])
+
         and: 'and reached every other sink shape too'
         SINKS.every { shape, floor ->
             JavaCallSites.productionCallsOf(shape).size() >= floor
@@ -114,7 +134,12 @@ class UntrustedTextSinkGateSpec extends Specification {
 
         when: 'each source is scanned for a carrier passed to a sink as itself'
         def offenders = sources.collectMany { file ->
-            violations(RepoSourceTree.code(file), RepoSourceTree.relative(file), carrierAccessors, carrierThrowables)
+            violations(
+            RepoSourceTree.code(file),
+            RepoSourceTree.relative(file),
+            carrierAccessors,
+            carrierThrowables,
+            qualifiedAccessors)
         }
 
         then: 'the gate names every offending site'
@@ -175,6 +200,56 @@ class UntrustedTextSinkGateSpec extends Specification {
         ]
     }
 
+    // D2, G1: the ambiguity rule alone left rule (c) silent over `stderr`/`stdout`/`output` — the
+    //     entire git/docker/in-box capture vocabulary, i.e. the families the rule was written for.
+    //     Where the receiver was declared in the same source, the owner decides what the bare name
+    //     could not, so the seeded call below is named although its accessor is ambiguous.
+    def "FR7: an ambiguous accessor on a declared carrier receiver is detected: #sink"() {
+        expect:
+        violations(
+                "GitCommandResult result = runner.run(dir, \"commit\");\n${code}",
+                'Declared.java',
+                [] as Set,
+                [] as Set,
+                [
+                    'GitCommandResult.stderr',
+                    'GitCommandResult.stdout'
+                ] as Set) == ['Declared.java:2']
+
+        where:
+        sink | code
+        'log call' | 'log.warn("stage command failed: {}", result.stderr());'
+        'console print' | 'console.print(result.stdout());'
+        'tracker postNote' | 'tracker.postNote(ref, result.stderr());'
+    }
+
+    // D2: and the other half of the same evidence — the owner that answers to the ambiguous name
+    //     with a plain String is now decided too, rather than merely un-scanned. A rule that
+    //     flagged this would fail the build on a suppressor's own prose.
+    def "FR7: the same accessor on a declared String receiver is not flagged"() {
+        expect:
+        violations(
+                "DrainReport report = drain.await();\nlog.info(\"drain finished: {}\", report.summary());",
+                'StringOwner.java',
+                [] as Set,
+                [] as Set,
+                ['StatusReport.summary'] as Set) == []
+    }
+
+    // D2: a name declared twice under two types in one source is no evidence either — the scan
+    //     reads no scopes, so it must not pick one of the two declarations and act on it.
+    def "FR7: a receiver name declared under two types decides nothing"() {
+        expect:
+        violations(
+                'GitCommandResult result = runner.run(dir, "commit");\n'
+                + 'DrainReport result = drain.await();\n'
+                + 'log.info("finished: {}", result.stderr());',
+                'TwoDeclarations.java',
+                [] as Set,
+                [] as Set,
+                ['GitCommandResult.stderr'] as Set) == []
+    }
+
     // D2: what the scan cannot decide, pinned so it cannot quietly grow. A name both a carrier
     //     and a plain String answer to is no evidence either way, so it is out of the scan — and
     //     it re-enters by itself when the family wearing the String twin is typed.
@@ -204,6 +279,11 @@ class UntrustedTextSinkGateSpec extends Specification {
         // side. `cause` stayed listed for one more reason until 6.3 and now has one fewer: the
         // `AbortRecord` twin became a carrier there.
         // Each re-enters the scan by itself once its last String twin is typed.
+        // What this list no longer means is "rule (c) is silent here": since the qualified
+        // vocabulary landed, a name on it is still decided wherever the receiver's type is
+        // declared in the same source (`CarrierAccessors.qualifiedNamesIn`, the three features
+        // above). The list is what is left when the source says nothing about the receiver — a
+        // `var`, a chained call — and there the bare name really is no evidence either way.
         expect:
         CarrierAccessors.ambiguousNamesIn(productionClasses).sort() == [
             'body',
@@ -243,6 +323,26 @@ class UntrustedTextSinkGateSpec extends Specification {
         !CarrierAccessors.namesIn(seeded).contains('exitCode')
     }
 
+    // D3: the mint list is the one part of the scan that is still a hand-kept set of names, so it
+    //     is pinned against the leaf itself — a family added there without a line here would be a
+    //     mint the sink gate cannot see, which is exactly the hole rule (c) exists to close.
+    def "FR7: the scanned mints are exactly the leaf's own"() {
+        given: 'every static factory of the carrier that takes text and returns one'
+        def mints = UntrustedText.declaredMethods
+                .findAll {
+                    Modifier.isStatic(it.modifiers) && Modifier.isPublic(it.modifiers) &&
+                    it.returnType == UntrustedText && it.parameterTypes == [String] as Class[]
+                }
+                .collect { "UntrustedText.${it.name}" as String }
+                .toSorted()
+
+        expect: 'the leaf really has mints, so an empty answer cannot pass this'
+        mints.size() >= 7
+
+        and: 'and the scan knows every one of them'
+        CarrierArguments.MINTS.toSorted() == mints
+    }
+
     /** Whether this call constructs a throwable that declares its detail as untrusted text. */
     private static boolean declaresCarrierDetail(String call, Set<String> typedThrowables) {
         def construction = THROWABLE.matcher(call)
@@ -251,18 +351,23 @@ class UntrustedTextSinkGateSpec extends Specification {
 
     /** Every sink call in one already comment-stripped source that takes a carrier as itself. */
     private static List<String> violations(
-            String code, String path, Set<String> accessors, Set<String> typedThrowables = [] as Set) {
+            String code,
+            String path,
+            Set<String> accessors,
+            Set<String> typedThrowables = [] as Set,
+            Set<String> qualified = [] as Set) {
         def declared = CarrierArguments.declaredNames(code)
+        def receivers = CarrierArguments.declaredTypes(code)
         def logged = LogCallSites.inSource(code, path).findAll { call ->
             JavaCallSites.chainArguments(call.text).any {
-                CarrierArguments.isCarrier(it, accessors, declared)
+                CarrierArguments.isCarrier(it, accessors, declared, qualified, receivers)
             }
         }
         def written = SINKS.keySet().collectMany {
             JavaCallSites.callsOf(code, path, it)
         }.findAll { call ->
             !declaresCarrierDetail(call.text, typedThrowables) && call.arguments.any {
-                CarrierArguments.isCarrier(it, accessors, declared)
+                CarrierArguments.isCarrier(it, accessors, declared, qualified, receivers)
             }
         }
         (logged + written).collect {

@@ -74,7 +74,7 @@ public final class RemoteDefaultBranch {
         }
         return symrefBranch(read.stdout().forParsing())
                 .map(RemoteDefaultBranch::discovered)
-                .orElseGet(() -> new DefaultBranchDiscovery.Undetermined(UntrustedText.subprocess(
+                .orElseGet(() -> new DefaultBranchDiscovery.Undetermined(UntrustedText.factory(
                         "origin answered but named no default branch: its HEAD points at no ref")));
     }
 
@@ -93,7 +93,7 @@ public final class RemoteDefaultBranch {
     private static DefaultBranchDiscovery discovered(String branch) {
         return DefaultBranch.violation(branch)
                 .<DefaultBranchDiscovery>map(violation ->
-                        new DefaultBranchDiscovery.Undetermined(UntrustedText.subprocess("origin named a default"
+                        new DefaultBranchDiscovery.Undetermined(UntrustedText.factory("origin named a default"
                                 + " branch '" + LogText.forLog(branch) + "' that is not a usable branch name: "
                                 + violation)))
                 .orElseGet(() -> new DefaultBranchDiscovery.Discovered(new DefaultBranch(branch)));

@@ -49,14 +49,14 @@ public sealed interface TakeResult
      * <p>Implements FR18, D3 of add-tracker-port.
      *
      * @param finalState the final task state the engine returned; never null
-     * @param summary finished text of the final report posted to the tracker, carried: it quotes
-     *     what the run captured, and the writer that publishes it renders it at the comment;
-     *     never blank
+     * @param summary finished text of the final report posted to the tracker: a report builder's
+     *     output, whose quoted captures already left their carriers through the comment exit's
+     *     inline shape (design D6), so the writer publishes it as it stands; never blank
      */
-    record Delivered(TaskState finalState, UntrustedText summary) implements TakeResult {
+    record Delivered(TaskState finalState, String summary) implements TakeResult {
 
         public Delivered {
-            summary = requireNonBlank(summary, "summary");
+            summary = requireNonBlankText(summary, "summary");
         }
     }
 
@@ -79,7 +79,7 @@ public sealed interface TakeResult
     record AwaitingHuman(TaskState finalState, ParkReason reason, String report) implements TakeResult {
 
         public AwaitingHuman {
-            report = requireNonBlankReport(report);
+            report = requireNonBlankText(report, "report");
         }
     }
 
@@ -182,29 +182,27 @@ public sealed interface TakeResult
     }
 
     /**
-     * Fails fast on a blank {@link AwaitingHuman#report}: every {@link TakeResult} variant's
-     * free-text field must describe what happened, since a caller renders a report from it alone
-     * (FR18). Kept as a shared static method rather than inline in the compact constructor: PIT's
-     * record filter suppresses all mutations inside a record's canonical constructor, which would
-     * silently exempt this validation from the 100% mutation gate. Takes no {@code component}
-     * parameter: {@link AwaitingHuman#report} is the only {@code String}-typed field across every
-     * variant (see the carrier twin below for the rest), so a parameter here would always carry the
-     * same value.
+     * Fails fast on a blank {@link AwaitingHuman#report} or {@link Delivered#summary}: every
+     * {@link TakeResult} variant's free-text field must describe what happened, since a caller
+     * renders a report from it alone (FR18). Kept as a shared static method rather than inline in
+     * the compact constructor: PIT's record filter suppresses all mutations inside a record's
+     * canonical constructor, which would silently exempt this validation from the 100% mutation
+     * gate.
      */
-    private static String requireNonBlankReport(String value) {
+    private static String requireNonBlankText(String value, String component) {
         if (value.isBlank()) {
-            throw new IllegalArgumentException("TakeResult.report must not be blank");
+            throw new IllegalArgumentException("TakeResult." + component + " must not be blank");
         }
         return value;
     }
 
     /**
-     * The carrier twin of the validator above, for the five variants whose free text embeds
+     * The carrier twin of the validator above, for the four variants whose free text embeds
      * captured text and therefore travels as {@code UntrustedText} (design D4 of
-     * type-untrusted-text). {@link AwaitingHuman#report} deliberately keeps the {@code String}
-     * form: it is a report builder's finished output, already rendered once through the comment
-     * exit for its two readers (design D6), so a carrier there would ask a second rendering of
-     * every park writer.
+     * type-untrusted-text). {@link AwaitingHuman#report} and {@link Delivered#summary} deliberately
+     * keep the {@code String} form: each is a report builder's finished output, already rendered
+     * once through the comment exit for its two readers (design D6), so a carrier there would ask
+     * a second rendering of every writer that publishes one.
      */
     private static UntrustedText requireNonBlank(UntrustedText value, String component) {
         if (value.isBlank()) {

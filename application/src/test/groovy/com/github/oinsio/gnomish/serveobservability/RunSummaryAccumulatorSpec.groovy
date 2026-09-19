@@ -40,7 +40,7 @@ class RunSummaryAccumulatorSpec extends Specification {
         accumulator.counts() == new OutcomeCounts(0, 0, 0, 0)
 
         when:
-        accumulator.record(new TakeResult.Delivered(stateAt(ExecutorUsage.none()), UntrustedText.tracker('shipped it')))
+        accumulator.record(new TakeResult.Delivered(stateAt(ExecutorUsage.none()), 'shipped it'))
         accumulator.record(new TakeResult.AwaitingHuman(stateAt(ExecutorUsage.none()), ParkReason.ESCALATION, 'needs a human'))
         accumulator.record(new TakeResult.Aborted(stateAt(ExecutorUsage.none()), UntrustedText.subprocess('durability guarantee broke')))
         accumulator.record(new TakeResult.Revoked(stateAt(ExecutorUsage.none()), UntrustedText.tracker('claim lost mid-run')))
@@ -59,8 +59,8 @@ class RunSummaryAccumulatorSpec extends Specification {
         def second = tokensOf(['claude-x': new TokenUsage(20L, 5L, 3L, 1L), 'claude-y': new TokenUsage(7L, 3L, 2L, 4L)])
 
         when:
-        accumulator.record(new TakeResult.Delivered(stateAt(first), UntrustedText.tracker('shipped it')))
-        accumulator.record(new TakeResult.Delivered(stateAt(second), UntrustedText.tracker('shipped it too')))
+        accumulator.record(new TakeResult.Delivered(stateAt(first), 'shipped it'))
+        accumulator.record(new TakeResult.Delivered(stateAt(second), 'shipped it too'))
 
         then:
         accumulator.tokensByModel() == [
@@ -91,7 +91,7 @@ class RunSummaryAccumulatorSpec extends Specification {
                 go.await()
                 (0..<recordsPerThread).each {
                     accumulator.record(new TakeResult.Delivered(
-                            stateAt(tokensOf(['claude-x': new TokenUsage(1L, 1L, 1L, 1L)])), UntrustedText.tracker('shipped it')))
+                            stateAt(tokensOf(['claude-x': new TokenUsage(1L, 1L, 1L, 1L)])), 'shipped it'))
                 }
             } as Runnable)
         }

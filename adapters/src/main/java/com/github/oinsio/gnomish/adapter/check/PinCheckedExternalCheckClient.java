@@ -104,14 +104,14 @@ public final class PinCheckedExternalCheckClient implements ExternalCheckClient 
 
         if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
-                    UntrustedText.manifest("pin-check requires the attempt-commit workspace"),
+                    UntrustedText.factory("pin-check requires the attempt-commit workspace"),
                     UntrustedText.manifest("external check '" + check.checkId() + "' declares pin paths " + pins
                             + " but the workspace is " + workspace.getClass().getName()
                             + ", which carries no attempt commit to compare against"));
         }
         if (lawCommit == null) {
             return new PollStatus.CannotVerify(
-                    UntrustedText.manifest("pin-check has no law commit to compare against"),
+                    UntrustedText.factory("pin-check has no law commit to compare against"),
                     UntrustedText.manifest(
                             "the run's law is bound to no commit — its repository root resolves no checkout — so"
                                     + " pinned definition files " + pins + " cannot be compared"));
@@ -124,7 +124,7 @@ public final class PinCheckedExternalCheckClient implements ExternalCheckClient 
             PinnedBlob attemptBlob = read(attempt, path);
             if (baseBlob.tooLarge() || attemptBlob.tooLarge()) {
                 return new PollStatus.CannotVerify(
-                        UntrustedText.manifest("pin-check cannot compare an oversized pinned file"),
+                        UntrustedText.factory("pin-check cannot compare an oversized pinned file"),
                         UntrustedText.manifest("pinned definition file '" + path + "' exceeds " + PIN_READ_CAP_BYTES
                                 + " bytes and cannot be byte-compared"));
             }

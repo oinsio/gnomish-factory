@@ -244,4 +244,61 @@ class TokenUsageMapperSpec extends Specification {
         then:
         tokensByModel == [(ModelIdSyntax.UNUSABLE): new TokenUsage(120, 20, 10, 5)]
     }
+
+    // FR10, NFR-R2: ModelIdSyntax is many-to-one, so two refused ids land on one key. The round's
+    //     cost must survive that collision — a put would drop the first entry's tokens while the
+    //     map stayed non-empty, so the empty-map WARN would not fire and nothing would report it.
+    def "FR10: two refused model ids sum onto the placeholder rather than overwriting"() {
+        given: 'a modelUsage naming two distinct ids the syntax gate refuses, plus one it accepts'
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-collide'), 'success', UntrustedText.agent('done'), null, [
+            ("claude-a[2J"): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 1, cacheReadInputTokens: 2],
+            ("claude-b\nforged"): [inputTokens: 10, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 4],
+            ('claude-opus-4-8[1m]'): [inputTokens: 100, outputTokens: 50, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+        ])
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-collide'), UntrustedText.agent('claude-fake-main-1'))
+
+        when:
+        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+
+        then: 'the two refused entries are one key carrying the sum of both, and neither is lost'
+        tokensByModel[ModelIdSyntax.UNUSABLE] == new TokenUsage(17, 8, 1, 6)
+
+        and: 'the accepted id keeps its own entry, untouched by the collision beside it'
+        tokensByModel['claude-opus-4-8[1m]'] == new TokenUsage(100, 50, 0, 0)
+        tokensByModel.size() == 2
+    }
+
+    // .claude/rules/logging.md, "Best effort must still leave a trace": keying the round's tokens
+    //     on a placeholder is a degraded result, and a degraded result nobody can attribute is the
+    //     shape the rule exists for — the dashboard would show "(unusable model id)" with nothing
+    //     anywhere saying that a substitution happened, or how long the refused id was.
+    def "FR10: the substitution of a refused model id leaves a trace"() {
+        given: "the mapper's own logger, watched at DEBUG"
+        def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
+
+        and: 'a modelUsage entry whose key the syntax gate refuses'
+        def hostile = "claude-x[2J"
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-3'), 'success', UntrustedText.agent('done'), null, [
+            (hostile): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
+        ])
+        def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-3'), UntrustedText.agent('claude-fake-main-1'))
+
+        when:
+        mapper.toTokensByModel(resultEvent, initEvent)
+
+        then: 'one DEBUG line names the placeholder the tokens are keyed on and the refused length'
+        def event = logs.list.find {
+            it.formattedMessage.contains('no accepted shape')
+        }
+        event != null
+        event.level == Level.DEBUG
+        event.formattedMessage.contains(ModelIdSyntax.UNUSABLE)
+        event.formattedMessage.contains(Integer.toString(hostile.length()))
+
+        and: 'and the refused id itself never reaches the line — it is the value that failed the gate'
+        !event.formattedMessage.contains('claude-x')
+
+        cleanup:
+        logs.detach()
+    }
 }

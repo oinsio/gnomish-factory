@@ -235,6 +235,6 @@ public final class TakeClaimAndWork {
      */
     static TakeResult refuseHeld(String holder) {
         return new TakeResult.Skipped(
-                UntrustedText.tracker("Task is claimed by another instance (" + holder + ") — refusing to take it."));
+                UntrustedText.factory("Task is claimed by another instance (" + holder + ") — refusing to take it."));
     }
 }
