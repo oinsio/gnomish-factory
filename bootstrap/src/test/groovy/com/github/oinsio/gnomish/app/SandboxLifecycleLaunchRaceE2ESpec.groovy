@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -97,7 +98,7 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
                 new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)

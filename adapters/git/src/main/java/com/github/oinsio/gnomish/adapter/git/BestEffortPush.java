@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
@@ -117,7 +116,7 @@ final class BestEffortPush {
                     stage,
                     round,
                     branch,
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
         }
     }
 }

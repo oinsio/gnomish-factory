@@ -81,9 +81,8 @@ public final class AgentRoundResultExtractor {
             }
         }
         if (resultEvent == null) {
-            String initSessionId = initEvent == null ? null : initEvent.sessionId();
             throw new MissingResultEventException(
-                    initSessionId == null ? "unknown" : initSessionId, bytesRead, events.size());
+                    initEvent == null ? null : initEvent.sessionId(), bytesRead, events.size());
         }
         var tokensByModel = tokenUsageMapper.toTokensByModel(resultEvent, initEvent);
         var trace = toolTraceBuilder.buildTrace(events, roundEnd);

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -19,7 +20,7 @@ public final class FactoryCloneHardeningException extends RuntimeException {
      * @param cloneDir the clone whose hooks could not be neutralized
      * @param detail the failing command's captured stderr, or the underlying exception's message
      */
-    public FactoryCloneHardeningException(String cloneDir, String detail) {
+    public FactoryCloneHardeningException(String cloneDir, UntrustedText detail) {
         super("failed to harden factory clone \"" + cloneDir + "\" (core.hooksPath): " + detail);
     }
 

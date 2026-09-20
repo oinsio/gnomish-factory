@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.baseref;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Objects;
 
@@ -41,12 +42,17 @@ public sealed interface DesignatorSelection {
      *
      * @param cause which of the two it is
      * @param values every value found on the task, in the order the adapter reported them, so the
-     *     report names what the human has to fix
+     *     report names what the human has to fix — carried, never rendered here: the values are the
+     *     task author's words and the report builder picks the exit (task 6.1 of
+     *     type-untrusted-text)
      * @param reason one sentence naming what was found and what is allowed — built here, where the
      *     allowed bases are in hand, rather than reconstructed by a caller that would have to
-     *     re-derive which of the two causes it is looking at
+     *     re-derive which of the two causes it is looking at. Factory-authored prose: the values it
+     *     quotes enter it through the carrier's {@code toString()}, which is the log exit, so the
+     *     sentence needs no neutralizing of its own
      */
-    record Refused(UnderdeterminedCause cause, List<String> values, String reason) implements DesignatorSelection {
+    record Refused(UnderdeterminedCause cause, List<UntrustedText> values, String reason)
+            implements DesignatorSelection {
 
         /** Copies the values so the refusal a caller reports cannot change under it. */
         public Refused {

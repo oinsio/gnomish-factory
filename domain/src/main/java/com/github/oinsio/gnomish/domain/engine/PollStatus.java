@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -84,6 +85,9 @@ public sealed interface PollStatus
      * escalation report can always name why no result could be obtained (NFR-O1);
      * {@code details} carries free-text detail (typically a preserved stack trace)
      * and is required non-null but MAY be empty when there is no underlying cause.
+     * Both are carriers: a poll's words are the external platform's, so they reach
+     * the engine unrendered and leave through the exit their reader needs (design
+     * D4, D6 of type-untrusted-text).
      *
      * <p>Implements FR3, D2 of add-stage-engine.
      *
@@ -92,7 +96,7 @@ public sealed interface PollStatus
      * @param details free-text detail, typically a preserved stack trace; never
      *     null, may be empty when there is no underlying cause
      */
-    record CannotVerify(String reason, String details) implements PollStatus {
+    record CannotVerify(UntrustedText reason, UntrustedText details) implements PollStatus {
 
         public CannotVerify {
             reason = requireNonBlankReason(reason);
@@ -106,7 +110,7 @@ public sealed interface PollStatus
          * record's canonical constructor, which would silently exempt this
          * validation from the 100% mutation gate.
          */
-        private static String requireNonBlankReason(String value) {
+        private static UntrustedText requireNonBlankReason(UntrustedText value) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException("CannotVerify.reason must not be blank");
             }

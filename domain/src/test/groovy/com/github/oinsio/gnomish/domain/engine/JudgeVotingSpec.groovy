@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -102,7 +103,7 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
     // FR7: the TaskContext is threaded through to every vote unchanged
     def "threads the task context through to every vote"() {
         given: 'a context with a decision and a single passing vote'
-        def context = new TaskContext('TASK-7', 't', 'b',
+        def context = new TaskContext('TASK-7', UntrustedText.tracker('t'), UntrustedText.tracker('b'),
                 [
                     new Decision('ok', 'build', 'bob', Instant.EPOCH)
                 ])

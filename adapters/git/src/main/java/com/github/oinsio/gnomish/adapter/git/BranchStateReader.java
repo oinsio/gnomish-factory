@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
@@ -79,7 +80,7 @@ public final class BranchStateReader {
             // Inspection reports what it knows, never a guess: "origin could not be asked" is not
             // "no such task", and answering NotFound here would tell an operator their branch is
             // gone because their network blinked (FR6).
-            case BranchLocation.Unavailable(String reason) ->
+            case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
             case BranchLocation.Local local -> readAt(cloneDir, local.ref());
             case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, tracking.ref());
@@ -94,12 +95,12 @@ public final class BranchStateReader {
         BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
         return switch (tipEnvelopeReader.read(source)) {
             case TipEnvelopeRead.NoState(BranchShape shape) -> new BranchStateResult.Shaped(shape);
-            case TipEnvelopeRead.Loaded(BranchShape ignored, String taskJson, String stateJson) ->
+            case TipEnvelopeRead.Loaded(BranchShape ignored, UntrustedText taskJson, UntrustedText stateJson) ->
                 new BranchStateResult.Found(readReport(taskJson, stateJson));
         };
     }
 
-    private StatusReport readReport(String taskJson, String stateJson) {
+    private StatusReport readReport(UntrustedText taskJson, UntrustedText stateJson) {
         TaskRecord taskContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(taskJson));
         TaskState state = StateJsonMapper.fromDto(StateJsonMapper.readDto(stateJson));
 

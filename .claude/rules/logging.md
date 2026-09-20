@@ -100,50 +100,123 @@ it:
 log.debug("fetch classified as not-found for {}", ref);
 ```
 
-## Route untrusted text through `LogText`
+## Carry untrusted text in `UntrustedText`; neutralize it at the exit
 
-Agent/LLM output, subprocess stderr, tracker-sourced strings and in-container
-command output are attacker-influenced: they enter a log line **only** through
-`com.github.oinsio.gnomish.logtext.LogText` (module `:logtext`), which strips
-control/ANSI sequences, flattens newlines so one event stays one line, and caps
-length.
+Agent/LLM output, subprocess and in-container command output, tracker-sourced
+strings, manifest strings and task-branch document values are
+attacker-influenced. They are carried by
+`com.github.oinsio.gnomish.untrustedtext.UntrustedText` (module
+`:untrustedtext`, a JDK-only leaf every module can reach) from the point of
+capture: **mint at capture, render at the sink**. A capture accessor returns the
+carrier, not a `String`; the text is neutralized only where it leaves the
+carrier, and which rendering it gets is chosen by the plane it is leaving for.
+
+The carrier has five ways out, each with its own allowlist:
+
+| Way out                                      | Who may call it                       | What it yields                                      |
+|----------------------------------------------|---------------------------------------|-----------------------------------------------------|
+| `isBlank()`, `contains(String)`, `length()`  | anyone                                | a boolean or an int — no text leaves                 |
+| `forLog()` / `forConsole()` / `forComment()` | anyone                                | neutralized text for a human plane                   |
+| `forCommentInline()`                         | anyone                                | the comment plane without the label and the fence    |
+| `forParsing()`                               | classes annotated `@UntrustedParser`  | the bytes as captured, to be turned into a value     |
+| `raw()`                                      | classes annotated `@UntrustedExit`    | the bytes as captured, to be written to a machine medium |
 
 ```java
-log.warn("stage command failed: {}", LogText.forLog(result.stderr()));
+log.warn("stage command failed: {}", failure.forLog());        // failure is an UntrustedText
+throw new TaskListingFailedException(pattern, exitCode, failure);  // the carrier goes in whole
 ```
 
-A source-scan gate (`UntrustedLogTextGateSpec`) fails the build when one of the
-recognized untrusted accessors — `stderr()`, `stdout()`, `output()`,
-`getOriginalMessage()`, `sessionId()`, `model()`, `label()` — reaches a log call
-outside a `LogText.*(...)` wrapper. Both SLF4J shapes are scanned: the classic `log.warn(...)` and the
-fluent `log.atLevel(...)....log(...)`, whose arguments sit past the level call
-and are followed through the builder chain. The accessor list is what the gate
-can see, not the whole rule: a change that introduces a new untrusted accessor
-adds it there in the same change.
+- **`forLog()`** strips control/ANSI sequences, flattens newlines so one event
+  stays one line, and caps length — the log plane's exit. `toString()` is
+  byte-identical to it, so an accidental concatenation is safe text rather than
+  a leak; the gate still asks for the explicit call, so intent stays visible.
+- **`forConsole()`** is the operator console's exit (see `ConsoleIO` below);
+  **`forComment()`** is the tracker's, applied by the carrier itself.
+- **`forCommentInline()`** is the same tracker rendering — stripped, mentions and
+  issue references broken — without the label and the fence, for a field quoted
+  inside a line the factory wrote itself. The fence says "everything between these
+  markers is machine output", so it belongs to a block that really is; a report the
+  factory assembled takes this exit field by field instead, and is published as it
+  stands. Fencing an assembled report whole labels the factory's own lines untrusted
+  and renders every field twice — the defect `ReportPlane` exists to prevent.
+- **`@UntrustedExit`** marks the few classes that write raw bytes to a *machine*
+  medium — the leaf's exit renderers, the branch document's JSON/state writers,
+  the `--json` mappers, the judge findings funnel entry. Rendering there would
+  corrupt the document the machine plane exists to keep verbatim. Membership is
+  the `raw()` call, not the family: a machine writer whose every field is a
+  string the factory minted itself reads no raw text, so marking it widens the
+  allowlist for nothing. A
+  gate asserts the call behind every marker, so the annotation cannot be applied
+  on the family argument alone.
+- **`@UntrustedParser`** marks the classes that turn captured text into a value
+  that is no longer untrusted text: a typed value, a `String` that passed a
+  *named* syntax gate (`RefNameSyntax`, `ModelIdSyntax`, `ContainerIdSyntax`), or
+  a carrier re-minted with another provenance. Handing the text back unchanged as
+  a `String` is not parsing — that is the escape hatch the type exists to close.
+  A parser that yields a `String` says in its own javadoc what makes that string
+  inert.
+- **Queries carry no text**, so they need no annotation: emptiness and substring
+  checks use them rather than `forParsing()`.
+- **The factory's own prose mints `UntrustedText.factory`.** A `reason`, a `cause`
+  or an empty `details` is a carrier on every path, so the sentence the factory
+  composes for the path that captured nothing is a carrier too — minted in its own
+  family, never in the family of whatever capture sits beside it. A sentence may
+  quote a capture and stay factory prose *if the quote left its carrier through an
+  exit first*; interpolating a capture raw keeps the capture's family.
+- **Pass-through is not parsing.** A file's content read off a branch is the
+  document itself, not an answer about it: it keeps travelling as a carrier down
+  to the mapper that lifts fields out of it, and that mapper re-mints each lifted
+  field with the branch-document provenance.
+
+The gate is type-level, not name-level — `UntrustedTextGateSpec` (`:bootstrap`,
+ArchUnit plus a source scan) fails the build on: a production capture accessor
+returning a plain `String` where its family is typed; a `raw()` call outside an
+`@UntrustedExit` class; a `forParsing()` call outside an `@UntrustedParser`
+class; and an `UntrustedText`-typed expression passed directly to an SLF4J call,
+a `Throwable` constructor, a `ConsoleIO.print*` or a text-carrying `Tracker`
+write. Both SLF4J shapes are scanned: the classic `log.warn(...)` and the fluent
+`log.atLevel(...)....log(...)`, whose arguments sit past the level call and are
+followed through the builder chain. Both annotated sets are pinned, so a class
+joining either one fails the spec until the growth is acknowledged.
+
+`LogText` (`:logtext`) remains as a `String → String` facade for callers that
+hold text from a family not yet typed.
+
+### A new capture source mints at the point of capture
+
+The type gate sees only text the factory already wrapped. An adapter that reads a
+subprocess stream, an HTTP response body or a document file straight into a
+`String` shows no carrier for any rule to judge, so **the mint belongs at the read
+itself**, not one layer down where the value is first used.
+
+That layer has its own gate: `RawCaptureGateSpec` (`:bootstrap`) scans every
+production source for the three capture shapes — `getInputStream()` /
+`getErrorStream()`, a `body()` call in a file naming `java.net.http.HttpResponse`,
+and a `Files.read*` — and fails the build on a hit outside
+`RawCaptureOwners.CAPTURE_OWNERS`. It is the accessor-name scan that used to guard
+log calls, pointed at the layer the type cannot reach once its vocabulary emptied.
+
+Adding a capture source therefore means adding its file to that map **with the
+family it mints**, or with the reason no mint is owed — a secret value, a document
+the factory itself wrote, or the deliberate `:subprocess` / `:gitobjects` mechanics
+carve-out, whose contract is process handling rather than text policy. The map is
+also checked the other way: every listed file must still capture, so an entry left
+behind after its read moves away fails the build rather than quietly permitting a
+file for nothing.
 
 ### The sink is a backstop, not a substitute
 
-The gate scans **log call sites**. An exception whose *message* concatenates
-subprocess output escapes it structurally — nothing untrusted appears at the log
-call, yet Logback renders the message when the throwable is logged. The same holds
-for a record's `toString()`, an assembled operator report, and an MDC value.
+The type gate sees *call sites and signatures*. An exception whose message was
+composed one layer down, a record's `toString()`, an assembled operator report,
+an MDC value — none of them shows a carrier at the log call, yet Logback renders
+them all.
 
-That hole is closed at the sink: the encoder renders the message, the throwable and
-every MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
+That hole is closed at the sink: the encoder renders the message, the throwable
+and every MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
 (`:bootstrap`), so no byte from an untrusted source can forge a record or drive a
 terminal whatever the call site did. It is layer 3 of the three layers
-`docs/adr/0004-logging-policy.md` states (capture → per-consumer exit → sink
-backstop) — **defense in depth, not a license to skip `LogText`**. The obligation on
-the throw site stands:
-
-```java
-throw new TaskListingFailedException(pattern, result.exitCode(), LogText.forLog(result.stderr()));
-```
-
-Sites predating this rule still concatenate raw `stderr()` (across `adapters/git`,
-`gitobjects`, `sandbox/docker`); they are honest debt, not precedent. Bringing them
-under the rule — and replacing the accessor-name gate with typed carriers — is
-`type-untrusted-text`.
+`docs/adr/0004-logging-policy.md` states (capture → typed carrier and its exits →
+sink backstop) — **defense in depth, not a license to skip the exit**.
 
 Never log a secret **value**; a warning about a secret names the variable only.
 `FindingsSanitizer` is a different control at a different boundary (plugin
@@ -166,7 +239,7 @@ console.print(report);        // human — controls rendered visible (^[, ^X, ^?
 console.printMachine(json);   // machine (--json) — byte-for-byte verbatim
 ```
 
-`print` applies `LogText.forConsole`: it makes controls **visible** rather than
+`print` applies the console exit (`forConsole`): it makes controls **visible** rather than
 removing them, and preserves line structure and length, because an operator report
 is long by design and the operator must see that a hostile source tried. Never send
 `--json` output down the human path — it is a parser's input, and neutralizing it
@@ -225,7 +298,7 @@ is the subject of the assertion.
 1. Level matches the reader's required reaction (table above).
 2. No swallowed failure without a trace; no second line for the same fault.
 3. Throwable is the trailing argument.
-4. Untrusted text went through `LogText`; no secret values.
+4. Untrusted text left its carrier through an exit; no secret values.
 5. Loop sites suppress or aggregate.
 6. The line is findable by `taskId` if it concerns a task.
 7. A new WARN/ERROR took the next free `OperatorEvent` code as its message head.
@@ -243,6 +316,11 @@ is the subject of the assertion.
 - **Console owner** (`ConsoleOwnerGateSpec`, `:bootstrap`): a source scan
   failing the build on `System.out.print*` / `System.err.print*` in any
   production class but `SystemConsoleIO`.
+- **Untrusted text** (`UntrustedTextGateSpec`, `:bootstrap`): the type gate
+  described above — capture accessors return the carrier, `raw()` and
+  `forParsing()` stay inside their annotated sets, and a carrier never reaches a
+  log call, a `Throwable` constructor, a console print or a tracker write without
+  an exit. Both annotated sets are pinned, so growth must be acknowledged.
 - **Runtime** (`LogExpectationGate` in `:test-fixtures` +
   `checkLogExpectationGate` in `build-logic`): a global Spock extension watches
   every feature's operator plane. It **reports** — per module, in

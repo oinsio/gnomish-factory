@@ -1,10 +1,5 @@
 package com.github.oinsio.gnomish.e2e
 
-import java.nio.file.Files
-import java.util.concurrent.TimeUnit
-import spock.lang.Specification
-import spock.lang.Timeout
-
 /**
  * Proves the E2E harness mechanics themselves work (task 9.1, M1): a real {@code
  * gnomish run} process, spawned via {@code java -jar}, driven through the {@code
@@ -27,16 +22,7 @@ import spock.lang.Timeout
  *
  * <p>M1 of add-manual-run.
  */
-@Timeout(value = 120, unit = TimeUnit.SECONDS)
-class E2eProcessHarnessSmokeSpec extends Specification {
-
-    private final E2eProcessHarness harness = new E2eProcessHarness()
-
-    def cleanup() {
-        // The stateful command check writes this marker into the fixture on its
-        // first (failing) invocation — reset it so a re-run starts pristine.
-        Files.deleteIfExists(E2eFixture.projectRoot().resolve('attempt-marker.txt'))
-    }
+class E2eProcessHarnessSmokeSpec extends AbstractE2eProcessSpec {
 
     def "M1: a real gnomish run process launches, is driven by piped stdin, and returns an exit code"() {
         given: 'a scripted session answering the executor, external, and judge prompts, then the checkpoint'

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -75,7 +76,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
         "refresh of '${baseName}' did not succeed: ${refreshed}"
         String commit = (refreshed as BaseRefreshOutcome.Refreshed).commit()
         new GitTaskRepository(runner, clone, tempDir.resolve('worktrees'), ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+                new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 ObjectId.of(commit),
                 new BasePin(baseName, (refreshed as BaseRefreshOutcome.Refreshed).kind(), BaseRule.CONFIGURED_DEFAULT),
                 TaskState.atStageStart('build'))
@@ -84,7 +85,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
 
     private String taskJsonBaseCommit(String taskId) {
         def json = gitOutput(clone, 'show', "gnomish/${taskId}:.gnomish-task/task.json")
-        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json)).baseCommit()
+        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json))).baseCommit()
     }
 
     // FR15, NFR-S1: the clone's own refs/heads/<default> is a commit behind origin. Before the peel,

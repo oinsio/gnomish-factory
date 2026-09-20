@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -111,12 +112,12 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def denial = Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
         def check = new CheckResult(
-                new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+                new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
                 [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
         def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
-        def context = new TaskContext(taskId, 'Fix flaky OrderServiceSpec', 'body', [])
+        def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
         def liveReport = StatusReport.build(context, state, 3, LiveActivity.idle())
 
         and: 'the round committed to the task branch exactly as the git adapters would'
@@ -147,9 +148,9 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def taskId = 'manual-20260716-143502-c1'
         def denial = Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
-        def escalation = new EscalationReport.CannotExecute('round timed out after 15m', [denial])
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out after 15m'), [denial])
         def state = TaskState.atStageStart('implement')
-        def context = new TaskContext(taskId, 'Fix flaky OrderServiceSpec', 'body', [])
+        def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
         def liveReport = StatusReport.build(
                 context, state, 3, new LiveActivity(null, escalation, new Outcome.Escalated(escalation)))
 

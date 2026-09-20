@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Shared
 import spock.lang.Specification
@@ -46,7 +47,7 @@ import spock.lang.TempDir
  */
 class ThreeProviderVerifyChainSpec extends Specification {
 
-    private static final TaskContext CONTEXT = new TaskContext('ACC-1', 'title', 'body', [])
+    private static final TaskContext CONTEXT = new TaskContext('ACC-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     private static final AttemptKey KEY = new AttemptKey('ACC-1', 'verify', 0)
 
     @Shared
@@ -82,7 +83,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
         then: 'all three checks ran, in manifest order, and all three passed'
         result.results.size() == 3
         result.results*.verdict.every { it instanceof Verdict.Pass }
-        result.results*.checkRef*.label == [
+        result.results*.checkRef*.label*.forLog() == [
             'command:true',
             'external:http:quality-gate',
             'external:github:' + WORKFLOW,

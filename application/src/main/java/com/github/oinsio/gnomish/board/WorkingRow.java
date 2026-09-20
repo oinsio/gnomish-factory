@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.board;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
@@ -29,7 +30,10 @@ import org.jspecify.annotations.Nullable;
  *     marker is missing
  */
 public record WorkingRow(
-        TaskRef ref, String title, String holder, @Nullable ClaimVersion claimVersion) {
+        TaskRef ref,
+        UntrustedText title,
+        String holder,
+        @Nullable ClaimVersion claimVersion) {
 
     public WorkingRow {
         Objects.requireNonNull(ref, "ref");

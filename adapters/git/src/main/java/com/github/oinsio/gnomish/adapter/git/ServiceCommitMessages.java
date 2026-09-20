@@ -23,6 +23,14 @@ public final class ServiceCommitMessages {
 
     private static final String PREFIX = "gnomish: ";
 
+    /**
+     * The snapshot subject's fixed prefix, ahead of {@code <stage>#<round>}. Package-visible so
+     * {@link SnapshotTipCheck} — the parsing side of this parsing contract — reads the same
+     * literal this class writes, rather than repeating it (`.claude/rules/manual-sync-pairs.md`,
+     * preference 1: shared definition over a hand-synced duplicate).
+     */
+    static final String SNAPSHOT_PREFIX = PREFIX + "snapshot ";
+
     private ServiceCommitMessages() {}
 
     /**
@@ -61,7 +69,7 @@ public final class ServiceCommitMessages {
      * @return the formatted commit message
      */
     public static String snapshot(String stage, int round) {
-        return PREFIX + "snapshot " + stage + "#" + round;
+        return SNAPSHOT_PREFIX + stage + "#" + round;
     }
 
     /**

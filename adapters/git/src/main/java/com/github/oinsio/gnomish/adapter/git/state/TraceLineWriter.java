@@ -12,10 +12,12 @@ import java.nio.file.Path;
 /**
  * Writes a {@link ToolTrace} as {@code attempts/<stage>/<round>/trace.jsonl}
  * under a {@code .gnomish-task/} root: one compact JSON object per line, one
- * line per {@link ToolCall}, in trace order (design D3). Only the line
- * writer itself lives here — actual git commit staging and worktree
- * materialization are the git {@code AttemptPersistence} adapter's job
- * (future work), which this writer is a building block for.
+ * line per {@link ToolCall}, in trace order (design D3). Only the rendering
+ * and the host-side write live here — staging the file into an attempt commit
+ * is {@code GitAttemptPersistence}'s job on the host medium and {@code
+ * EnvironmentAttemptPersistence}'s in a sandboxed round; both build on this
+ * writer, the host one through {@link #write}, the sandboxed one through
+ * {@link #render(ToolTrace)}.
  *
  * <p>Reuses {@link TaskStateJson#mapper()} for the JSON binding: {@code
  * trace.jsonl} follows the same JSON conventions as {@code task.json}/{@code
@@ -58,9 +60,10 @@ public final class TraceLineWriter {
 
     /**
      * Renders one {@code trace.jsonl} line for a single {@link ToolCall}:
-     * a compact (non-pretty-printed) JSON object, without a trailing
-     * newline — this is a line-oriented log format, one JSON object per
-     * line.
+     * a compact (non-pretty-printed) JSON object in {@link TraceLineDto}'s
+     * shape, without a trailing newline — this is a line-oriented log format,
+     * one JSON object per line, and {@link #render(ToolTrace)} adds the
+     * terminator.
      *
      * @param call the tool call to render; never null
      * @return the compact JSON line, no trailing newline
@@ -76,9 +79,30 @@ public final class TraceLineWriter {
     }
 
     /**
-     * Writes {@code trace} under {@code gnomishTaskRoot} at its resolved
-     * relative path ({@link #relativePath(AttemptKey)}), creating parent
-     * directories as needed and overwriting any existing file at that path.
+     * Renders a whole {@code trace.jsonl} file: one {@link #renderLine(ToolCall)}
+     * per call, in trace order, each terminated by a newline. This is the one
+     * definition of the file's content, so the host medium (which writes it to a
+     * worktree through {@link #write}) and the sandboxed medium (which sends the
+     * same bytes across the environment channel) cannot render a round's trace
+     * differently. An empty {@code calls} list renders the empty string, the
+     * zero-line file {@link ToolTrace#calls()} allows.
+     *
+     * @param trace the trace to render; never null
+     * @return the file's full content, empty for a trace with no calls
+     */
+    public static String render(ToolTrace trace) {
+        StringBuilder content = new StringBuilder();
+        for (ToolCall call : trace.calls()) {
+            content.append(renderLine(call)).append('\n');
+        }
+        return content.toString();
+    }
+
+    /**
+     * Writes {@link #render(ToolTrace)}'s content under {@code gnomishTaskRoot}
+     * at the trace's resolved relative path ({@link #relativePath(AttemptKey)}),
+     * creating parent directories as needed and atomically replacing any
+     * existing file at that path.
      *
      * @param gnomishTaskRoot the {@code .gnomish-task/} directory; never null
      * @param trace the trace to write; never null
@@ -86,11 +110,6 @@ public final class TraceLineWriter {
      *     written (an I/O fault, never a validation error)
      */
     public static void write(Path gnomishTaskRoot, ToolTrace trace) throws IOException {
-        Path target = gnomishTaskRoot.resolve(relativePath(trace.key()));
-        StringBuilder content = new StringBuilder();
-        for (ToolCall call : trace.calls()) {
-            content.append(renderLine(call)).append('\n');
-        }
-        AtomicFileWriter.write(target, content.toString());
+        AtomicFileWriter.write(gnomishTaskRoot.resolve(relativePath(trace.key())), render(trace));
     }
 }

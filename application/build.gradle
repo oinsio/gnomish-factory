@@ -78,6 +78,14 @@ dependencies {
     // constant. `implementation`, not `api`: the enum is named only inside log calls,
     // never in a signature this module exports.
     implementation project(':operatorevent')
+    // The untrusted-text leaf (FR2, FR3, design D2/D7 of type-untrusted-text): `TrackerFence` is a
+    // facade over `TextSafety.forComment`, the comment exit the carrier renders through too, and
+    // the `status.json`, `board --json` and `usage.json` mappers carry `@UntrustedExit`, the marker
+    // that allows a machine writer to read the carrier's raw text. So this module names the leaf
+    // directly rather than reaching it through `:logtext`. `api`, not `implementation`: that marker has runtime
+    // retention and sits on public types, so it travels on this module's own surface — which is
+    // what the dependency-analysis gate establishes.
+    api project(':untrustedtext')
 
     // Annotations only — never a running context, which is the composition
     // root's concern (design D3): `@Component` on the startup collaborators and
@@ -137,10 +145,9 @@ layering {
         ':sandbox:core',
         // The supervision leaf, also reached transitively through `:gitobjects`.
         ':subprocess',
-        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
-        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
-        // it; the layering gate walks the transitive graph, so the reach is listed where
-        // it arrives.
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR2, design D7 of
+        // type-untrusted-text): reached directly by `TrackerFence`, the facade over the comment
+        // exit, and transitively via `:logtext`, whose `LogText` is a facade over it too.
         ':untrustedtext',
     ]
 }

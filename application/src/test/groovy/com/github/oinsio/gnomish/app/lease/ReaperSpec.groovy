@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -12,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -41,7 +41,7 @@ class ReaperSpec extends Specification {
     private final Reaper reaper = new Reaper(tracker, memory)
 
     private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, UntrustedText.tracker('fixture title'))
     }
 
     private static ClaimFacts claimOf(ClaimVersion version, String holder = 'inst-1') {
@@ -50,20 +50,6 @@ class ReaperSpec extends Specification {
 
     private static ClaimVersion version(String marker = 'm1', String updatedAt = ANCIENT.toString()) {
         new ClaimVersion(marker, Instant.parse(updatedAt), new ClaimEpoch(1))
-    }
-
-    /**
-     * Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec —
-     * pinned at DEBUG, which is where the converging no-op now lives (FR12).
-     */
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        def logs = LogCaptureSupport.attach(Reaper, Level.DEBUG)
-        try {
-            emit()
-            return List.copyOf(logs.list)
-        } finally {
-            logs.detach()
-        }
     }
 
     // FR4: a claim whose version stood unchanged for TTL is removed with the observed
@@ -161,7 +147,7 @@ class ReaperSpec extends Specification {
 
         when: 'TTL elapses and both are reaped — T-1 mismatches, T-2 is removed'
         time.advance(TTL)
-        def events = capture {
+        def events = LogCaptureSupport.capture(Reaper, Level.DEBUG) {
             reaper.reapOnce([])
         }
 

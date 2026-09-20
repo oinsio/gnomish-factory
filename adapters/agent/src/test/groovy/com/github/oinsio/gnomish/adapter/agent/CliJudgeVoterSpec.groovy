@@ -43,8 +43,9 @@ class CliJudgeVoterSpec extends Specification {
         new VerifyCheck.Judge(criteriaFile, 'claude-fake-judge-1', settings, 1)
     }
 
+    // Delegates to FakeAgentSupport#defaultTaskContext, the single owner of this fixture value.
     private static TaskContext context() {
-        new TaskContext('TASK-1', 'title', 'body', [])
+        FakeAgentSupport.defaultTaskContext()
     }
 
     // FR8: a clean {"passed": true} final message yields Pass.
@@ -129,8 +130,8 @@ class CliJudgeVoterSpec extends Specification {
 
         and: 'the CannotVerify details carry the exception\'s own message (session id), not its class name'
         def cannotVerify = vote.verdict() as Verdict.CannotVerify
-        cannotVerify.details().contains('stream-json carried no result event for round')
-        !cannotVerify.details().contains('MissingResultEventException')
+        cannotVerify.details().forLog().contains('stream-json carried no result event for round')
+        !cannotVerify.details().forLog().contains('MissingResultEventException')
     }
 
     // FR13, NFR-R1: the agent CLI binary failing to start (not merely hanging or
@@ -150,8 +151,8 @@ class CliJudgeVoterSpec extends Specification {
 
         and: 'the failure reason and details describe the process failing to start, not a round outcome'
         def cannotVerify = vote.verdict() as Verdict.CannotVerify
-        cannotVerify.reason() == 'agent CLI process failed to start'
-        cannotVerify.details() == missingBinary
+        cannotVerify.reason().forLog()== 'agent CLI process failed to start'
+        cannotVerify.details().forLog()== missingBinary
     }
 
     // FR7, D10, task 9.4: a supplied AgentProgressListener receives the round's live progress —

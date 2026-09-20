@@ -41,10 +41,11 @@ layering {
         // transitive graph, so the reach is listed where it arrives.
         ':operatorevent',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
-        // `:gnomish-plugin-api`, whose findings sanitizer is a facade over it. No source in
-        // this module names it — a third party still compiles against one declared
-        // dependency; the layering gate walks the transitive graph, so the reach is listed
-        // where it arrives.
+        // `:gnomish-plugin-api`, whose findings sanitizer is a facade over it. Since FR4 of
+        // type-untrusted-text this module's own sources name it too — the sample tracker mints
+        // its snapshot's title and body as `TRACKER` carriers, the sample check client mints its
+        // cannot-verify text — and that is the point: a third party still compiles against one
+        // declared dependency, because the leaf arrives through the api's own `api` edge.
         ':untrustedtext',
     ]
 }

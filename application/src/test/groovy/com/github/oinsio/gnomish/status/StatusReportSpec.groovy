@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -26,11 +27,11 @@ class StatusReportSpec extends Specification {
     private static final Instant STARTED = Instant.parse('2026-07-16T14:35:10Z')
 
     private static TaskContext context(List<Decision> decisions = []) {
-        new TaskContext('manual-20260716-143502-x7', 'Fix flaky spec', 'body text', decisions)
+        new TaskContext('manual-20260716-143502-x7', UntrustedText.tracker('Fix flaky spec'), UntrustedText.tracker('body text'), decisions)
     }
 
     private static AttemptRecord passedRound() {
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
     }
 
@@ -85,7 +86,7 @@ class StatusReportSpec extends Specification {
     // FR11: attemptsUsed, attempts, decisions, totals pass through faithfully from TaskState/TaskContext
     def "passes attemptsUsed, attempts, decisions and totals through from state and context"() {
         given: 'a state with a recorded quality failure and non-empty totals'
-        def failedCheck = new CheckResult(new CheckRef(0, 'command:./gradlew test'),
+        def failedCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         def round = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [failedCheck],
         new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [])
@@ -147,14 +148,17 @@ class StatusReportSpec extends Specification {
     def "surfaces a carried escalation report and activity on the built StatusReport"() {
         given: 'a state and a live activity carrying an escalation report'
         def state = TaskState.atStageStart('implement')
-        def escalation = new EscalationReport.DecisionNeeded('Refactor or patch?', ['refactor', 'patch'])
-        def activity = new LiveActivity(new Activity.AwaitingInput('decide?', STARTED), escalation, null)
+        def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor or patch?'), [
+            UntrustedText.agent('refactor'),
+            UntrustedText.agent('patch')
+        ])
+        def activity = new LiveActivity(new Activity.AwaitingInput(UntrustedText.agent('decide?'), STARTED), escalation, null)
 
         when: 'a report is built'
         def report = StatusReport.build(context(), state, 3, activity)
 
         then: 'the escalation and activity are surfaced'
-        report.activity() == new Activity.AwaitingInput('decide?', STARTED)
+        report.activity() == new Activity.AwaitingInput(UntrustedText.agent('decide?'), STARTED)
         report.lastEscalation() == escalation
     }
 
@@ -174,7 +178,7 @@ class StatusReportSpec extends Specification {
     // FR11: attempts is defensively copied and unmodifiable
     def "exposes attempts as unmodifiable"() {
         given: 'a report'
-        def report = new StatusReport('t1', 'title', 'body', 'stage', 0, 3, [passedRound()], [], null,
+        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), 'stage', 0, 3, [passedRound()], [], null,
         ExecutorUsage.none(), null, null, null)
 
         when: 'a caller tries to mutate the exposed list'
@@ -188,7 +192,7 @@ class StatusReportSpec extends Specification {
     def "exposes decisions as unmodifiable"() {
         given: 'a report'
         def decision = new Decision('do it', null, null, null)
-        def report = new StatusReport('t1', 'title', 'body', 'stage', 0, 3, [], [decision], decision,
+        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), 'stage', 0, 3, [], [decision], decision,
         ExecutorUsage.none(), null, null, null)
 
         when: 'a caller tries to mutate the exposed list'

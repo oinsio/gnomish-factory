@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -129,10 +130,10 @@ class ReentrancySpec extends Specification {
         when: 'both runs execute concurrently on virtual threads, meeting inside the verify chain'
         try (def pool = Executors.newVirtualThreadPerTaskExecutor()) {
             def futureA = pool.submit({
-                engine.run(pipeline(), new TaskContext('TASK-A', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runA))
+                engine.run(pipeline(), new TaskContext('TASK-A', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runA))
             } as Callable<TaskOutcome>)
             def futureB = pool.submit({
-                engine.run(pipeline(), new TaskContext('TASK-B', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runB))
+                engine.run(pipeline(), new TaskContext('TASK-B', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runB))
             } as Callable<TaskOutcome>)
             runA.outcome = futureA.get(10, TimeUnit.SECONDS)
             runB.outcome = futureB.get(10, TimeUnit.SECONDS)
@@ -156,12 +157,12 @@ class ReentrancySpec extends Specification {
 
         when: 'the first run completes'
         def first = newRun('TASK-A', null)
-        first.outcome = engine.run(pipeline(), new TaskContext('TASK-A', 't', 'b', []),
+        first.outcome = engine.run(pipeline(), new TaskContext('TASK-A', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         TaskState.atStageStart('build'), WORKSPACE, portsOf(first))
 
         and: 'a second run on the SAME engine follows'
         def second = newRun('TASK-B', null)
-        second.outcome = engine.run(pipeline(), new TaskContext('TASK-B', 't', 'b', []),
+        second.outcome = engine.run(pipeline(), new TaskContext('TASK-B', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         TaskState.atStageStart('build'), WORKSPACE, portsOf(second))
 
         then: 'both are isolated, identical successes with each port called exactly once'

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -87,7 +88,7 @@ class DecisionCarryingResumeSpec extends Specification {
         def middle = new Decision('single region', null, null, null)
         def appended = new Decision('yes, add the migration', 'build', 'bob', Instant.parse('2026-07-16T00:00:00Z'))
         def decisions = [older, middle, appended]
-        def context = new TaskContext('TASK-1', 'title', 'body', decisions)
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), decisions)
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << new Verdict.Pass()
         executor.scripted << completed()
@@ -121,7 +122,7 @@ class DecisionCarryingResumeSpec extends Specification {
     def "a caller-reset counter is what lets the run proceed instead of escalating"() {
         given: 'a 2-attempt stage and a context carrying one decision'
         def decision = new Decision('proceed', null, null, null)
-        def context = new TaskContext('TASK-1', 'title', 'body', [decision])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [decision])
         def stageDef = stage('build', 2, [builtin('files_exist')])
 
         when: 'a run enters at the limit — no caller reset — with its own fakes'
@@ -155,7 +156,7 @@ class DecisionCarryingResumeSpec extends Specification {
     def "the same decisions reach the judge vote on the run"() {
         given: 'a context with a decision and a single-vote judge check that passes'
         def decision = new Decision('accept the tradeoff', 'review', 'carol', null)
-        def context = new TaskContext('TASK-1', 'title', 'body', [decision])
+        def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [decision])
         def judge = new VerifyCheck.Judge('criteria.md', 'judge-model', [:], 1)
         def stageDef = stage('review', 5, [judge])
         judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(), [:])

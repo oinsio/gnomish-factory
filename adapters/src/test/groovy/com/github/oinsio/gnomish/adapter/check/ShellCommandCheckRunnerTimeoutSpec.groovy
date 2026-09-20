@@ -128,7 +128,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
 
         then: 'the shutdown never burns a stage attempt on a verdict nobody established'
         verdict instanceof Verdict.CannotVerify
-        (verdict as Verdict.CannotVerify).reason().toLowerCase().contains('interrupted')
+        (verdict as Verdict.CannotVerify).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'NFR-O2: the WARN names interruption, not a deadline the check never reached'
         def warnings = events.findAll { it.level.toString() == 'WARN' }

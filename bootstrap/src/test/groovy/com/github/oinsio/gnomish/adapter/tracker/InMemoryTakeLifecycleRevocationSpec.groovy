@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -38,7 +39,7 @@ class InMemoryTakeLifecycleRevocationSpec extends TakeLifecycleRevocationSpecBas
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
         realTracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(realTracker)
-        harness.seed(ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
         // TrackerAdapterFactory#create returns whatever Tracker `tracker` currently is: the
         // fixture calls seededReadyTrackerAndFactory BEFORE closeOnSecondFetch, so this closure
         // captures the mutable `tracker` field by reference and picks up the decorator installed

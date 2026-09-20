@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -48,7 +49,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         TaskLifecycleStore repository = store.taskRepository(cloneDir, worktreesRoot)
 
         then: 'it is bound, not merely non-null: creating a task through it lands on this clone'
-        repository.createTask(new TaskContext('PROJ-1', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         runner.run(cloneDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/gnomish/PROJ-1').exitCode() == 0
     }
 
@@ -58,7 +59,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         addRemote(cloneDir, 'origin', origin.toString())
 
         when:
-        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         then:
         new RemoteBranchTip(runner).read(cloneDir, 'gnomish/PROJ-9')
@@ -78,7 +79,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
                         ]))
 
         then: 'the commit landed on the task branch in this worktree'
-        runner.run(worktree, 'show', 'HEAD:.gnomish-task/state.json').stdout().contains('verify')
+        runner.run(worktree, 'show', 'HEAD:.gnomish-task/state.json').stdout().forParsing().contains('verify')
     }
 
     def "readRecordedState reads the worktree's state.json back into the domain state"() {
@@ -98,7 +99,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
 
         then:
         record.context().taskId() == 'PROJ-4'
-        record.context().title() == 'Fix it'
+        record.context().title().forLog() == 'Fix it'
     }
 
     def "reading a state file that is not there fails loudly, naming the file"() {

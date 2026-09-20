@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -149,7 +150,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
                 sandboxProps, factoryProps, trackedContainerSupport(), LiveConsoleIO.onStdout())
 
         when:
-        instanceOne.run(cloneDir, null, pipeline(), segments(), new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+        instanceOne.run(cloneDir, null, pipeline(), segments(), new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 TaskState.atStageStart('work'), RunArguments.InteractiveMode.NONE)
 
         then:

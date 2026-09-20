@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
  * <p>Implements FR8, NFR-R3 of harden-task-branch-contract; supersedes FR9 of add-git-workflow's
  * stop-and-escalate rule.
  */
+@UntrustedParser
 final class ReplicaPairReconciler {
 
     private static final Logger log = LoggerFactory.getLogger(ReplicaPairReconciler.class);
@@ -177,7 +178,7 @@ final class ReplicaPairReconciler {
                     + "), so the swap's outcome is unknown; resume the task to re-run the reconciliation");
         }
         if (swap.exitCode() != 0) {
-            return swap.stderr().isBlank() ? "(no stderr)" : swap.stderr().trim();
+            return swap.stderr().isBlank() ? "(no stderr)" : swap.stderr().forLog();
         }
         if (relation == DivergenceOutcome.DIVERGED) {
             // NFR-O1: every discard is named, with both tips and the tenure it ran under, so the
@@ -206,30 +207,24 @@ final class ReplicaPairReconciler {
         return epochs.epochFor(taskId);
     }
 
+    // GitReadGate.answered: an interrupted `merge-base` would otherwise answer "not an ancestor"
+    // for a pair it never compared — classifying a merely BEHIND or AHEAD pair as DIVERGED and,
+    // under a live tenure, discarding the local line; an interrupted `rev-parse` can hand back a
+    // truncated tip with the same verdict.
     private boolean isAncestor(String ancestor, String descendant) {
-        return answered(ancestor, "merge-base", runner.run(repo, "merge-base", "--is-ancestor", ancestor, descendant))
+        return GitReadGate.answered(
+                                ancestor,
+                                "merge-base",
+                                runner.run(repo, "merge-base", "--is-ancestor", ancestor, descendant))
                         .exitCode()
                 == 0;
     }
 
     private @Nullable String tipOf(String ref) {
-        GitCommandResult result = answered(ref, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", ref));
-        return result.exitCode() == 0 ? result.stdout().trim() : null;
-    }
-
-    /**
-     * The gate every classification read passes through, same rule as {@link GitShowTip}: a result
-     * is a fact about the pair only when the invocation ran to its own exit. An interrupted
-     * {@code merge-base} answers "not an ancestor" for a pair it never compared — which classifies
-     * a merely BEHIND or AHEAD pair as DIVERGED and, under a live tenure, discards the local line;
-     * an interrupted {@code rev-parse} can hand back a truncated tip with the same verdict.
-     */
-    private GitCommandResult answered(String revision, String command, GitCommandResult result) {
-        return switch (result.termination()) {
-            case EXITED -> result;
-            case TIMED_OUT, INTERRUPTED ->
-                throw new BranchTipUnavailableException(
-                        revision, command, result.termination().name());
-        };
+        GitCommandResult result =
+                GitReadGate.answered(ref, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", ref));
+        // @UntrustedParser warrant (design D11): a rev-parse answer is an object id, used for
+        //     ancestry comparisons and update-ref arguments, never shown to a reader as itself.
+        return result.exitCode() == 0 ? result.stdout().forParsing().trim() : null;
     }
 }

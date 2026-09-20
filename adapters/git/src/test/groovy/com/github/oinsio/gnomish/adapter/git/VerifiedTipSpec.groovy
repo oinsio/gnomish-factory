@@ -22,16 +22,16 @@ class VerifiedTipSpec extends Specification {
 
         where:
         result || expected
-        new GitCommandResult(0, SHA + '\n', '') || Optional.of(SHA)
-        new GitCommandResult(128, '', 'fatal: bad revision') || Optional.empty()
-        new GitCommandResult(0, '', '') || Optional.empty()
-        new GitCommandResult(0, '   \n', '') || Optional.empty()
-        new GitCommandResult(0, SHA, '', Termination.INTERRUPTED) || Optional.empty()
+        GitCommandResult.of(0, SHA + '\n', '') || Optional.of(SHA)
+        GitCommandResult.of(128, '', 'fatal: bad revision') || Optional.empty()
+        GitCommandResult.of(0, '', '') || Optional.empty()
+        GitCommandResult.of(0, '   \n', '') || Optional.empty()
+        GitCommandResult.of(0, SHA, '', Termination.INTERRUPTED) || Optional.empty()
     }
 
     def "FR13: a durable resolution refuses a blank tip and carries the git evidence"() {
         when:
-        VerifiedTip.required('refs/heads/gnomish/PROJ-1', 'rev-parse', new GitCommandResult(128, '', 'fatal: bad revision'))
+        VerifiedTip.required('refs/heads/gnomish/PROJ-1', 'rev-parse', GitCommandResult.of(128, '', 'fatal: bad revision'))
 
         then:
         def failure = thrown(BranchTipUnavailableException)
@@ -42,7 +42,7 @@ class VerifiedTipSpec extends Specification {
 
     def "FR13: a resolution that never ran to its own exit reports how it ended instead"() {
         when:
-        VerifiedTip.required('HEAD', 'rev-parse', new GitCommandResult(0, '', '', Termination.INTERRUPTED))
+        VerifiedTip.required('HEAD', 'rev-parse', GitCommandResult.of(0, '', '', Termination.INTERRUPTED))
 
         then:
         def failure = thrown(BranchTipUnavailableException)
@@ -52,7 +52,7 @@ class VerifiedTipSpec extends Specification {
 
     def "FR13: a clean resolution returns the trimmed sha"() {
         expect:
-        VerifiedTip.required('HEAD', 'rev-parse', new GitCommandResult(0, SHA + '\n', '')) == SHA
+        VerifiedTip.required('HEAD', 'rev-parse', GitCommandResult.of(0, SHA + '\n', '')) == SHA
     }
 
     // FR6: git's stderr is subprocess output, and this message is rendered into a log record when
@@ -64,7 +64,7 @@ class VerifiedTipSpec extends Specification {
         def stderr = "fatal: bad revision\n2026-01-01 ERROR forged record${esc}[31m"
 
         when:
-        VerifiedTip.required('refs/heads/gnomish/PROJ-1', 'rev-parse', new GitCommandResult(128, '', stderr))
+        VerifiedTip.required('refs/heads/gnomish/PROJ-1', 'rev-parse', GitCommandResult.of(128, '', stderr))
 
         then:
         def failure = thrown(BranchTipUnavailableException)

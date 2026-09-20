@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -83,8 +84,8 @@ import org.jspecify.annotations.Nullable;
  */
 public record StatusReport(
         String taskId,
-        String title,
-        String body,
+        UntrustedText title,
+        UntrustedText body,
         @Nullable String currentStage,
         int attemptsUsed,
         @Nullable Integer attemptLimit,
@@ -155,6 +156,6 @@ public record StatusReport(
 
     @DoNotMutate
     private static @Nullable Decision lastDecisionOf(List<Decision> decisions) {
-        return decisions.isEmpty() ? null : decisions.get(decisions.size() - 1);
+        return decisions.isEmpty() ? null : decisions.getLast();
     }
 }

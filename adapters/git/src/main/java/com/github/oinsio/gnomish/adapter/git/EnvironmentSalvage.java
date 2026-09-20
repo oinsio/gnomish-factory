@@ -112,7 +112,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
     public boolean hasLeftovers() {
         try {
             InBoxGitCommand.Outcome status = exec(STATUS);
-            return status.succeeded() && !status.output().trim().isEmpty();
+            return status.succeeded() && !status.output().isBlank();
         } catch (ProcessStartException | UncheckedIOException e) {
             log.warn(
                     OperatorEvent.SALVAGE_PROBE_UNREACHABLE.head() + "salvage probe could not reach the environment",

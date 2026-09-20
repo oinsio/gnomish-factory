@@ -32,20 +32,12 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
     BestEffortPush push
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(repo, 'origin', bareRepo.toString())
 
         push = new BestEffortPush(runner)
-    }
-
-    private String currentHead() {
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when this spec was next touched. */
@@ -74,7 +66,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         assert noOriginRunner.run(bareRepoDir, 'remote', 'get-url', 'origin').exitCode() != 0
 
         def check = new RoundBoundaryCheck(noOriginRunner, bareRepoDir, 'gnomish/PROJ-99')
-        def previousTip = noOriginRunner.run(bareRepoDir, 'rev-parse', 'HEAD').stdout().trim()
+        def previousTip = noOriginRunner.run(bareRepoDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def noOriginPush = new BestEffortPush(noOriginRunner)
 
         when:
@@ -90,20 +82,20 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
     def "NFR-S1: a normal push updates the remote's task branch to the exact same-named ref"() {
         given:
         def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
-        def previousTip = currentHead()
+        def previousTip = currentHead(repo)
 
         when:
         push.pushBestEffort('PROJ-1', 'implement', 0, repo, 'gnomish/PROJ-1', check, previousTip)
 
         then:
-        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
-        remoteHead == currentHead()
+        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
+        remoteHead == currentHead(repo)
     }
 
     def "NFR-S1: push is skipped with no exception when HEAD is off the task branch"() {
         given:
         def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
-        def previousTip = currentHead()
+        def previousTip = currentHead(repo)
         runner.run(repo, 'checkout', '-q', '-b', 'not-the-task-branch')
 
         when:
@@ -128,7 +120,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
     def "NFR-S1: push is skipped with no exception when previousTip is not an ancestor of HEAD"() {
         given: 'an orphan commit replaces the branch history, so the remembered previousTip is stranded'
         def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
-        def previousTip = currentHead()
+        def previousTip = currentHead(repo)
         runner.run(repo, 'checkout', '-q', '--orphan', 'rewritten-history')
         new File(repo.toFile(), 'rewritten.txt').text = 'rewritten history'
         runner.run(repo, 'add', 'rewritten.txt')
@@ -165,10 +157,10 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         runner.run(otherClone, 'add', 'divergent.txt')
         runner.run(otherClone, '-c', 'user.email=x@b.c', '-c', 'user.name=x', 'commit', '-m', 'divergent')
         runner.run(otherClone, 'push', 'origin', 'gnomish/PROJ-1:gnomish/PROJ-1')
-        def remoteHeadBeforeLocalPush = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
+        def remoteHeadBeforeLocalPush = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
 
         def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
-        def previousTip = currentHead()
+        def previousTip = currentHead(repo)
 
         when:
         def events = capture {
@@ -177,7 +169,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
 
         then:
         noExceptionThrown()
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() == remoteHeadBeforeLocalPush
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() == remoteHeadBeforeLocalPush
 
         and: 'a WARN was actually logged for the rejected push — proving the failure branch, not the success one, ran'
         events.size() == 1

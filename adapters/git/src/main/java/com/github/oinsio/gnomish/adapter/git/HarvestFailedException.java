@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -21,9 +22,21 @@ public final class HarvestFailedException extends RuntimeException {
 
     /**
      * @param branch the task branch whose harvest failed
-     * @param stderr the fetch's error output, for the log trail
+     * @param stderr the fetch's error output, for the log trail; rendered through its log exit
      */
-    public HarvestFailedException(String branch, String stderr) {
-        super("harvest failed for branch \"" + branch + "\": " + stderr.strip());
+    public HarvestFailedException(String branch, UntrustedText stderr) {
+        super("harvest failed for branch \"" + branch + "\": " + stderr);
+    }
+
+    /**
+     * The unfinished-fetch shape: a fetch killed on its deadline or interrupted printed at most a
+     * partial transcript, so what it said is evidence, not a verdict.
+     *
+     * @param branch the task branch whose harvest failed
+     * @param what how the fetch ended, in the factory's own words
+     * @param partialOutput whatever git managed to print; rendered through its log exit
+     */
+    public HarvestFailedException(String branch, String what, UntrustedText partialOutput) {
+        super("harvest failed for branch \"" + branch + "\": " + what + "; partial output: " + partialOutput);
     }
 }

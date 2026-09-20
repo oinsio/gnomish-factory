@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.logtext.LogText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,10 @@ record ContainerEnvironmentKeeper(DockerCli docker) {
             DockerResult stopped = docker.run(DockerCommands.stop(container));
             if (!stopped.ok()) {
                 // throwable-not-subject: docker answered with a status, not a thrown fault.
-                log.debug("best-effort stop of {} was refused: {}", container, LogText.forLog(stopped.stderr()));
+                log.debug(
+                        "best-effort stop of {} was refused: {}",
+                        container,
+                        stopped.stderr().forLog());
                 return false;
             }
             log.info("kept container {} stopped; its volume and network are retained for inspection", container);

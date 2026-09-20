@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -78,7 +79,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'the entry reports returned = false'
-        result.find { it.ref() == ref }.returned() == false
+        !result.find { it.ref() == ref }.returned()
     }
 
     // FR6, FR7: a task claimed, parked with an escalation report, then moved back
@@ -99,7 +100,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'the entry reports returned = true — the park report is recorded history'
-        result.find { it.ref() == ref }.returned() == true
+        result.find { it.ref() == ref }.returned()
     }
 
     // FR6, FR7: a task whose stale claim was reaped and returned to Ready carries a
@@ -121,7 +122,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'the entry reports returned = true — the holder-transition marker is recorded history'
-        result.find { it.ref() == ref }.returned() == true
+        result.find { it.ref() == ref }.returned()
     }
 
     // FR6, FR7: a task claimed then returned to Ready via an infrastructure abort
@@ -138,11 +139,11 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         seedWorkingWithClaim(adapter, ref, 'instance-a')
 
         when: 'the abort protocol records an abort and returns the task to Ready, and listReady is called'
-        adapter.recordAbort(ref, new AbortRecord('infra hiccup', 'instance-a', Instant.now()))
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('infra hiccup'), 'instance-a', Instant.now()))
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'the entry reports returned = false — an abort marker is not a returned marker'
-        result.find { it.ref() == ref }.returned() == false
+        !result.find { it.ref() == ref }.returned()
     }
 
     // FR6: listOpen's size is directly usable as the WIP policy's open-front count —

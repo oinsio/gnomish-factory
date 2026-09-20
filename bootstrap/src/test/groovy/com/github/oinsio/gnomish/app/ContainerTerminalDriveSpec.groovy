@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -70,7 +71,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         ]
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
         def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
-        def context = new TaskContext('T-ABORT', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('T-ABORT', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         support.taskRepository().createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def assembly = newAssembly()
         def originalErr = System.err

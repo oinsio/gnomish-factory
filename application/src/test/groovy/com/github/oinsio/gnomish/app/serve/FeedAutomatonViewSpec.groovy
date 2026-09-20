@@ -1,16 +1,17 @@
 package com.github.oinsio.gnomish.app.serve
 
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.fresh
+
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
@@ -37,24 +38,8 @@ class FeedAutomatonViewSpec extends Specification {
     private static final Duration IDLE = Duration.ofSeconds(30)
     private static final int WIP_LIMIT = 2
 
-    private static final class FixedRandom extends Random {
-        @Override
-        int nextInt(int bound) {
-            0
-        }
-
-        @Override
-        double nextDouble() {
-            0.0d
-        }
-    }
-
     private final VirtualClock clock = new VirtualClock(Instant.parse('2026-01-01T00:00:00Z'))
     private final def sleeper = new BudgetedVirtualSleeper(clock)
-
-    private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
-    }
 
     private static SlotRunner noop() {
         { TaskRef ref -> } as SlotRunner
@@ -85,7 +70,7 @@ class FeedAutomatonViewSpec extends Specification {
     def "a Filling cycle reports FILLING with the poll's open-front count and the poll instant as lastPollAt"() {
         given: 'open fronts below the WIP limit, so the fresh candidate is claim-eligible'
         def openFronts = [
-            new OpenTask(new TaskRef('github:o/r#open-1'), new TrackerTaskState.Working('other'), null, 'fixture title')
+            new OpenTask(new TaskRef('github:o/r#open-1'), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
         ]
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },

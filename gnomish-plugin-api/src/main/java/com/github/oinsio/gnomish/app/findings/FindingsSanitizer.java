@@ -3,12 +3,15 @@ package com.github.oinsio.gnomish.app.findings;
 import com.github.oinsio.gnomish.untrustedtext.TextSafety;
 
 /**
- * The sanitization half of the findings funnel: environment-derived findings text passes
- * through here before it reaches any sink, so ANSI/terminal escape sequences and control
- * characters are stripped once, in one tested place, and log volume is bounded by a tail cap
+ * The sanitization half of the findings funnel: environment-derived findings text is neutralized
+ * before it reaches a human sink, so ANSI/terminal escape sequences and control characters are
+ * stripped once, in one tested place, and log volume is bounded by a tail cap
  * noting truncation. Findings as <em>data</em> are deliberately untouched — {@code state.json}
  * carries them in full — sanitization applies at the sinks: log lines through {@link #forLog},
- * tracker publication through the engine's fenced-publication renderer.
+ * tracker publication through the comment exit of the same owner, {@link TextSafety#forComment}
+ * (or {@link TextSafety#forCommentInline} for one field quoted inside a line the factory wrote
+ * itself). That exit is the carrier's, not the engine's: the {@code String} facade that once
+ * stood in front of it was retired with design D7 of type-untrusted-text.
  *
  * <p>Stripping removes the {@code ESC}-introduced sequences whole — CSI and the five string types
  * (OSC, DCS, SOS, PM, APC), payload included — every ISO control character except {@code \n} and
@@ -20,7 +23,7 @@ import com.github.oinsio.gnomish.untrustedtext.TextSafety;
  *
  * <p>Which characters those are is not decided here. This class is a <b>facade</b> over
  * {@link TextSafety} in the JDK-only {@code :untrustedtext} leaf, the factory's one owner of the
- * character-class table (FR1, FR3 of split-logtext-leaves); the log-line sanitizer
+ * character-class table (FR1 of split-logtext-leaves); the log-line sanitizer
  * {@code logtext.LogText} is the other facade over the same owner. What remains this class's own is
  * the funnel's policy — its {@value #LOG_TAIL_CAP_CHARS}-character bound, and the deliberate
  * difference that findings keep their line structure where a log line destroys it. The leaf is

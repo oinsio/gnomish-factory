@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -24,25 +25,25 @@ import org.slf4j.LoggerFactory;
  * The real command check runner (design D6): runs {@code check} through a {@link
  * CommandProcessRunner} over the environment acquired from the run's {@link CheckEnvironmentSource}
  * (host workspace environment by default; the round's leased box or a fresh box in sandboxed mode)
- * — the task environment
- * port is the sole process-launch seam (FR4 of add-sandbox-core) — then classifies the exit code
- * per the engine's table (FR7, D6): exit 0 is {@link Verdict.Pass} — any findings content is
- * ignored with a logged warning (FR8); exit 126/127 (shell convention for "not executable" /
- * "not found") is {@link Verdict.CannotVerify} — an infrastructure failure, honoring the same
- * classification a missing binary would get, and the findings channel plays no role; any other
- * non-zero exit is {@link Verdict.Fail} carrying either the findings {@link FindingsFileReader}
- * parsed from the channel (if present and well-formed) or one synthetic {@link Finding} built from
- * the output tail (if the content is absent, empty, or malformed — NFR-R2: the exit-code verdict
- * always stands). A process start failure (a null {@link CommandProcessRunner#run} result) is also
- * {@link Verdict.CannotVerify}.
+ * — the task environment port is the sole process-launch seam (FR4 of add-sandbox-core) — then
+ * classifies the exit code per the engine's table (FR7, D6): exit 0 is {@link Verdict.Pass} — any
+ * findings content is ignored with a logged warning (FR8); exit 126/127 (shell convention for
+ * "not executable" / "not found") is {@link Verdict.CannotVerify} — an infrastructure failure,
+ * honoring the same classification a missing binary would get, and the findings channel plays no
+ * role; any other non-zero exit is {@link Verdict.Fail} carrying either the findings {@link
+ * FindingsFileReader} parsed from the channel (if present and well-formed) or one synthetic {@link
+ * Finding} built from the output tail (if the content is absent, empty, or malformed — NFR-R2: the
+ * exit-code verdict always stands). A process start failure (a null {@link
+ * CommandProcessRunner#run} result) is also {@link Verdict.CannotVerify}.
  *
  * <p>The findings channel follows FR1/NFR-S3 of add-sandbox-core: the path is allocated in the
  * environment's scratch area (outside the working copy, inside the environment boundary), handed
  * to the command as {@code GNOMISH_FINDINGS_FILE}, and — only for a run that chose its own exit
  * code — read back through the environment's size-capped {@code readFile} — bytes in memory, never
- * a factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child environment is the layered allowlist
- * carried by {@link #childEnv} (D6, FR9); {@link #withChildEnv} threads the run's allowlist —
- * passthrough plus the active tracker adapter's declared credential names — per run.
+ * a factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child
+ * environment is the layered allowlist carried by {@link #childEnv} (D6, FR9); {@link
+ * #withChildEnv} threads the run's allowlist — passthrough plus the active tracker adapter's
+ * declared credential names — per run.
  *
  * <p>Both infrastructure exits that happen before any exit code exists — the environment the
  * check needs cannot be served, and the process refuses to start — carry a WARN naming the check
@@ -148,7 +149,9 @@ public record ShellCommandCheckRunner(
                             + "command check '{}' cannot be verified: no environment to run it in",
                     identityOf(check),
                     e);
-            return new Verdict.CannotVerify(e.getMessage() != null ? e.getMessage() : e.toString(), "");
+            return new Verdict.CannotVerify(
+                    UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()),
+                    NoCheckDetails.NO_DETAILS);
         }
         try (acquired) {
             TaskExecutionEnvironment environment = acquired.environment();
@@ -162,7 +165,9 @@ public record ShellCommandCheckRunner(
                         OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head()
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
-                return new Verdict.CannotVerify("failed to start command: " + check.command(), "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("failed to start command: " + check.command()),
+                        NoCheckDetails.NO_DETAILS);
             }
 
             // The termination decides first (FR6, FR12 of bound-subprocess-commands): a run that
@@ -197,7 +202,9 @@ public record ShellCommandCheckRunner(
             return new Verdict.Fail(List.of(new Finding(
                     "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
         }
-        return new Verdict.CannotVerify("command run was interrupted before a verdict existed", outcome.outputTail());
+        return new Verdict.CannotVerify(
+                UntrustedText.factory("command run was interrupted before a verdict existed"),
+                UntrustedText.subprocess(outcome.outputTail()));
     }
 
     /**
@@ -217,8 +224,12 @@ public record ShellCommandCheckRunner(
             return new Verdict.Pass();
         }
         if (exitCode == 126 || exitCode == 127) {
+            // The reason is the factory's own sentence about an exit code, quoting nothing the
+            // command printed — its family is FACTORY, not the family of the tail beside it
+            // (design D3 of type-untrusted-text).
             String reason = exitCode == 126 ? "command not executable (exit 126)" : "command not found (exit 127)";
-            return new Verdict.CannotVerify(reason, outcome.outputTail());
+            return new Verdict.CannotVerify(
+                    UntrustedText.factory(reason), UntrustedText.subprocess(outcome.outputTail()));
         }
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
         List<Finding> parsed = FindingsFileReader.read(checkIdentity, findingsContent);

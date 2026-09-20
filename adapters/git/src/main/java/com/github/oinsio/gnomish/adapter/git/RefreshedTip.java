@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
 /**
@@ -62,8 +63,8 @@ final class RefreshedTip {
         return VerifiedTip.read(runner.run(cloneDir, "rev-parse", "--verify", "--quiet", ref + "^{commit}"))
                 .<BaseRefreshOutcome>map(
                         commit -> new BaseRefreshOutcome.Refreshed(name, commit, kind, OriginContact.CONTACTED))
-                .orElseGet(() -> new BaseRefreshOutcome.Unavailable(
-                        "the " + label(kind) + " fetch of " + name + " reported success but left no " + ref));
+                .orElseGet(() -> new BaseRefreshOutcome.Unavailable(UntrustedText.factory(
+                        "the " + label(kind) + " fetch of " + name + " reported success but left no " + ref)));
     }
 
     /**
@@ -76,11 +77,12 @@ final class RefreshedTip {
         if (fetch.termination() != Termination.EXITED || !new OriginProbe(runner).answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail(label(kind) + " fetch of " + name));
         }
-        return new BaseRefreshOutcome.Refused("The base " + label(kind) + " '" + name + "' was found on origin, "
-                + "which is reachable, but the fetch was refused: "
-                + fetch.failureDetail(label(kind) + " fetch of " + name)
-                + ". This is most often an authentication or permission problem for this ref; check credentials "
-                + "and access on origin.");
+        return new BaseRefreshOutcome.Refused(
+                UntrustedText.factory("The base " + label(kind) + " '" + name + "' was found on origin, "
+                        + "which is reachable, but the fetch was refused: "
+                        + fetch.failureDetail(label(kind) + " fetch of " + name).forLog()
+                        + ". This is most often an authentication or permission problem for this ref; check "
+                        + "credentials and access on origin."));
     }
 
     private static String label(BaseRefKind kind) {

@@ -58,7 +58,7 @@ final class DashboardAttentionCardRenderer {
                 .append("<span class=\"num\">")
                 .append(DashboardHtmlFormatter.escape(row.ref().id()))
                 .append("</span><span class=\"row__label\">")
-                .append(DashboardHtmlFormatter.escape(row.title()))
+                .append(DashboardHtmlFormatter.escape(row.title().forConsole()))
                 .append("</span></div>\n");
     }
 }

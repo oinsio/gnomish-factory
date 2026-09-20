@@ -318,7 +318,7 @@ class GithubFeedQuerySpec extends Specification {
 
         then:
         result.size() == 1
-        result[0].title() == 'Fix the widget'
+        result[0].title().forLog() == 'Fix the widget'
         // exactly one feed request and one comments request — no issue-detail (GET /issues/20) call
         wireMock.verify(1, getRequestedFor(urlEqualTo(
                         '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))

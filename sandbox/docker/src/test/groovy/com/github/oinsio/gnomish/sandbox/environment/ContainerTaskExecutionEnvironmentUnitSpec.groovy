@@ -44,7 +44,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         // the fresh-materialize baseline. Features override onRun for reattach and failure paths.
         docker.onRun = { List<String> args ->
             declaredVolumes(args)
-            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+            ?: (args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', ''))
         }
     }
 
@@ -110,7 +110,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         def capture = LogCaptureSupport.attach(ContainerMaterializer)
         docker.onRun = { List<String> args ->
             declaredVolumes(args, '{"/cache":{},"/opt/tool-state":{}}')
-            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+            ?: (args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', ''))
         }
 
         when:
@@ -130,7 +130,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given:
         def capture = LogCaptureSupport.attach(ContainerMaterializer)
         docker.onRun = { List<String> args ->
-            args[0] == 'inspect' ? new DockerResult(0, 'true', '') : new DockerResult(0, '', '')
+            args[0] == 'inspect' ? DockerResult.of(0, 'true', '') : DockerResult.of(0, '', '')
         }
 
         when:
@@ -150,8 +150,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given: 'the task container survived, stopped (keep semantics)'
         docker.onRun = { List<String> args ->
             args[0] == 'inspect'
-            ? new DockerResult(0, 'false 2026-08-07T10:00:00Z\n', '')
-            : new DockerResult(0, '', '')
+            ? DockerResult.of(0, 'false 2026-08-07T10:00:00Z\n', '')
+            : DockerResult.of(0, '', '')
         }
 
         when:
@@ -167,7 +167,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR6: materialize over a running container touches no docker object"() {
         given:
         docker.onRun = { List<String> args ->
-            args[0] == 'inspect' ? new DockerResult(0, 'true 0001-01-01T00:00:00Z\n', '') : new DockerResult(0, '', '')
+            args[0] == 'inspect' ? DockerResult.of(0, 'true 0001-01-01T00:00:00Z\n', '') : DockerResult.of(0, '', '')
         }
 
         when:
@@ -183,7 +183,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR1: the reattach branch still recognizes running and stopped from the extended state line"() {
         given:
         docker.onRun = { List<String> args ->
-            args[0] == 'inspect' ? new DockerResult(0, stateLine, '') : new DockerResult(0, '', '')
+            args[0] == 'inspect' ? DockerResult.of(0, stateLine, '') : DockerResult.of(0, '', '')
         }
 
         when:
@@ -205,7 +205,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR6: a commit pin on reattach runs the idempotent seed helper to reset the working copy"() {
         given:
         docker.onRun = { List<String> args ->
-            args[0] == 'inspect' ? new DockerResult(0, 'true 0001-01-01T00:00:00Z\n', '') : new DockerResult(0, '', '')
+            args[0] == 'inspect' ? DockerResult.of(0, 'true 0001-01-01T00:00:00Z\n', '') : DockerResult.of(0, '', '')
         }
 
         when:
@@ -222,12 +222,12 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given: 'no container, but network create reports a duplicate'
         docker.onRun = { List<String> args ->
             if (args[0] == 'inspect') {
-                return new DockerResult(1, '', 'No such object')
+                return DockerResult.of(1, '', 'No such object')
             }
             declaredVolumes(args)
                     ?: args[0] == 'network' && args[1] == 'create'
-                    ? new DockerResult(1, '', 'network with name gnomish-net-' + KEY + ' already exists')
-                    : new DockerResult(0, '', '')
+                    ? DockerResult.of(1, '', 'network with name gnomish-net-' + KEY + ' already exists')
+                    : DockerResult.of(0, '', '')
         }
 
         when:
@@ -288,17 +288,17 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         seed[seed.indexOf('-c') + 1].contains('git reset --hard "$2"')
     }
 
-    def "FR3: a failed docker create surfaces as IllegalStateException naming the failure"() {
+    def "FR3: a failed docker create surfaces as DockerCommandFailedException naming the failure"() {
         given:
         docker.onRun = { args ->
-            new DockerResult(1, '', 'no space left on device')
+            DockerResult.of(1, '', 'no space left on device')
         }
 
         when:
         env().materialize('task/x', null)
 
         then:
-        def ex = thrown(IllegalStateException)
+        def ex = thrown(DockerCommandFailedException)
         ex.message.contains('no space left on device')
     }
 
@@ -309,16 +309,16 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given: 'the named management step is the one the daemon refuses'
         docker.onRun = { List<String> args ->
             args[0] == 'inspect'
-            ? new DockerResult(1, '', 'No such object')
+            ? DockerResult.of(1, '', 'No such object')
             : (declaredVolumes(args)
-            ?: (refuse(args) ? new DockerResult(1, '', 'no space left on device') : new DockerResult(0, '', '')))
+            ?: (refuse(args) ? DockerResult.of(1, '', 'no space left on device') : DockerResult.of(0, '', '')))
         }
 
         when:
         env().materialize('task/x', null)
 
         then:
-        def ex = thrown(IllegalStateException)
+        def ex = thrown(DockerCommandFailedException)
         ex.message.contains('gnomish-box-' + KEY)
         ex.message.contains('no space left on device')
 
@@ -345,7 +345,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given:
         docker.onRun = { List<String> args ->
             declaredVolumes(args, '{"/cache":{},"/gnomish/work":{}}')
-            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+            ?: (args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', ''))
         }
 
         when:
@@ -367,16 +367,16 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given:
         docker.onRun = { List<String> args ->
             if (args[0] == 'image') {
-                return new DockerResult(1, '', 'No such image: gnomish/img')
+                return DockerResult.of(1, '', 'No such image: gnomish/img')
             }
-            args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+            args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', '')
         }
 
         when:
         env().materialize('gnomish/task-x', null)
 
         then: 'the failure names the task container, ready to paste (FR2 of polish-sandbox-forensics)'
-        def ex = thrown(IllegalStateException)
+        def ex = thrown(DockerCommandFailedException)
         ex.message.contains('gnomish-box-' + KEY)
         ex.message.contains('No such image: gnomish/img')
 
@@ -387,13 +387,13 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "NFR-R1: a daemon outage at materialize propagates as an infrastructure failure, not a quality failure"() {
         given:
         docker.onRun = { args ->
-            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null as Throwable)
         } as Closure<DockerResult>
 
         when:
         env().materialize('task/x', null)
 
-        then: 'the caller sees the infrastructure-outage type — never an IllegalStateException it might read as a real failure'
+        then: 'the caller sees the infrastructure-outage type — never a command failure it might read as a real refusal'
         thrown(DockerUnavailableException)
     }
 
@@ -425,9 +425,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given:
         docker.onRun = { args ->
             if (args == DockerCommands.removeContainer('gnomish-box-' + KEY)) {
-                throw new DockerUnavailableException('down', null)
+                throw new DockerUnavailableException('down', null as Throwable)
             }
-            new DockerResult(0, '', '')
+            DockerResult.of(0, '', '')
         }
 
         when:

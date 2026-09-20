@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -71,14 +72,21 @@ public sealed interface Verdict {
      * the escalation report carries the underlying cause. It is required non-null
      * but MAY be empty when there is no underlying exception to preserve.
      *
-     * <p>Implements FR4 of add-stage-engine.
+     * <p>Both components are {@link UntrustedText}: whatever named the failure — a
+     * command's stderr, a judge's own words, a runtime's refusal — is attacker-
+     * influenced, and this verdict travels into the escalation report, the tracker
+     * and {@code task.json} (design D4 of type-untrusted-text). A check that phrases
+     * its own sentence mints it with the provenance of the medium that failed, so
+     * the sentence and the quoted answer render as one.
+     *
+     * <p>Implements FR4 of add-stage-engine; FR1, FR7 of type-untrusted-text.
      *
      * @param reason the human-facing short cause (e.g. {@code binary not found},
      *     {@code check id unknown}); never blank
      * @param details free-text detail, typically a preserved stack trace; never
      *     null, may be empty when there is no underlying cause
      */
-    record CannotVerify(String reason, String details) implements Verdict {
+    record CannotVerify(UntrustedText reason, UntrustedText details) implements Verdict {
 
         public CannotVerify {
             reason = requireNonBlankReason(reason);
@@ -92,7 +100,7 @@ public sealed interface Verdict {
          * record's canonical constructor, which would silently exempt this
          * validation from the 100% mutation gate.
          */
-        private static String requireNonBlankReason(String value) {
+        private static UntrustedText requireNonBlankReason(UntrustedText value) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException("CannotVerify.reason must not be blank");
             }

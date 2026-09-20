@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.baseref
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -16,6 +17,16 @@ import spock.lang.Specification
  */
 class BaseRefResolverSpec extends Specification {
 
+    /** A tracker label, minted where {@code BaseDesignatorMapping} mints it in production. */
+    private static UntrustedText tracker(String value) {
+        UntrustedText.tracker(value)
+    }
+
+    /** The operator's own {@code --base}, minted where the resolver mints it (task 6.1). */
+    private static UntrustedText operator(String value) {
+        UntrustedText.operator(value)
+    }
+
     private static final AllowedBases ALLOWED = AllowedBases.of([
         AllowedBase.of(BasePattern.compile('main')),
         new AllowedBase(BasePattern.compile('release/*'), BranchRole.RELEASE),
@@ -23,11 +34,11 @@ class BaseRefResolverSpec extends Specification {
 
     private static BaseRefRequest request(Map overrides) {
         new BaseRefRequest(
-                overrides.containsKey('explicitBase') ? overrides.explicitBase : null,
-                overrides.designator ?: BaseDesignator.absent(),
-                overrides.containsKey('allowedBases') ? overrides.allowedBases : ALLOWED,
-                overrides.containsKey('configuredDefault') ? overrides.configuredDefault : null,
-                overrides.mode ?: ResolutionMode.AUTONOMOUS,
+                (overrides.containsKey('explicitBase') ? overrides.explicitBase : null) as String,
+                (overrides.designator ?: BaseDesignator.absent()) as BaseDesignator,
+                (overrides.containsKey('allowedBases') ? overrides.allowedBases : ALLOWED) as AllowedBases,
+                (overrides.containsKey('configuredDefault') ? overrides.configuredDefault : null) as String,
+                (overrides.mode ?: ResolutionMode.AUTONOMOUS) as ResolutionMode,
                 overrides.defaultBranch ? new DefaultBranch(overrides.defaultBranch as String) : null)
     }
 
@@ -63,10 +74,10 @@ class BaseRefResolverSpec extends Specification {
         where:
         scenario | inputs || ref | rule
         'an explicit --base with nothing else' | [explicitBase: 'v1.2.3'] || 'v1.2.3' | BaseRule.EXPLICIT_ARGUMENT
-        'an explicit --base over a valid designator' | [explicitBase: 'v1.2.3', designator: BaseDesignator.single('release/1.18'), configuredDefault: 'develop', defaultBranch: 'trunk'] || 'v1.2.3' | BaseRule.EXPLICIT_ARGUMENT
+        'an explicit --base over a valid designator' | [explicitBase: 'v1.2.3', designator: BaseDesignator.single(tracker('release/1.18')), configuredDefault: 'develop', defaultBranch: 'trunk'] || 'v1.2.3' | BaseRule.EXPLICIT_ARGUMENT
         'an explicit --base that is not allowed' | [explicitBase: 'experiments/foo'] || 'experiments/foo' | BaseRule.EXPLICIT_ARGUMENT
-        'an explicit --base over a conflict' | [explicitBase: 'v1.2.3', designator: BaseDesignator.conflict(['a', 'b'])] || 'v1.2.3' | BaseRule.EXPLICIT_ARGUMENT
-        'a designator over the configured default' | [designator: BaseDesignator.single('release/1.18'), configuredDefault: 'develop', defaultBranch: 'trunk'] || 'release/1.18' | BaseRule.DESIGNATOR
+        'an explicit --base over a conflict' | [explicitBase: 'v1.2.3', designator: BaseDesignator.conflict([tracker('a'), tracker('b')])] || 'v1.2.3' | BaseRule.EXPLICIT_ARGUMENT
+        'a designator over the configured default' | [designator: BaseDesignator.single(tracker('release/1.18')), configuredDefault: 'develop', defaultBranch: 'trunk'] || 'release/1.18' | BaseRule.DESIGNATOR
         'the configured default over the remote' | [configuredDefault: 'develop', defaultBranch: 'trunk'] || 'develop' | BaseRule.CONFIGURED_DEFAULT
         'zero configuration' | [allowedBases: AllowedBases.empty(), defaultBranch: 'trunk'] || 'trunk' | BaseRule.REPOSITORY_DEFAULT_BRANCH
         'a manual run without --base' | [mode: ResolutionMode.MANUAL, allowedBases: AllowedBases.empty()] || 'HEAD' | BaseRule.LOCAL_HEAD
@@ -87,21 +98,23 @@ class BaseRefResolverSpec extends Specification {
 
         where:
         scenario | inputs || cause | values | reasonFragment
-        'a designator that is not allowed' | [designator: BaseDesignator.single('experiments/foo'), configuredDefault: 'develop', defaultBranch: 'trunk'] || UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED | ['experiments/foo'] | 'the allowed bases are main, release/*'
+        'a designator that is not allowed' | [designator: BaseDesignator.single(tracker('experiments/foo')), configuredDefault: 'develop', defaultBranch: 'trunk'] || UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED | [tracker('experiments/foo')] | 'the allowed bases are main, release/*'
         'two base labels' | [designator: BaseDesignator.conflict([
-                'release/1.18',
-                'release/1.19'
+                tracker('release/1.18'),
+                tracker('release/1.19')
             ]), configuredDefault: 'develop'] || UnderdeterminedCause.DESIGNATOR_CONFLICT | [
-            'release/1.18',
-            'release/1.19'
+            tracker('release/1.18'),
+            tracker('release/1.19')
         ] | 'resolution never picks one'
-        'a designator with no allowed base' | [designator: BaseDesignator.single('release/1.18'), allowedBases: AllowedBases.empty(), defaultBranch: 'trunk'] || UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED | ['release/1.18'] | 'the allowed bases are (empty)'
+        'a designator with no allowed base' | [designator: BaseDesignator.single(tracker('release/1.18')), allowedBases: AllowedBases.empty(), defaultBranch: 'trunk'] || UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED | [tracker('release/1.18')] | 'the allowed bases are (empty)'
         'an autonomous run with no default branch' | [allowedBases: AllowedBases.empty()] || UnderdeterminedCause.NO_DEFAULT_BRANCH | [] | "never falls back to the clone's local HEAD"
-        'a manual run under a conflict' | [mode: ResolutionMode.MANUAL, designator: BaseDesignator.conflict(['a', 'b'])] || UnderdeterminedCause.DESIGNATOR_CONFLICT | ['a', 'b'] | 'more than one base'
+        'a manual run under a conflict' | [mode: ResolutionMode.MANUAL, designator: BaseDesignator.conflict([tracker('a'), tracker('b')])] || UnderdeterminedCause.DESIGNATOR_CONFLICT | [tracker('a'), tracker('b')] | 'more than one base'
         // NFR-S3 (task 12.2): the explicit tier is bounded by no pattern, so the grammar is its only check
-        'a malformed --base' | [explicitBase: 'release/../../secrets', configuredDefault: 'develop', defaultBranch: 'trunk'] || UnderdeterminedCause.EXPLICIT_BASE_MALFORMED | ['release/../../secrets'] | 'not a well-formed ref name'
+        'a malformed --base' | [explicitBase: 'release/../../secrets', configuredDefault: 'develop', defaultBranch: 'trunk'] || UnderdeterminedCause.EXPLICIT_BASE_MALFORMED | [
+            operator('release/../../secrets')
+        ] | 'not a well-formed ref name'
         'a --base with a control character, in a manual run' | [mode: ResolutionMode.MANUAL, explicitBase: 'main' + Character.toString(27 as char)] || UnderdeterminedCause.EXPLICIT_BASE_MALFORMED | [
-            'main' + Character.toString(27 as char)
+            operator('main' + Character.toString(27 as char))
         ] | 'control characters'
     }
 
@@ -124,7 +137,7 @@ class BaseRefResolverSpec extends Specification {
     def "each tier explains itself"() {
         expect:
         reasonOf(request(explicitBase: 'v1.2.3')) == 'explicit --base argument'
-        reasonOf(request(designator: BaseDesignator.single('release/1.18')))
+        reasonOf(request(designator: BaseDesignator.single(tracker('release/1.18'))))
         == "the task's base designator, accepted by allowed-base pattern 'release/*'"
         reasonOf(request(configuredDefault: 'develop')) == 'the configured task-branch.base.default'
         reasonOf(request(defaultBranch: 'trunk')) == 'the repository default branch reported by the remote'
@@ -134,7 +147,7 @@ class BaseRefResolverSpec extends Specification {
     // FR10, NFR-C1: deterministic — two instances with the same inputs produce the same decision
     def "the same inputs always produce the same decision"() {
         given:
-        def inputs = request(designator: BaseDesignator.single('release/1.18'), defaultBranch: 'trunk')
+        def inputs = request(designator: BaseDesignator.single(tracker('release/1.18')), defaultBranch: 'trunk')
 
         expect:
         BaseRefResolver.resolve(inputs) == BaseRefResolver.resolve(inputs)

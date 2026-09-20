@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -22,7 +23,7 @@ class TakeBatchSummarySpec extends Specification {
         given:
         def outcomes = [
             new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped it')),
-            new TakeBatchOutcome('43', new TakeResult.Skipped('held by another instance')),
+            new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('held by another instance'))),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
         ]
 

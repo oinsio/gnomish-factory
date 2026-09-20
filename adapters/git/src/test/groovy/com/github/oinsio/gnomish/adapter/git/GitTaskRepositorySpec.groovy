@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.port.tracker.fake.TrackerFixtureText
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -23,6 +24,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.Provenance
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -54,14 +57,14 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     }
 
     private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
-        new TaskContext(taskId, 'Fix the thing', 'Body text', decisions)
+        new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), decisions)
     }
 
     private Path worktreeFor(String taskId) {
         worktreesRoot.resolve('clone').resolve(taskId)
     }
 
-    private String readTaskJson(String taskId, String ref = 'HEAD') {
+    private UntrustedText readTaskJson(String taskId, String ref = 'HEAD') {
         runner.run(worktreeFor(taskId), 'show', "${ref}:.gnomish-task/task.json").stdout()
     }
 
@@ -77,7 +80,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
         and: 'the worktree carries a commit with the STARTED message'
         def worktree = worktreeFor('PROJ-1')
-        def message = runner.run(worktree, 'log', '-1', '--format=%s').stdout().trim()
+        def message = runner.run(worktree, 'log', '-1', '--format=%s').stdout().forParsing().trim()
         message == ServiceCommitMessages.taskEvent(TaskLifecycleEvent.STARTED)
 
         and: 'task.json round-trips the context with null outcome/lastEscalation'
@@ -147,14 +150,14 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
                         ExecutorUsage.none(), JudgeUsage.none(), []))
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE).persist('PROJ-1', burned,
                 new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0), []))
-        def before = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().trim() as Integer
+        def before = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as Integer
 
         when: 'the human answer is appended with the reset it implies'
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', Instant.EPOCH),
                 burned.resetAttempts())
 
         then: 'exactly one commit was added'
-        def after = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().trim() as Integer
+        def after = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as Integer
         after == before + 1
 
         and: 'that one commit carries the decision and the reset counter together'
@@ -172,7 +175,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR2/D7: createTask with an explicit baseRef records that commit as baseCommit"() {
         given: 'a second commit on the clone after the base we want to pin'
-        def firstHead = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim()
+        def firstHead = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         new File(cloneDir.toFile(), 'b.txt').text = 'second'
         runner.run(cloneDir, 'add', 'b.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'second')
@@ -243,7 +246,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
         then:
         def worktree = worktreeFor('PROJ-1')
-        def message = runner.run(worktree, 'log', '-1', '--format=%s').stdout().trim()
+        def message = runner.run(worktree, 'log', '-1', '--format=%s').stdout().forParsing().trim()
         message == ServiceCommitMessages.taskEvent(TaskLifecycleEvent.RESUMED)
 
         and:
@@ -272,19 +275,50 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         new TaskOutcome.Completed(TaskState.atStageStart('implement')) | TaskLifecycleEvent.COMPLETED | RecordedOutcome.Completed
         new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement') | TaskLifecycleEvent.PAUSED | RecordedOutcome.Paused
         new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])) | TaskLifecycleEvent.ESCALATED | RecordedOutcome.Escalated
+                new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                    UntrustedText.agent('yes'),
+                    UntrustedText.agent('no')
+                ])) | TaskLifecycleEvent.ESCALATED | RecordedOutcome.Escalated
         new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), 'boom') | TaskLifecycleEvent.ABORTED | RecordedOutcome.Aborted
+                new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')) | TaskLifecycleEvent.ABORTED | RecordedOutcome.Aborted
     }
 
     private String commitMessageAt(Path worktree, int commitsBack) {
-        runner.run(worktree, 'log', "-1", "--skip=${commitsBack}", '--format=%s').stdout().trim()
+        runner.run(worktree, 'log', "-1", "--skip=${commitsBack}", '--format=%s').stdout().forParsing().trim()
+    }
+
+    // FR1, NFR-R2 of type-untrusted-text (design D1, revised 2026-09-17): the flow assertion the
+    //     carrier's equality exists for — on the real medium, through the real adapter. The writer
+    //     holds a subprocess carrier, the branch holds its bytes, and the reader mints a
+    //     branch-document carrier; the two are one value, or every set and map key that spans the
+    //     two media stops deduplicating without anything going red.
+    def "FR1: an abort cause written to the branch equals the cause read back off it"() {
+        given: 'a cause captured from a subprocess, with bytes a sink would have to neutralize'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def written = UntrustedText.subprocess('fatal: \u001B[2K refused\nCaused by: boom')
+
+        when:
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Aborted(
+                        TaskState.atStageStart('implement'), new AttemptKey('PROJ-1', 'implement', 0), written))
+
+        then: 'what comes back off the branch is the same value, under the branch\'s provenance'
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        def readBack = (content.outcome() as RecordedOutcome.Aborted).cause()
+        readBack == written
+        readBack.hashCode() == written.hashCode()
+        readBack.provenance() == Provenance.BRANCH_DOCUMENT
+
+        and: 'the medium carried the bytes, not a rendering of them'
+        readBack.forParsing() == written.forParsing()
     }
 
     def "FR1: recordOutcome for Escalated populates lastEscalation"() {
         given:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
 
         when:
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
@@ -298,7 +332,10 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         given: 'two tasks escalated with a question, both resumed by a decision'
         repository.createTask(sampleContext('PROJ-PARKED'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         repository.createTask(sampleContext('PROJ-INTERRUPTED'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         repository.recordOutcome('PROJ-PARKED', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
         repository.recordOutcome(
                 'PROJ-INTERRUPTED', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
@@ -335,7 +372,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
         then: 'the tip still carries the envelope, recording Completed'
         def worktree = worktreeFor('PROJ-1')
-        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().trim() != ''
+        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() != ''
         commitMessageAt(worktree, 0) == ServiceCommitMessages.taskEvent(TaskLifecycleEvent.COMPLETED)
     }
 
@@ -348,7 +385,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('PROJ-1')
         def worktree = worktreeFor('PROJ-1')
-        def tip = runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim()
+        def tip = runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def logs = LogCaptureSupport.attach(CleanupCommit, Level.DEBUG)
 
         when:
@@ -357,7 +394,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         logs.detach()
 
         then:
-        runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim() == tip
+        runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim() == tip
 
         and:
         events.size() == 1
@@ -380,7 +417,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         !new File(worktree.toFile(), '.gnomish-task').exists()
 
         and: 'the tip has no .gnomish-task/ directory in the git tree either'
-        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().trim() == ''
+        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() == ''
 
         and: 'the last commit is the cleanup commit'
         commitMessageAt(worktree, 0) == ServiceCommitMessages.cleanup()
@@ -389,7 +426,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         commitMessageAt(worktree, 1) == ServiceCommitMessages.taskEvent(TaskLifecycleEvent.COMPLETED)
 
         and: 'the completed task.json is still readable from the second-to-last commit — history preserved'
-        def completedSha = runner.run(worktree, 'log', '-1', '--skip=1', '--format=%H').stdout().trim()
+        def completedSha = runner.run(worktree, 'log', '-1', '--skip=1', '--format=%H').stdout().forParsing().trim()
         def historicalJson = runner.run(worktree, 'show', "${completedSha}:.gnomish-task/task.json").stdout()
         def historicalContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(historicalJson))
         historicalContent.outcome() instanceof RecordedOutcome.Completed
@@ -408,7 +445,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
         then: '.gnomish-task/ is still present on disk and at HEAD'
         new File(worktree.toFile(), '.gnomish-task').exists()
-        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().trim() != ''
+        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() != ''
 
         and: 'no commit carries the cleanup message'
         allCommitMessages(worktree).every {
@@ -419,9 +456,12 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         outcome << [
             new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'),
             new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-            new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])),
+            new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                UntrustedText.agent('yes'),
+                UntrustedText.agent('no')
+            ])),
             new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-            new AttemptKey('PROJ-1', 'implement', 0), 'boom'),
+            new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')),
         ]
     }
 
@@ -442,7 +482,10 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         where:
         event | outcome
         'ESCALATED' | new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']))
+                new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+                    UntrustedText.agent('yes'),
+                    UntrustedText.agent('no')
+                ]))
         'PAUSED' | new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')
     }
 
@@ -456,7 +499,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         repository.recordOutcome(
                 'PROJ-1',
                 new TaskOutcome.Aborted(TaskState.atStageStart('implement'), new AttemptKey('PROJ-1', 'implement', 0),
-                'boom'))
+                UntrustedText.subprocess('boom')))
 
         then:
         !TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1'))).trackerWritePending()
@@ -467,7 +510,10 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     def "FR10: confirmTerminalWrite clears the pending marker while preserving the recorded park outcome"() {
         given:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
         when:
@@ -483,7 +529,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
         and: 'the clear is a dedicated write-confirmed commit at the tip'
         def worktree = worktreeFor('PROJ-1')
-        runner.run(worktree, 'log', '-1', '--format=%s').stdout().trim() ==
+        runner.run(worktree, 'log', '-1', '--format=%s').stdout().forParsing().trim() ==
                 ServiceCommitMessages.trackerWriteConfirmed()
     }
 
@@ -519,20 +565,20 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         Path worktree = worktreeFor(taskId)
         Path stateJson = worktree.resolve('.gnomish-task').resolve('state.json')
         Path taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
-        def state = StateJsonMapper.readDto(Files.readString(stateJson))
+        def state = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
                         state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt)))
         Files.writeString(taskJson, TaskStateJson.mapper()
-                .writeValueAsString(TaskJsonMapper.readDto(Files.readString(taskJson)).withEgressCursor(escalation)))
+                .writeValueAsString(TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).withEgressCursor(escalation)))
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'round state')
     }
 
     private int commitCount(Path worktree) {
-        runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().trim() as int
+        runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as int
     }
 
     private List<String> allCommitMessages(Path worktree) {
-        runner.run(worktree, 'log', '--format=%s').stdout().readLines()
+        runner.run(worktree, 'log', '--format=%s').stdout().forParsing().readLines()
     }
 }

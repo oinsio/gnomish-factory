@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.jspecify.annotations.NullMarked;
 
 /**
  * Test-only translation layer bridging the abstract {@code TrackerContract}
@@ -55,6 +56,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * never a {@link TaskRef} — no translation applies to it. {@link HumanReply}
  * carries no ref field either.
  */
+// Null-marked explicitly (JSpecify): this test tree carries no package-info, so without the
+// class-level marker every Tracker override here reads as unannotated against its null-marked
+// supertype (precedent: ManualRunRunner).
+@NullMarked
 final class GithubTrackerFixtureAdapter implements Tracker {
 
     private final Tracker delegate;
@@ -213,8 +218,10 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      */
     void seedTask(TaskRef ref, TaskSnapshot snapshot, TrackerTaskState state, AbortFacts abortFacts) {
         FixtureIssue issue = issueFor(ref);
-        issue.title(snapshot.title());
-        issue.body(snapshot.body());
+        // The fixture issue IS the tracker here, so the snapshot's bytes go back onto it
+        // verbatim — a rendering would make the real fetcher read something else back.
+        issue.title(snapshot.title().raw());
+        issue.body(snapshot.body().raw());
         seeder.seedTask(issue, state, abortFacts);
     }
 

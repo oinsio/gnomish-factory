@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -50,7 +51,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     }
 
     private static ReadyTask ready(String id, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, false, 'title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, false, UntrustedText.tracker('title'))
     }
 
     /** A walk over a claim chain whose git ports are never reached in these scenarios. */
@@ -220,7 +221,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     def "skips a fresh candidate whose open front grew past the limit since the snapshot"() {
         given:
         def openNow = [
-            new OpenTask(REF, new TrackerTaskState.Working('other'), null, 'title')
+            new OpenTask(REF, new TrackerTaskState.Working('other'), null, UntrustedText.tracker('title'))
         ]
 
         when:

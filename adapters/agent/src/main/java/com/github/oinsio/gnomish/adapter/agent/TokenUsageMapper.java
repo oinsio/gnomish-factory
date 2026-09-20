@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -28,8 +29,17 @@ import org.slf4j.LoggerFactory;
  * partially-filled {@link TokenUsage}, which would misrepresent a real (if
  * incomplete) report as a fabricated zero in the missing fields.
  *
+ * <p>Entries that share a key are summed, not overwritten. Distinct keys in the
+ * wire map can still collide here, because {@link ModelIdSyntax} maps every id
+ * it refuses onto one placeholder: a round reporting two unusable ids has two
+ * entries and one key. Overwriting would lose the first entry's tokens from the
+ * round's whole accounting while leaving the map non-empty, so nothing would
+ * report the loss — the degradation this class is allowed is an unnamed model,
+ * never an unreported cost.
+ *
  * <p>Implements FR5, D4 of add-agent-executor.
  */
+@UntrustedParser
 final class TokenUsageMapper {
 
     private static final Logger log = LoggerFactory.getLogger(TokenUsageMapper.class);
@@ -66,10 +76,20 @@ final class TokenUsageMapper {
         modelUsage.forEach((model, rawEntry) -> {
             TokenUsage tokens = toTokenUsage(
                     rawEntry, "inputTokens", "outputTokens", "cacheCreationInputTokens", "cacheReadInputTokens");
+            // The keys are whatever the agent wrote, and they travel into state.json and onto the
+            // dashboard, so each is held to ModelIdSyntax before it becomes a key (design D11).
+            String id = modelKey(model);
             if (tokens == null) {
-                log.debug("stream-json: skipping modelUsage entry for model '{}' (unusable shape)", model);
+                log.debug("stream-json: skipping modelUsage entry for model '{}' (unusable shape)", id);
             } else {
-                tokensByModel.put(model, tokens);
+                // Merged, never overwritten. ModelIdSyntax is many-to-one — every id it refuses
+                // becomes the same placeholder — so two refused ids in one round arrive at one key,
+                // and a put would silently drop the first one's tokens from ExecutorUsage, from
+                // state.json, from the budget and from the dashboard, with the empty-map WARN below
+                // staying quiet because the map is not empty. Summing keeps the round's total
+                // honest: the placeholder reports what was spent under ids that could not be named,
+                // which is the whole of what is still knowable about them.
+                tokensByModel.merge(id, tokens, TokenUsage::plus);
             }
         });
         return tokensByModel;
@@ -86,7 +106,35 @@ final class TokenUsageMapper {
             log.debug("stream-json: skipping flat usage fallback (unusable shape)");
             return Map.of();
         }
-        return Map.of(initEvent.model(), tokens);
+        // @UntrustedParser warrant (design D11): the init event's model id becomes a telemetry
+        //     key, held to ModelIdSyntax — which is what makes it inert enough for state.json and
+        //     the dashboard, where it is displayed.
+        return Map.of(modelKey(initEvent.model().forParsing()), tokens);
+    }
+
+    /**
+     * Holds one reported model id to {@link ModelIdSyntax} and leaves a trace when the gate refused
+     * it. The substitution is a degraded result — the telemetry, {@code state.json} and the
+     * dashboard all key on the placeholder rather than on the id the agent reported — and a
+     * degraded result with no log line is what {@code .claude/rules/logging.md} calls a finding.
+     *
+     * <p>DEBUG, not WARN: the round's cost is still reported in full, so nothing asks the operator
+     * to act; this is the per-entry detail that explains an odd key once someone is diagnosing one.
+     * The refused candidate itself is never logged — it is exactly the value that failed the gate
+     * — so the line names its length instead, which is inert and still tells a truncated id from a
+     * flood.
+     */
+    private String modelKey(String candidate) {
+        String id = ModelIdSyntax.of(candidate);
+        if (ModelIdSyntax.UNUSABLE.equals(id)) {
+            // throwable-not-subject: the candidate was classified by its shape, not thrown.
+            log.debug(
+                    "stream-json: a reported model id has no accepted shape ({} characters);"
+                            + " its tokens are keyed on '{}'",
+                    candidate.length(),
+                    ModelIdSyntax.UNUSABLE);
+        }
+        return id;
     }
 
     private @Nullable TokenUsage toTokenUsage(

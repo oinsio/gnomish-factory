@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -36,6 +38,7 @@ import java.util.List;
  * <p>Implements FR21, FR23 of add-sandbox-core; FR13 of
  * harden-logging-observability.
  */
+@UntrustedParser
 public final class HarvestedBoundaryCheck {
 
     private final GitProcessRunner runner;
@@ -65,7 +68,7 @@ public final class HarvestedBoundaryCheck {
      */
     public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key) {
         GitCommandResult diff =
-                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", ".gnomish-task/");
+                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", GnomishTaskPaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
         // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
         // round aborts as infrastructure rather than blaming the gnome for what git never said.
@@ -74,15 +77,26 @@ public final class HarvestedBoundaryCheck {
                     taskId, key.stage(), key.attempt(), "harvested boundary diff", diff.cannotVerifyDetail());
         }
         String allowed = decisionPath(key);
+        // @UntrustedParser warrant (design D11): the captured bytes are converted into a decision —
+        //     did the gnome touch anything under .gnomish-task/ besides this round's decision file
+        //     — and the paths behind that decision are never handed on as a plain String. They go
+        //     back into a carrier, re-minted from the diff they came out of, and the violation
+        //     message quotes that carrier through the log exit, so what reaches a reader is
+        //     stripped, one line and bounded however the gnome named its files.
         List<String> touched = diff.stdout()
+                .forParsing()
                 .lines()
                 .map(String::strip)
                 .filter(HarvestedBoundaryCheck::isNonEmpty)
                 .filter(line -> !line.equals(allowed))
                 .toList();
         if (!touched.isEmpty()) {
+            UntrustedText paths = UntrustedText.subprocess(String.join(", ", touched));
+            // Factory prose quoting a capture that left its own carrier through the log exit, so
+            // the sentence is the factory's (design D3 of type-untrusted-text) and the violation
+            // type receives it whole rather than as a rendered String.
             throw new RoundBoundaryViolationException(
-                    taskId, ".gnomish-task/ was modified by the gnome: " + String.join(", ", touched));
+                    taskId, UntrustedText.factory(".gnomish-task/ was modified by the gnome: " + paths.forLog()));
         }
     }
 
@@ -94,8 +108,8 @@ public final class HarvestedBoundaryCheck {
      * all-whitespace) line through this filter; it exists purely as defense in depth against a
      * hypothetical blank line in subprocess output. Keeping unreachable lines has zero
      * externally observable difference, so no unit test can kill the mutant (the same
-     * equivalent-mutant category as {@code TakeBatchExitCode.isNewSmallestNonZero}, see the
-     * pitest block in build.gradle).
+     * equivalent-mutant category as {@code TakeBatchExitCode.isNewSmallestNonZero}, whose own
+     * comment beside the marker carries the same trace).
      */
     @DoNotMutate
     private static boolean isNonEmpty(String line) {
@@ -108,6 +122,6 @@ public final class HarvestedBoundaryCheck {
      * attempt in the name make stale files self-excluding.
      */
     public static String decisionPath(AttemptKey key) {
-        return ".gnomish-task/decisions/" + key.stage() + "-a" + key.attempt() + ".json";
+        return GnomishTaskPaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + ".json";
     }
 }

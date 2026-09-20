@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -16,7 +17,7 @@ import spock.lang.Specification
 class EscalationReportSpec extends Specification {
 
     private static CheckRef sampleCheck() {
-        new CheckRef(0, 'command:./gradlew build')
+        new CheckRef(0, UntrustedText.manifest('command:./gradlew build'))
     }
 
     // FR10: AttemptsExhausted exposes the resolved attempt limit as constructed
@@ -38,11 +39,16 @@ class EscalationReportSpec extends Specification {
     // FR10: DecisionNeeded exposes the question and free-text options as constructed
     def "DecisionNeeded exposes question and options as constructed"() {
         when: 'a DecisionNeeded report is created'
-        def report = new EscalationReport.DecisionNeeded('Which database?', ['postgres', 'sqlite'])
+        def report = new EscalationReport.DecisionNeeded(
+                UntrustedText.agent('Which database?'),
+                [
+                    UntrustedText.agent('postgres'),
+                    UntrustedText.agent('sqlite')
+                ])
 
         then: 'each component is exposed exactly as constructed'
-        report.question() == 'Which database?'
-        report.options() == ['postgres', 'sqlite']
+        report.question().forLog() == 'Which database?'
+        report.options()*.forLog() == ['postgres', 'sqlite']
     }
 
     // FR10: CannotVerify exposes the check, reason and details as constructed
@@ -51,30 +57,31 @@ class EscalationReportSpec extends Specification {
         def check = sampleCheck()
 
         when: 'a CannotVerify report is created'
-        def report = new EscalationReport.CannotVerify(check, 'CI unavailable', 'HTTP 503 ...')
+        def report = new EscalationReport.CannotVerify(
+                check, UntrustedText.tracker('CI unavailable'), UntrustedText.tracker('HTTP 503 ...'))
 
         then: 'each component is exposed exactly as constructed'
         report.check() == check
-        report.reason() == 'CI unavailable'
-        report.details() == 'HTTP 503 ...'
+        report.reason().forLog() == 'CI unavailable'
+        report.details().forLog() == 'HTTP 503 ...'
     }
 
     // FR10: PipelineMismatch exposes the stale stage name as constructed
     def "PipelineMismatch exposes its staleStage as constructed"() {
         when: 'a PipelineMismatch report is created'
-        def report = new EscalationReport.PipelineMismatch('legacy-build')
+        def report = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('legacy-build'))
 
         then: 'the stale stage name is exposed exactly as constructed'
-        report.staleStage() == 'legacy-build'
+        report.staleStage().forLog() == 'legacy-build'
     }
 
     // FR10: CannotExecute exposes the preserved cause as constructed
     def "CannotExecute exposes its cause as constructed"() {
         when: 'a CannotExecute report is created'
-        def report = new EscalationReport.CannotExecute('network error: java.net.ConnectException ...', [])
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('network error: java.net.ConnectException ...'), [])
 
         then: 'the cause is exposed exactly as constructed'
-        report.cause() == 'network error: java.net.ConnectException ...'
+        report.cause() == UntrustedText.subprocess('network error: java.net.ConnectException ...')
     }
 
     // FR1 of fix-denial-attribution-durability: the report carries the denials drained from
@@ -84,7 +91,7 @@ class EscalationReportSpec extends Specification {
         def denial = Denial.unidentified(new Finding('egress denied: POST paste.example/api', 'paste.example', null))
 
         when: 'a CannotExecute report is created carrying it'
-        def report = new EscalationReport.CannotExecute('boom', [denial])
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('boom'), [denial])
 
         then: 'the denial is exposed exactly as constructed'
         report.denials() == [denial]
@@ -94,7 +101,7 @@ class EscalationReportSpec extends Specification {
     //     reports no denials, and the empty list is the normal case.
     def "CannotExecute accepts an empty denials list"() {
         when: 'a CannotExecute report is created with no denials'
-        def report = new EscalationReport.CannotExecute('boom', [])
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('boom'), [])
 
         then: 'the denials list is empty'
         report.denials().isEmpty()
@@ -107,7 +114,7 @@ class EscalationReportSpec extends Specification {
         def source = [denial]
 
         when: 'a CannotExecute is created and the source is then mutated'
-        def report = new EscalationReport.CannotExecute('boom', source)
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('boom'), source)
         source.add(Denial.unidentified(new Finding('sneaked in', null, null)))
 
         then: 'the report keeps its original single denial'
@@ -117,7 +124,7 @@ class EscalationReportSpec extends Specification {
     // FR1: the exposed denials list is unmodifiable — it is carried verbatim
     def "CannotExecute denials are unmodifiable"() {
         given: 'a CannotExecute report carrying one denial'
-        def report = new EscalationReport.CannotExecute('boom', [
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('boom'), [
             Denial.unidentified(new Finding('egress denied', null, null))
         ])
 
@@ -144,7 +151,7 @@ class EscalationReportSpec extends Specification {
     // FR10: a decision that asks nothing cannot be answered — a blank question is rejected
     def "DecisionNeeded rejects a blank question with the component named"() {
         when: 'a DecisionNeeded is created with a blank question'
-        new EscalationReport.DecisionNeeded(question, [])
+        new EscalationReport.DecisionNeeded(UntrustedText.agent(question), [])
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -157,7 +164,7 @@ class EscalationReportSpec extends Specification {
     // FR10: an open-ended decision carries no options — an empty options list is valid
     def "DecisionNeeded accepts an empty options list"() {
         when: 'a DecisionNeeded is created with no options'
-        def report = new EscalationReport.DecisionNeeded('Open question?', [])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('Open question?'), [])
 
         then: 'the options list is empty'
         report.options().isEmpty()
@@ -166,23 +173,24 @@ class EscalationReportSpec extends Specification {
     // FR10: options are copied on construction — later source mutation cannot leak in
     def "DecisionNeeded options are defensively copied from the source"() {
         given: 'a mutable source list'
-        def source = ['a']
+        def source = [UntrustedText.agent('a')]
 
         when: 'a DecisionNeeded is created and the source is then mutated'
-        def report = new EscalationReport.DecisionNeeded('Pick one?', source)
-        source.add('sneaked in')
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('Pick one?'), source)
+        source.add(UntrustedText.agent('sneaked in'))
 
         then: 'the report keeps its original single option'
-        report.options() == ['a']
+        report.options()*.forLog() == ['a']
     }
 
     // FR10: the exposed options list is unmodifiable — it is carried verbatim
     def "DecisionNeeded options are unmodifiable"() {
         given: 'a DecisionNeeded report'
-        def report = new EscalationReport.DecisionNeeded('Pick one?', ['a'])
+        def report = new EscalationReport.DecisionNeeded(
+                UntrustedText.agent('Pick one?'), [UntrustedText.agent('a')])
 
         when: 'a caller tries to add an option'
-        report.options().add('b')
+        report.options().add(UntrustedText.agent('b'))
 
         then: 'the modification is rejected'
         thrown(UnsupportedOperationException)
@@ -191,7 +199,8 @@ class EscalationReportSpec extends Specification {
     // FR10: CannotVerify.reason is required — a report must state why verification failed
     def "CannotVerify rejects a blank reason with the component named"() {
         when: 'a CannotVerify is created with a blank reason'
-        new EscalationReport.CannotVerify(sampleCheck(), reason, 'details')
+        new EscalationReport.CannotVerify(
+                sampleCheck(), UntrustedText.tracker(reason), UntrustedText.tracker('details'))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -204,16 +213,17 @@ class EscalationReportSpec extends Specification {
     // FR10: CannotVerify.details may be empty — an adapter need not always have a stack trace
     def "CannotVerify accepts empty details"() {
         when: 'a CannotVerify is created with empty details'
-        def report = new EscalationReport.CannotVerify(sampleCheck(), 'CI unavailable', '')
+        def report = new EscalationReport.CannotVerify(
+                sampleCheck(), UntrustedText.tracker('CI unavailable'), UntrustedText.tracker(''))
 
         then: 'the details are the empty string'
-        report.details() == ''
+        report.details().forLog() == ''
     }
 
     // FR10: PipelineMismatch.staleStage is required — the report names the missing stage
     def "PipelineMismatch rejects a blank staleStage with the component named"() {
         when: 'a PipelineMismatch is created with a blank staleStage'
-        new EscalationReport.PipelineMismatch(staleStage)
+        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(staleStage))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -226,7 +236,7 @@ class EscalationReportSpec extends Specification {
     // FR10: CannotExecute.cause is required — the preserved stack trace must be present
     def "CannotExecute rejects a blank cause with the component named"() {
         when: 'a CannotExecute is created with a blank cause'
-        new EscalationReport.CannotExecute(cause, [])
+        new EscalationReport.CannotExecute(UntrustedText.subprocess(cause), [])
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)

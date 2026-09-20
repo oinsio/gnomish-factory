@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 
 /**
@@ -28,19 +29,25 @@ import java.time.Instant;
  * spend from the same counter; the category is what lets the quarantine report tell an operator
  * which kind of failure keeps happening.
  *
+ * <p>{@code cause} is {@link UntrustedText}: what went wrong is whatever a subprocess, an agent or
+ * a container said, and the adapter publishes the marker as a tracker comment — so the carrier
+ * travels the whole way and the writer renders it through the comment exit at the write (design D4,
+ * D7 of type-untrusted-text). An adapter that took a {@code String} here would have no way to tell
+ * the factory's words from the medium's.
+ *
  * <p>Inert value data compared by content.
  *
  * <p>Implements FR14 of add-tracker-port; the category is FR14 of harden-task-branch-contract.
  *
- * @param cause free-text description of what went wrong; never blank
+ * @param cause description of what went wrong, carried; never blank
  * @param instance the identifier of the instance recording the abort; never blank
  * @param at when the abort happened; never null
  * @param category which category of the unified accounting this attempt spends; never null
  */
-public record AbortRecord(String cause, String instance, Instant at, RecoveryCause category) {
+public record AbortRecord(UntrustedText cause, String instance, Instant at, RecoveryCause category) {
 
     public AbortRecord {
-        cause = requireNonBlank(cause, "cause");
+        cause = requireNonBlankCause(cause);
         instance = requireNonBlank(instance, "instance");
     }
 
@@ -48,11 +55,11 @@ public record AbortRecord(String cause, String instance, Instant at, RecoveryCau
      * The pre-categorization shape: an attempt recorded with no category stated is the category
      * every such marker meant, {@link RecoveryCause#INSTANCE_CRASH}.
      *
-     * @param cause free-text description of what went wrong; never blank
+     * @param cause description of what went wrong, carried; never blank
      * @param instance the identifier of the instance recording the abort; never blank
      * @param at when the abort happened; never null
      */
-    public AbortRecord(String cause, String instance, Instant at) {
+    public AbortRecord(UntrustedText cause, String instance, Instant at) {
         this(cause, instance, at, RecoveryCause.INSTANCE_CRASH);
     }
 
@@ -67,6 +74,17 @@ public record AbortRecord(String cause, String instance, Instant at, RecoveryCau
     private static String requireNonBlank(String value, String component) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("AbortRecord." + component + " must not be blank");
+        }
+        return value;
+    }
+
+    /**
+     * The same check for the carried component, asking the carrier's own blankness query — which
+     * takes no text out of it, so it needs neither an exit nor a parser warrant (design D11).
+     */
+    private static UntrustedText requireNonBlankCause(UntrustedText value) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("AbortRecord.cause must not be blank");
         }
         return value;
     }

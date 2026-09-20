@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -12,14 +10,11 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import org.slf4j.MDC
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -31,7 +26,7 @@ import spock.lang.TempDir
  * {@link TakeCommand#run} returns or throws, regardless of outcome. Mirrors {@link
  * TakeCommandSpec}'s fixture shape but asserts MDC state instead of exit codes.
  */
-class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -94,19 +89,11 @@ tracker:
         // rather than the production ConsoleTakeoverConfirmation so this MDC-focused spec never binds
         // to the real System.in (which a mutated confirm() would block on). Behaviour is identical: no
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
-        TakeCommandFactory.of(
-                newAssembly(testProperties(instanceName: INSTANCE_NAME)),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                TASK_ID_KEY,
-                testProperties(instanceName: INSTANCE_NAME),
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                registry,
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+        newTakeCommand(
+                testProperties(instanceName: INSTANCE_NAME), worktreesRoot, registry,
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(new ThreadSleeper())
-                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
     }
 
     // FR9, UX2, NFR-O1: every explicit-mode refusal disposition (Working/AwaitingHuman/Finished/
@@ -119,7 +106,7 @@ tracker:
         String mdcDuringFetch = null
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
-            new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none(), false)
+            new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
         }
         // The Working row enters the takeover path (task 6.2), which reads facts via listOpen before
         // the headless (no-TTY) refusal; an empty listing renders the age as "unknown". Harmless for
@@ -212,7 +199,7 @@ tracker:
         given:
         writeConfig()
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
+            new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -234,13 +221,13 @@ tracker:
         writeConfig()
         String mdcDuringFetch = 'UNSET'
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
+            new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
         ]
         tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
             new TrackerTask(
-                    REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+                    REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                     new TrackerTaskState.Finished(), AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -269,7 +256,7 @@ tracker:
         tracker.fetchTask(_) >> {
             mdcDuringFetch << MDC.get(TASK_ID_KEY)
             new TrackerTask(
-                    REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+                    REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                     claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working((String) claimedBy),
                     AbortFacts.none(), false)
         }

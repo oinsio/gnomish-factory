@@ -19,10 +19,13 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
 import org.springframework.boot.DefaultApplicationArguments
@@ -215,6 +218,17 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * dispatcher specs sharing this fixture.
      */
     static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {
-        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
+        new TrackerTask(ref, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
+    }
+
+    /**
+     * A plain {@link TaskContext} with a fixed title/body and no decisions — the bare test
+     * context every app-layer spec that only needs a valid, otherwise-inert one reaches for.
+     * Extracted (rule of three, {@code .claude/rules/manual-sync-pairs.md}) from four identical
+     * private copies: {@code RunnerStartHardeningSpec}, {@code ContainerGitModeRunnerSpec},
+     * {@code GiteaBestEffortPushE2ESpec}, {@code GiteaCrossInstanceResumeE2ESpec}.
+     */
+    static TaskContext context(String taskId) {
+        new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -37,7 +38,8 @@ sealed interface RoundOutcome permits RoundOutcome.Verified, RoundOutcome.NeedsD
      * @param question what the human must decide, carried verbatim; never null
      * @param options the candidate answers, carried verbatim; never null, possibly empty
      */
-    record NeedsDecision(AttemptKey key, AttemptRecord record, ToolTrace trace, String question, List<String> options)
+    record NeedsDecision(
+            AttemptKey key, AttemptRecord record, ToolTrace trace, UntrustedText question, List<UntrustedText> options)
             implements RoundOutcome {}
 
     /**
@@ -58,5 +60,5 @@ sealed interface RoundOutcome permits RoundOutcome.Verified, RoundOutcome.NeedsD
      * @param denials the failed round's egress denials; already unmodifiable when built (the
      *     wrapper copies, and a non-wrapper throw yields {@link List#of()}), possibly empty
      */
-    record CannotExecute(AttemptKey key, String cause, List<Denial> denials) implements RoundOutcome {}
+    record CannotExecute(AttemptKey key, UntrustedText cause, List<Denial> denials) implements RoundOutcome {}
 }

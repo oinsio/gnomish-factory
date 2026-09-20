@@ -25,6 +25,7 @@ import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.nio.file.Paths
 import spock.lang.Specification
@@ -49,7 +50,7 @@ class FreshClaimBaseBindingSpec extends Specification {
 
     private static TrackerTask taskNaming(Designator designator) {
         new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none(),
+                REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Ready(), AbortFacts.none(),
                 false, TaskDesignators.of('base', designator))
     }
 
@@ -192,7 +193,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def outcome = FreshClaimBaseBinding.bind(baseRefGit, ROOT, request, STATE, tracker)
 
         then:
-        1 * baseRefGit.refresh(ROOT, 'release/9.9') >> new BaseRefreshOutcome.Refused("origin holds no ref named 'release/9.9'")
+        1 * baseRefGit.refresh(ROOT, 'release/9.9') >> new BaseRefreshOutcome.Refused(UntrustedText.subprocess("origin holds no ref named 'release/9.9'"))
 
         and:
         1 * tracker.park(REF, ParkReason.INFRA, { String report ->
@@ -230,7 +231,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def outcome = FreshClaimBaseBinding.bind(baseRefGit, ROOT, request, STATE, tracker)
 
         then:
-        1 * baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable('connection timed out')
+        1 * baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
 
         and:
         1 * tracker.release(REF)
@@ -286,7 +287,7 @@ class FreshClaimBaseBindingSpec extends Specification {
     // NFR-R2: a tracker whose release itself fails must not escape either.
     def "a release failure is swallowed and logs GF143, still returns InfrastructureUnavailable"() {
         given:
-        baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable('no answer')
+        baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('no answer'))
         tracker.release(_) >> {
             throw new RuntimeException('tracker unreachable')
         }
@@ -334,7 +335,7 @@ class FreshClaimBaseBindingSpec extends Specification {
     def "resolve never calls the continuation when the refresh is refused"() {
         given:
         def request = new FreshClaimBaseBinding.Request('release/9.9', taskWithNoDesignator(), NO_ALLOWED_BASES)
-        baseRefGit.refresh(ROOT, 'release/9.9') >> new BaseRefreshOutcome.Refused('gone')
+        baseRefGit.refresh(ROOT, 'release/9.9') >> new BaseRefreshOutcome.Refused(UntrustedText.subprocess('gone'))
         def continuationCalled = false
 
         when:

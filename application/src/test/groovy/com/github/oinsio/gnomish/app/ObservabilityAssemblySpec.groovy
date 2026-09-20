@@ -15,7 +15,6 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner

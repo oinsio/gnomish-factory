@@ -60,9 +60,9 @@ include 'atomicfile'
 // flattening and the console notation. Carved out of `:logtext` because text safety is not
 // logging plumbing: the domain and the published plugin contract need the primitives and
 // must not acquire the slf4j edge `:logtext` carries. Dependency-free for `:baseref`'s
-// reason rather than `:atomicfile`'s — an empty allowlist is what constructively guarantees
-// terminal-safety policy can know nothing of subprocesses, trackers or configuration
-// formats (NFR-S1).
+// security reason rather than `:atomicfile`'s coupling one — an empty allowlist is what
+// constructively guarantees terminal-safety policy can know nothing of subprocesses,
+// trackers or configuration formats (NFR-S1).
 include 'untrustedtext'
 // The operator-event leaf (FR4, design D1 of split-logtext-leaves): the catalog of
 // `[GFnnn]` codes, one constant per production WARN/ERROR call site, that gives every
@@ -80,10 +80,11 @@ include 'gitobjects'
 // policy that decides which ref a new task branch starts from — the allowed-base
 // pattern grammar, the per-task designator's validation against it, the source
 // priority order, and the decision value it hands back. Values in, a decision out:
-// no subprocess, no port, no factory type. Dependency-free for the same reason
-// `:subprocess` and `:atomicfile` are, plus one of its own — an empty allowlist is
-// what constructively guarantees the policy can know nothing of trackers, git
-// remotes, or configuration formats (NFR-S3).
+// no subprocess, no port, no factory type. Its one edge is the JDK-only
+// `:untrustedtext` leaf, which its refusal value names so a tracker's designator
+// values travel typed (task 6.1 of type-untrusted-text); with that leaf being itself
+// dependency-free, the allowlist still constructively guarantees the policy can know
+// nothing of trackers, git remotes, or configuration formats (NFR-S3).
 include 'baseref'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the

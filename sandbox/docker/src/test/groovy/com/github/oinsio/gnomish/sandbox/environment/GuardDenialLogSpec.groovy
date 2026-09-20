@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -209,6 +210,33 @@ class GuardDenialLogSpec extends Specification {
         def reason = warnings[0].formattedMessage.split('First malformed reason: ')[1]
         reason.contains("'o'")
         !reason.contains('@')
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR1, FR5 of type-untrusted-text, design D5: the reason is Jackson's echo of the offending
+    //     bytes, stored at the catch and logged one read later — the shape no gate at the log call
+    //     could ever see. It is held as the carrier the whole way and rendered by its log exit here.
+    def "FR5: the first malformed reason is logged through the carrier's log exit"() {
+        given: 'a reason carrying what a hostile guard line would put in it'
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
+        def drops = new GuardDenialDrops()
+
+        when:
+        drops.malformed(UntrustedText.container("broken\n\u001B[2J2026-01-01 ERROR forged record"))
+        drops.report(KEY)
+
+        then: 'the aggregate carries one inert line: no break to forge a record, no escape to drive'
+        def warnings = logs.list.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        def reason = warnings[0].formattedMessage.split('First malformed reason: ')[1]
+        !reason.contains('\n')
+        !reason.contains('\u001B')
+
+        and: 'and the diagnosis itself survives — the exit neutralizes, it does not redact'
+        reason.contains('broken')
+        reason.contains('forged record')
 
         cleanup:
         logs.detach()

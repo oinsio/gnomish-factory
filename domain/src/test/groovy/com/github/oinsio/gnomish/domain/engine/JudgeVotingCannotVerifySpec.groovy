@@ -29,8 +29,8 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
 
         then: 'the whole check is CannotVerify, carrying that vote reason and details'
         result.verdict() instanceof Verdict.CannotVerify
-        result.verdict().reason() == 'service down'
-        result.verdict().details() == 'HTTP 503'
+        result.verdict().reason().forLog() == 'service down'
+        result.verdict().details().forLog() == 'HTTP 503'
 
         and: 'it short-circuits: only two votes were cast, the third never requested'
         voter.voteCount == 2
@@ -50,8 +50,8 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
 
         then: 'the check is CannotVerify with the first vote reason and details'
         result.verdict() instanceof Verdict.CannotVerify
-        result.verdict().reason() == 'unparseable'
-        result.verdict().details() == 'no verdict token in output'
+        result.verdict().reason().forLog() == 'unparseable'
+        result.verdict().details().forLog() == 'no verdict token in output'
 
         and: 'exactly one vote was cast'
         voter.voteCount == 1

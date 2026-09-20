@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git.state
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -10,15 +12,21 @@ import spock.lang.Specification
  */
 class RecordedDenialIdentitiesSpec extends Specification {
 
-    private static StateDenialDto denial(String at) {
+    private static StateDenialDto denial(String at, String source = 'src-1') {
         new StateDenialDto('egress denied: paste.example.com:443', null, null,
-                at == null ? null : new DenialIdentityDto('src-1', at))
+                at == null ? null : new DenialIdentityDto(source, at))
     }
 
     private static StateJsonDto stateWith(List<StateDenialDto> denials) {
         new StateJsonDto(1, new StatePositionDto.AtStage('atStage', 'build'), 1, [
-            new StateAttemptDto(0, 'passed', '2026-08-19T10:00:00Z', [], denials, null, null)
-        ], null, null)
+            new StateAttemptDto(0, 'passed', '2026-08-19T10:00:00Z', [], denials,
+            emptyUsage(), new StateJudgeUsageDto([]))
+        ], emptyUsage(), null)
+    }
+
+    /** The usage components this package declares non-null, with nothing recorded in them. */
+    private static StateUsageDto emptyUsage() {
+        new StateUsageDto(null, [:], [])
     }
 
     private static TaskJsonDto taskWith(EscalationReportDto escalation) {
@@ -58,5 +66,30 @@ class RecordedDenialIdentitiesSpec extends Specification {
     def "FR7: a tip with neither envelope records nothing"() {
         expect:
         RecordedDenialIdentities.of(null, null).isEmpty()
+    }
+
+    // FR7 + logging.md ("best effort must still leave a trace"): an identity whose restored source
+    //     fails the denial-source syntax gate reads as "unknown, keep" — the denial survives, but
+    //     it can no longer be recognized on a re-read, and only the refused id explains that
+    def "FR7: an identity whose source fails the syntax gate is dropped with a trace"() {
+        given:
+        def hostile = 'src-1\nWARN forged'
+
+        when:
+        def events = LogCaptureSupport.capture(StateDenialMapper, Level.DEBUG) {
+            assert RecordedDenialIdentities.of(stateWith([
+                denial('2026-08-19T10:00:00Z', hostile)
+            ]), null)
+            .isEmpty()
+        }
+
+        then: 'one DEBUG line names the refused id and what becomes of the denial'
+        def dropped = events.findAll { it.level == Level.DEBUG }
+        dropped.size() == 1
+        dropped.first().formattedMessage.contains('re-attached on a re-read')
+
+        and: 'the refused id reaches the line rendered, never as the bytes the document held'
+        dropped.first().formattedMessage.contains('src-1')
+        !dropped.first().formattedMessage.contains('\n')
     }
 }

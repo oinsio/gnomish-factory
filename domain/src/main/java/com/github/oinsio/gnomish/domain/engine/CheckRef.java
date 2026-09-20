@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The identity of a single verify check within a stage: its zero-based position
@@ -20,10 +21,11 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  *
  * @param index the zero-based position in the stage's ordered verify list; never
  *     negative
- * @param label the derived human-readable identity {@code <type>:<discriminator>};
- *     never blank
+ * @param label the derived human-readable identity {@code <type>:<discriminator>} — manifest
+ *     text, since every discriminator in it comes from the target repository's own
+ *     {@code .gnomish/} (design D3, D4 of type-untrusted-text); never blank
  */
-public record CheckRef(int index, String label) {
+public record CheckRef(int index, UntrustedText label) {
 
     public CheckRef {
         requireNonNegative(index);
@@ -59,7 +61,10 @@ public record CheckRef(int index, String label) {
                         "external:" + provider + ":" + checkId;
                     case VerifyCheck.Judge(String criteriaFile, var _, var _, var _) -> "judge:" + criteriaFile;
                 };
-        return new CheckRef(index, label);
+        // The manifest mint (design D3): every discriminator in the label — a builtin's name, a
+        // command line, a provider and check id, a criteria file — is text the target repository's
+        // own `.gnomish/` wrote, so the label leaves the manifest as manifest text.
+        return new CheckRef(index, UntrustedText.manifest(label));
     }
 
     /**
@@ -82,7 +87,7 @@ public record CheckRef(int index, String label) {
      * canonical constructor, which would silently exempt this validation from the
      * 100% mutation gate.
      */
-    private static void requireNonBlank(String value) {
+    private static void requireNonBlank(UntrustedText value) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("CheckRef.label must not be blank");
         }

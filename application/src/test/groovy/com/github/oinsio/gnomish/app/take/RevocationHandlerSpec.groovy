@@ -41,14 +41,10 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
     RevocationHandler handler
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', BRANCH)
+        repo = initTaskWorkingRepo(tempDir, 'PROJ-1')
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(repo, 'origin', bareRepo.toString())
         runner.run(repo, 'push', 'origin', "${BRANCH}:${BRANCH}")
 
         worktreeSalvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
@@ -56,25 +52,21 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         handler = new RevocationHandler(tracker, worktreeSalvage, branchPush)
     }
 
-    private String currentHead() {
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
-    }
-
     def "handle salvages leftovers, pushes, posts a note, releases, and returns Revoked"() {
         given: 'an interrupted round left an uncommitted leftover in the worktree'
         Files.writeString(repo.resolve('leftover.txt'), 'half-done work')
-        def tipBefore = currentHead()
+        def tipBefore = currentHead(repo)
 
         when:
         def result = handler.handle(REF, 'PROJ-1', STATE, repo, BRANCH, 'task closed')
 
         then: 'the leftover was salvage-committed'
-        currentHead() != tipBefore
-        runner.run(repo, 'log', '-1', '--format=%s').stdout().trim() == 'gnomish: salvage'
+        currentHead(repo) != tipBefore
+        runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == 'gnomish: salvage'
         !worktreeSalvage.hasLeftovers()
 
         and: 'the branch was pushed to origin, up to the salvage commit'
-        runner.run(bareRepo, 'rev-parse', BRANCH).stdout().trim() == currentHead()
+        runner.run(bareRepo, 'rev-parse', BRANCH).stdout().forParsing().trim() == currentHead(repo)
 
         and: 'a stop note is posted and the claim is released'
         1 * tracker.postNote(REF, { String note ->
@@ -95,13 +87,13 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
 
     def "handle is clean on an already-clean worktree: no salvage commit, still pushes and reports"() {
         given:
-        def tipBefore = currentHead()
+        def tipBefore = currentHead(repo)
 
         when:
         def result = handler.handle(REF, 'PROJ-1', STATE, repo, BRANCH, 'claim held by another instance')
 
         then: 'no salvage commit landed'
-        currentHead() == tipBefore
+        currentHead(repo) == tipBefore
 
         and:
         1 * tracker.postNote(REF, _)

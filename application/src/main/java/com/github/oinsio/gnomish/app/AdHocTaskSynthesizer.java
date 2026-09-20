@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Clock;
@@ -78,7 +79,10 @@ public final class AdHocTaskSynthesizer {
         Split split = splitTitleAndBody(text);
         String startStage = resolveStartStage(args.fromStage(), definition);
 
-        TaskContext context = new TaskContext(taskId, split.title(), split.body(), List.of());
+        // A task file stands in for the tracker on this path, so its title and body enter as
+        // the same TRACKER carriers a fetched issue would (design D3 of type-untrusted-text).
+        TaskContext context = new TaskContext(
+                taskId, UntrustedText.tracker(split.title()), UntrustedText.tracker(split.body()), List.of());
         TaskState initialState = TaskState.atStageStart(startStage);
         return new SynthesizedTask(context, initialState);
     }
@@ -127,7 +131,7 @@ public final class AdHocTaskSynthesizer {
     private static String resolveStartStage(@Nullable String fromStage, PipelineDefinition definition) {
         List<StageDefinition> stages = definition.stages();
         if (fromStage == null) {
-            return stages.get(0).name();
+            return stages.getFirst().name();
         }
         boolean known = stages.stream().anyMatch(stage -> stage.name().equals(fromStage));
         if (!known) {

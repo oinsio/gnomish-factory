@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
 import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -233,6 +234,7 @@ public final class TakeClaimAndWork {
      * <p>Implements FR9, UX2 of add-tracker-port.
      */
     static TakeResult refuseHeld(String holder) {
-        return new TakeResult.Skipped("Task is claimed by another instance (" + holder + ") — refusing to take it.");
+        return new TakeResult.Skipped(
+                UntrustedText.factory("Task is claimed by another instance (" + holder + ") — refusing to take it."));
     }
 }

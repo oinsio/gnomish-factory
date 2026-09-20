@@ -7,12 +7,12 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.StatePositionDto;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
-import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +53,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR14, NFR-C1 of add-git-workflow; FR16 of harden-task-branch-contract.
  */
+@UntrustedParser
 public final class UsageHistoryWalker {
 
     private static final Logger log = LoggerFactory.getLogger(UsageHistoryWalker.class);
@@ -81,7 +82,7 @@ public final class UsageHistoryWalker {
         String ref =
                 switch (location) {
                     case BranchLocation.NotFound ignored -> null;
-                    case BranchLocation.Unavailable(String reason) ->
+                    case BranchLocation.Unavailable(UntrustedText reason) ->
                         throw new BranchLocationUnavailableException(taskId, reason);
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
@@ -123,7 +124,9 @@ public final class UsageHistoryWalker {
      * pathspec too), handled by {@link #readStateAt} returning {@code null} for it.
      */
     private List<String> stateTouchingCommits(Path cloneDir, String ref) {
-        GitCommandResult log = answered(
+        // GitReadGate.answered: an interrupted `git log` would otherwise hand back a prefix of the
+        // commit list — a report silently missing its newest rounds.
+        GitCommandResult log = GitReadGate.answered(
                 ref, "log", runner.run(cloneDir, "log", "--reverse", "--format=%H", ref, "--", STATE_JSON_PATH));
         if (log.exitCode() != 0) {
             // The whole branch's usage report silently becomes empty otherwise (FR5).
@@ -134,26 +137,16 @@ public final class UsageHistoryWalker {
                             + " empty: {}",
                     ref,
                     log.exitCode(),
-                    LogText.forLog(log.stderr()));
+                    log.stderr().forLog());
             return List.of();
         }
-        return log.stdout().lines().filter(UsageHistoryWalker::isNonBlank).toList();
-    }
-
-    /**
-     * The gate both history reads pass through, same rule as {@link GitShowTip}: a result is a fact
-     * about the branch only when the invocation ran to its own exit. An interrupted {@code git log}
-     * hands back a prefix of the commit list — a report silently missing its newest rounds — and an
-     * interrupted {@code git show} reads as the absent-state case, silently dropping a commit's
-     * rounds; both must surface as unavailability instead.
-     */
-    private static GitCommandResult answered(String revision, String command, GitCommandResult result) {
-        return switch (result.termination()) {
-            case EXITED -> result;
-            case TIMED_OUT, INTERRUPTED ->
-                throw new BranchTipUnavailableException(
-                        revision, command, result.termination().name());
-        };
+        // @UntrustedParser warrant (design D11): --format=%H prints object ids, one per line, and
+        //     each is used only as a revision argument to the reads below.
+        return log.stdout()
+                .forParsing()
+                .lines()
+                .filter(UsageHistoryWalker::isNonBlank)
+                .toList();
     }
 
     /**
@@ -179,7 +172,10 @@ public final class UsageHistoryWalker {
      * harden-task-branch-contract).
      */
     private @Nullable StateJsonDto readStateAt(Path cloneDir, String commit) {
-        GitCommandResult show = answered(commit, "show", runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH));
+        // GitReadGate.answered: an interrupted `git show` would otherwise read as the absent-state
+        // case, silently dropping this commit's rounds.
+        GitCommandResult show =
+                GitReadGate.answered(commit, "show", runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH));
         if (show.exitCode() != 0) {
             // DEBUG, not WARN: this IS the normal outcome being classified — the cleanup commit
             // (FR15) deletes state.json, so a path-filtered log entry with nothing to show is

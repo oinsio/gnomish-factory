@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.util.List;
 
@@ -89,8 +90,9 @@ final class ExternalPolling {
         // delivery of the attempt commit is a verified precondition of the loop — an
         // undeliverable commit resolves as CannotVerify (no attempt burned) instead of being
         // left to expire as a poll-timeout quality failure.
-        if (attemptDelivery.ensureDelivered(workspace) instanceof AttemptDelivery.Outcome.Undeliverable undeliverable) {
-            return new Verdict.CannotVerify(undeliverable.reason(), undeliverable.details());
+        if (attemptDelivery.ensureDelivered(workspace)
+                instanceof AttemptDelivery.Outcome.Undeliverable(UntrustedText reason, UntrustedText details)) {
+            return new Verdict.CannotVerify(reason, details);
         }
         Instant deadline = clock.now().plus(check.timeout());
         while (true) {
@@ -129,7 +131,13 @@ final class ExternalPolling {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
             case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
-            case INFRASTRUCTURE -> new Verdict.CannotVerify(message, message);
+            // MANIFEST, not FACTORY: the sentence interpolates the check id raw, and a capture
+            // quoted raw keeps the capture's family (design D1 of type-untrusted-text). The detail
+            // is the empty carrier: a timeout is the absence of an answer, so nothing was captured,
+            // and every renderer prints reason and details in turn — handing the one sentence to
+            // both fields would show the operator the same line twice (design D3, "the empty
+            // details of a verdict that captured nothing" is FACTORY).
+            case INFRASTRUCTURE -> new Verdict.CannotVerify(UntrustedText.manifest(message), UntrustedText.factory(""));
         };
     }
 }

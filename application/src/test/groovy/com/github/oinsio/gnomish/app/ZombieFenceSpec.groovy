@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -120,7 +121,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         def base = originTip()
         Tracker tracker = Stub {
             fetchTask(REF) >> new TrackerTask(
-            REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Working(HOLDER.value()), AbortFacts.none(), false)
+            REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Working(HOLDER.value()), AbortFacts.none(), false)
         }
 
         when: 'the new holder persists a round: local commit plus a fast-forward push that lands on origin'

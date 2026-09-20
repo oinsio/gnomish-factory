@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * Shared Spock fixture for the {@code TrackerTask} that {@code tracker.fetchTask} stubs return
@@ -21,6 +22,6 @@ class TrackerTaskFixtures {
     }
 
     static TrackerTask taskWith(TaskRef ref, TrackerTaskState state, boolean finished) {
-        new TrackerTask(ref, new TaskSnapshot(ref.id(), 'title', 'body'), state, AbortFacts.none(), finished)
+        new TrackerTask(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), finished)
     }
 }

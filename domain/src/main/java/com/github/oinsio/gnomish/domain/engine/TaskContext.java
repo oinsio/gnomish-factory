@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -11,8 +12,9 @@ import java.util.List;
  *
  * <p>Inert, immutable value data: {@code taskId} is required non-blank because
  * it is the task's key, while {@code title} and {@code body} are the human
- * description — required non-null but allowed to be empty text, since a task may
- * legitimately have an empty title or body. The {@code decisions} list is
+ * description — the tracker's own text, carried (design D4 of type-untrusted-text)
+ * and required non-null but allowed to be empty, since a task may legitimately
+ * have an empty title or body. The {@code decisions} list is
  * defensively copied and unmodifiable and may be empty (a task need not carry
  * any decisions yet); its order is the chronological order supplied by the
  * caller and is preserved faithfully.
@@ -25,7 +27,7 @@ import java.util.List;
  * @param decisions the chronological human decisions; defensively copied,
  *     unmodifiable, possibly empty
  */
-public record TaskContext(String taskId, String title, String body, List<Decision> decisions) {
+public record TaskContext(String taskId, UntrustedText title, UntrustedText body, List<Decision> decisions) {
 
     public TaskContext {
         taskId = requireNonBlank(taskId, "taskId");

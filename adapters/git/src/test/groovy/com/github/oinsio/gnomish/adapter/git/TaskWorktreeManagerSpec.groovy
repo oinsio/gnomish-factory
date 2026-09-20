@@ -43,7 +43,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
 
         and: 'FR6: the branch is checked out there'
         def head = runner.run(path, 'rev-parse', '--abbrev-ref', 'HEAD')
-        head.stdout().trim() == branchName
+        head.stdout().forParsing().trim() == branchName
     }
 
     def "FR6: worktree directory name is sanitized and distinct from the branch name"() {
@@ -76,7 +76,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         resumedPath == firstPath
         resumedPath.toFile().isDirectory()
         def head = runner.run(resumedPath, 'rev-parse', '--abbrev-ref', 'HEAD')
-        head.stdout().trim() == branchName
+        head.stdout().forParsing().trim() == branchName
     }
 
     def "FR6: reuse — calling ensureWorktree twice does not error and returns the same path"() {
@@ -117,20 +117,20 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
     def "FR7-style: worktree creation does not alter the clone's own branch, HEAD, or working tree"() {
         given:
         def branchName = createTaskBranch(cloneDir, 'PROJ-4')
-        def branchBefore = runner.run(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()
-        def headBefore = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim()
+        def branchBefore = runner.run(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().forParsing().trim()
+        def headBefore = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
 
         when:
         manager.ensureWorktree(cloneDir, 'PROJ-4', branchName)
 
         then:
-        def branchAfter = runner.run(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()
-        def headAfter = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim()
+        def branchAfter = runner.run(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().forParsing().trim()
+        def headAfter = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def status = runner.run(cloneDir, 'status', '--porcelain')
 
         branchAfter == branchBefore
         headAfter == headBefore
-        status.stdout().trim().isEmpty()
+        status.stdout().forParsing().trim().isEmpty()
     }
 
     def "FR6: parent directories under the worktrees root are created as needed"() {

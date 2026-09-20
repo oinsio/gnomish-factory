@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
-import java.nio.file.Files
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -21,14 +21,10 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
 
     def "the push follows a successful persist, from the factory clone, for the task branch"() {
         given: 'a real clone with an origin, so the push is observable on the remote'
+        def cloneDir = initTaskWorkingRepo(tempDir, 'T-1')
         def origin = initBareRepo(tempDir, 'origin')
-        def cloneDir = tempDir.resolve('clone')
+        addRemote(cloneDir, 'origin', origin.toString())
         def git = new GitProcessRunner()
-        git.run(tempDir, 'clone', origin.toString(), cloneDir.toString())
-        Files.writeString(cloneDir.resolve('a.txt'), 'a')
-        git.run(cloneDir, 'add', 'a.txt')
-        git.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        git.run(cloneDir, 'branch', 'gnomish/T-1')
         def delegate = Mock(AttemptPersistence)
         def persistence = new PushBestEffortAttemptPersistence(
                 delegate, new BranchPush(git), cloneDir, 'gnomish/T-1')
@@ -40,7 +36,7 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
         then: 'the delegate persisted, and the branch reached origin'
         1 * delegate.persist('T-1', _, _)
         git.run(cloneDir, 'ls-remote', origin.toString(), 'refs/heads/gnomish/T-1')
-                .stdout().trim()
+                .stdout().forParsing().trim()
     }
 
     def "a failed persist pushes nothing: durability is the branch state, never a stray push"() {
@@ -56,7 +52,7 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
 
         then:
         1 * delegate.persist(_, _, _) >> {
-            throw new GitPersistFailedException('T-1', 'work', 0, 'boom', 'x')
+            throw new GitPersistFailedException('T-1', 'work', 0, 'boom', UntrustedText.subprocess('x'))
         }
         thrown(GitPersistFailedException)
     }

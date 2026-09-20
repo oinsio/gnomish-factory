@@ -35,6 +35,12 @@ dependencies {
     // so it is not inherited transitively.
     implementation libs.slf4j.api
 
+    // The untrusted-text leaf (FR1, design D3 of type-untrusted-text): `CapturedExec`
+    // carries an in-box command's output as `UntrustedText` and mints it at the box
+    // boundary. `api`, not `implementation`: the carrier is on this port layer's own
+    // public surface, so every consumer compiles against it too.
+    api project(':untrustedtext')
+
     // @ConfigurationProperties / @Name on the three configuration records
     // (design D1's layer-home rule: root config-properties types follow their
     // consumers). The bare `spring-boot` artifact, not the starter: this module
@@ -58,5 +64,9 @@ layering {
         // source in this module names it; the layering gate walks the transitive graph, so the
         // reach is listed where it arrives.
         ':operatorevent',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, design D3
+        // of type-untrusted-text): declared directly above — `CapturedExec.output` is a
+        // carrier, so this module's own signatures name it.
+        ':untrustedtext',
     ]
 }

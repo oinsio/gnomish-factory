@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import groovy.transform.ImmutableOptions
 import spock.lang.Specification
 
 /**
@@ -13,7 +15,7 @@ import spock.lang.Specification
  * casts one vote and reads back a {@link JudgeVoter.Vote}. A concrete subclass binds
  * an adapter-under-test through the {@link #arrange} seam, which builds the voter for
  * a target verdict-and-tokens shape, casts one vote against the supplied
- * {@link TaskContext}, and returns the produced {@link VoteOutcome}; an unproducible
+ * {@link TaskContext}, and returns the produced {@code VoteOutcome}; an unproducible
  * shape returns {@link Optional#empty} and the row is recorded and skipped.
  *
  * <p>FR14 of add-manual-run: interactive and real adapters pass the same
@@ -27,7 +29,15 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
         PASS_WITH_TOKENS, PASS_WITHOUT_TOKENS, FAIL, CANNOT_VERIFY
     }
 
-    /** What a vote arrangement produced: the vote plus the context the voter observed. */
+    /**
+     * What a vote arrangement produced: the vote plus the context the voter observed.
+     *
+     * <p>{@code @ImmutableOptions}: both component types are Java records that copy their
+     * own collections defensively, so they are immutable — but a Groovy record only treats a
+     * type as immutable if it is on Groovy's own known list or named here, and otherwise
+     * reports the component as mutable.
+     */
+    @ImmutableOptions(knownImmutableClasses = [JudgeVoter.Vote, TaskContext])
     static record VoteOutcome(JudgeVoter.Vote vote, TaskContext observedContext) {}
 
     /**
@@ -44,7 +54,7 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
     protected abstract Optional<VoteOutcome> arrange(VoteShape shape, TaskContext context)
 
     private static TaskContext sampleContext() {
-        new TaskContext('TASK-1', 'title', 'body', [])
+        new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 
     // FR14: vote returns a non-null Vote whose verdict is non-null (FR3)
@@ -106,7 +116,7 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
     // FR14: the voter receives and can read the TaskContext it was handed (FR7)
     def "the voter receives the TaskContext it was handed"() {
         given: 'a distinctive task context'
-        def context = new TaskContext('TASK-JUDGE', 'grade me', 'the body', [])
+        def context = new TaskContext('TASK-JUDGE', UntrustedText.tracker('grade me'), UntrustedText.tracker('the body'), [])
 
         and: 'a voter arranged to pass, observing that context'
         def outcome = arrange(VoteShape.PASS_WITH_TOKENS, context)

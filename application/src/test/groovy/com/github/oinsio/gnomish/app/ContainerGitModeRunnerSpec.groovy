@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -34,7 +35,7 @@ import spock.lang.Specification
  */
 class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes, StdoutCaptureFixture {
 
-    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
+    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     TaskBranchGit branches = Mock(TaskBranchGit)
     TaskRepository taskRepository = Mock(TaskRepository)
@@ -120,7 +121,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
     def "remaps a creation failure into the same usage error the host path raises"() {
         given:
         taskRepository.createTask(_, _, _, _) >> {
-            throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
+            throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('x'))
         }
 
         when:

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -59,7 +60,7 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
     def "maps Aborted to an aborted line with no parkReason"() {
         given:
         def finalState = stateAt(new Position.AtStage('build'), 0, ExecutorUsage.none())
-        def result = new TakeResult.Aborted(finalState, 'durability guarantee broke')
+        def result = new TakeResult.Aborted(finalState, UntrustedText.subprocess('durability guarantee broke'))
 
         when:
         def line = TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, result, STARTED_AT, FINISHED_AT)
@@ -72,7 +73,7 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
     def "maps Revoked to a revoked line with no parkReason"() {
         given:
         def finalState = stateAt(new Position.AtStage('build'), 0, ExecutorUsage.none())
-        def result = new TakeResult.Revoked(finalState, 'claim lost mid-run')
+        def result = new TakeResult.Revoked(finalState, UntrustedText.tracker('claim lost mid-run'))
 
         when:
         def line = TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, result, STARTED_AT, FINISHED_AT)
@@ -110,6 +111,6 @@ class TaskOutcomeLineAssemblerSpec extends Specification {
     def "maps EmptyQueue and Skipped to no line at all"() {
         expect:
         TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, new TakeResult.EmptyQueue(), STARTED_AT, FINISHED_AT) == null
-        TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, new TakeResult.Skipped('lost claim race'), STARTED_AT, FINISHED_AT) == null
+        TaskOutcomeLineAssembler.assemble(INSTANCE, TASK_ID, new TakeResult.Skipped(UntrustedText.tracker('lost claim race')), STARTED_AT, FINISHED_AT) == null
     }
 }

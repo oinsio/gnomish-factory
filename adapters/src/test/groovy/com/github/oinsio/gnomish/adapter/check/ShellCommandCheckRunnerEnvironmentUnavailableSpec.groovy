@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -15,7 +13,7 @@ import spock.lang.TempDir
  * verdict's reason carries the exception's message verbatim, so the escalation report names the
  * actual cause rather than a wrapped or generic string.
  */
-class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification {
+class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification implements ShellCommandCheckRunnerTestSupport {
 
     @TempDir
     Path tempDir
@@ -29,10 +27,10 @@ class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification {
         def runner = new ShellCommandCheckRunner().withEnvironments(source)
 
         when:
-        def verdict = runner.run(new VerifyCheck.Command('true'), new DirectoryWorkspace(tempDir))
+        def verdict = runner.run(command('true'), workspace())
 
         then:
         verdict instanceof Verdict.CannotVerify
-        (verdict as Verdict.CannotVerify).reason() == 'fresh-box environment could not be materialized: boom'
+        (verdict as Verdict.CannotVerify).reason().forLog() == 'fresh-box environment could not be materialized: boom'
     }
 }

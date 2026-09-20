@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.LiveActivity;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import org.slf4j.Logger;
@@ -95,11 +96,12 @@ final class TakePauseExit {
      * As {@link #finish(TaskOutcome.Paused, TaskContext, String, Tracker, TaskRef, InstanceId)}, but
      * wraps the git-unfenced checkpoint {@code tracker.park} write in {@code retry} via {@link
      * GuardedPark#attempt} — a tracker outage is retried with backoff for the bounded hold-the-slot
-     * period (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code onConfirmed} once the park
-     * lands, clearing the branch's "tracker-write pending" marker. On give-up the marker is left set
-     * and an ERROR names the unreconciled checkpoint park; reconcile-on-resume completes it later.
-     * When the pre-write claim-still-ours check shows the claim moved, neither the park nor {@code
-     * onConfirmed} runs.
+     * period (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code transition}'s receipt once
+     * (and only once) the park has landed, clearing the branch's durable "tracker-write pending"
+     * marker so a later resume reads the checkpoint park as settled. On give-up the marker is left
+     * set and an ERROR names the unreconciled checkpoint park; reconcile-on-resume completes it
+     * later. When the pre-write claim-still-ours check shows the claim moved, neither the park nor
+     * its receipt runs (the marker stays for the successor's reconcile, never clobbering its state).
      *
      * <p>Implements FR13, FR18, D12 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
      *
@@ -111,7 +113,8 @@ final class TakePauseExit {
      * @param transition the park's branch-side steps (FR10 of harden-task-branch-contract): a fresh
      *     checkpoint park records its outcome commit and fences its delivery here; a recovered one
      *     carries the verdict its caller's fence already produced and probes the tracker before
-     *     re-driving the write. Either way the receipt clears the branch's pending marker
+     *     re-driving the write. Either way the receipt clears the branch's pending marker once the
+     *     park lands
      */
     static TakeResult finish(
             TaskOutcome.Paused paused,
@@ -123,20 +126,12 @@ final class TakePauseExit {
             TerminalWriteRetry retry,
             ParkTransition transition) {
         var report = StatusReport.build(context, paused.finalState(), null, LiveActivity.idle());
-        String rendered = new StatusTextRenderer().renderFull(report);
+        String rendered = new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report);
         String checkpoint = "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.";
-        String head = rendered + "\n" + "Branch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
+        String head = rendered + "\nBranch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
 
         String reportText = GuardedPark.attempt(
-                tracker,
-                ref,
-                instanceId,
-                ParkReason.CHECKPOINT,
-                note -> head + (note.isEmpty() ? "" : "\n" + note),
-                retry,
-                transition,
-                log,
-                "checkpoint park");
+                tracker, ref, instanceId, ParkReason.CHECKPOINT, head, retry, transition, log, "checkpoint park");
         return new TakeResult.AwaitingHuman(paused.finalState(), ParkReason.CHECKPOINT, reportText);
     }
 }

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -35,7 +36,11 @@ final class SampleTracker implements Tracker {
     @Override
     public TrackerTask fetchTask(TaskRef ref) {
         return new TrackerTask(
-                ref, new TaskSnapshot(ref.id(), "sample", ""), new TrackerTaskState.Ready(), AbortFacts.none(), false);
+                ref,
+                new TaskSnapshot(ref.id(), UntrustedText.tracker("sample"), UntrustedText.tracker("")),
+                new TrackerTaskState.Ready(),
+                AbortFacts.none(),
+                false);
     }
 
     @Override

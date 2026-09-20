@@ -40,6 +40,7 @@ import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppende
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -125,7 +126,7 @@ tracker:
 
     private static TrackerTask workingTask(String taskId) {
         new TrackerTask(
-                new TaskRef(taskId), new TaskSnapshot(taskId, 'title', 'body'),
+                new TaskRef(taskId), new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false)
     }
 

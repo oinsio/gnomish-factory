@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.testfixtures.concurrency.BoundedExecutionFixture
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir

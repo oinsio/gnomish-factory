@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -27,16 +28,16 @@ class StatusTextRendererSpec extends Specification {
     private static final Instant STARTED = Instant.parse('2026-07-16T14:35:10Z')
 
     private static TaskContext context(List<Decision> decisions = []) {
-        new TaskContext('manual-20260716-143502-x7', 'Fix flaky spec', 'body text', decisions)
+        new TaskContext('manual-20260716-143502-x7', UntrustedText.tracker('Fix flaky spec'), UntrustedText.tracker('body text'), decisions)
     }
 
     private static AttemptRecord passedRound(int round = 0) {
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
     }
 
     private static AttemptRecord failedRound(int round = 0) {
-        def check = new CheckResult(new CheckRef(0, 'command:./gradlew test'),
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
         new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [])
@@ -77,8 +78,11 @@ class StatusTextRendererSpec extends Specification {
         def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0))
         def decision = new Decision('patch in place', 'plan', 'operator', STARTED)
         def ctx = context([decision])
-        def escalation = new EscalationReport.DecisionNeeded('Refactor or patch?', ['refactor', 'patch'])
-        def activity = new LiveActivity(new Activity.Verifying(new CheckRef(0, 'command:./gradlew test'), STARTED),
+        def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor or patch?'), [
+            UntrustedText.agent('refactor'),
+            UntrustedText.agent('patch')
+        ])
+        def activity = new LiveActivity(new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), STARTED),
                 escalation, null)
         def report = StatusReport.build(ctx, state, 3, activity)
 
@@ -87,7 +91,7 @@ class StatusTextRendererSpec extends Specification {
 
         then:
         text.contains(ctx.taskId())
-        text.contains(ctx.title())
+        text.contains(ctx.title().forConsole())
         text.contains('implement')
         text.contains('1/3')
         text.contains('Round 0')
@@ -159,10 +163,13 @@ class StatusTextRendererSpec extends Specification {
         where:
         escalation | expectedFragment
         new EscalationReport.AttemptsExhausted(3) | 'attempts exhausted'
-        new EscalationReport.DecisionNeeded('Refactor?', ['a', 'b']) | 'decision needed'
-        new EscalationReport.CannotVerify(new CheckRef(0, 'command:x'), 'network error', '') | 'cannot verify'
-        new EscalationReport.PipelineMismatch('stale-stage') | 'pipeline mismatch'
-        new EscalationReport.CannotExecute('agent crashed', []) | 'cannot execute'
+        new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor?'), [
+            UntrustedText.agent('a'),
+            UntrustedText.agent('b')
+        ]) | 'decision needed'
+        new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:x')), UntrustedText.subprocess('network error'), UntrustedText.subprocess('')) | 'cannot verify'
+        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) | 'pipeline mismatch'
+        new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []) | 'cannot execute'
     }
 
     // FR11, D7: renderFull renders every Activity kind without throwing
@@ -178,8 +185,8 @@ class StatusTextRendererSpec extends Specification {
         where:
         activity | expectedFragment
         new Activity.Executing(STARTED) | 'executing'
-        new Activity.Verifying(new CheckRef(0, 'builtin:files_exist'), STARTED) | 'verifying builtin:files_exist'
-        new Activity.AwaitingInput('pass/fail? ', STARTED) | 'awaiting input: "pass/fail? "'
+        new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), STARTED) | 'verifying builtin:files_exist'
+        new Activity.AwaitingInput(UntrustedText.agent('pass/fail? '), STARTED) | 'awaiting input: "pass/fail? "'
     }
 
     // FR7, UX1, D10, D12 of add-agent-executor: executing activity renders live tool detail when present
@@ -187,7 +194,7 @@ class StatusTextRendererSpec extends Specification {
         given:
         def renderer = new StatusTextRenderer()
         def state = TaskState.atStageStart('implement')
-        def activity = new LiveActivity(new Activity.Executing(STARTED, 'Edit', 3), null, null)
+        def activity = new LiveActivity(new Activity.Executing(STARTED, UntrustedText.agent('Edit'), 3), null, null)
         def report = StatusReport.build(context(), state, 3, activity)
 
         when:
@@ -221,7 +228,7 @@ class StatusTextRendererSpec extends Specification {
         given: 'a passing round that recorded one denial'
         def denial = new Finding(
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
@@ -247,7 +254,7 @@ class StatusTextRendererSpec extends Specification {
                 "egress denied: evil.example.com:443${esc}[31m",
                 "evil.example.com:443/x${esc}[2K\nRound 9:\tpassed\rHIDDEN",
                 'kind=http method=POST')
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
@@ -271,7 +278,7 @@ class StatusTextRendererSpec extends Specification {
         given: 'an escalation for a round killed on its timeout after a denied egress'
         def denial = new Finding(
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
-        def escalation = new EscalationReport.CannotExecute('round timed out after 15m', [Denial.unidentified(denial)])
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out after 15m'), [Denial.unidentified(denial)])
         def state = TaskState.atStageStart('implement')
 
         when:
@@ -294,7 +301,7 @@ class StatusTextRendererSpec extends Specification {
                 "egress denied: evil.example.com:443${esc}[31m",
                 "evil.example.com:443/x${esc}[2K\nLast escalation:\tforged",
                 'kind=http method=POST')
-        def escalation = new EscalationReport.CannotExecute('round timed out', [Denial.unidentified(denial)])
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [Denial.unidentified(denial)])
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(
@@ -314,7 +321,7 @@ class StatusTextRendererSpec extends Specification {
     //     this change — no heading, no empty list.
     def "renderFull renders nothing extra for a cannotExecute escalation with no denials"() {
         given:
-        def escalation = new EscalationReport.CannotExecute('adapter crashed', [])
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), [])
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(
@@ -350,7 +357,7 @@ class StatusTextRendererSpec extends Specification {
                         'egress denial log truncated: older denials inside the read window are lost',
                         'gnomish-PROJ-9',
                         'loss window: after the guard container\'s start'))
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), JudgeUsage.none(), [denial, marker])
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())

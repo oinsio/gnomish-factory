@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -34,8 +35,8 @@ final class SampleExternalCheckClient implements ExternalCheckClient {
     public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
         if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
-                    "sample check requires a sandboxed-mode workspace",
-                    "got: " + (workspace == null ? "null" : workspace.getClass().getName()));
+                    UntrustedText.factory("sample check requires a sandboxed-mode workspace"),
+                    UntrustedText.factory("got: " + workspace.getClass().getName()));
         }
         String sha = attemptWorkspace.attemptCommitSha();
         return new PollStatus.Fail(List.of(new Finding(

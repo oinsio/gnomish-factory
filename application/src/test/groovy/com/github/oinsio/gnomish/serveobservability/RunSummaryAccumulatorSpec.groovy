@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -41,8 +42,8 @@ class RunSummaryAccumulatorSpec extends Specification {
         when:
         accumulator.record(new TakeResult.Delivered(stateAt(ExecutorUsage.none()), 'shipped it'))
         accumulator.record(new TakeResult.AwaitingHuman(stateAt(ExecutorUsage.none()), ParkReason.ESCALATION, 'needs a human'))
-        accumulator.record(new TakeResult.Aborted(stateAt(ExecutorUsage.none()), 'durability guarantee broke'))
-        accumulator.record(new TakeResult.Revoked(stateAt(ExecutorUsage.none()), 'claim lost mid-run'))
+        accumulator.record(new TakeResult.Aborted(stateAt(ExecutorUsage.none()), UntrustedText.subprocess('durability guarantee broke')))
+        accumulator.record(new TakeResult.Revoked(stateAt(ExecutorUsage.none()), UntrustedText.tracker('claim lost mid-run')))
 
         then:
         accumulator.counts() == new OutcomeCounts(1, 1, 1, 1)
@@ -110,8 +111,8 @@ class RunSummaryAccumulatorSpec extends Specification {
 
         when:
         accumulator.record(new TakeResult.EmptyQueue())
-        accumulator.record(new TakeResult.Skipped('lost claim race'))
-        accumulator.record(new TakeResult.InfrastructureUnavailable('origin never answered'))
+        accumulator.record(new TakeResult.Skipped(UntrustedText.tracker('lost claim race')))
+        accumulator.record(new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered')))
 
         then:
         accumulator.counts() == new OutcomeCounts(0, 0, 0, 0)

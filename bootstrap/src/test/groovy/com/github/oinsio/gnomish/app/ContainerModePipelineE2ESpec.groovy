@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -116,21 +117,21 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         ]
 
         when:
-        runner.run(cloneDir, null, pipeline(), segments, new TaskContext(taskId, 'title', 'body',
+        runner.run(cloneDir, null, pipeline(), segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
                 List.<Decision> of()), TaskState.atStageStart('work'), RunArguments.InteractiveMode.NONE)
 
         then: 'the snapshot-first protocol is on the branch: snapshot commit, then the state commit on top'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$').stdout().trim()
+                '^gnomish: snapshot work#0$').stdout().forParsing().trim()
         snapshotSha
         def stateSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: round work#0$').stdout().trim()
+                '^gnomish: round work#0$').stdout().forParsing().trim()
         stateSha
-        gitRunner.run(cloneDir, 'rev-parse', "${stateSha}^").stdout().trim() == snapshotSha
+        gitRunner.run(cloneDir, 'rev-parse', "${stateSha}^").stdout().forParsing().trim() == snapshotSha
 
         and: 'the gnome round really ran inside the box: the fake agent wrote output.txt into the snapshot'
-        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', snapshotSha).stdout().contains('output.txt')
+        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', snapshotSha).stdout().forParsing().contains('output.txt')
 
         and: 'the completed tip is cleaned: no .gnomish-task/, the work is present'
         def tipTree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()

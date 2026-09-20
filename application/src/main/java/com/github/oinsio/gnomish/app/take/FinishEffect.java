@@ -26,7 +26,11 @@ import org.slf4j.Logger;
  * @param tracker the tracker port the finish is written through; never null
  * @param ref the task's tracker identity; never null
  * @param instanceId this factory instance's identity, for the pre-write claim check; never null
- * @param summary the operator-facing final report the finish carries; never null
+ * @param summary the operator-facing final report the finish carries, finished text: its builder
+ *     assembled it for the comment plane, quoted field by quoted field, and this record publishes
+ *     what it was handed. Rendering it again here would fence the factory's own report lines as
+ *     machine output — the alternative design D7 rejects (design D6, D7 of type-untrusted-text);
+ *     never blank
  * @param retry the bounded terminal-write retry the finish is made through; never null
  * @param transition the completion's branch-side steps — fresh or recovered; never null
  * @param log the caller's logger, so log lines stay attributed to the calling class; never null

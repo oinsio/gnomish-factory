@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -19,7 +20,7 @@ class CheckRefSpec extends Specification {
 
         then: 'the index is carried through and the label is derived by type'
         ref.index() == index
-        ref.label() == expectedLabel
+        ref.label().forLog() == expectedLabel
 
         where:
         index | check || expectedLabel
@@ -44,25 +45,25 @@ class CheckRefSpec extends Specification {
         def httpRef = CheckRef.of(0, onHttp)
 
         then: 'the labels carry the provider and the identities stay distinct'
-        githubRef.label() == 'external:github:ci/build'
-        httpRef.label() == 'external:http:ci/build'
+        githubRef.label().forLog() == 'external:github:ci/build'
+        httpRef.label().forLog() == 'external:http:ci/build'
         githubRef != httpRef
     }
 
     // FR4: the index and label are exposed exactly as constructed
     def "exposes index and label as constructed"() {
         when: 'a CheckRef is constructed directly'
-        def ref = new CheckRef(4, 'command:make')
+        def ref = new CheckRef(4, UntrustedText.manifest('command:make'))
 
         then: 'both components are exposed as constructed'
         ref.index() == 4
-        ref.label() == 'command:make'
+        ref.label().forLog() == 'command:make'
     }
 
     // FR4/D3: a verify-list position cannot be negative — negative index is rejected
     def "rejects a negative index with the component named"() {
         when: 'a CheckRef is constructed with a negative index'
-        new CheckRef(negative, 'command:make')
+        new CheckRef(negative, UntrustedText.manifest('command:make'))
 
         then: 'construction fails and the message names the index'
         def failure = thrown(IllegalArgumentException)
@@ -75,7 +76,7 @@ class CheckRefSpec extends Specification {
     // FR4: a zero index is the first position and is accepted
     def "accepts a zero index"() {
         when: 'a CheckRef is constructed at the first position'
-        def ref = new CheckRef(0, 'builtin:files_exist')
+        def ref = new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))
 
         then: 'the zero index is exposed as constructed'
         ref.index() == 0
@@ -84,7 +85,7 @@ class CheckRefSpec extends Specification {
     // FR4: the label is the check's human identity — a blank label is rejected
     def "rejects a blank label with the component named"() {
         when: 'a CheckRef is constructed with a blank label'
-        new CheckRef(0, blank)
+        new CheckRef(0, UntrustedText.manifest(blank))
 
         then: 'construction fails and the message names the label'
         def failure = thrown(IllegalArgumentException)
@@ -97,10 +98,10 @@ class CheckRefSpec extends Specification {
     // FR4: CheckRef is inert value data compared by content
     def "is value-equal by content"() {
         expect: 'two CheckRefs with the same components are equal'
-        new CheckRef(2, 'external:ci/build') == new CheckRef(2, 'external:ci/build')
+        new CheckRef(2, UntrustedText.manifest('external:ci/build')) == new CheckRef(2, UntrustedText.manifest('external:ci/build'))
 
         and: 'differing components make them unequal'
-        new CheckRef(2, 'external:ci/build') != new CheckRef(3, 'external:ci/build')
-        new CheckRef(2, 'external:ci/build') != new CheckRef(2, 'external:other')
+        new CheckRef(2, UntrustedText.manifest('external:ci/build')) != new CheckRef(3, UntrustedText.manifest('external:ci/build'))
+        new CheckRef(2, UntrustedText.manifest('external:ci/build')) != new CheckRef(2, UntrustedText.manifest('external:other'))
     }
 }

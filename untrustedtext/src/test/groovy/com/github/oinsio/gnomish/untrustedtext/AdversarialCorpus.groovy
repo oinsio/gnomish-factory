@@ -66,16 +66,13 @@ final class AdversarialCorpus {
     ]
 
     /**
-     * The log plane's composition, restated where its facade is not visible: {@code logtext.LogText}
-     * sits a module above this leaf, and its {@code forLog} is strip -> capTail -> flatten by
-     * definition (design D2 of split-logtext-leaves), so the choke-point output the specs that call
-     * this reason about is exactly what these three primitives produce.
-     *
-     * <p>Kept in one place because {@link TextSafetyIdempotenceSpec} and
-     * {@link TextSafetyRecordCapSpec} both need the same restatement of that composition.
+     * The log plane's composition at its default bound. No longer a restatement: the composition
+     * itself is {@code TextSafety.forLog} since the carrier arrived (FR2 of type-untrusted-text),
+     * so {@link TextSafetyIdempotenceSpec} and {@link TextSafetyRecordCapSpec} reason about the
+     * choke-point output the production log plane really produces.
      */
     static String forLog(String text) {
-        TextSafety.flatten(TextSafety.capTail(TextSafety.strip(text), TextSafety.DEFAULT_CAP_CHARS))
+        TextSafety.forLog(text, TextSafety.DEFAULT_CAP_CHARS)
     }
 
     private AdversarialCorpus() {}

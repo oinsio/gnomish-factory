@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine.port;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * The engine's precondition seam for external checks (FR21 of add-sandbox-core): before the
  * poll loop of an {@code external} check starts, the engine confirms the attempt commit under
@@ -44,10 +46,15 @@ public interface AttemptDelivery {
          * The attempt commit could not be delivered — the poll loop never starts and the check
          * resolves as CannotVerify (infrastructure failure, no stage attempt burned).
          *
+         * <p>Both components are carriers: the detail quotes the push's own stderr, and a
+         * reason the git layer composed around it is no more trusted than the words it
+         * embeds — so the text reaches the engine unrendered and the report that shows it
+         * picks the exit (design D4, D6 of type-untrusted-text).
+         *
          * @param reason the human-facing short cause; never blank
          * @param details free-text detail (e.g. the push stderr); never null, may be empty
          */
-        record Undeliverable(String reason, String details) implements Outcome {
+        record Undeliverable(UntrustedText reason, UntrustedText details) implements Outcome {
 
             public Undeliverable {
                 requireNonBlank(reason);
@@ -60,7 +67,7 @@ public interface AttemptDelivery {
              * mutations inside a record's canonical constructor, which would silently exempt
              * this validation from the 100% mutation gate.
              */
-            private static void requireNonBlank(String value) {
+            private static void requireNonBlank(UntrustedText value) {
                 if (value.isBlank()) {
                     throw new IllegalArgumentException("Undeliverable.reason must not be blank");
                 }

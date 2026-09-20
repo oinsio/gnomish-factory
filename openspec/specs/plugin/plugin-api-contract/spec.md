@@ -26,11 +26,14 @@ and with it the committed compatibility baseline — is `gnomish-plugin-api`,
 `domain`, the `untrustedtext` leaf this module declares, and every JDK-only
 leaf `domain` reaches (today `operatorevent`);
 a change to that set is re-baselined with a version bump even when no
-signature moves.
+signature moves. The task snapshot's title and body SHALL be carried as
+untrusted text from that same leaf, so an adapter author mints them and the
+contract itself says which fields the tracker controls.
 <!-- implements FR4 of split-into-modules -->
 <!-- implements FR5, FR12, FR15, FR17 of add-plugin-architecture -->
 <!-- implements FR1, FR2 of close-plugin-api-compilability-gap -->
 <!-- implements FR3, FR8 of split-logtext-leaves -->
+<!-- implements FR4 of type-untrusted-text -->
 
 #### Scenario: api artifact excludes application and bootstrap internals
 - **WHEN** dependency-analysis inspects the `gnomish-plugin-api` artifact
@@ -49,6 +52,8 @@ signature moves.
 - **AND** an external-check implementation can read the attempt-commit sha of
   the round under verification through `AttemptCommitWorkspace` and sanitize
   its findings through `FindingsSanitizer` using only that dependency
+- **AND** a tracker implementation mints the snapshot's title and body as
+  tracker-provenance untrusted text using only that dependency
 
 #### Scenario: The first-party vendor bundle satisfies the same constraint
 - **WHEN** the production dependency declarations of the github vendor bundle
@@ -170,10 +175,21 @@ construction and regresses as a compile failure.
 ### Requirement: Surface growth is additive and re-baselined
 The api additions SHALL be backward-compatible for every pre-existing
 `gnomish-plugin-api` type, and the compatibility gate SHALL pass against a
-deliberately regenerated baseline that includes the new surface.
+deliberately regenerated baseline that includes the new surface. A pre-1.0
+breaking move — a re-exposed domain type or the snapshot changing a field's
+type — SHALL be a MINOR bump with the baseline regenerated in the same
+commit and the break named in the module's build script, so a reviewer sees
+the break and the bump together.
 <!-- implements FR5 of close-plugin-api-compilability-gap -->
+<!-- implements FR4 of type-untrusted-text -->
 
 #### Scenario: Compatibility gate passes on the grown surface
 - **WHEN** the api compatibility check runs after the baseline regeneration
 - **THEN** it passes, and the diff against the previous baseline shows
   additions only for pre-existing types
+
+#### Scenario: A typed-field break is bumped and re-baselined together
+- **WHEN** the snapshot's title and body and the abort marker's cause change
+  from plain strings to the untrusted-text carrier
+- **THEN** the api version takes a MINOR bump, the baseline is regenerated in
+  the same commit, and the build script names the break

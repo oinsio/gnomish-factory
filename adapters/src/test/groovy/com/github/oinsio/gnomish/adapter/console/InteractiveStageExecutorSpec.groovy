@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -31,7 +32,7 @@ class InteractiveStageExecutorSpec extends Specification {
     private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
 
     private StageExecutor.Request sampleRequest() {
-        def context = new TaskContext('task-1', 'Add login page', 'Implement OAuth login.', [])
+        def context = new TaskContext('task-1', UntrustedText.tracker('Add login page'), UntrustedText.tracker('Implement OAuth login.'), [])
         def stage = new StageDefinition(
                 'build', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
@@ -85,8 +86,8 @@ class InteractiveStageExecutorSpec extends Specification {
 
         then:
         result instanceof ExecutionResult.DecisionNeeded
-        result.question() == 'Which framework?'
-        result.options() == ['React', 'Vue']
+        result.question().forLog() == 'Which framework?'
+        result.options()*.forLog() == ['React', 'Vue']
         result.usage().wallTime() != null
         result.usage().tools().isEmpty()
         result.usage().tokensByModel().isEmpty()

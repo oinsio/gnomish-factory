@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.board
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -17,7 +18,7 @@ class ReadySummarySpec extends Specification {
     private static final EligibilityReason WIP_HELD = new EligibilityReason.WipHeld()
 
     private static ReadyRow row(String id, EligibilityReason reason = null, boolean returned = false) {
-        new ReadyRow(new TaskRef(id), "title-$id", returned, reason)
+        new ReadyRow(new TaskRef(id), UntrustedText.tracker("title-$id"), returned, reason)
     }
 
     // FR3: "Summary counts reconcile" scenario — 7 queued, 3 eligible, 2 backoff, 1 finished, 1 WIP-held

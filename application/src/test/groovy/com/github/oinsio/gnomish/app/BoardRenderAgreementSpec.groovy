@@ -26,9 +26,11 @@ class BoardRenderAgreementSpec extends Specification {
     def "every Ready row's id and title appear on both surfaces"() {
         expect:
         model.readyRows().every { row ->
-            text.contains(row.ref().id()) && text.contains(row.title()) &&
+            // The two surfaces render the same title through different exits: the human board
+            // through the console one, the --json document byte for byte (design D2, D6).
+            text.contains(row.ref().id()) && text.contains(row.title().forConsole()) &&
             json.ready().rows().any {
-                it.id() == row.ref().id() && it.title() == row.title()
+                it.id() == row.ref().id() && it.title() == row.title().raw()
             }
         }
     }

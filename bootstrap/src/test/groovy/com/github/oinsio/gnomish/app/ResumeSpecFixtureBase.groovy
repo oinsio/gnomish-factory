@@ -6,8 +6,6 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -87,10 +85,6 @@ tracker:
 
     def cleanup() {
         MDC.remove('taskId')
-    }
-
-    protected static TaskContext context(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     protected GitTaskRepository repository() {

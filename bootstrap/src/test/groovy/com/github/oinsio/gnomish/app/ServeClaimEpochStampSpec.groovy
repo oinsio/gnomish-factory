@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
 import spock.lang.Specification
@@ -65,7 +66,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         homeDir = tempDir.resolve('home')
         claimWatcher = new ClaimWatchingTrackerFactory(fakeFactory(tracker))
         new InMemoryTrackerHarness(tracker).seed(
-                REF, new TaskSnapshot(REF.id(), 'Add widgets', 'please add widgets'),
+                REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')),
                 new TrackerTaskState.Ready(), AbortFacts.none())
     }
 

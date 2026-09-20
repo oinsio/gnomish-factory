@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -35,11 +36,11 @@ class LivenessOracleSpec extends Specification {
     private final LivenessOracle oracle = new LivenessOracle(cache, memory)
 
     private static OpenTask working(String ref, ClaimVersion version = version()) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, UntrustedText.tracker('fixture title'))
     }
 
     private static OpenTask awaitingHuman(String ref) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'fixture title')
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, UntrustedText.tracker('fixture title'))
     }
 
     private static ClaimVersion version(String marker = 'm1') {

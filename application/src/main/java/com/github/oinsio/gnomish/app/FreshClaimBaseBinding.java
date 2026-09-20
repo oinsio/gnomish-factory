@@ -19,8 +19,8 @@ import com.github.oinsio.gnomish.baseref.BaseResolution;
 import com.github.oinsio.gnomish.baseref.ResolutionMode;
 import com.github.oinsio.gnomish.baseref.UnderdeterminedCause;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Function;
@@ -127,8 +127,8 @@ final class FreshClaimBaseBinding {
         return switch (BaseRefResolver.resolve(baseRequest)) {
             case BaseResolution.Resolved(BaseDecision decision) ->
                 refresh(baseRefGit, cloneDir, decision, finalState, ref, tracker);
-            case BaseResolution.Underdetermined(var cause, var values, var reason) ->
-                new Parked(parkUnderdetermined(finalState, ref, tracker, cause, values, reason));
+            case BaseResolution.Underdetermined(var cause, var values, var account) ->
+                new Parked(parkUnderdetermined(finalState, ref, tracker, cause, values, account));
         };
     }
 
@@ -164,9 +164,9 @@ final class FreshClaimBaseBinding {
         return switch (baseRefGit.refresh(cloneDir, decision.ref())) {
             case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var kind, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit), new BasePin(decision.ref(), kind, decision.rule()));
-            case BaseRefreshOutcome.Refused(String report) ->
-                new Parked(parkRefused(finalState, ref, tracker, decision.ref(), report));
-            case BaseRefreshOutcome.Unavailable(String reason) ->
+            case BaseRefreshOutcome.Refused(UntrustedText refusal) ->
+                new Parked(parkRefused(finalState, ref, tracker, decision.ref(), refusal));
+            case BaseRefreshOutcome.Unavailable(UntrustedText reason) ->
                 new Released(release(ref, tracker, decision.ref(), reason));
         };
     }
@@ -176,28 +176,30 @@ final class FreshClaimBaseBinding {
             TaskRef ref,
             Tracker tracker,
             UnderdeterminedCause cause,
-            List<String> values,
-            String reason) {
-        String report = FreshClaimBaseReport.underdetermined(ref.id(), cause, values, reason);
+            List<UntrustedText> values,
+            String resolverAccount) {
+        String report = FreshClaimBaseReport.underdetermined(ref.id(), cause, values, resolverAccount);
+        // The resolver's sentence is its own prose, and the designator values it quotes entered it
+        // through the carrier's toString() — the log exit — so it is inert with no call here.
         log.error(
                 OperatorEvent.FRESH_CLAIM_BASE_UNDERDETERMINED.head()
                         + "parking task {}: its base could not be determined ({}): {}",
                 ref.id(),
                 cause,
-                LogText.forLog(reason));
+                resolverAccount);
         parkBestEffort(tracker, ref, report);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
     }
 
     private static TakeResult parkRefused(
-            TaskState finalState, TaskRef ref, Tracker tracker, String resolvedRef, String report) {
-        String fullReport = FreshClaimBaseReport.refused(ref.id(), resolvedRef, report);
+            TaskState finalState, TaskRef ref, Tracker tracker, String resolvedRef, UntrustedText refusal) {
+        String fullReport = FreshClaimBaseReport.refused(ref.id(), resolvedRef, refusal);
         log.error(
                 OperatorEvent.FRESH_CLAIM_BASE_REFUSED.head()
                         + "parking task {}: its resolved base ref '{}' could not be refreshed: {}",
                 ref.id(),
-                LogText.forLog(resolvedRef),
-                LogText.forLog(report));
+                resolvedRef,
+                refusal.forLog());
         parkBestEffort(tracker, ref, fullReport);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, fullReport);
     }
@@ -215,23 +217,26 @@ final class FreshClaimBaseBinding {
         }
     }
 
-    private static TakeResult release(TaskRef ref, Tracker tracker, String resolvedRef, String reason) {
+    private static TakeResult release(TaskRef ref, Tracker tracker, String resolvedRef, UntrustedText reason) {
         log.warn(
                 OperatorEvent.FRESH_CLAIM_BASE_REFRESH_UNAVAILABLE.head()
                         + "releasing claim on task {}: origin never answered the refresh of its resolved base ref"
                         + " '{}': {}",
                 ref.id(),
-                LogText.forLog(resolvedRef),
-                LogText.forLog(reason));
+                resolvedRef,
+                reason.forLog());
         releaseBestEffort(tracker, ref);
-        // Sanitized here, not at the sinks: this text becomes TakeResult.InfrastructureUnavailable's
-        // reason, which SlotOutcomeLog and the drain/batch summaries log whole — by then no
-        // untrusted accessor is left for UntrustedLogTextGateSpec to see (FR6 of
-        // harden-logging-observability).
-        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " claim released (the reaper returns"
-                + " it to Ready after the claim TTL): origin did not answer the refresh of its resolved base ref '"
-                + LogText.forLog(resolvedRef) + "': "
-                + LogText.forLog(reason));
+        // The reason leaves its carrier through the log exit here rather than at each sink: what is
+        // built is one message the sinks log whole, and minting the composed line keeps the field a
+        // carrier so no sink can take it raw (design D4 of type-untrusted-text). The composed line
+        // is the factory's own sentence around an already-neutralized quote, so it is minted in the
+        // factory's family rather than in the one the quote came from (design D3). The resolved ref
+        // beside it is not untrusted text at all: it is what BaseRefResolver decided, and every
+        // tier of that decision is held to RefNameSyntax (NG4).
+        return new TakeResult.InfrastructureUnavailable(
+                UntrustedText.factory("Task " + ref.id() + " claim released (the reaper returns it to Ready after"
+                        + " the claim TTL): origin did not answer the refresh of its resolved base ref '"
+                        + resolvedRef + "': " + reason.forLog()));
     }
 
     private static void releaseBestEffort(Tracker tracker, TaskRef ref) {

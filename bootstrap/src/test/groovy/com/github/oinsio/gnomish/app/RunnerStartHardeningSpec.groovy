@@ -12,8 +12,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -25,6 +23,7 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -75,10 +74,6 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
 
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
-    }
-
-    private static TaskContext context(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     private static SandboxProperties sandboxProperties() {
@@ -191,7 +186,7 @@ tracker:
         String defaultBranch = currentBranch(clone)
         def tracker = Mock(Tracker)
         def trackerTask = new TrackerTask(
-                new TaskRef('T-1'), new TaskSnapshot('T-1', 'title', 'body'),
+                new TaskRef('T-1'), new TaskSnapshot('T-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false)
 
         when:

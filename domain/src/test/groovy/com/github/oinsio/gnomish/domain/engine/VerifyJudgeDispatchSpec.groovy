@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * VerifyOrchestrator judge dispatch, task 4.4 — a Judge check dispatches to the JudgeVoting
@@ -57,7 +58,7 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
     // FR7: the TaskContext (with its decisions) reaches the judge voter unmodified
     def "threads the task context through to the judge voter"() {
         given: 'a context carrying a decision and a single-vote passing judge'
-        def context = new TaskContext('TASK-9', 'title', 'body', [
+        def context = new TaskContext('TASK-9', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [
             new Decision('ship it', 'build', 'alice', java.time.Instant.EPOCH)
         ])
         def judgeVoter = new ScriptedJudgeVoter([

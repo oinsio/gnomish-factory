@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.port.tracker
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -123,7 +124,7 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.release(REF)
         tracker.park(REF, ParkReason.ESCALATION, 'report')
         tracker.finish(REF, 'summary')
-        tracker.recordAbort(REF, new AbortRecord('cause', 'instance', Instant.EPOCH))
+        tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('cause'), 'instance', Instant.EPOCH))
         tracker.recordProgress(REF)
         tracker.acknowledgeDecision(REF, 'decision')
         tracker.postNote(REF, 'note')
@@ -158,13 +159,13 @@ class TrackerHealthTrackerSpec extends Specification {
     def "every delegating operation returns the delegate's actual value, unchanged"() {
         given:
         def fetchedTask = new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Gone(), new AbortFacts(0, null),
+                REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Gone(), new AbortFacts(0, null),
                 false)
         def decisions = [
             new HumanReply('looks good', Instant.EPOCH)
         ]
         def openTasks = [
-            new OpenTask(REF, new TrackerTaskState.Gone(), null, 'fixture title')
+            new OpenTask(REF, new TrackerTaskState.Gone(), null, UntrustedText.tracker('fixture title'))
         ]
         def heartbeatResult = new HeartbeatResult.Beaten(new ClaimVersion('marker-1', Instant.EPOCH, new ClaimEpoch(1)))
         def removeResult = new RemoveStaleClaimResult.Removed()

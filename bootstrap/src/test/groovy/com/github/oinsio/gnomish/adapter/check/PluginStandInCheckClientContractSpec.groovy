@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.adapter.check
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 
 /**
@@ -37,7 +37,7 @@ class PluginStandInCheckClientContractSpec extends ExternalCheckClientContract {
                     case PollVariant.PASS -> new PollStatus.Pass()
                     case PollVariant.FAIL_WITH_FINDINGS -> new PollStatus.Fail(List.of(new Finding('stand-in finding', null, null)))
                     case PollVariant.RUNNING -> new PollStatus.Running()
-                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify('plugin unreachable', 'no route to host')
+                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify(UntrustedText.tracker('plugin unreachable'), UntrustedText.tracker('no route to host'))
                 }
     }
 }

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskListRow;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -86,7 +87,7 @@ public final class GitTaskBranches implements TaskBranchGit {
             case BranchLocation.Local(String ref) -> shapeAt(cloneDir, ref);
             case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, ref);
             case BranchLocation.NotFound() -> new BranchShape.Bare();
-            case BranchLocation.Unavailable(String reason) ->
+            case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
         };
     }

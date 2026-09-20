@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -83,7 +84,7 @@ class GitOutcomeRecorderSpec extends Specification {
         where:
         outcome || reconciliations
         new TaskOutcome.Completed(FINAL_STATE) || 1
-        new TaskOutcome.Aborted(FINAL_STATE, new AttemptKey('PROJ-2', 'build', 0), 'persistence failed') || 1
+        new TaskOutcome.Aborted(FINAL_STATE, new AttemptKey('PROJ-2', 'build', 0), UntrustedText.subprocess('persistence failed')) || 1
         new TaskOutcome.Paused(FINAL_STATE, 'build') || 0
         new TaskOutcome.Escalated(FINAL_STATE, new EscalationReport.AttemptsExhausted(3)) || 0
     }

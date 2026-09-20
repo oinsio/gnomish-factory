@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -29,7 +30,7 @@ import spock.lang.Specification
 abstract class EventEmissionSpecBase extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
     def builtinRunner = new ScriptedBuiltinCheckRunner()

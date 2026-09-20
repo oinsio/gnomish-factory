@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -352,7 +353,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def flakyBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('flaky-box'))) {
                     @Override
                     void harvest() {
-                        throw new HarvestFailedException(BRANCH, 'simulated transport failure')
+                        throw new HarvestFailedException(BRANCH, UntrustedText.subprocess('simulated transport failure'))
                     }
                 }
         flakyBox.materialize(BRANCH, null)

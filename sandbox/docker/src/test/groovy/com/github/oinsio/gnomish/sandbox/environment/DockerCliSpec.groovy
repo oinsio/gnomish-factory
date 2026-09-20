@@ -16,6 +16,9 @@ import spock.lang.Timeout
  * unreachable as an infrastructure outage ({@link DockerUnavailableException}),
  * and streams {@code docker exec} output with optional stderr merge — all driven
  * by a fake {@code docker} binary, so no daemon is required.
+ *
+ * <p>Kept in sync with {@link FakeDockerBinary}: both rely on {@code FakeDockerBinary} as the
+ * one place that writes the fake binary's shell shebang and executable bit.
  */
 class DockerCliSpec extends Specification {
 
@@ -48,8 +51,8 @@ class DockerCliSpec extends Specification {
         then:
         result.exitCode() == 0
         result.ok()
-        result.stdout().trim() == 'out:network'
-        result.stderr().trim() == 'warn'
+        result.stdout().forParsing().trim() == 'out:network'
+        result.stderr().forParsing().trim() == 'warn'
     }
 
     def "FR3: a non-zero exit is returned, not thrown"() {

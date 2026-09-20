@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.domain.engine
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * StageAttemptLoop persist-failure abort behavior, task 5.4 — a thrown persist ends the run as
@@ -22,7 +23,7 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
     def "aborts the run when persist throws on the round"() {
         given: 'a CannotVerify round whose persist throws on the first call'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         persistence.failOnCall = 1
 
@@ -48,7 +49,7 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
         given: 'a stage that fails once then cannot verify, with persist failing on the second call'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << fail('findingA')
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         executor.scripted << completed()
         persistence.failOnCall = 2
@@ -72,7 +73,7 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
     def "carries the persist failure's stack trace into the Aborted cause"() {
         given: 'a CannotVerify round whose persist throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         persistence.failOnCall = 1
 
@@ -94,7 +95,7 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
 
         and: 'a round whose persist throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         persistence.failOnCall = 1
 

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.baseref;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -47,7 +48,7 @@ public final class BaseRefResolver {
             return RefNameSyntax.refNameViolation(explicit)
                     .<BaseResolution>map(violation -> new BaseResolution.Underdetermined(
                             UnderdeterminedCause.EXPLICIT_BASE_MALFORMED,
-                            List.of(explicit),
+                            List.of(UntrustedText.operator(explicit)),
                             "the --base argument is not a well-formed ref name: " + violation))
                     .orElseGet(() -> resolved(explicit, BaseRule.EXPLICIT_ARGUMENT, "explicit --base argument"));
         }

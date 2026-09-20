@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -21,7 +22,7 @@ import spock.lang.Specification
 class TaskJsonMapperBasePinSpec extends Specification {
 
     def someContext = new TaskContext(
-    "task-1", "Fix flaky test", "body text",
+    "task-1", UntrustedText.tracker("Fix flaky test"), UntrustedText.tracker("body text"),
     [
         new Decision("patch in place", "plan", "operator", Instant.parse("2026-07-16T14:21:30Z"))
     ])
@@ -126,7 +127,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
         '''
 
         when:
-        def record = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json))
+        def record = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
 
         then: 'it parses, and the task reads as carrying no durable pin'
         record.baseCommit() == "abc123"
@@ -154,7 +155,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
         '''
 
         when:
-        def record = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json))
+        def record = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
 
         then:
         record.pin() == new BasePin("origin/release", null, BaseRule.UNKNOWN)
@@ -171,7 +172,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
             baseRef: baseRef, baseRule: 'designator', baseKind: 'branch'])
 
         when:
-        TaskJsonMapper.readDto(json)
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         def refused = thrown(MalformedStateFileException)

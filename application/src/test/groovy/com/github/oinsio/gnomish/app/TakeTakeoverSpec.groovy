@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -44,7 +45,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
             listOpen() >> (version == null
             ? []
             : [
-                new OpenTask(REF, new TrackerTaskState.Working(HOLDER), version, 'title')
+                new OpenTask(REF, new TrackerTaskState.Working(HOLDER), version, UntrustedText.tracker('title'))
             ])
             claim(_, _) >> new ClaimResult.Held(HOLDER)
             // Scripted rather than left to Spock's default: the return type is a sealed interface,
@@ -120,7 +121,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
 
         then: 'the footprint handed to removeStaleClaim is the one listOpen reported for THIS ref'
         1 * tracker.listOpen() >> [
-            new OpenTask(REF, new TrackerTaskState.Working(HOLDER), observed, 'title')
+            new OpenTask(REF, new TrackerTaskState.Working(HOLDER), observed, UntrustedText.tracker('title'))
         ]
         1 * tracker.removeStaleClaim(REF, new ClaimFacts.Live(HOLDER, observed))
 
@@ -176,7 +177,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     // hours AND the leftover minutes — and an unobservable version reads as "unknown", never as 0s.
     def "renders the last-beat age the confirmation prompt shows"() {
         given:
-        def version = beatAge == null ? null : new ClaimVersion('marker-7', NOW.minus(beatAge), new ClaimEpoch(1))
+        def version = beatAge == null ? null : new ClaimVersion('marker-7', NOW - beatAge, new ClaimEpoch(1))
         def tracker = trackerHolding(version)
         String shown = null
         def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
@@ -240,7 +241,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
 
         then:
         1 * tracker.listOpen() >> [
-            new OpenTask(other, new TrackerTaskState.Working('someone'), new ClaimVersion('m', NOW.minusSeconds(5), new ClaimEpoch(1)), 'other')
+            new OpenTask(other, new TrackerTaskState.Working('someone'), new ClaimVersion('m', NOW.minusSeconds(5), new ClaimEpoch(1)), UntrustedText.tracker('other'))
         ]
         shown == 'unknown'
     }

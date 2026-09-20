@@ -4,26 +4,21 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -62,7 +57,7 @@ import spock.util.concurrent.PollingConditions
  * <p>Implements FR1, FR2, FR5 of fix-reaper-idle-liveness.
  */
 @Timeout(30)
-class TakeCommandStandingReaperWiringSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+class TakeCommandStandingReaperWiringSpec extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     // A hand-managed temp dir, NOT @TempDir (see cleanup()): Spock's @TempDir deletion rethrows a
     // NoSuchFileException if its retry walk races an entry vanishing under the tree, which this
@@ -139,20 +134,11 @@ tracker:
     }
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
-        TakeCommandFactory.of(
-                newAssembly(testProps()),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                testProps(),
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: fixedFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
-                TakeCommandSeams.DEFAULTS
-                .withServeProperties(serveProperties)
-                .withHeartbeatSleeper(budgetedRealSleeper(600))
-                .withReaperSleeper(budgetedRealSleeper(600)), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+        newTakeCommand(testProps(), worktreesRoot, [github: fixedFactory(tracker)],
+        TakeCommandSeams.DEFAULTS
+        .withServeProperties(serveProperties)
+        .withHeartbeatSleeper(budgetedRealSleeper(600))
+        .withReaperSleeper(budgetedRealSleeper(600)))
     }
 
     /**
@@ -181,7 +167,7 @@ tracker:
     def "FR1, FR5: take starts the standing reaper independent of the claim, and stops it once the run returns"() {
         given: 'a Ready task to take, and an unrelated foreign stale claim'
         def x = new TaskRef('PROJ-1')
-        harness.seed(x, new TaskSnapshot(x.id(), 'Add widgets', 'please add widgets'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(x, new TaskSnapshot(x.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')), new TrackerTaskState.Ready(), AbortFacts.none())
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
@@ -227,8 +213,8 @@ tracker:
         given: 'two Ready tasks, run sequentially (one slot)'
         def x1 = new TaskRef('PROJ-1')
         def x2 = new TaskRef('PROJ-2')
-        harness.seed(x1, new TaskSnapshot(x1.id(), 'Add widgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
-        harness.seed(x2, new TaskSnapshot(x2.id(), 'Add gadgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(x1, new TaskSnapshot(x1.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please')), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(x2, new TaskSnapshot(x2.id(), UntrustedText.tracker('Add gadgets'), UntrustedText.tracker('please')), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
         def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null))
 

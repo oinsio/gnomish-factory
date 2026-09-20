@@ -1,14 +1,14 @@
 package com.github.oinsio.gnomish.app.serve
 
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.fresh
+
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger as LogbackLogger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -26,7 +27,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
-import spock.util.concurrent.PollingConditions
 
 /**
  * FeedAutomaton: the serve feed's four-state cycle (design D1) — Full as the ledger's own
@@ -51,38 +51,8 @@ class FeedAutomatonSpec extends Specification {
     private final VirtualClock clock = new VirtualClock()
     private final VirtualSleeper sleeper = new BudgetedVirtualSleeper(clock)
 
-    // A Random whose picks are always index/fraction zero: the head-zone pick keeps the
-    // original ordering and the idle jitter adds nothing, making candidate order and slept
-    // durations exact rather than randomized.
-    private static final class FixedRandom extends Random {
-        @Override
-        int nextInt(int bound) {
-            0
-        }
-
-        @Override
-        double nextDouble() {
-            0.0d
-        }
-    }
-
-    private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
-    }
-
     private static SlotRunner capturing(List<TaskRef> sink) {
         { TaskRef ref -> sink.add(ref) } as SlotRunner
-    }
-
-    // startSlot (FeedCycle) hands the claimed ref to the SlotRunner on a freshly spawned virtual
-    // thread (design D1) — step()/drain() return before that thread necessarily runs, so a test
-    // asserting on `sink`'s content must wait for it to reach the expected size instead of reading
-    // it immediately, or the assertion races the virtual thread's scheduling (usually wins, but not
-    // guaranteed — e.g. under PIT's instrumented, CPU-contended coverage/mutation runs).
-    private static void awaitSize(List<TaskRef> sink, int expectedSize) {
-        new PollingConditions(timeout: 2).eventually {
-            assert sink.size() == expectedSize
-        }
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, SlotRunner runner, Random random, int wipLimit = WIP_LIMIT) {
@@ -223,7 +193,7 @@ class FeedAutomatonSpec extends Specification {
         then:
         state == FeedState.FILLING
         claimCalls == [lost.ref(), won.ref()]
-        awaitSize(claimed, 1)
+        SlotAwait.awaitSize(claimed, 1)
         claimed == [won.ref()]
     }
 
@@ -255,7 +225,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -405,7 +375,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -432,7 +402,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -464,7 +434,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(2)
         def fillingCounter = new AtomicInteger()
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
         }
         def blockedFresh = fresh('github:o/r#blocked')
         Tracker tracker = [
@@ -574,7 +544,7 @@ class FeedAutomatonSpec extends Specification {
         then:
         state == FeedState.FILLING
         claimCalls.get() == 3
-        awaitSize(claimed, 1)
+        SlotAwait.awaitSize(claimed, 1)
         claimed == [candidate.ref()]
         sleeper.slept.size() == 2
     }

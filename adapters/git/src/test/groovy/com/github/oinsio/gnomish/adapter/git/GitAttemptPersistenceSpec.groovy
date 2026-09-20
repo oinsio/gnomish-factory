@@ -27,11 +27,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
     Path repo
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
     }
 
     private void gnomeCommit(String fileName) {
@@ -53,14 +49,14 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
     def "FR2: persisting a round produces exactly one new commit on top of the previous HEAD"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
-        def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def headBefore = currentHead(repo)
 
         when:
         persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
 
         then:
         def log = runner.run(repo, 'log', '--format=%H', "${headBefore}..HEAD")
-        log.stdout().trim().readLines().size() == 1
+        log.stdout().forParsing().trim().readLines().size() == 1
     }
 
     def "FR2: the commit contains a round-trippable state.json and the trace file at the correct path"() {
@@ -80,7 +76,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         and:
         def traceFile = runner.run(repo, 'show', 'HEAD:.gnomish-task/attempts/implement/2/trace.jsonl')
         traceFile.exitCode() == 0
-        traceFile.stdout().contains('"tool":"bash"')
+        traceFile.stdout().forParsing().contains('"tool":"bash"')
     }
 
     def "FR2: the commit message matches ServiceCommitMessages.round(stage, round)"() {
@@ -91,7 +87,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
 
         then:
-        def message = runner.run(repo, 'log', '-1', '--format=%s').stdout().trim()
+        def message = runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim()
         message == ServiceCommitMessages.round('verify', 3)
     }
 
@@ -111,7 +107,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         then:
         def full = runner.run(repo, 'log', '-1', '--format=%B').stdout()
         full.contains('Gnomish-Claim-Epoch: 4711')
-        runner.run(repo, 'log', '-1', '--format=%s').stdout().trim() == ServiceCommitMessages.round('verify', 3)
+        runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == ServiceCommitMessages.round('verify', 3)
     }
 
     // FR13: a writer holding no claim stamps nothing — the pre-contract shape stays legal
@@ -123,7 +119,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
 
         then:
-        !runner.run(repo, 'log', '-1', '--format=%B').stdout().contains('Gnomish-Claim-Epoch')
+        !runner.run(repo, 'log', '-1', '--format=%B').stdout().forParsing().contains('Gnomish-Claim-Epoch')
     }
 
     def "FR2: pre-existing uncommitted gnome file changes are included in the same round commit"() {
@@ -138,7 +134,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def show = runner.run(repo, 'show', '--stat', 'HEAD').stdout()
         show.contains('gnome-change.txt')
         def status = runner.run(repo, 'status', '--porcelain')
-        status.stdout().trim().isEmpty()
+        status.stdout().forParsing().trim().isEmpty()
     }
 
     def "NFR-R1: a persist failure throws GitPersistFailedException instead of failing silently"() {
@@ -157,7 +153,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
     def "FR12: gnome commits during the round are preserved and the round-closing commit builds on them"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
-        def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def headBefore = currentHead(repo)
         gnomeCommit('gnome-1.txt')
         gnomeCommit('gnome-2.txt')
         gnomeCommit('gnome-3.txt')
@@ -167,7 +163,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
 
         then: 'all three gnome commits plus the round-closing commit reach the branch'
         def log = runner.run(repo, 'log', '--format=%H', "${headBefore}..HEAD")
-        log.stdout().trim().readLines().size() == 4
+        log.stdout().forParsing().trim().readLines().size() == 4
     }
 
     def "FR12: a history rewrite since the previous round tip aborts persist"() {
@@ -226,7 +222,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         then:
         noExceptionThrown()
         def log = runner.run(repo, 'log', '-1', '--format=%s')
-        log.stdout().trim() == ServiceCommitMessages.round('implement', 0)
+        log.stdout().forParsing().trim() == ServiceCommitMessages.round('implement', 0)
         runner.run(repo, 'remote', 'get-url', 'origin').exitCode() != 0
     }
 
@@ -240,8 +236,8 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
 
         then:
-        def localHead = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
-        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
+        def localHead = currentHead(repo)
+        def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
         remoteHead == localHead
     }
 
@@ -251,7 +247,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         notARepo.toFile().mkdirs()
         runner.run(repo, 'remote', 'add', 'origin', notARepo.toString())
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
-        def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def headBefore = currentHead(repo)
 
         when:
         persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
@@ -259,6 +255,6 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         then:
         noExceptionThrown()
         def log = runner.run(repo, 'log', '--format=%H', "${headBefore}..HEAD")
-        log.stdout().trim().readLines().size() == 1
+        log.stdout().forParsing().trim().readLines().size() == 1
     }
 }

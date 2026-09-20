@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * FR12, design D13 of add-base-ref-resolution: {@link TakeResumeRunner} wires {@link
@@ -57,7 +58,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
-        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Refused('gone')
+        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Refused(UntrustedText.subprocess('gone'))
         def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
@@ -81,7 +82,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
-        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Unavailable('no answer')
+        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Unavailable(UntrustedText.subprocess('no answer'))
         def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 

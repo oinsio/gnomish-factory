@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 
@@ -53,19 +54,19 @@ final class BoardReferenceFixture {
      */
     static BoardModel referenceModel() {
         def ready = [
-            new ReadyTask(new TaskRef('github:g/r#1'), new AbortFacts(1, BACKOFF_LAST_ABORT_AT), false, false, 'Fix flaky OrderServiceSpec'),
-            new ReadyTask(new TaskRef('github:g/r#2'), AbortFacts.none(), false, true, 'Old reopened task'),
-            new ReadyTask(new TaskRef('github:g/r#3'), AbortFacts.none(), false, false, 'Add new feature flag'),
-            new ReadyTask(new TaskRef('github:g/r#4'), AbortFacts.none(), true, false, 'Returned after park')
+            new ReadyTask(new TaskRef('github:g/r#1'), new AbortFacts(1, BACKOFF_LAST_ABORT_AT), false, false, UntrustedText.tracker('Fix flaky OrderServiceSpec')),
+            new ReadyTask(new TaskRef('github:g/r#2'), AbortFacts.none(), false, true, UntrustedText.tracker('Old reopened task')),
+            new ReadyTask(new TaskRef('github:g/r#3'), AbortFacts.none(), false, false, UntrustedText.tracker('Add new feature flag')),
+            new ReadyTask(new TaskRef('github:g/r#4'), AbortFacts.none(), true, false, UntrustedText.tracker('Returned after park'))
         ]
 
         def open = [
             new OpenTask(new TaskRef('github:g/w#1'), new TrackerTaskState.Working('factory-a-1b2c'),
-            new ClaimVersion('marker-1', WORKING_CLAIM_UPDATED_AT, new ClaimEpoch(1)), 'Refactor retry module'),
-            new OpenTask(new TaskRef('github:g/w#2'), new TrackerTaskState.Working('factory-b-9f00'), null, 'Update operator docs'),
-            new OpenTask(new TaskRef('github:h/1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'Needs operator decision'),
-            new OpenTask(new TaskRef('github:h/2'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, 'Environment broken'),
-            new OpenTask(new TaskRef('github:h/3'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, 'Checkpoint pause')
+            new ClaimVersion('marker-1', WORKING_CLAIM_UPDATED_AT, new ClaimEpoch(1)), UntrustedText.tracker('Refactor retry module')),
+            new OpenTask(new TaskRef('github:g/w#2'), new TrackerTaskState.Working('factory-b-9f00'), null, UntrustedText.tracker('Update operator docs')),
+            new OpenTask(new TaskRef('github:h/1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, UntrustedText.tracker('Needs operator decision')),
+            new OpenTask(new TaskRef('github:h/2'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, UntrustedText.tracker('Environment broken')),
+            new OpenTask(new TaskRef('github:h/3'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, UntrustedText.tracker('Checkpoint pause'))
         ]
 
         return BoardModel.build(ready, open, true, GENERATED_AT, BASE, CAP, GENERATED_AT, OPEN_FRONT_COUNT, WIP_LIMIT)

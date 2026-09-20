@@ -22,7 +22,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         new File(repo.toFile(), fileName).text = content
         runner.run(repo, 'add', fileName)
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
     }
 
     def "FR7: the branch is created at the commit it was handed"() {
@@ -51,7 +51,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
 
         then:
         (result as BranchCreationResult.Created).baseCommit() == older
-        runner.run(repo, 'rev-parse', 'gnomish/PROJ-2').stdout().trim() == older
+        runner.run(repo, 'rev-parse', 'gnomish/PROJ-2').stdout().forParsing().trim() == older
     }
 
     // FR15, NFR-S1: a local branch and a local tag both carrying the base's name are exactly what
@@ -69,7 +69,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
 
         then:
         (result as BranchCreationResult.Created).baseCommit() == intended
-        runner.run(repo, 'rev-parse', 'gnomish/PROJ-6').stdout().trim() == intended
+        runner.run(repo, 'rev-parse', 'gnomish/PROJ-6').stdout().forParsing().trim() == intended
     }
 
     def "FR2: branch name is sanitized via TaskIdSanitizer"() {
@@ -82,7 +82,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
 
         then:
         def listed = runner.run(repo, 'branch', '--list', 'gnomish/PROJ-42-fix-it')
-        listed.stdout().contains('gnomish/PROJ-42-fix-it')
+        listed.stdout().forParsing().contains('gnomish/PROJ-42-fix-it')
     }
 
     def "FR7: branch-already-exists is reported as a deterministic result, not a crash"() {
@@ -123,7 +123,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def repo = initWorkingRepo(tempDir)
         commitAndGetSha(repo, 'a.txt', 'first')
-        def tree = ObjectId.of(runner.run(repo, 'rev-parse', 'HEAD^{tree}').stdout().trim())
+        def tree = ObjectId.of(runner.run(repo, 'rev-parse', 'HEAD^{tree}').stdout().forParsing().trim())
 
         when:
         def result = creator.createBranch(repo, 'PROJ-7', tree)
@@ -136,19 +136,19 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def repo = initWorkingRepo(tempDir)
         def head = commitAndGetSha(repo, 'a.txt', 'first')
-        def branchBefore = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()
-        def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def branchBefore = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().forParsing().trim()
+        def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
 
         when:
         creator.createBranch(repo, 'PROJ-5', ObjectId.of(head))
 
         then:
-        def branchAfter = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()
-        def headAfter = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        def branchAfter = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().forParsing().trim()
+        def headAfter = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         def status = runner.run(repo, 'status', '--porcelain')
 
         branchAfter == branchBefore
         headAfter == headBefore
-        status.stdout().trim().isEmpty()
+        status.stdout().forParsing().trim().isEmpty()
     }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * A tracker write that never reached GitHub: the transport failed and the shared HTTP core's own
@@ -14,7 +15,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException;
 public final class GithubTransportException extends TrackerUnavailableException {
 
     GithubTransportException(GithubHttpException cause) {
-        super("Tracker write failed at the transport: " + cause.getMessage());
+        // The fold re-mints (design D5 of type-untrusted-text): the transport failure's message
+        // quotes what GitHub answered, so it reaches this message through the carrier's log exit
+        // rather than as the raw String the lower exception happens to hold.
+        super("Tracker write failed at the transport: " + UntrustedText.tracker(String.valueOf(cause.getMessage())));
         initCause(cause);
     }
 }

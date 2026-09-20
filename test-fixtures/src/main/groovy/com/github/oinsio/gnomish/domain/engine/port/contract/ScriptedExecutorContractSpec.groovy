@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The scripted {@link com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor}
@@ -25,7 +26,10 @@ class ScriptedExecutorContractSpec extends StageExecutorContract {
                     case ExecutorVariant.COMPLETED ->
                     new ExecutionResult.Completed(ExecutorUsage.none(), trace, [])
                     case ExecutorVariant.DECISION_NEEDED ->
-                    new ExecutionResult.DecisionNeeded('which path?', ['a', 'b'], ExecutorUsage.none(), trace, [])
+                    new ExecutionResult.DecisionNeeded(UntrustedText.agent('which path?'), [
+                        UntrustedText.agent('a'),
+                        UntrustedText.agent('b')
+                    ], ExecutorUsage.none(), trace, [])
                     default ->
                     throw new IllegalArgumentException("Unhandled ExecutorVariant: $variant")
                 }

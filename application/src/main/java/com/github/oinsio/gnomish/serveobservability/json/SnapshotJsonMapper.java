@@ -32,6 +32,12 @@ import org.jspecify.annotations.Nullable;
  * a new variant fails to compile here until its mapping is added.
  *
  * <p>Implements FR2, FR3, FR10 conventions of add-serve-observability.
+ *
+ * <p>Not an {@code @UntrustedExit} (design D2 of type-untrusted-text): every field of the
+ * snapshot is a {@code String}, a number or a wire token minted by this module, so nothing here
+ * reads {@code UntrustedText.raw()} and the marker would widen the allowlist for nothing — the
+ * membership rule D2 states is the {@code raw()} call, not the family. A snapshot field that
+ * later carries the carrier adds the marker in the same change that adds the field.
  */
 public final class SnapshotJsonMapper {
 
@@ -147,6 +153,11 @@ public final class SnapshotJsonMapper {
         return new KeptEnvironmentDto(entry.taskKey(), entry.ageSeconds(), entry.untilReapSeconds());
     }
 
+    /**
+     * Package-private rather than private on purpose: {@link LedgerJsonMapper} maps the same
+     * {@link SweepCounts} shape for its sweep-tick line and shares this one mapping instead of
+     * keeping a second copy of the field order.
+     */
     static SweepCountsDto toSweepCounts(SweepCounts counts) {
         return new SweepCountsDto(
                 counts.checkedAlive(),

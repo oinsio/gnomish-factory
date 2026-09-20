@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -107,7 +108,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         // has no origin at all and the remote is restored right after.
         def originUrl = gitOutput(cloneDir, 'remote', 'get-url', 'origin').trim()
         assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         addRemote(cloneDir, 'origin', originUrl)
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"

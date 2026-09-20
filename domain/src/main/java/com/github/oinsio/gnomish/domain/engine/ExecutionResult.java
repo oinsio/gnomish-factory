@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -89,7 +90,9 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      *
      * <p>The {@code options} list is defensively copied and unmodifiable and may be
      * empty — an open-ended question offers no fixed choices. Its entries are free
-     * text carried as supplied. Also carries the round's telemetry (FR13).
+     * text the gnome wrote, so they travel as the carrier they were minted in
+     * (design D4 of type-untrusted-text) rather than as text this port has already
+     * rendered. Also carries the round's telemetry (FR13).
      *
      * <p>Implements FR6 and carries the FR13 telemetry of add-stage-engine.
      *
@@ -102,7 +105,11 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      *     unmodifiable, possibly empty
      */
     record DecisionNeeded(
-            String question, List<String> options, ExecutorUsage usage, ToolTrace trace, List<Denial> denials)
+            UntrustedText question,
+            List<UntrustedText> options,
+            ExecutorUsage usage,
+            ToolTrace trace,
+            List<Denial> denials)
             implements ExecutionResult {
 
         public DecisionNeeded {
@@ -118,7 +125,7 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
          * mutations inside a record's canonical constructor, which would silently
          * exempt this validation from the 100% mutation gate.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException(
                         "ExecutionResult.DecisionNeeded." + component + " must not be blank");

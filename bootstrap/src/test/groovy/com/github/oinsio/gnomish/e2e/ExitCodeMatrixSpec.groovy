@@ -2,9 +2,6 @@ package com.github.oinsio.gnomish.e2e
 
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
-import spock.lang.Specification
-import spock.lang.Timeout
 
 /**
  * The exit-code matrix (task 9.3): five scenarios pinning FR12's exit-code table and
@@ -23,17 +20,7 @@ import spock.lang.Timeout
  *
  * <p>Implements M1, FR12, FR13 of add-manual-run.
  */
-@Timeout(value = 120, unit = TimeUnit.SECONDS)
-class ExitCodeMatrixSpec extends Specification {
-
-    private final E2eProcessHarness harness = new E2eProcessHarness()
-    private static final String MARKER_FILE = 'attempt-marker.txt'
-
-    def cleanup() {
-        // Keep the shared e2e fixture pristine for other specs (ReferenceE2ESessionSpec,
-        // E2eProcessHarnessSmokeSpec) that assume no stale command-check marker.
-        Files.deleteIfExists(E2eFixture.projectRoot().resolve(MARKER_FILE))
-    }
+class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
 
     def "usage error exits 2 without any dialog"() {
         given: 'neither --task nor --task-file is supplied'
@@ -127,7 +114,8 @@ class ExitCodeMatrixSpec extends Specification {
         result.exitCode() == 10
 
         and: 'the escalation was rendered before the process exited'
-        result.stdout().contains('The gnome asked: should the fixture use approach A or B?')
+        result.stdout().contains('The gnome asked:')
+        result.stdout().contains('should the fixture use approach A or B?')
         result.stdout().contains('approach A')
         result.stdout().contains('approach B')
     }

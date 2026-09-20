@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,7 +43,7 @@ class TakeFinishReportSpec extends Specification {
 
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
-    static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'Fix the widget', 'body', List.<Decision> of())
+    static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body'), List.<Decision> of())
     static final TaskState STATE = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
     static final String BRANCH = 'gnomish/PROJ-1'
 
@@ -86,7 +87,46 @@ class TakeFinishReportSpec extends Specification {
         delivered.summary().contains(BRANCH)
     }
 
-    // FR18, D11: the returned TakeResult carries exactly the summary text passed to tracker.finish.
+    // D6, D7 of type-untrusted-text: the report's prose is the factory's own, so the block is
+    //     published as it stands — the fence and its "untrusted machine output" label belong to a
+    //     block that really is machine output end to end, not to a report the factory assembled.
+    //     Its quoted fields still leave their carriers: a hostile title arrives stripped, with its
+    //     mention broken, and cannot ping a team from the finish comment.
+    def "the finish comment is not fenced, and the untrusted title it quotes is neutralized"() {
+        given: 'a title carrying a mention, an issue reference and a terminal escape'
+        def esc = new String(Character.toChars(0x1B))
+        def context = new TaskContext(
+                'PROJ-1',
+                UntrustedText.tracker("@team ship ${esc}[31m#123" as String),
+                UntrustedText.tracker('body'),
+                List.<Decision> of())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
+        String published = null
+
+        when:
+        TakeFinishReport.finish(new TaskOutcome.Completed(STATE), context, BRANCH, tracker, REF, INSTANCE)
+
+        then:
+        1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
+            published = summary
+        }
+
+        and: 'the factory\'s own report lines are not labeled as machine output'
+        !published.contains('Untrusted machine output:')
+        !published.contains('~~~~')
+        published.startsWith('Task: PROJ-1')
+        published.contains('Branch: ' + BRANCH)
+
+        and: 'and the title it quotes left its carrier through the comment exit'
+        !published.contains(esc)
+        !published.contains('@team')
+        !published.contains('#123')
+        published.contains('@​team ship #​123')
+    }
+
+    // FR18, D11: the returned TakeResult carries exactly the summary the tracker.finish call
+    //     published — the builder's finished text, published as it stands rather than neutralized
+    //     a second time at the write (design D6, D7 of type-untrusted-text).
     def "finish returns a Delivered result whose summary matches the tracker.finish call"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
@@ -196,7 +236,7 @@ class TakeFinishReportSpec extends Specification {
         given:
         def cleaned = new AtomicInteger()
         tracker.fetchTask(REF) >> new TrackerTask(
-                REF, new TaskSnapshot(REF.id(), 'title', 'body'),
+                REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Finished(), AbortFacts.none(), true)
 
         when:

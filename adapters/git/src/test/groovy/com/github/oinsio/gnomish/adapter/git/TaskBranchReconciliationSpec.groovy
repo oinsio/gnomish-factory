@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -61,7 +62,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
      */
     private void driveWithoutPushing() {
         def repository = undecoratedHostRepository()
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
     }
 
@@ -85,7 +86,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def "a partially delivered branch is caught up to its local tip"() {
         given: 'the creation commit reached origin, the terminal one did not'
         def repository = undecoratedHostRepository()
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         assert new RefspecPush(runner).push(cloneDir, BRANCH).exitCode() == 0
         def deliveredTip = originTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -43,7 +44,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             listReady: { int limit ->
                 [
                     new ReadyTask(new TaskRef('github:o/r#1'),
-                    AbortFacts.none(), false, false, 'fixture title')
+                    AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
                 ]
             },
             listOpen : { -> [] },

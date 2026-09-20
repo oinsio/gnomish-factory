@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery;
 import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
@@ -58,7 +59,7 @@ record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gat
         BaseRefreshOutcome outcome = delegate.refresh(cloneDir, ref);
         switch (outcome) {
             case BaseRefreshOutcome.Refreshed(var _, var _, var _, OriginContact contact) -> confirm(contact);
-            case BaseRefreshOutcome.Unavailable(String reason) -> gate.openOnFailure(reason);
+            case BaseRefreshOutcome.Unavailable(UntrustedText reason) -> gate.openOnFailure(reason.forLog());
             case BaseRefreshOutcome.Refused _ -> {
                 // origin answered; nothing about its reachability changed either way.
             }
@@ -71,7 +72,7 @@ record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gat
         ResumeBaseOutcome outcome = delegate.resolveForResume(cloneDir, ref, kind);
         switch (outcome) {
             case ResumeBaseOutcome.Bound(var _, var _, OriginContact contact) -> confirm(contact);
-            case ResumeBaseOutcome.Unavailable(String reason) -> gate.openOnFailure(reason);
+            case ResumeBaseOutcome.Unavailable(UntrustedText reason) -> gate.openOnFailure(reason.forLog());
             case ResumeBaseOutcome.Refused _ -> {
                 // origin answered; nothing about its reachability changed either way.
             }

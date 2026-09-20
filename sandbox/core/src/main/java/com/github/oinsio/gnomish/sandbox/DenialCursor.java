@@ -20,7 +20,18 @@ package com.github.oinsio.gnomish.sandbox;
  * out of the report (NFR-O1).
  *
  * <p>{@code source} is opaque to every consumer — matched for equality, never
- * parsed. {@code position} is opaque in meaning but not in shape: the factory
+ * parsed. It stays a {@code String} rather than becoming untrusted text although
+ * it is read off a container runtime's output: it is an identity two leases
+ * compare across two media — one minted at the daemon, one read back from a
+ * branch document — and comparison is not something the untrusted-text carrier
+ * does, which answers emptiness, substring and length and nothing else. An
+ * identity is the wrong shape for it. It is kept out of the untrusted plane by
+ * being parsed instead: <em>both</em> halves of the comparison pass the same
+ * named syntax gate, {@code ContainerIdSyntax} in the docker backend — applied
+ * by {@code GuardSourceIdentity} where the live id is read off the daemon, and
+ * by {@code TipRecordedDenials} where the committed id comes back off a branch
+ * another instance wrote. That is the answer design D11 of type-untrusted-text
+ * gives for the agent's model id too. {@code position} is opaque in meaning but not in shape: the factory
  * holds two of them at a resume (one committed with the last attempt, one with
  * the last escalation) and must offer the later, so a denial source SHALL mint
  * positions that are RFC-3339 instants of its own clock. A consumer orders them

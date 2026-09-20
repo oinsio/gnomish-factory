@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -44,7 +45,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         new PipelineDefinition('1', LIMITS, stageNames.collect { stage(it) })
     }
 
-    private static RunArguments args(String taskId, String fromStage, source) {
+    private static RunArguments args(String taskId, String fromStage, TaskSource source) {
         new RunArguments(Path.of('.'), source, taskId, fromStage, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
     }
 
@@ -97,8 +98,10 @@ class AdHocTaskSynthesizerSpec extends Specification {
         def result = synthesizer.synthesize(runArgs, definition('plan'))
 
         then:
-        result.context().title() == expectedTitle
-        result.context().body() == expectedBody
+        // Compared as carriers, not as rendered text: a body is legitimately multi-line, and the
+        // log exit would flatten exactly the line breaks this split is about.
+        result.context().title() == UntrustedText.tracker(expectedTitle)
+        result.context().body() == UntrustedText.tracker(expectedBody)
 
         where:
         description | text || expectedTitle | expectedBody
@@ -121,8 +124,8 @@ class AdHocTaskSynthesizerSpec extends Specification {
         def result = synthesizer.synthesize(runArgs, definition('plan'))
 
         then:
-        result.context().title() == 'Investigate flaky spec'
-        result.context().body() == 'Steps here.'
+        result.context().title().forLog() == 'Investigate flaky spec'
+        result.context().body().forLog() == 'Steps here.'
     }
 
     def "FR2: initial decisions are empty"() {

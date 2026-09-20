@@ -90,13 +90,13 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
         def branch = createTaskBranch(cloneDir, 'PROJ-5')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-5', branch)
         worktree.toFile().deleteDir()
-        assert runner.run(cloneDir, 'worktree', 'list').stdout().contains('PROJ-5')
+        assert runner.run(cloneDir, 'worktree', 'list').stdout().forParsing().contains('PROJ-5')
 
         when:
         worktrees.pruneWorktrees(cloneDir)
 
         then:
-        !runner.run(cloneDir, 'worktree', 'list').stdout().contains('PROJ-5')
+        !runner.run(cloneDir, 'worktree', 'list').stdout().forParsing().contains('PROJ-5')
     }
 
     def "environmentDisposal delegates to WorktreeEnvironmentDisposal and returns the bound port"() {

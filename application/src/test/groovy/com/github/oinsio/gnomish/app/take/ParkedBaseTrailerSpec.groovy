@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.take
 import com.github.oinsio.gnomish.baseref.UnderdeterminedCause
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -24,11 +25,14 @@ class ParkedBaseTrailerSpec extends Specification {
         where:
         report | rendered | remedy
         'underdetermined' | FreshClaimBaseReport.underdetermined(
-                'PROJ-1', UnderdeterminedCause.DESIGNATOR_CONFLICT, ['main'], 'two values on one task') |
+                'PROJ-1', UnderdeterminedCause.DESIGNATOR_CONFLICT, [UntrustedText.tracker('main')],
+                'two values on one task') |
                 "Fix the task's base designator or the project's allowed bases, then return the task to work."
-        'refresh refused' | FreshClaimBaseReport.refused('PROJ-1', 'release/1.18', 'origin holds no such ref') |
+        'refresh refused' | FreshClaimBaseReport.refused(
+                'PROJ-1', 'release/1.18', UntrustedText.subprocess('origin holds no such ref')) |
                 ParkedBaseTrailer.REPOINT_BASE
-        'resume unresolved' | ResumeBaseReport.unresolved('PROJ-1', 'release/1.18', 'origin holds no such ref') |
+        'resume unresolved' | ResumeBaseReport.unresolved(
+                'PROJ-1', 'release/1.18', UntrustedText.subprocess('origin holds no such ref')) |
                 ParkedBaseTrailer.REPOINT_BASE
         'law failed to load' | BaseLawReport.of('PROJ-1', 'release/1.18',
                 ObjectId.of('0123456789abcdef0123456789abcdef01234567'),

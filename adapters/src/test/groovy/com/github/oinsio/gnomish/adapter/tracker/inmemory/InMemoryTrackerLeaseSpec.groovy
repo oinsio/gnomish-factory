@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -77,7 +78,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         'park' | { t, r -> t.park(r, ParkReason.CHECKPOINT, 'paused') }
         'finish' | { t, r -> t.finish(r, 'done') }
         'abort' | { t, r ->
-            t.recordAbort(r, new AbortRecord('boom', 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
+            t.recordAbort(r, new AbortRecord(UntrustedText.subprocess('boom'), 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
         }
         'release' | { t, r -> t.release(r) }
     }
@@ -108,8 +109,8 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'two Ready tasks'
         def refA = new TaskRef('fixture:advance-a')
         def refB = new TaskRef('fixture:advance-b')
-        harness.seed(refA, new TaskSnapshot(refA.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
-        harness.seed(refB, new TaskSnapshot(refB.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(refA, new TaskSnapshot(refA.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(refB, new TaskSnapshot(refB.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'both are claimed'
         tracker.claim(refA, 'instance-a')

@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -209,7 +210,10 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // the in-box clone contains the decision from the start.
     def "commits an escalation answer factory-side before the environment materializes"() {
         given:
-        def report = new EscalationReport.DecisionNeeded('which database?', ['postgres', 'sqlite'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ])
         record = recordWith(new RecordedOutcome.Escalated(report), report)
         console = new ScriptedConsoleIO(['use postgres'])
 
@@ -276,7 +280,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // the host path's "inspect the kept worktree".
     def "refuses to resume an aborted branch, pointing at the kept environment"() {
         given:
-        record = recordWith(new RecordedOutcome.Aborted('build', 'persistence failed'))
+        record = recordWith(new RecordedOutcome.Aborted('build', UntrustedText.branchDocument('persistence failed')))
 
         when:
         resume()

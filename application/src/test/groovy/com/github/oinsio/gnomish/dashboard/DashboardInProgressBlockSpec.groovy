@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.board.ReadyRow
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.board.WorkingRow
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -31,12 +32,12 @@ class DashboardInProgressBlockSpec extends Specification {
     def "working and ready rows share one list with distinct dots and trailing notes"() {
         given:
         def workingRows = [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1',
+            new WorkingRow(new TaskRef('task-2'), UntrustedText.tracker('Working title'), 'gnome-1',
             new ClaimVersion('m-1', GENERATED_AT.minusSeconds(180), new ClaimEpoch(1)))
         ]
         def backoff = new EligibilityReason.InBackoff(Instant.parse('2026-08-06T10:00:00Z'))
         def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, backoff)
+            new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, backoff)
         ]
         def model = new BoardModel(readyRows, workingRows, [], ReadySummary.tally(readyRows), false, GENERATED_AT)
 
@@ -70,7 +71,7 @@ class DashboardInProgressBlockSpec extends Specification {
     def "an eligible ready row carries no note rather than an empty one"() {
         given:
         def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, null)
+            new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, null)
         ]
         def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), false, GENERATED_AT)
 
@@ -84,7 +85,7 @@ class DashboardInProgressBlockSpec extends Specification {
     def "a capped ready window still says more is ready than fits"() {
         given:
         def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, null)
+            new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, null)
         ]
         def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), true, GENERATED_AT)
 

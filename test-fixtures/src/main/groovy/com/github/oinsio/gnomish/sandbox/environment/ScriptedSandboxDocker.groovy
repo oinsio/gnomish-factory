@@ -34,28 +34,28 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             // silently stop matching and turn the fresh-materialize path into the reattach path
             // (a green fixture answering the wrong question).
             if (args[0] == 'inspect' && args == DockerCommands.inspectContainerState(args.last())) {
-                return new DockerResult(1, '', 'No such object') // fresh materialize path
+                return DockerResult.of(1, '', 'No such object') // fresh materialize path
             }
             def declared = answerDeclaredVolumes(args)
             if (declared != null) {
                 return declared
             }
             if (args[0] == 'inspect' && args.contains('{{.Id}}')) {
-                return new DockerResult(0, 'sha256:guard-container\n', '') // the guard's denial-source identity
+                return DockerResult.of(0, 'sha256:guard-container\n', '') // the guard's denial-source identity
             }
             if (args[0] == 'inspect' && args.contains('{{.State.Running}}')) {
-                return new DockerResult(0, 'true\n', '') // guard already running
+                return DockerResult.of(0, 'true\n', '') // guard already running
             }
             if (args[0] == 'network' && args[1] == 'inspect') {
-                return new DockerResult(0, 'true\n', '') // task network is --internal
+                return DockerResult.of(0, 'true\n', '') // task network is --internal
             }
             if (args[0] == 'inspect' && args.contains('{{.HostConfig.Runtime}}')) {
-                return new DockerResult(0, 'runc\n', '') // runtime matches the configured default
+                return DockerResult.of(0, 'runc\n', '') // runtime matches the configured default
             }
             if (args[0] == 'logs') {
-                return new DockerResult(0, guardLog, '') // the guard's denial log, scripted per scenario
+                return DockerResult.of(0, guardLog, '') // the guard's denial log, scripted per scenario
             }
-            new DockerResult(0, '', '')
+            DockerResult.of(0, '', '')
         }
     }
 

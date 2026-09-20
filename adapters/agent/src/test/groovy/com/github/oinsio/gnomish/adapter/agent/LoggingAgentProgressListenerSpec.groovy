@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -38,7 +39,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundStarted('claude-fake-main-1', 'fake-session-plain-1'))
+            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-fake-main-1'), UntrustedText.agent('fake-session-plain-1')))
         }
 
         then:
@@ -57,7 +58,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.ToolStarted('Write'))
+            listener.onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent('Write')))
         }
 
         then:
@@ -74,7 +75,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], 'Stage complete: output.txt written.'))
+            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], UntrustedText.agent('Stage complete: output.txt written.')))
         }
 
         then:
@@ -91,7 +92,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished(null, [:], ''))
+            listener.onProgress(new AgentProgressEvent.RoundFinished(null, [:], UntrustedText.agent('')))
         }
 
         then:
@@ -110,7 +111,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], forged))
+            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], UntrustedText.agent(forged)))
         }
 
         then: 'one event, one line — no line break of any flavour survives into the message'
@@ -133,8 +134,8 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundStarted("opus\nINFO forged", "s\u001B[2J"))
-            listener.onProgress(new AgentProgressEvent.ToolStarted("Bash\nWARN forged"))
+            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent("opus\nINFO forged"), UntrustedText.agent("s\u001B[2J")))
+            listener.onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent("Bash\nWARN forged")))
         }
 
         then:

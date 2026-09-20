@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -87,7 +88,7 @@ exec sh '${scriptPath}' "\$@"
         def assembly = newAssembly(scriptedIn, new PrintStream(capturedOut, true, 'UTF-8'),
                 fakeAgentProperties('decision-then-plain', captureFile.absolutePath))
 
-        def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
         def run = assembly.assemble(pipeline(), context, initialState, RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
@@ -100,7 +101,8 @@ exec sh '${scriptPath}' "\$@"
 
         and: '1. attempt 1 surfaced the decision as an escalation dialog, question and options rendered exactly like an engine escalation'
         def printed = capturedOut.toString('UTF-8')
-        printed.contains('The gnome asked: ' + QUESTION)
+        printed.contains('The gnome asked:')
+        printed.contains(QUESTION)
         printed.contains('refactor')
         printed.contains('patch')
 

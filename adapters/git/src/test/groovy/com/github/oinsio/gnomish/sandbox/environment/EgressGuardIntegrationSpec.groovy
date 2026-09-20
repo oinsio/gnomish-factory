@@ -125,7 +125,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         guard.ensureRunning()
 
         then:
-        docker.run(GuardCommands.inspectGuardRunning(key)).stdout().strip() == 'true'
+        docker.run(GuardCommands.inspectGuardRunning(key)).stdout().forParsing().strip() == 'true'
     }
 
     /** A local HTTP target on the default bridge — the allowlisted destination the guard can reach. */
@@ -149,7 +149,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
             '-f',
             '{{.State.Running}}',
             targetName
-        ]).stdout().strip() == 'true':
+        ]).stdout().forParsing().strip() == 'true':
         'target container is not running — its httpd did not start'
         def inspect = docker.run([
             'inspect',
@@ -158,7 +158,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
             targetName
         ])
         assert inspect.ok()
-        targetIp = inspect.stdout().strip()
+        targetIp = inspect.stdout().forParsing().strip()
         // Docker 29 renders a missing IP as the literal 'invalid IP'; require a real IPv4 address.
         assert targetIp ==~ /(\d{1,3}\.){3}\d{1,3}/: "target container has no bridge IP: '${targetIp}'"
     }

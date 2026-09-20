@@ -62,18 +62,18 @@ public final class LoggingAgentProgressListener implements AgentProgressListener
             case AgentProgressEvent.RoundStarted started ->
                 log.info(
                         "round started: model={}, sessionId={}",
-                        LogText.forLog(started.model()),
-                        LogText.forLog(started.sessionId()));
+                        started.model().forLog(),
+                        started.sessionId().forLog());
             // FR12 of harden-logging-observability: one line per tool call is per-item detail —
             //     a single round makes dozens, and none of them is a state change of the run.
             case AgentProgressEvent.ToolStarted started ->
-                log.debug("tool started: {}", LogText.forLog(started.name()));
+                log.debug("tool started: {}", started.name().forLog());
             case AgentProgressEvent.RoundFinished finished ->
                 log.info(
                         "round finished: subtype={}, tokensByModel={}, summary={}",
                         LogText.forLog(String.valueOf(finished.subtype())),
                         finished.tokensByModel(),
-                        LogText.forLog(finished.summary()));
+                        finished.summary().forLog());
         }
     }
 }

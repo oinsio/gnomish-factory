@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine.port.contract
 
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -49,7 +50,7 @@ abstract class ExternalCheckClientContract extends Specification implements Port
                         new Finding('CI check failed', null, null)
                     ])
                     case PollVariant.RUNNING -> new PollStatus.Running()
-                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify('service unavailable', '')
+                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify(UntrustedText.tracker('service unavailable'), UntrustedText.tracker(''))
                 }
     }
 

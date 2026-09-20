@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -34,7 +35,7 @@ import spock.lang.Specification
 class StageAttemptLoopSpec extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
     def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -78,7 +79,7 @@ class StageAttemptLoopSpec extends Specification {
     def "escalates CannotVerify recording the round without counting it"() {
         given: 'a stage whose single builtin check cannot be verified, run by a Completed executor'
         def stageDef = stage('build', 3, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed(ExecutorUsage.none())
 
         when: 'the run is driven'
@@ -88,8 +89,8 @@ class StageAttemptLoopSpec extends Specification {
         outcome instanceof TaskOutcome.Escalated
         def report = outcome.report() as EscalationReport.CannotVerify
         report.check() == CheckRef.of(0, stageDef.verify()[0])
-        report.reason() == 'binary not found'
-        report.details() == 'no such tool'
+        report.reason().forLog() == 'binary not found'
+        report.details().forLog() == 'no such tool'
 
         and: 'the round was recorded but no attempt was burned'
         def finalState = outcome.finalState()
@@ -116,7 +117,7 @@ class StageAttemptLoopSpec extends Specification {
         def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], ['model-a': new TokenUsage(100, 40, 0, 0)])
         executor.scripted << completed(executorUsage)
         def voteTokens = ['model-a': new TokenUsage(7, 3, 0, 0)]
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify('model unparseable', 'gibberish'), voteTokens)
+        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('model unparseable'), UntrustedText.subprocess('gibberish')), voteTokens)
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
@@ -133,7 +134,7 @@ class StageAttemptLoopSpec extends Specification {
     def "invokes the executor once with attempt zero and the run's stage and context"() {
         given: 'a stage whose check cannot verify so the run terminates after one round'
         def stageDef = stage('build', 3, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', '')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess(''))
         executor.scripted << completed(ExecutorUsage.none())
 
         when: 'the run is driven'
@@ -177,7 +178,7 @@ class StageAttemptLoopSpec extends Specification {
         begin | verdict || expectedResult
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass() || AttemptRecord.Result.PASSED
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([]) || AttemptRecord.Result.QUALITY_FAILURE
-        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify('x', 'y') || AttemptRecord.Result.CANNOT_VERIFY
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify(UntrustedText.subprocess('x'), UntrustedText.subprocess('y')) || AttemptRecord.Result.CANNOT_VERIFY
     }
 
     // FR15: a DecisionNeeded round — no verify chain runs — still carries startedAt equal to the
@@ -187,7 +188,10 @@ class StageAttemptLoopSpec extends Specification {
         def begin = Instant.parse('2026-07-16T09:30:00Z')
         clock.instant = begin
         def stageDef = stage('build', 3, [builtin('files_exist')])
-        executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['pg', 'mysql'],
+        executor.scripted << new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+            UntrustedText.agent('pg'),
+            UntrustedText.agent('mysql')
+        ],
         ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when: 'the run is driven'

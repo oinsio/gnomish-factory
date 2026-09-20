@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -216,7 +217,10 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // engine resumes from the dialog's reset state.
     def "re-opens the escalation dialog and records a non-blank answer as a decision"() {
         given:
-        def report = new EscalationReport.DecisionNeeded('which database?', ['postgres', 'sqlite'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ])
         record = recordWith(new RecordedOutcome.Escalated(report), report)
 
         when:
@@ -284,7 +288,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // resume automatically, and the refusal points at the kept worktree so the operator can look.
     def "refuses to resume an aborted branch, pointing at the kept worktree"() {
         given:
-        record = recordWith(new RecordedOutcome.Aborted('build', 'persistence failed'))
+        record = recordWith(new RecordedOutcome.Aborted('build', UntrustedText.branchDocument('persistence failed')))
 
         when:
         resume()

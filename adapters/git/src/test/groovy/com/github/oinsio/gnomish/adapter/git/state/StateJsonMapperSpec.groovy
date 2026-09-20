@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -77,7 +78,7 @@ class StateJsonMapperSpec extends Specification {
 
     def "toDto flattens every Verdict kind onto StateCheckDto"() {
         given:
-        def check = new CheckResult(new CheckRef(0, "command:./gradlew test"), verdict, Duration.ofMillis(500))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), verdict, Duration.ofMillis(500))
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
@@ -103,7 +104,7 @@ class StateJsonMapperSpec extends Specification {
             new StateFindingDto("bad", "file.txt:12", "trace")
         ] | null | null | null
         new Verdict.Fail([]) | "fail" | [] | null | null | null
-        new Verdict.CannotVerify("timeout", "network blip") | "cannotVerify" | [] | "timeout" | "network blip" | null
+        new Verdict.CannotVerify(UntrustedText.subprocess("timeout"), UntrustedText.subprocess("network blip")) | "cannotVerify" | [] | "timeout" | "network blip" | null
     }
 
     def "round-trip: full TaskState with multiple attempts, checks, tokens, tools survives toDto/fromDto"() {
@@ -113,9 +114,9 @@ class StateJsonMapperSpec extends Specification {
             new ToolUsage("bash", 3, Duration.ofMillis(1200))
         ], tokens)
         def judgeUsage = new JudgeUsage([tokens, [:]])
-        def check1 = new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Pass(), Duration.ofMillis(200))
+        def check1 = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(), Duration.ofMillis(200))
         def check2 = new CheckResult(
-                new CheckRef(0, "judge:acceptance.md"),
+                new CheckRef(0, UntrustedText.manifest("judge:acceptance.md")),
                 new Verdict.Fail([
                     new Finding("missing case", "Foo.java:10", null)
                 ]),
@@ -128,8 +129,13 @@ class StateJsonMapperSpec extends Specification {
         def dto = StateJsonMapper.toDto(state)
         def rebuilt = StateJsonMapper.fromDto(dto)
 
-        then:
-        rebuilt == state
+        then: 'write -> read -> write is stable: every value the wire format owes survives'
+        // Compared at the DTO level, not against `state` itself. The reader re-mints each field it
+        // lifts out of the document with the branch-document provenance (design D3 of
+        // type-untrusted-text) and the carrier's equality includes provenance, so a state read
+        // back is equal to the one written in text but not in provenance — deliberately: what
+        // matters about a value read off a branch is that some instance wrote it.
+        StateJsonMapper.toDto(rebuilt) == dto
     }
 
     def "round-trip: empty tokensByModel, empty tools, empty checks, no attempts survives"() {
@@ -154,17 +160,29 @@ class StateJsonMapperSpec extends Specification {
         rebuilt == state
     }
 
-    def "round-trip: CannotVerify verdict survives with reason and details"() {
-        given:
-        def check = new CheckResult(new CheckRef(0, "external:ci"), new Verdict.CannotVerify("timeout", "poll exceeded"), Duration.ofMillis(1000))
+    // FR1, design D3 of type-untrusted-text: the wire format is unchanged — the writer puts the
+    //     check's own words in raw and the reader lifts them back out — but what comes back is a
+    //     BRANCH_DOCUMENT carrier whatever medium first produced it, because the branch is what the
+    //     next instance read it from. So the round trip is byte-identical and provenance-normalizing.
+    def "round-trip: CannotVerify verdict survives with reason and details, re-minted as branch text"() {
+        given: 'a verdict whose words were captured from a subprocess'
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("external:ci")),
+                new Verdict.CannotVerify(UntrustedText.subprocess("timeout"), UntrustedText.subprocess("poll exceeded")),
+                Duration.ofMillis(1000))
         def record = new AttemptRecord(0, AttemptRecord.Result.CANNOT_VERIFY, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("verify"), 0, [record], ExecutorUsage.none())
 
         when:
         def rebuilt = StateJsonMapper.fromDto(StateJsonMapper.toDto(state))
 
-        then:
-        rebuilt == state
+        then: 'every word survives, now carried as what it is on the way back: a branch document\'s'
+        def verdict = rebuilt.attempts()[0].checkResults()[0].verdict() as Verdict.CannotVerify
+        verdict.reason() == UntrustedText.branchDocument("timeout")
+        verdict.details() == UntrustedText.branchDocument("poll exceeded")
+
+        and: 'and the rest of the state is unchanged'
+        rebuilt.position() == state.position()
+        rebuilt.attempts()[0].result() == state.attempts()[0].result()
     }
 
     def "round-trip: DecisionNeeded round with no checks survives"() {
@@ -191,7 +209,7 @@ class StateJsonMapperSpec extends Specification {
                             AttemptRecord.Result.QUALITY_FAILURE,
                             startedAt,
                             [
-                                new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Fail([
+                                new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Fail([
                                     new Finding("bad", null, null)
                                 ]), Duration.ofMillis(400))
                             ],
@@ -209,7 +227,7 @@ class StateJsonMapperSpec extends Specification {
 
         then:
         roundTripped == dto
-        StateJsonMapper.fromDto(roundTripped) == state
+        StateJsonMapper.toDto(StateJsonMapper.fromDto(roundTripped)) == dto
     }
 
     def "round-trip via JSON: null wallMillis survives serialize/deserialize"() {
@@ -262,7 +280,7 @@ class StateJsonMapperSpec extends Specification {
         '''
 
         when:
-        def dto = StateJsonMapper.readDto(json)
+        def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         dto.version() == 1
@@ -281,7 +299,7 @@ class StateJsonMapperSpec extends Specification {
         def json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state, cursor))
 
         then:
-        StateJsonMapper.readDto(json).egressCursor() == cursor
+        StateJsonMapper.readDto(UntrustedText.branchDocument(json)).egressCursor() == cursor
     }
 
     def "FR5: a writer with no denial source records no cursor"() {
@@ -302,7 +320,7 @@ class StateJsonMapperSpec extends Specification {
         '''
 
         expect:
-        StateJsonMapper.readDto(json).egressCursor() == null
+        StateJsonMapper.readDto(UntrustedText.branchDocument(json)).egressCursor() == null
     }
 
     def "readDto refuses an unsupported version before attempting to bind the DTO shape"() {
@@ -312,7 +330,7 @@ class StateJsonMapperSpec extends Specification {
         def json = '{"version": 2, "somethingElseEntirely": true}'
 
         when:
-        StateJsonMapper.readDto(json)
+        StateJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         def e = thrown(UnsupportedStateFileVersionException)
@@ -327,7 +345,7 @@ class StateJsonMapperSpec extends Specification {
         def json = '{"attemptsUsed": 0}'
 
         when:
-        StateJsonMapper.readDto(json)
+        StateJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         def e = thrown(UnsupportedStateFileVersionException)
@@ -356,7 +374,7 @@ class StateJsonMapperSpec extends Specification {
         given: 'a passing round whose environment denied one egress attempt'
         def denial = new Finding(
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
-        def check = new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Pass(), Duration.ofMillis(9))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(), Duration.ofMillis(9))
         def record = new AttemptRecord(
                 0,
                 AttemptRecord.Result.PASSED,
@@ -383,7 +401,8 @@ class StateJsonMapperSpec extends Specification {
         dto.attempts()[0].checks()*.verdict() == ["pass"]
 
         and: 'the whole state rebuilds equal, denial included'
-        StateJsonMapper.fromDto(TaskStateJson.mapper().readValue(json, StateJsonDto)) == state
+        StateJsonMapper.toDto(StateJsonMapper.fromDto(TaskStateJson.mapper().readValue(json, StateJsonDto))) ==
+                StateJsonMapper.toDto(state)
     }
 
     // FR4, D5: additive under contract v1 — a state file written before the field existed
@@ -408,7 +427,7 @@ class StateJsonMapperSpec extends Specification {
         '''
 
         when:
-        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(json))
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(UntrustedText.branchDocument(json)))
 
         then: 'the document is readable and the absent field is an empty list, never null'
         state.attempts()[0].denials() == []
@@ -458,7 +477,7 @@ class StateJsonMapperSpec extends Specification {
         '''
 
         when:
-        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(json))
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(UntrustedText.branchDocument(json)))
 
         then:
         state.attempts()[0].denials()*.finding()*.message() == [

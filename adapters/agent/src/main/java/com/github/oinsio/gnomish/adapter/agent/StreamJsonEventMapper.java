@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,10 +43,14 @@ final class StreamJsonEventMapper {
     @DoNotMutate
     static Optional<AgentEvent> toEvent(StreamJsonLine wire) {
         String type = wire.type();
-        String sessionId = wire.session_id();
-        if (type == null || sessionId == null) {
+        String wireSessionId = wire.session_id();
+        if (type == null || wireSessionId == null) {
             return skip(wire, "missing type or session_id");
         }
+        // The mint for the whole agent family (design D3 of type-untrusted-text): every text
+        // field below is what the agent CLI — a process running the gnome's own product — chose
+        // to write, so it becomes untrusted text here, where the line is first recognized.
+        UntrustedText sessionId = UntrustedText.agent(wireSessionId);
         return switch (type) {
             case "system" -> toInit(wire, sessionId);
             case "assistant" -> toAssistant(wire, sessionId);
@@ -61,20 +66,24 @@ final class StreamJsonEventMapper {
     // line) intact and only swaps the already-Optional.empty() return value
     // for an equal literal — no test can observe the difference.
     @DoNotMutate
-    private static Optional<AgentEvent> toInit(StreamJsonLine wire, String sessionId) {
+    private static Optional<AgentEvent> toInit(StreamJsonLine wire, UntrustedText sessionId) {
         String model = wire.model();
         if (!"init".equals(wire.subtype()) || model == null) {
             return skip(wire, "system line without subtype=init or model");
         }
-        return present(new AgentEvent.InitEvent(sessionId, model));
+        return present(new AgentEvent.InitEvent(sessionId, UntrustedText.agent(model)));
     }
 
-    private static Optional<AgentEvent> toAssistant(StreamJsonLine wire, String sessionId) {
+    private static Optional<AgentEvent> toAssistant(StreamJsonLine wire, UntrustedText sessionId) {
         String model = wire.message() == null ? null : wire.message().model();
-        return present(new AgentEvent.AssistantEvent(sessionId, wire.parent_tool_use_id(), model, contentOf(wire)));
+        return present(new AgentEvent.AssistantEvent(
+                sessionId,
+                wire.parent_tool_use_id(),
+                model == null ? null : UntrustedText.agent(model),
+                contentOf(wire)));
     }
 
-    private static Optional<AgentEvent> toUser(StreamJsonLine wire, String sessionId) {
+    private static Optional<AgentEvent> toUser(StreamJsonLine wire, UntrustedText sessionId) {
         return present(new AgentEvent.UserEvent(sessionId, wire.parent_tool_use_id(), contentOf(wire)));
     }
 
@@ -84,12 +93,13 @@ final class StreamJsonEventMapper {
     // intact and only swaps the already-Optional.empty() return value for
     // an equal literal — no test can observe the difference.
     @DoNotMutate
-    private static Optional<AgentEvent> toResult(StreamJsonLine wire, String sessionId) {
+    private static Optional<AgentEvent> toResult(StreamJsonLine wire, UntrustedText sessionId) {
         String result = wire.result();
         if (result == null) {
             return skip(wire, "result line without a result field");
         }
-        return present(new AgentEvent.ResultEvent(sessionId, wire.subtype(), result, wire.usage(), wire.modelUsage()));
+        return present(new AgentEvent.ResultEvent(
+                sessionId, wire.subtype(), UntrustedText.agent(result), wire.usage(), wire.modelUsage()));
     }
 
     private static List<ContentBlock> contentOf(StreamJsonLine wire) {

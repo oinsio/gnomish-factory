@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app.take
 
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.fresh
+import static com.github.oinsio.gnomish.app.ReadyTaskFixtures.returned
+
 import java.util.function.IntSupplier
 import spock.lang.Specification
 
@@ -16,14 +16,6 @@ import spock.lang.Specification
  * Implements FR6, D5, M4 of add-factory-serve.
  */
 class OpenFrontGateSpec extends Specification {
-
-    private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
-    }
-
-    private static ReadyTask returned(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
-    }
 
     // FR6, D5: a fresh candidate is claimable while the re-read count is below the limit
     def "a fresh candidate is still eligible when the re-read open-front count is below the limit"() {

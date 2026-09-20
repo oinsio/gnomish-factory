@@ -7,6 +7,8 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +33,13 @@ import org.jspecify.annotations.Nullable;
  * task.json}'s {@code EscalationReportDto.CannotVerify} mapping).
  *
  * <p>Implements FR3, FR4 of add-git-workflow.
+ *
+ * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): this writer carries untrusted
+ * text to a machine medium, where the document's own encoding bounds it and a neutralized value
+ * would corrupt the record. It is therefore one of the few classes that may read
+ * {@code UntrustedText.raw()}; the reader on the other side mints the carrier back.
  */
+@UntrustedExit
 public final class StateJsonMapper {
 
     private StateJsonMapper() {}
@@ -42,13 +50,13 @@ public final class StateJsonMapper {
      * before attempting to bind the rest of the document (FR4). Unknown fields
      * elsewhere are tolerated per {@link TaskStateJson#mapper()}.
      *
-     * @param json the raw {@code state.json} text; never null
+     * @param json the {@code state.json} text as it was read off the branch; never null
      * @return the parsed and version-gated DTO
      * @throws UnsupportedStateFileVersionException if {@code "version"} is
      *     missing or is not {@code 1}
      */
-    public static StateJsonDto readDto(String json) {
-        return StateFileVersionGate.readGated(TaskStateJson.mapper(), "state.json", json, 1, StateJsonDto.class);
+    public static StateJsonDto readDto(UntrustedText json) {
+        return StateFileVersionGate.readGated(TaskStateJson.mapper(), "state.json", json.raw(), 1, StateJsonDto.class);
     }
 
     /**
@@ -172,10 +180,10 @@ public final class StateJsonMapper {
         return switch (check.verdict()) {
             case Verdict.Pass pass ->
                 new StateCheckDto(
-                        check.checkRef().label(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
+                        check.checkRef().label().raw(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
             case Verdict.Fail fail ->
                 new StateCheckDto(
-                        check.checkRef().label(),
+                        check.checkRef().label().raw(),
                         "fail",
                         StateFindingMapper.toDtos(fail.findings()),
                         durationMillis,
@@ -184,12 +192,12 @@ public final class StateJsonMapper {
                         null);
             case Verdict.CannotVerify cannotVerify ->
                 new StateCheckDto(
-                        check.checkRef().label(),
+                        check.checkRef().label().raw(),
                         "cannotVerify",
                         List.of(),
                         durationMillis,
-                        cannotVerify.reason(),
-                        cannotVerify.details(),
+                        cannotVerify.reason().raw(),
+                        cannotVerify.details().raw(),
                         null);
         };
     }
@@ -197,15 +205,18 @@ public final class StateJsonMapper {
     private static CheckResult fromCheck(StateCheckDto dto) {
         // The wire format carries only the check's label, never its zero-based
         // list index; index 0 is a placeholder (see class-level note).
-        CheckRef ref = new CheckRef(0, dto.ref());
+        CheckRef ref = new CheckRef(0, UntrustedText.branchDocument(dto.ref()));
         Verdict verdict =
                 switch (dto.verdict()) {
                     case "pass" -> new Verdict.Pass(dto.runUrl());
                     case "fail" -> new Verdict.Fail(StateFindingMapper.fromDtos(dto.findings()));
                     case "cannotVerify" ->
+                        // The branch-document re-mint (design D3): what this reader lifts out of
+                        // the state file was written by some instance, so it comes back as the
+                        // branch's text rather than as whatever medium originally produced it.
                         new Verdict.CannotVerify(
-                                Objects.requireNonNull(dto.reason(), "reason"),
-                                Objects.requireNonNull(dto.details(), "details"));
+                                UntrustedText.branchDocument(Objects.requireNonNull(dto.reason(), "reason")),
+                                UntrustedText.branchDocument(Objects.requireNonNull(dto.details(), "details")));
                     default -> throw new IllegalArgumentException("Unknown Verdict: " + dto.verdict());
                 };
         return new CheckResult(ref, verdict, Duration.ofMillis(dto.durationMillis()));

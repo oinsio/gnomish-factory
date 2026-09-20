@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.BranchShape
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -129,7 +128,7 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         and: 'every commit the SECOND tenure made carries the second epoch the tracker issued (FR3, FR6 of fix-claim-epoch-fence)'
         def secondEpoch = claimWatcher.issuedEpochs[1]
         secondEpoch != firstEpoch
-        def reclaimCommits = commitsSince(tipBeforeReclaim)
+        def reclaimCommits = commitsSince(tipBeforeReclaim, TASK_BRANCH)
         !reclaimCommits.isEmpty()
         reclaimCommits.every { stampOf(it) == secondEpoch }
 
@@ -141,25 +140,6 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         and: 'the second tenure resumed the branch as Answered: its first act was to append the human decision, and the branch at that commit is what the engine then ran from (FR6, scenario "Escalated, returned, reclaimed")'
         subjectOf(reclaimCommits.first()) == 'gnomish: task resumed'
         shapeAt(reclaimCommits.first()) instanceof BranchShape.Answered
-    }
-
-    /**
-     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
-     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this base only binds it to the
-     * spec's own repository.
-     */
-    protected ClaimEpoch stampOf(String rev) {
-        stampOf(projectDir, rev)
-    }
-
-    /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
-    protected String subjectOf(String rev) {
-        subjectOf(projectDir, rev)
-    }
-
-    /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
-    private List<String> commitsSince(String exclusiveFrom) {
-        commitsIn(projectDir, "${exclusiveFrom}..${TASK_BRANCH}")
     }
 
     /**

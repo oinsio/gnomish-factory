@@ -60,9 +60,12 @@ public final class BriefingSections {
     /** Renders the task-goal section: title and, when non-empty, body. */
     public static void renderTaskGoal(StringBuilder out, TaskContext context) {
         out.append("=== Task goal ===\n");
-        out.append(context.title()).append('\n');
-        if (!context.body().isEmpty()) {
-            out.append(context.body()).append('\n');
+        // The console exit, not the log one: the briefing is prose a reader works from, so its
+        // line structure and length are kept and only control sequences become visible — benign
+        // text passes through byte for byte (design D6 of type-untrusted-text).
+        out.append(context.title().forConsole()).append('\n');
+        if (!context.body().isBlank()) {
+            out.append(context.body().forConsole()).append('\n');
         }
         out.append('\n');
     }

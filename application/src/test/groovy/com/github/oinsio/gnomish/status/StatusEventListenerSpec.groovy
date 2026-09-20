@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -47,7 +48,7 @@ class StatusEventListenerSpec extends Specification {
     }
 
     private static TaskContext context() {
-        new TaskContext(TASK_ID, 'Fix flaky spec', 'body text', [])
+        new TaskContext(TASK_ID, UntrustedText.tracker('Fix flaky spec'), UntrustedText.tracker('body text'), [])
     }
 
     // FR10, FR11, D7: AttemptStarted sets activity to Executing stamped with the clock's now()
@@ -68,7 +69,7 @@ class StatusEventListenerSpec extends Specification {
         given: 'a listener wrapping a fresh holder and a fixed clock'
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
         def listener = new StatusEventListener(holder, fixedClock())
-        def checkRef = new CheckRef(0, 'builtin:files_exist')
+        def checkRef = new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))
 
         when: 'a CheckStarted event arrives'
         listener.onEvent(new EngineEvent.CheckStarted(key(), checkRef))
@@ -96,7 +97,7 @@ class StatusEventListenerSpec extends Specification {
         given: 'a listener wrapping a fresh holder'
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
         def listener = new StatusEventListener(holder, fixedClock())
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), JudgeUsage.none(), [])
         def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
@@ -161,13 +162,13 @@ class StatusEventListenerSpec extends Specification {
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
         def listener = new StatusEventListener(holder, fixedClock())
         def failedAt = key()
-        def outcome = new TaskOutcome.Aborted(TaskState.atStageStart('implement'), failedAt, 'disk full')
+        def outcome = new TaskOutcome.Aborted(TaskState.atStageStart('implement'), failedAt, UntrustedText.subprocess('disk full'))
 
         when: 'a TaskFinished event carrying an Aborted outcome arrives'
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, outcome))
 
         then: 'the Aborted outcome is recorded'
-        holder.outcome() == new Outcome.Aborted(failedAt, 'disk full')
+        holder.outcome() == new Outcome.Aborted(failedAt, UntrustedText.subprocess('disk full'))
     }
 
     // FR10, D7: RunStarted and CheckFinished are no-ops for this listener's scope
@@ -176,7 +177,7 @@ class StatusEventListenerSpec extends Specification {
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
         def listener = new StatusEventListener(holder, fixedClock())
         listener.onEvent(new EngineEvent.AttemptStarted(key()))
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
 
         when: 'RunStarted and CheckFinished events arrive'
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0))
@@ -193,18 +194,21 @@ class StatusEventListenerSpec extends Specification {
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'), 3)
         def listener = new StatusEventListener(holder, fixedClock())
         def ctx = context()
-        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), JudgeUsage.none(), [])
         def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
-        def escalation = new EscalationReport.DecisionNeeded('Refactor or patch?', ['refactor', 'patch'])
+        def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor or patch?'), [
+            UntrustedText.agent('refactor'),
+            UntrustedText.agent('patch')
+        ])
         def outcome = new TaskOutcome.Escalated(newState, escalation)
 
         when: 'a realistic sequence of events arrives'
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0))
         listener.onEvent(new EngineEvent.AttemptStarted(key()))
         listener.onEvent(new EngineEvent.ExecutionFinished(key(), ExecutorUsage.none()))
-        listener.onEvent(new EngineEvent.CheckStarted(key(), new CheckRef(0, 'builtin:files_exist')))
+        listener.onEvent(new EngineEvent.CheckStarted(key(), new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))))
         listener.onEvent(new EngineEvent.CheckFinished(key(), check))
         listener.onEvent(new EngineEvent.AttemptFinished(key(), newState, new ToolTrace(key(), [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, outcome))

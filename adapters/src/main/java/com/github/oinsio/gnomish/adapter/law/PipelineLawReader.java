@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw.Entry;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -90,7 +91,7 @@ public final class PipelineLawReader {
     private static Entry entry(LawSource.Read read) {
         return switch (read) {
             case LawSource.Text(String text) -> new Content(text);
-            case LawSource.Unreadable(String reason) -> new PipelineLaw.Unreadable(reason);
+            case LawSource.Unreadable(UntrustedText reason) -> new PipelineLaw.Unreadable(reason);
         };
     }
 }

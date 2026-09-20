@@ -89,15 +89,17 @@ class DeclaredVolumeOverridesSpec extends Specification {
         given:
         def docker = new RecordingDockerCli()
         docker.onRun = { List<String> args ->
-            new DockerResult(1, '', 'No such image: gnomish/img:1\n')
+            DockerResult.of(1, '', 'No such image: gnomish/img:1\n')
         }
 
         when:
         DeclaredVolumeOverrides.resolve(docker, IMAGE, [] as Set)
 
         then:
-        def e = thrown(IllegalStateException)
-        e.message == 'docker image inspect of gnomish/img:1 failed: No such image: gnomish/img:1'
+        def e = thrown(DockerCommandFailedException)
+        // The runtime's answer leaves the carrier through its log exit, so the trailing newline
+        // it arrived with is inert notation rather than a second line (design D1, D5, D6).
+        e.message == 'docker image inspect for gnomish/img:1 failed: No such image: gnomish/img:1\\n'
     }
 
     def "NFR-R1: an answer of shape #answer is refused, never read as an empty override set"() {
@@ -105,8 +107,8 @@ class DeclaredVolumeOverridesSpec extends Specification {
         DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, [] as Set)
 
         then:
-        def e = thrown(IllegalStateException)
-        e.message.startsWith('docker image inspect of ' + IMAGE + ' returned')
+        def e = thrown(DockerCommandFailedException)
+        e.message.startsWith('docker image inspect for ' + IMAGE + ' failed:')
 
         where:
         answer << [
@@ -146,7 +148,7 @@ class DeclaredVolumeOverridesSpec extends Specification {
 
     private static RecordingDockerCli answering(String stdout) {
         def docker = new RecordingDockerCli()
-        docker.onRun = { List<String> args -> new DockerResult(0, stdout, '') }
+        docker.onRun = { List<String> args -> DockerResult.of(0, stdout, '') }
         docker
     }
 }

@@ -1,17 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -48,7 +41,7 @@ class RoundInterruptedWaitSpec extends Specification {
                 { event -> },
                 new AgentRoundResultExtractor(),
                 new DecisionFileReader(),
-                request(),
+                StageExecutorRequests.request(workspaceDir),
                 'prompt',
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
 
@@ -80,19 +73,8 @@ class RoundInterruptedWaitSpec extends Specification {
 
         then:
         def verdict = vote.verdict() as Verdict.CannotVerify
-        verdict.reason().contains('interrupted')
-        !verdict.reason().contains('exceeded')
-    }
-
-    private StageExecutor.Request request() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
+        verdict.reason().forLog().contains('interrupted')
+        !verdict.reason().forLog().contains('exceeded')
     }
 }
 

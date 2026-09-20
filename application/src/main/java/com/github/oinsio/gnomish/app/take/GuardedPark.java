@@ -10,8 +10,6 @@ import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import java.util.function.Function;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -38,6 +36,14 @@ import org.slf4j.Logger;
  * <p>An unconfirmed park records no receipt: the marker stays set, an ERROR names the unreconciled
  * park, and the next pickup re-drives it — probing the tracker first.
  *
+ * <p>This class is also the single owner of the <em>delivery-note append</em>: a caller hands in
+ * the head text it composed and never sees the note, so the two exits and the deferred-park
+ * reconcile cannot word the same line differently. The note's own sentence is owned one layer down,
+ * by the fence that produces {@link ParkDeliveryVerdict.Undelivered}; the append lives here because
+ * the verdict is only known once the intent has been recorded. Enforced by the parameter type:
+ * {@code attempt} takes a plain head {@code String}, not a report function, so there is no seam a
+ * caller could word the note through.
+ *
  * <p>Implements FR13, D12 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat; FR10
  * of harden-task-branch-contract.
  */
@@ -47,21 +53,20 @@ public final class GuardedPark implements TerminalEffect {
     private final TaskRef ref;
     private final InstanceId instanceId;
     private final ParkReason reason;
-    private final Function<String, String> report;
+    private final String head;
     private final TerminalWriteRetry retry;
     private final ParkTransition transition;
     private final Logger log;
     private final String kind;
 
     private ParkDeliveryVerdict verdict;
-    private @Nullable String reportText;
 
     private GuardedPark(
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId,
             ParkReason reason,
-            Function<String, String> report,
+            String head,
             TerminalWriteRetry retry,
             ParkTransition transition,
             Logger log,
@@ -70,7 +75,7 @@ public final class GuardedPark implements TerminalEffect {
         this.ref = ref;
         this.instanceId = instanceId;
         this.reason = reason;
-        this.report = report;
+        this.head = head;
         this.retry = retry;
         this.transition = transition;
         this.log = log;
@@ -91,8 +96,9 @@ public final class GuardedPark implements TerminalEffect {
      * @param ref the task's tracker identity; never null
      * @param instanceId this factory instance's identity, for the pre-write claim check; never null
      * @param reason the park reason recorded on the tracker; never null
-     * @param report builds the operator-facing report from the delivery fence's note, which is known
-     *     only once the intent has been recorded; never null
+     * @param head the operator-facing report as the caller composed it, without the delivery note —
+     *     this class appends that note itself, since the fence produces it only once the intent has
+     *     been recorded; never null
      * @param retry the bounded terminal-write retry the park is made through; never null
      * @param transition the park's branch-side steps — fresh or recovered; never null
      * @param log the caller's logger, so log lines are attributed to the calling class; never null
@@ -105,12 +111,12 @@ public final class GuardedPark implements TerminalEffect {
             TaskRef ref,
             InstanceId instanceId,
             ParkReason reason,
-            Function<String, String> report,
+            String head,
             TerminalWriteRetry retry,
             ParkTransition transition,
             Logger log,
             String kind) {
-        var park = new GuardedPark(tracker, ref, instanceId, reason, report, retry, transition, log, kind);
+        var park = new GuardedPark(tracker, ref, instanceId, reason, head, retry, transition, log, kind);
         if (transition instanceof ParkTransition.Fresh) {
             TerminalEffectDrive.deliverFresh(park);
         } else {
@@ -129,7 +135,8 @@ public final class GuardedPark implements TerminalEffect {
     /**
      * A tracker already reporting the task as awaiting a human carries this park: the write landed
      * and only its receipt was lost. Anything else — including a tracker that cannot be asked —
-     * re-drives, which the find-then-upsert write makes safe (FR11).
+     * re-drives, which the find-then-upsert write makes safe (FR11 of
+     * harden-task-branch-contract).
      */
     @Override
     public EffectObservation observeAtTarget() {
@@ -180,11 +187,12 @@ public final class GuardedPark implements TerminalEffect {
     /**
      * The report the human reads, built once the delivery fence's verdict is known — an origin that
      * does not yet carry the recorded park adds one line saying so (FR5, UX2 of fix-lifecycle-push).
+     *
+     * <p>This is the single owner of the append; see the class javadoc for why it lives here rather
+     * than in each caller's report builder.
      */
     private String reportText() {
-        if (reportText == null) {
-            reportText = report.apply(verdict.reportNote());
-        }
-        return reportText;
+        String note = verdict.reportNote();
+        return note.isEmpty() ? head : head + "\n" + note;
     }
 }

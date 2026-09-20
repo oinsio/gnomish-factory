@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.board.WorkingRow
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -82,7 +83,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
         def canary = 'password=hunter2 <script>alert(1)</script>'
         def escapedCanary = DashboardHtmlFormatter.escape(canary)
         def readyRows = [
-            new ReadyRow(new TaskRef('task-canary'), canary, false, null)
+            new ReadyRow(new TaskRef('task-canary'), UntrustedText.tracker(canary), false, null)
         ]
         def board = new BoardSectionView(
                 new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), false, GENERATED_AT),
@@ -125,13 +126,13 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
 
     private static BoardSectionView fullBoard() {
         def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, new EligibilityReason.InBackoff(GENERATED_AT))
+            new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, new EligibilityReason.InBackoff(GENERATED_AT))
         ]
         def workingRows = [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1', null)
+            new WorkingRow(new TaskRef('task-2'), UntrustedText.tracker('Working title'), 'gnome-1', null)
         ]
         def awaitingRows = [
-            new AwaitingHumanRow(new TaskRef('task-3'), 'Parked title', ParkReason.ESCALATION)
+            new AwaitingHumanRow(new TaskRef('task-3'), UntrustedText.tracker('Parked title'), ParkReason.ESCALATION)
         ]
         def model = new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), false, GENERATED_AT)
         new BoardSectionView(model, GENERATED_AT, null)

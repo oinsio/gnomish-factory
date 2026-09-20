@@ -19,6 +19,9 @@ import spock.lang.TempDir
  * <p>Driven by a fake {@code docker} binary, so no daemon is required. The stall stands in for the
  * defect this bounds: {@code docker run} on an absent image reaching a registry that accepts the
  * connection and then never answers.
+ *
+ * <p>Kept in sync with {@link FakeDockerBinary}: the fake binary is the one place that writes the
+ * shell shebang and executable bit, and this spec's expectations rest on that being unchanged.
  */
 class DockerCliBoundedSpec extends Specification {
 
@@ -116,8 +119,8 @@ class DockerCliBoundedSpec extends Specification {
         then:
         result.termination() == Termination.EXITED
         result.exitCode() == 3
-        result.stdout().trim() == 'out:inspect'
-        result.stderr().trim() == 'warn'
+        result.stdout().forParsing().trim() == 'out:inspect'
+        result.stderr().forParsing().trim() == 'warn'
     }
 
     // design D11, M4: concurrent drains — a stream past the OS pipe buffer neither blocks nor truncates

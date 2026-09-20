@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -16,6 +17,7 @@ import java.util.Optional;
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
+@UntrustedParser
 final class LocalBranchTip {
 
     private final GitProcessRunner runner;
@@ -33,6 +35,9 @@ final class LocalBranchTip {
      */
     Optional<String> read(Path repo, String branch) {
         GitCommandResult tip = runner.run(repo, "rev-parse", "--verify", "--quiet", "refs/heads/" + branch);
-        return tip.exitCode() == 0 ? Optional.of(tip.stdout().trim()) : Optional.empty();
+        // @UntrustedParser warrant (design D11): what leaves here is git's own object id for a
+        //     ref this factory named — used only as a revision argument and compared for equality,
+        //     never rendered to a reader, so no untrusted text escapes as text.
+        return tip.exitCode() == 0 ? Optional.of(tip.stdout().forParsing().trim()) : Optional.empty();
     }
 }

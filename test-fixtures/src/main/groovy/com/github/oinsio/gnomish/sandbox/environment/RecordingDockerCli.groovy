@@ -17,7 +17,7 @@ class RecordingDockerCli extends DockerCli {
 
     /** Maps a run argv to its result; may throw to simulate a runtime outage. Default: exit 0. */
     Closure<DockerResult> onRun = { List<String> args ->
-        new DockerResult(0, '', '')
+        DockerResult.of(0, '', '')
     }
 
     RecordingDockerCli() {
@@ -38,7 +38,7 @@ class RecordingDockerCli extends DockerCli {
      *     caller's own closure decides every other command
      */
     static DockerResult answerDeclaredVolumes(List<String> args, String answer = 'null') {
-        args == DockerCommands.inspectImageVolumes(args.last()) ? new DockerResult(0, answer, '') : null
+        args == DockerCommands.inspectImageVolumes(args.last()) ? DockerResult.of(0, answer, '') : null
     }
 
     @Override

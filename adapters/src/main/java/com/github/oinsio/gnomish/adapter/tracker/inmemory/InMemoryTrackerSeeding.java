@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 
 /**
@@ -90,7 +91,9 @@ final class InMemoryTrackerSeeding {
         adapter.lock.lock();
         try {
             TrackedTask task = new TrackedTask(
-                    new TaskSnapshot(ref.id(), "fixture title", "fixture body"), new TrackerTaskState.Working(holder));
+                    new TaskSnapshot(
+                            ref.id(), UntrustedText.tracker("fixture title"), UntrustedText.tracker("fixture body")),
+                    new TrackerTaskState.Working(holder));
             task.establishClaim(adapter.claimClock.mint(holder));
             adapter.store.put(ref, task);
         } finally {

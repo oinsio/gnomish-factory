@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * Wires the production {@link InMemoryTracker} (via {@link
@@ -60,7 +61,7 @@ class InMemoryTrackerContractSpec extends TrackerReleaseContract {
     protected void seedWorkingWithoutClaim(Tracker adapter, TaskRef ref) {
         // The reference adapter's own working state carries no marker unless one is established,
         // so seeding the state alone IS the claimless window.
-        harness.seed(ref, new TaskSnapshot(ref.id(), 'fixture title', 'fixture body'),
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('fixture title'), UntrustedText.tracker('fixture body')),
                 new TrackerTaskState.Working('instance-a'), AbortFacts.none())
     }
 

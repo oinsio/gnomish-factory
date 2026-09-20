@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+
 /**
  * Whole-run event emission — non-standard rounds, task 6.1: driven end to end through
  * {@code Engine.run}, this spec pins the event stream for the runs that deviate from the
@@ -32,7 +34,14 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         given: 'a stage whose executor asks a human instead of completing'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         executor.scripted << new ExecutionResult.DecisionNeeded(
-                'which?', ['a', 'b'], ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+                UntrustedText.agent('which?'),
+                [
+                    UntrustedText.agent('a'),
+                    UntrustedText.agent('b')
+                ],
+                ExecutorUsage.none(),
+                new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []),
+                [])
 
         when: 'the run is driven'
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())

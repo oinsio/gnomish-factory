@@ -35,6 +35,10 @@ final class SlotOutcomeLog {
     SlotOutcomeLog(Logger log) {
         this.log = log;
     }
+    // record-not-applicable: this class holds a Logger and exposes only side-effecting behavior
+    //     (detail/summarize/crashed write log lines) — it has no value semantics for equals/
+    //     hashCode/toString to carry, so a record's identity-by-components contract would be
+    //     meaningless here; kept as a plain final class.
 
     /**
      * The per-outcome <em>detail</em> line: the free text each terminal variant carries (a delivery
@@ -71,15 +75,26 @@ final class SlotOutcomeLog {
                         claimed.id(),
                         awaitingHuman.reason(),
                         awaitingHuman.report());
-            case TakeResult.Aborted aborted -> log.debug("slot for task {} aborted: {}", claimed.id(), aborted.cause());
-            case TakeResult.Revoked revoked -> log.debug("slot for task {} revoked: {}", claimed.id(), revoked.note());
+            case TakeResult.Aborted aborted ->
+                log.debug(
+                        "slot for task {} aborted: {}",
+                        claimed.id(),
+                        aborted.cause().forLog());
+            case TakeResult.Revoked revoked ->
+                log.debug(
+                        "slot for task {} revoked: {}",
+                        claimed.id(),
+                        revoked.note().forLog());
             case TakeResult.Skipped skipped ->
                 log.warn(
                         OperatorEvent.SLOT_SKIPPED.head() + "slot for task {} skipped: {}",
                         claimed.id(),
-                        skipped.reason());
+                        skipped.reason().forLog());
             case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
-                log.debug("slot for task {} released: {}", claimed.id(), infrastructureUnavailable.reason());
+                log.debug(
+                        "slot for task {} released: {}",
+                        claimed.id(),
+                        infrastructureUnavailable.reason().forLog());
             case TakeResult.EmptyQueue _ ->
                 log.debug("slot for task {} reported an unexpected empty-queue result", claimed.id());
         }

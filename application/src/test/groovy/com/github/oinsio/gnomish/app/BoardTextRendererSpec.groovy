@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.board.ReadyRow
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.board.WorkingRow
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -41,13 +42,13 @@ class BoardTextRendererSpec extends Specification {
         given:
         def board = model(
                 [
-                    new ReadyRow(new TaskRef('r-1'), 'Ready task', false, null)
+                    new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('Ready task'), false, null)
                 ],
                 [
-                    new WorkingRow(new TaskRef('w-1'), 'Working task', 'holder-a', null)
+                    new WorkingRow(new TaskRef('w-1'), UntrustedText.tracker('Working task'), 'holder-a', null)
                 ],
                 [
-                    new AwaitingHumanRow(new TaskRef('a-1'), 'Parked task', ParkReason.ESCALATION)
+                    new AwaitingHumanRow(new TaskRef('a-1'), UntrustedText.tracker('Parked task'), ParkReason.ESCALATION)
                 ])
 
         when:
@@ -67,8 +68,8 @@ class BoardTextRendererSpec extends Specification {
         given:
         def deadline = Instant.parse('2026-08-05T14:02:00Z')
         def board = model([
-            new ReadyRow(new TaskRef('r-backoff'), 'Backed off', false, new EligibilityReason.InBackoff(deadline)),
-            new ReadyRow(new TaskRef('r-eligible'), 'Eligible', false, null)
+            new ReadyRow(new TaskRef('r-backoff'), UntrustedText.tracker('Backed off'), false, new EligibilityReason.InBackoff(deadline)),
+            new ReadyRow(new TaskRef('r-eligible'), UntrustedText.tracker('Eligible'), false, null)
         ])
 
         when:
@@ -84,7 +85,7 @@ class BoardTextRendererSpec extends Specification {
     def "annotates a finished Ready row as finished"() {
         given:
         def board = model([
-            new ReadyRow(new TaskRef('r-1'), 'Reopened task', false, new EligibilityReason.Finished())
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('Reopened task'), false, new EligibilityReason.Finished())
         ])
 
         when:
@@ -98,7 +99,7 @@ class BoardTextRendererSpec extends Specification {
     def "annotates a WIP-held Ready row"() {
         given:
         def board = model([
-            new ReadyRow(new TaskRef('r-1'), 'Fresh task', false, new EligibilityReason.WipHeld())
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('Fresh task'), false, new EligibilityReason.WipHeld())
         ])
 
         when:
@@ -113,13 +114,13 @@ class BoardTextRendererSpec extends Specification {
         given:
         def deadline = Instant.parse('2026-08-05T09:14:00Z')
         def readyRows = [
-            new ReadyRow(new TaskRef('r-1'), 't1', false, null),
-            new ReadyRow(new TaskRef('r-2'), 't2', false, null),
-            new ReadyRow(new TaskRef('r-3'), 't3', false, null),
-            new ReadyRow(new TaskRef('r-4'), 't4', false, new EligibilityReason.InBackoff(deadline)),
-            new ReadyRow(new TaskRef('r-5'), 't5', false, new EligibilityReason.InBackoff(deadline)),
-            new ReadyRow(new TaskRef('r-6'), 't6', false, new EligibilityReason.Finished()),
-            new ReadyRow(new TaskRef('r-7'), 't7', false, new EligibilityReason.WipHeld())
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null),
+            new ReadyRow(new TaskRef('r-2'), UntrustedText.tracker('t2'), false, null),
+            new ReadyRow(new TaskRef('r-3'), UntrustedText.tracker('t3'), false, null),
+            new ReadyRow(new TaskRef('r-4'), UntrustedText.tracker('t4'), false, new EligibilityReason.InBackoff(deadline)),
+            new ReadyRow(new TaskRef('r-5'), UntrustedText.tracker('t5'), false, new EligibilityReason.InBackoff(deadline)),
+            new ReadyRow(new TaskRef('r-6'), UntrustedText.tracker('t6'), false, new EligibilityReason.Finished()),
+            new ReadyRow(new TaskRef('r-7'), UntrustedText.tracker('t7'), false, new EligibilityReason.WipHeld())
         ]
         def board = model(readyRows)
 
@@ -134,8 +135,8 @@ class BoardTextRendererSpec extends Specification {
     def "marks a returned Ready row as returned"() {
         given:
         def board = model([
-            new ReadyRow(new TaskRef('r-returned'), 'Returned task', true, null),
-            new ReadyRow(new TaskRef('r-fresh'), 'Fresh task', false, null)
+            new ReadyRow(new TaskRef('r-returned'), UntrustedText.tracker('Returned task'), true, null),
+            new ReadyRow(new TaskRef('r-fresh'), UntrustedText.tracker('Fresh task'), false, null)
         ])
 
         when:
@@ -150,7 +151,7 @@ class BoardTextRendererSpec extends Specification {
     def "notes truncation when the ready window was capped"() {
         given:
         def board = model([
-            new ReadyRow(new TaskRef('r-1'), 't1', false, null)
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null)
         ], [], [], true)
 
         when:
@@ -163,7 +164,7 @@ class BoardTextRendererSpec extends Specification {
     def "does not mention truncation when the window is not capped"() {
         given:
         def board = model([
-            new ReadyRow(new TaskRef('r-1'), 't1', false, null)
+            new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null)
         ], [], [], false)
 
         when:
@@ -178,7 +179,7 @@ class BoardTextRendererSpec extends Specification {
         given:
         def claimVersion = new ClaimVersion('marker-1', GENERATED_AT.minusSeconds(180), new ClaimEpoch(1))
         def board = model([], [
-            new WorkingRow(new TaskRef('w-1'), 'Working task', 'factory-a-1b2c', claimVersion)
+            new WorkingRow(new TaskRef('w-1'), UntrustedText.tracker('Working task'), 'factory-a-1b2c', claimVersion)
         ])
 
         when:
@@ -194,7 +195,7 @@ class BoardTextRendererSpec extends Specification {
     def "renders a Working row's freshness as unknown when the claim marker is absent"() {
         given:
         def board = model([], [
-            new WorkingRow(new TaskRef('w-1'), 'Working task', 'factory-a-1b2c', null)
+            new WorkingRow(new TaskRef('w-1'), UntrustedText.tracker('Working task'), 'factory-a-1b2c', null)
         ])
 
         when:
@@ -208,9 +209,9 @@ class BoardTextRendererSpec extends Specification {
     def "renders AwaitingHuman rows with their park reason"() {
         given:
         def board = model([], [], [
-            new AwaitingHumanRow(new TaskRef('a-1'), 'Escalated task', ParkReason.ESCALATION),
-            new AwaitingHumanRow(new TaskRef('a-2'), 'Checkpointed task', ParkReason.CHECKPOINT),
-            new AwaitingHumanRow(new TaskRef('a-3'), 'Infra task', ParkReason.INFRA)
+            new AwaitingHumanRow(new TaskRef('a-1'), UntrustedText.tracker('Escalated task'), ParkReason.ESCALATION),
+            new AwaitingHumanRow(new TaskRef('a-2'), UntrustedText.tracker('Checkpointed task'), ParkReason.CHECKPOINT),
+            new AwaitingHumanRow(new TaskRef('a-3'), UntrustedText.tracker('Infra task'), ParkReason.INFRA)
         ])
 
         when:

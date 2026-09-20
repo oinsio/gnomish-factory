@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * FR6, FR25, D19, UX2 of add-sandbox-core: {@link ContainerResumeRunner}'s escalated-outcome
@@ -17,7 +18,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
     private void recordEscalated(String taskId) {
         repository.createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(taskId,
-                new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('how?', ['a'])))
+                new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded(UntrustedText.agent('how?'), [UntrustedText.agent('a')])))
         commitStateAtPipelineEnd(taskId)
     }
 
@@ -56,7 +57,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
         given:
         repository.createTask(context('T-NOREP'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         commitTaskJson('T-NOREP',
-                new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('q', ['a'])),
+                new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded(UntrustedText.agent('q'), [UntrustedText.agent('a')])),
                 null)
 
         when:

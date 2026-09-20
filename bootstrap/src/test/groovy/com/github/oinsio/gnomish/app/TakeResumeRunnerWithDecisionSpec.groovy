@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * FR9, FR12, D3 of add-tracker-port (task 5.6): {@link TakeResumeRunner#appendDecision} followed by
@@ -30,7 +31,10 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
@@ -99,7 +103,10 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
+            UntrustedText.agent('yes'),
+            UntrustedText.agent('no')
+        ])
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
         def runner = newTakeResumeRunner()

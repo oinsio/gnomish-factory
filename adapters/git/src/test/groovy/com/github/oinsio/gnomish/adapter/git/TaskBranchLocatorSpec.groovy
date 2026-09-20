@@ -30,7 +30,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def bare = initBareRepo(parent, repoName)
         def seed = initWorkingRepo(parent, repoName + '-seed')
         commit(seed, 'seed.txt', 'seed')
-        runner.run(seed, 'remote', 'add', 'origin', bare.toString())
+        addRemote(seed, 'origin', bare.toString())
         runner.run(seed, 'push', 'origin', 'HEAD:refs/heads/main')
         runner.run(seed, 'checkout', '-b', branch)
         commit(seed, fileName, content)
@@ -58,7 +58,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def creator = new TaskBranchCreator(runner)
         creator.createBranch(clone, 'PROJ-1', TaskStart.commit(clone, 'HEAD'))
         def emptyOrigin = initBareRepo(tempDir, 'empty-origin.git')
-        runner.run(clone, 'remote', 'add', 'origin', emptyOrigin.toString())
+        addRemote(clone, 'origin', emptyOrigin.toString())
 
         when:
         def location = locator.locate(clone, 'PROJ-1')
@@ -103,14 +103,14 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         and: 'the resolved ref is readable end-to-end via git show'
         def show = runner.run(clone, 'show', "${ref}:f.txt")
         show.exitCode() == 0
-        show.stdout().trim() == 'branch-content'
+        show.stdout().forParsing().trim() == 'branch-content'
     }
 
     def "FR8: the narrow fetch retrieves exactly the target branch, never a second unrelated branch on origin"() {
         given: 'origin has the target branch plus an unrelated second gnomish branch'
         def bare = initBareWithBranch(tempDir, 'origin4.git', 'gnomish/PROJ-4', 'f.txt', 'wanted')
         def seed = initWorkingRepo(tempDir, 'origin4-seed2')
-        runner.run(seed, 'remote', 'add', 'origin', bare.toString())
+        addRemote(seed, 'origin', bare.toString())
         runner.run(seed, 'fetch', 'origin', 'main')
         runner.run(seed, 'checkout', '-b', 'gnomish/OTHER', 'origin/main')
         commit(seed, 'other.txt', 'unrelated')
@@ -159,25 +159,26 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def bare = initBareRepo(tempDir, 'origin5.git')
         def clone = initWorkingRepo(tempDir, 'clone5')
         commit(clone, 'a.txt', 'first')
-        runner.run(clone, 'remote', 'add', 'origin', bare.toString())
+        addRemote(clone, 'origin', bare.toString())
         def logs = LogCaptureSupport.attach(TaskBranchLocator, Level.DEBUG)
 
         when:
         def location = locator.locate(clone, 'PROJ-5')
-        def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         noExceptionThrown()
         location instanceof BranchLocation.NotFound
 
         and: 'FR5: the failed fetch behind the absence is traced — a failure and a fact answer alike here'
-        def traces = events.findAll {
+        def traces = logs.list.findAll {
             it.formattedMessage.contains('origin confirms it is absent')
         }
         traces.size() == 1
         traces[0].level == Level.DEBUG
         traces[0].formattedMessage.contains('gnomish/PROJ-5')
+
+        cleanup: 'the appender and the DEBUG pin are JVM-global, so they come off even on a failed assertion'
+        logs.detach()
     }
 
     def "FR13: no origin configured at all is also reported as not-found, not a crash"() {
@@ -217,15 +218,14 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given: 'a clone whose origin URL points nowhere, so neither the fetch nor the probe gets an answer'
         def clone = initWorkingRepo(tempDir, 'clone-unreachable')
         commit(clone, 'a.txt', 'first')
-        runner.run(clone, 'remote', 'add', 'origin', tempDir.resolve('does-not-exist.git').toString())
+        addRemote(clone, 'origin', tempDir.resolve('does-not-exist.git').toString())
 
         when:
         def location = instantRetryLocator().locate(clone, 'PROJ-8')
 
         then: 'the lookup reports what it is — unestablished — and names why'
         location instanceof BranchLocation.Unavailable
-        (location as BranchLocation.Unavailable).reason().contains('gnomish/PROJ-8')
-        !(location instanceof BranchLocation.NotFound)
+        (location as BranchLocation.Unavailable).reason().contains('origin did not answer whether gnomish/PROJ-8')
     }
 
     def "FR6: a branch origin confirms it carries but the fetch could not deliver is unavailable"() {
@@ -247,6 +247,23 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         reason.contains('unable to access origin')
     }
 
+    // FR6 of harden-task-branch-contract: what the narrow fetch delivered is read off the tracking
+    //     ref, never off its exit code — a fetch that reports success without creating the ref has
+    //     delivered nothing, and answering RemoteTracking there hands the caller a ref that is not
+    //     there, which every reader then resolves against.
+    def "FR6: a fetch that exits zero without creating the ref is unavailable, never remote-tracking"() {
+        given: 'a git whose fetch succeeds silently while origin confirms it carries the branch'
+        def clone = initWorkingRepo(tempDir, 'clone-lying-fetch')
+        commit(clone, 'a.txt', 'first')
+
+        when:
+        def location = instantRetryLocator(new GitProcessRunner(lyingFetchGit().toString())).locate(clone, 'PROJ-13')
+
+        then: 'the absent ref decides, not the zero exit'
+        location instanceof BranchLocation.Unavailable
+        (location as BranchLocation.Unavailable).reason().contains('origin carries gnomish/PROJ-13')
+    }
+
     def "FR6: the unsettled lookup is re-attempted under the infrastructure budget before giving up"() {
         given:
         def gitBinary = dispatchingGit()
@@ -258,6 +275,68 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
         then: 'the fetch ran once per attempt of the budget, and no more'
         Files.readAllLines(tempDir.resolve('fetch-count.txt')).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+    }
+
+    // FR6 of harden-task-branch-contract: "this clone has no origin" is itself the answer of a git
+    //     invocation, so a fetch cut off on its deadline must not be followed by a configuration
+    //     read whose own silence is then spent as a second vote for absence.
+    def "FR6: a fetch cut off on its deadline is unavailable even when the origin read fails too"() {
+        given: 'a git that stalls on every network command and denies having an origin at all'
+        def clone = initWorkingRepo(tempDir, 'clone-stalled-fetch')
+        commit(clone, 'a.txt', 'first')
+        def stalling = new GitProcessRunner(stallingNetworkGit().toString(), Duration.ofMillis(500))
+        def oneAttempt = new GitInfrastructureRetry({ Duration ignored -> } as Sleeper, 1, Duration.ofMillis(1))
+
+        when:
+        def location = new TaskBranchLocator(stalling, oneAttempt).locate(clone, 'PROJ-12')
+
+        then: 'the unestablished lookup says so, instead of the absence that forks a duplicate branch'
+        location instanceof BranchLocation.Unavailable
+        (location as BranchLocation.Unavailable).reason().contains('origin did not answer whether gnomish/PROJ-12')
+    }
+
+    /**
+     * A git whose network commands never return — so the runner ends them on its own deadline —
+     * and whose {@code remote get-url} fails: the combination in which a silenced origin read
+     * would otherwise pass for "this clone is purely local".
+     */
+    private Path stallingNetworkGit() {
+        def script = tempDir.resolve('stalling-network-git.sh')
+        script.toFile().text = """#!/bin/sh
+while [ "\$1" = "-c" ]; do shift 2; done
+case "\$1" in
+  rev-parse)
+    if [ "\$2" = "--git-common-dir" ]; then echo '.git'; exit 0; fi
+    exit 1 ;;
+  remote) echo 'fatal: No such remote' 1>&2; exit 128 ;;
+  fetch|ls-remote) sleep 600 ;;
+esac
+exit 1
+"""
+        script.toFile().setExecutable(true)
+        script
+    }
+
+    /**
+     * A git that reports a <em>successful</em> fetch while creating no ref at all, and answers
+     * {@code ls-remote} with the branch: the combination that tells apart "the fetch's exit code"
+     * from "the tracking ref" as the authority on what actually arrived.
+     */
+    private Path lyingFetchGit() {
+        def script = tempDir.resolve('lying-fetch-git.sh')
+        script.toFile().text = """#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in
+    fetch) exit 0;;
+    ls-remote) echo '1111111111111111111111111111111111111111\trefs/heads/gnomish/PROJ'; exit 0;;
+    rev-parse) exit 1;;
+    remote) echo 'https://example.invalid/repo.git'; exit 0;;
+  esac
+done
+exit 1
+"""
+        script.toFile().setExecutable(true)
+        script
     }
 
     /**

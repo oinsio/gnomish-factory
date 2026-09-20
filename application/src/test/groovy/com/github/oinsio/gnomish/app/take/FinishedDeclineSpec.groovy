@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -34,7 +35,7 @@ class FinishedDeclineSpec extends Specification {
     FinishedDecline decline = new FinishedDecline(new RepeatSuppressor(clock, ROLL_UP))
 
     private static ReadyTask task(String id, boolean finished) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, finished, 'fixture title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, finished, UntrustedText.tracker('fixture title'))
     }
 
     // FR3, FR4: only finished entries trigger a decline call; non-finished entries are never

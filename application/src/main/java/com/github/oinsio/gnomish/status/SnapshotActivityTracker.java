@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.app.port.console.ActivityTracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -36,7 +37,11 @@ public final class SnapshotActivityTracker implements ActivityTracker {
     @Override
     public @Nullable Activity markAwaitingInput(String prompt) {
         Activity previous = holder.activity().activity();
-        holder.updateActivity(new Activity.AwaitingInput(prompt, clock.now()));
+        // The prompt is composed by the console layer and may quote the gnome's own question,
+        // so the live activity carries it rather than publishing a bare String to the status
+        // surfaces (design D4). A factory-authored constant renders identically: every exit is
+        // the identity on benign text.
+        holder.updateActivity(new Activity.AwaitingInput(UntrustedText.agent(prompt), clock.now()));
         return previous;
     }
 

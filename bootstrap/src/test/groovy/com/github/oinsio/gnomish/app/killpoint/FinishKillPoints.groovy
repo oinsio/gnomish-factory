@@ -18,7 +18,13 @@ import org.slf4j.LoggerFactory
  */
 final class FinishKillPoints {
 
-    /** The final report the finish is written with, fresh or re-driven. */
+    /**
+     * The final report the finish is written with, fresh or re-driven. Finished text, because a
+     * report builder renders its quoted captures for the comment plane and {@code FinishEffect}
+     * publishes what it was handed (design D6, D7 of type-untrusted-text) — so the re-drive and the
+     * plain tracker call below publish the same bytes, which is exactly what the settled
+     * fingerprint compares.
+     */
     static final String SUMMARY = 'all stages passed'
 
     private FinishKillPoints() {}

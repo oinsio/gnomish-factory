@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -21,14 +22,14 @@ import spock.lang.TempDir
  * made on a read that established nothing. M6's failing-invocation spec for the skipped-poll
  * site: the refusal path is exercised, and the previous silent path asserted dead.
  */
-class MidRoundTipObservationSpec extends Specification implements BareGitRepoFixture, FailingSubcommandGitFixture {
+class MidRoundTipObservationSpec extends Specification implements PlumbingCommitFixture, FailingSubcommandGitFixture {
 
     static final String BRANCH = 'gnomish/PROJ-9'
 
     @TempDir
     Path tempDir
 
-    def toolEvent = new AgentProgressEvent.ToolStarted('Bash')
+    def toolEvent = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash'))
     Instant now = Instant.parse('2026-08-08T10:00:00Z')
     def clock = { -> now } as Clock
     MovableClock suppressorClock = new MovableClock(now)
@@ -46,18 +47,10 @@ class MidRoundTipObservationSpec extends Specification implements BareGitRepoFix
         addRemote(clone, 'origin', origin.toString())
     }
 
-    /** Advances the (never checked-out) task branch by one plumbing commit, as a harvest would. */
-    private void advanceBranch() {
-        def tree = gitOutput(clone, 'rev-parse', 'HEAD^{tree}')
-        def parent = gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH)
-        def commit = gitOutput(
-                clone, '-c', 'user.email=g@b.c', '-c', 'user.name=g',
-                'commit-tree', tree, '-p', parent, '-m', 'in-box commit')
-        gitOutput(clone, 'update-ref', 'refs/heads/' + BRANCH, commit)
-    }
-
     private MidRoundHarvestListener blindListener() {
-        def env = [harvest: { advanceBranch() }] as TaskExecutionEnvironment
+        def env = [harvest: {
+                advanceBranch(clone, BRANCH, 'in-box commit')
+            }] as TaskExecutionEnvironment
         new MidRoundHarvestListener(
                 env,
                 new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString()),

@@ -12,8 +12,6 @@ import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -22,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -62,10 +61,6 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
 
     def cleanup() {
         MDC.remove('taskId')
-    }
-
-    private static TaskContext context(String taskId = 'PROJ-100') {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     private static StageDefinition stage() {
@@ -113,7 +108,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         def stateBeforeKill = StateJsonMapper.fromDto(
-                StateJsonMapper.readDto(gitOutput(worktree, 'show', 'HEAD:.gnomish-task/state.json')))
+                StateJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(worktree, 'show', 'HEAD:.gnomish-task/state.json'))))
         def branchTipAfterFirstRound = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
 
         and: 'the process dies mid-round: gnome work sits uncommitted, no round-closing persist ran'
@@ -147,12 +142,11 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
 
         and: 'the completion round is a genuinely new round on top of the salvage commit, not a re-run of the first'
         def completedTaskJson = gitOutput(cloneDir, 'show', "gnomish/${taskId}~1:.gnomish-task/task.json")
-        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(completedTaskJson)).outcome() instanceof RecordedOutcome.Completed
+        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(completedTaskJson))).outcome() instanceof RecordedOutcome.Completed
 
-        and: 'the round recorded by that completion is the only round.json attempt beyond the pre-kill one — the'
-        and: 'salvage commit itself never appears as an AttemptRecord in any state.json on the branch'
+        and: 'the round recorded by that completion is the only round.json attempt beyond the pre-kill one — the salvage commit itself never appears as an AttemptRecord in any state.json on the branch'
         def finalRoundStateJson = gitOutput(cloneDir, 'show', "gnomish/${taskId}~2:.gnomish-task/state.json")
-        def finalRoundState = StateJsonMapper.fromDto(StateJsonMapper.readDto(finalRoundStateJson))
+        def finalRoundState = StateJsonMapper.fromDto(StateJsonMapper.readDto(UntrustedText.branchDocument(finalRoundStateJson)))
         finalRoundState.attempts().size() == stateBeforeKill.attempts().size() + 1
     }
 }

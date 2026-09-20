@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -87,7 +88,7 @@ class GithubTaskFetcherSpec extends Specification {
 
         then:
         result.state() == new TrackerTaskState.Ready()
-        result.snapshot() == new TaskSnapshot(refFor(5).id(), 'Fix the widget', 'details')
+        result.snapshot() == new TaskSnapshot(refFor(5).id(), UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('details'))
     }
 
     def "reports Finished when the delivered label is present"() {
@@ -122,7 +123,7 @@ class GithubTaskFetcherSpec extends Specification {
         def result = fetcher.fetchTask(refFor(6))
 
         then:
-        result.snapshot().body() == ''
+        result.snapshot().body().forLog() == ''
     }
 
     def "reports Working with the holder from the latest active claim marker"() {
@@ -349,7 +350,7 @@ class GithubTaskFetcherSpec extends Specification {
         then:
         result.state() == new TrackerTaskState.Gone()
         and: 'the gone snapshot is a real snapshot (id echoed as both id and title, empty body), never null'
-        result.snapshot() == new TaskSnapshot(refFor(404).id(), refFor(404).id(), '')
+        result.snapshot() == new TaskSnapshot(refFor(404).id(), UntrustedText.tracker(refFor(404).id()), UntrustedText.tracker(''))
     }
 
     def "abort facts fold only markers posted after the latest claim (boundary anchoring)"() {

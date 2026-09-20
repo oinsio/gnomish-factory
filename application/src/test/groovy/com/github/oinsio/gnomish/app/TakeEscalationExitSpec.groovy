@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -56,7 +57,10 @@ class TakeEscalationExitSpec extends Specification {
     def "exit parks DecisionNeeded escalation as ESCALATION with the rendered question and a reply-and-return report"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
-        def report = new EscalationReport.DecisionNeeded('Which approach?', ['A', 'B'])
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('Which approach?'), [
+            UntrustedText.agent('A'),
+            UntrustedText.agent('B')
+        ])
         def escalated = new TaskOutcome.Escalated(STATE, report)
 
         when:
@@ -94,9 +98,9 @@ class TakeEscalationExitSpec extends Specification {
 
         where:
         kind | escalationReport
-        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, 'command:test'), 'timed out', '')
-        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed', [])
-        'PipelineMismatch' | new EscalationReport.PipelineMismatch('old-stage')
+        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:test')), UntrustedText.subprocess('timed out'), UntrustedText.subprocess(''))
+        'CannotExecute' | new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), [])
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('old-stage'))
     }
 
     // FR7 of add-claim-heartbeat: the park write is git-unfenced, so a claim reaped/taken over

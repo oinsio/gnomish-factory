@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.board.EligibilityReason;
 import com.github.oinsio.gnomish.board.ReadyRow;
 import com.github.oinsio.gnomish.board.ReadySummary;
 import com.github.oinsio.gnomish.board.WorkingRow;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
@@ -32,8 +33,14 @@ import org.jspecify.annotations.Nullable;
  * model.awaitingHumanRows().size()}, the same {@code listOpen} result already on
  * the model.
  *
- * <p>Implements FR6, NFR-O1, UX4 of add-board-command.
+ * <p>Annotated {@link UntrustedExit} for the same reason the {@code status.json} mappers are
+ * (design D2 of type-untrusted-text): {@code board --json} is a parser's input, so a task's
+ * tracker-written title goes into it byte for byte; the human board renders the same title
+ * through the console exit instead.
+ *
+ * <p>Implements FR6, NFR-O1, UX4 of add-board-command; FR3 of type-untrusted-text.
  */
+@UntrustedExit
 public final class BoardJsonMapper {
 
     private final ObjectMapper mapper;
@@ -99,7 +106,8 @@ public final class BoardJsonMapper {
     }
 
     private static ReadyRowDto toReadyRowDto(ReadyRow row) {
-        return new ReadyRowDto(row.ref().id(), row.title(), row.returned(), toEligibilityDto(row.eligibilityReason()));
+        return new ReadyRowDto(
+                row.ref().id(), row.title().raw(), row.returned(), toEligibilityDto(row.eligibilityReason()));
     }
 
     private static EligibilityDto toEligibilityDto(@Nullable EligibilityReason reason) {
@@ -116,12 +124,12 @@ public final class BoardJsonMapper {
         ClaimVersion claimVersion = row.claimVersion();
         return new WorkingRowDto(
                 row.ref().id(),
-                row.title(),
+                row.title().raw(),
                 row.holder(),
                 claimVersion == null ? null : claimVersion.updatedAt().toString());
     }
 
     private static AwaitingHumanRowDto toAwaitingHumanDto(AwaitingHumanRow row) {
-        return new AwaitingHumanRowDto(row.ref().id(), row.title(), BoardLabels.parkReasonLabel(row.reason()));
+        return new AwaitingHumanRowDto(row.ref().id(), row.title().raw(), BoardLabels.parkReasonLabel(row.reason()));
     }
 }

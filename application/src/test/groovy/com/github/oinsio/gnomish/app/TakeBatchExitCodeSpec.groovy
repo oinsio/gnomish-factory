@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -36,7 +37,7 @@ class TakeBatchExitCodeSpec extends Specification {
         given:
         def outcomes = [
             new TakeBatchOutcome('42', new TakeResult.Delivered(STATE, 'shipped')),
-            new TakeBatchOutcome('43', new TakeResult.Skipped('held by another instance')),
+            new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('held by another instance'))),
             new TakeBatchOutcome('44', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
         ]
 
@@ -66,7 +67,7 @@ class TakeBatchExitCodeSpec extends Specification {
         given:
         def outcomes = [
             new TakeBatchOutcome('42', new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, 'paused')),
-            new TakeBatchOutcome('43', new TakeResult.Skipped('already done')),
+            new TakeBatchOutcome('43', new TakeResult.Skipped(UntrustedText.tracker('already done'))),
             TakeBatchOutcome.toolFailure('44', new IllegalStateException('crashed')),
         ]
 

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -21,7 +22,7 @@ class DecisionAckSpec extends Specification {
     static final TaskRef REF = new TaskRef('PROJ-1')
 
     private static TaskContext contextWith(String... decisions) {
-        new TaskContext('PROJ-1', 'title', 'body',
+        new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'),
                 decisions.collect {
                     new Decision(it, 'build', 'tracker', Instant.parse('2026-07-18T09:00:00Z'))
                 })
@@ -35,7 +36,7 @@ class DecisionAckSpec extends Specification {
         given:
         def decided = contextWith('go ahead')
         def steps = []
-        tracker.acknowledgeDecision(REF, 'go ahead') >> {
+        tracker.acknowledgeDecision(REF, inert('go ahead')) >> {
             steps << 'acknowledge'
         }
 
@@ -76,7 +77,7 @@ class DecisionAckSpec extends Specification {
         DecisionAck.redriveAcknowledge(tracker, REF, contextWith('go ahead'), 'go ahead')
 
         then:
-        1 * tracker.acknowledgeDecision(REF, 'go ahead')
+        1 * tracker.acknowledgeDecision(REF, inert('go ahead'))
     }
 
     // FR12: an unaskable tracker reads as "not there" — a redundant upsert beats a lost transition.
@@ -93,7 +94,7 @@ class DecisionAckSpec extends Specification {
         DecisionAck.redriveAcknowledge(tracker, REF, contextWith('go ahead'), 'go ahead')
 
         then:
-        1 * tracker.acknowledgeDecision(REF, 'go ahead')
+        1 * tracker.acknowledgeDecision(REF, inert('go ahead'))
 
         and: 'FR15 of harden-logging-observability: the unverifiable probe is a coded WARN naming the task'
         def event = logs.list.find {
@@ -129,5 +130,16 @@ class DecisionAckSpec extends Specification {
                     new HumanReply('a new answer', Instant.parse('2026-07-18T10:00:00Z'))
                 ] | contextWith('go ahead') ||
                 null
+    }
+
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, with no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19). The fence's label is the sentence "everything between these markers is machine
+     * output", and a human's own reply quoted back to them is the one thing that is not — the
+     * mention break and the strip are what the acknowledge owes it.
+     */
+    private static String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

@@ -136,18 +136,27 @@ operator's screen, and each is load-bearing on its own:
    one a ledger stores, and the one a tracker comment quotes; neutralizing it here
    would corrupt every consumer to protect one. The MDC follows the same rule: it
    is a carrier, so `taskId` stays exactly the id an operator holds.
-2. **Per-consumer exit.** Each consumer has one exit that applies *its* notation,
-   and all exits read one character-class table. `LogText.forLog` (`:logtext`)
-   strips control/ANSI sequences, flattens newlines so one event stays one line,
-   and caps length — that is the log plane's exit, and every call site carrying
-   untrusted text into a log line is obliged to use it. `LogText.forConsole` is
-   the operator console's exit: it makes controls **visible** instead of removing
-   them, and preserves line structure and length. `FindingsSanitizer`
-   (`gnomish-plugin-api`) is the plugin-findings boundary's exit, with line
-   structure preserved deliberately; it and `LogText` are both facades over the
-   `:untrustedtext` leaf, which owns the character table and the primitives; the
-   three-way identity spec verifies that neither facade has re-acquired a table of
-   its own.
+2. **The typed carrier and its per-consumer exits.** Captured text travels as
+   `UntrustedText` (`:untrustedtext`), a value holding the raw bytes and the
+   provenance they were captured from — so the obligation to neutralize is carried
+   by the *type*, not by the discipline of whoever holds the string. Each consumer
+   has one exit on the carrier that applies *its* notation, and all exits read one
+   character-class table. `forLog()` strips control/ANSI sequences, flattens
+   newlines so one event stays one line, and caps length — that is the log plane's
+   exit. `forConsole()` is the operator console's: it makes controls **visible**
+   instead of removing them, and preserves line structure and length.
+   `forComment()` is the tracker's, applied by the carrier itself. Two further ways out
+   exist for text that is not headed for a reader, each with its own annotated
+   allowlist: `raw()`, for the `@UntrustedExit` writers that put bytes on a machine
+   medium (the branch's JSON/state documents, the `--json` mappers, the judge
+   findings funnel — and only where a `raw()` call warrants the marker, which a
+   gate asserts), and `forParsing()`, for the `@UntrustedParser` classes that
+   convert captured text into a value that is no longer untrusted text; queries
+   that yield a boolean or an int are open to everyone. `LogText` (`:logtext`) and
+   `FindingsSanitizer` (`gnomish-plugin-api`, line structure preserved
+   deliberately) remain as `String` facades over the same `:untrustedtext` leaf,
+   which owns the character table and the primitives; the three-way identity spec
+   verifies that neither facade has re-acquired a table of its own.
 3. **Sink backstop.** The two sinks neutralize whatever reaches them, whatever the
    call site did. Logback's encoder renders the message, the throwable and every
    MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
@@ -157,14 +166,13 @@ operator's screen, and each is load-bearing on its own:
    `System.out`/`System.err` out of every other production class. Introduced by
    `harden-untrusted-text-sinks`.
 
-The backstop exists because layer 2 depends on caller discipline and the gate that
-enforces it can only see *accessor names at log call sites*: text concatenated into
-an exception message, a record's `toString()`, an assembled operator report or an
-MDC value leaves no accessor for the gate to see. It is **defense in depth, not a
-license to skip the exit** — a call site that carries untrusted text still reaches
-for `LogText`, and the gate still fails the build when it does not. The backstop is
-idempotent over `forLog` output, so a correct call site renders byte-identically
-with and without it.
+The backstop exists because layer 2's gate can only see *call sites and
+signatures*: text composed into an exception message one layer down, a record's
+`toString()`, an assembled operator report or an MDC value shows no carrier where
+the gate looks. It is **defense in depth, not a license to skip the exit** — a call
+site holding a carrier still calls an exit, and the type gate still fails the build
+when it does not. The backstop is idempotent over `forLog` output, so a correct
+call site renders byte-identically with and without it.
 
 Two layer-2 properties are deliberate asymmetries. The log plane *strips*; the
 console plane makes the same characters *visible* (`^[`, `^X`, `^?`, `\uXXXX`),
@@ -178,9 +186,13 @@ No secret value, token, or credential material appears in any log line; warnings
 about secrets name the *variable*, never the value.
 
 `split-logtext-leaves` moved the primitives into the `:untrustedtext` leaf, so both
-layer-2 exits delegate to one owner. One follow-up remains: `type-untrusted-text`
-replaces the accessor-name gate with typed carriers, so layer 2 stops depending on
-discipline at all.
+facades delegate to one owner, and `type-untrusted-text` made layer 2 the carrier
+itself: the accessor-name scan at log call sites is replaced by a type-level gate —
+a capture accessor returning a plain `String`, a `raw()` read outside an
+`@UntrustedExit` class, a `forParsing()` read outside an `@UntrustedParser` class,
+and a carrier passed to a log call, a `Throwable` constructor, a console print or a
+tracker write without an exit each fail the build. Layer 2 no longer depends on
+discipline; it depends on the signature.
 
 ### Repeat suppression has one owner; edges are the signal
 
@@ -269,6 +281,51 @@ Recorded so they are decisions rather than drift:
   surveyed and rejected: the task branch already is the per-task artifact store,
   and there is no fleet to ship to.
 
+Three upgrades to the untrusted-text layers were argued and **deferred rather
+than rejected** by `type-untrusted-text` (design D1, D2, D11, D12), each with the
+condition that reopens it. They are recorded here because a change's `design.md`
+archives with the change and governs nothing afterwards, which is exactly how a
+considered alternative comes back as an oversight.
+
+- **Branded exit types — type the safe side, not only the unsafe one.** The exits
+  return `String`, so a logger, `ConsoleIO` and a tracker write still accept any
+  string, and an uncovered path is a review finding rather than a compile error.
+  Trusted Types and `google/safe-html-types` type the *sink* instead: `innerHTML`
+  takes `TrustedHTML`, and plain text is a `TypeError`. The equivalent here —
+  `SafeLogText` / `SafeConsoleText` / `SafeCommentText` returned by the exits and
+  required by the facades — would make the carrier-at-a-sink scan unnecessary and
+  double-rendering unrepresentable. It changes every log call site in the
+  repository, which is its own initiative. *Revisit when* the sink backstop or the
+  carrier-at-a-sink rule catches a laundered string at a real production site —
+  the evidence that `String`-returning exits leak — or when the log call sites are
+  being touched wholesale for another reason.
+- **`@RestrictedApi` beside ArchUnit for the raw-read rule.** Error Prone is
+  already wired build-wide, and its built-in `@RestrictedApi` checks at the *call
+  site*, at compile time, with a mandatory explanation and link and a second
+  allowlist level for legacy callers — strictly more than the class-level ArchUnit
+  check that guards `raw()` today, and not the custom checker that was rejected
+  outright. The cost is `error_prone_annotations` on the compile classpath of
+  `untrustedtext`, today a JDK-only leaf; whether that leaf takes a dependency is
+  a decision for whoever revisits the annotation design. *Revisit when*
+  `untrustedtext` takes a compile dependency for any other reason — the JDK-only
+  objection dies with it — or when the `@UntrustedExit` / `@UntrustedParser`
+  pinned sets grow more than once, the same "revisit if exemptions accumulate"
+  shape this section already uses for the throwable-convention checker.
+- **`ContainerId` / `ModelId` as value objects.** A record over one validated
+  field, parsed in its compact constructor, rather than a static gate that checks
+  a `String` and hands the bare string back: the gate's proof is discarded the
+  moment it returns, so nothing downstream can tell a checked id from an unchecked
+  one, and a two-`String` record of identity and stamp is the transposition hazard
+  `process-invariants.md` names. It is the better shape and a different
+  initiative: it touches the sandbox lease protocol, the state-file DTOs and the
+  published plugin api. *Revisit when* the published contract next takes a
+  breaking bump — the cost that defers it is already being paid at that moment —
+  or at a fourth named syntax gate, or at the first gate-checked identity found
+  rendered at a sink. The honest note for that reader: three named gates exist
+  today (`RefNameSyntax`, `ModelIdSyntax`, `ContainerIdSyntax`), so the
+  rule-of-three bar is already met; what defers the extraction is the contract
+  break, not the count.
+
 ## Consequences
 
 - Every emitter has a citable rule, and four of the rules are mechanical gates
@@ -277,17 +334,19 @@ Recorded so they are decisions rather than drift:
 - Console volume becomes a health signal: a healthy `serve` hour is silent, so
   any WARN is worth reading.
 - New mechanisms carry ownership: `AnchorLog` for lifecycle anchors and the
-  canonical task summary, `RepeatSuppressor` for edges, `LogText` for untrusted
-  text, `SystemConsoleIO` for terminal output outside the logger — a second
-  implementation of them is a review finding.
-- The cost is indirection: a site that wants to log agent output must reach for
-  `LogText`, and a poll loop must thread a suppressor key. Both are one line.
+  canonical task summary, `RepeatSuppressor` for edges, `UntrustedText` for
+  untrusted text (with `LogText` as its `String` facade), `SystemConsoleIO` for
+  terminal output outside the logger — a second implementation of them is a review
+  finding.
+- The cost is indirection: a site that wants to log captured output must call an
+  exit on the carrier, and a poll loop must thread a suppressor key. Both are one
+  line.
 
 ## See also
 
 - `.claude/rules/logging.md` — the emitter's one-page checklist.
 - `docs/glossary.md` — *anchor line*, *canonical task summary*, *operator
   event*, *operator console*, *log contract*, *repeat suppression*, *log text
-  sanitization*.
+  sanitization*, *untrusted text*, *provenance*.
 - `docs/adr/0003-crash-consistency.md` — why the durable record is the media,
   not the log.

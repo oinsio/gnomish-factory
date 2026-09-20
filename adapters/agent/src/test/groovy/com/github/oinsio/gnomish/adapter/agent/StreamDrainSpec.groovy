@@ -3,8 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
@@ -103,7 +102,7 @@ class StreamDrainSpec extends Specification {
         conditions.eventually {
             assert recorded.size() == 2
             assert recorded[0] instanceof AgentProgressEvent.RoundStarted
-            assert recorded[1] == new AgentProgressEvent.ToolStarted('Write')
+            assert recorded[1] == new AgentProgressEvent.ToolStarted(UntrustedText.agent('Write'))
         }
 
         and: 'they arrived on the drain thread, not the round thread'

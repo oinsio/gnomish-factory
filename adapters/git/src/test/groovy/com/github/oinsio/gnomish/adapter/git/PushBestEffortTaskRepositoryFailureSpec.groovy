@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -87,7 +88,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         'ESCALATED' | new TaskOutcome.Escalated(TaskState.atStageStart('work'),
                 new EscalationReport.AttemptsExhausted(3))
         'ABORTED' | new TaskOutcome.Aborted(TaskState.atStageStart('work'),
-                new AttemptKey('T-1', 'work', 0), 'violation')
+                new AttemptKey('T-1', 'work', 0), UntrustedText.subprocess('violation'))
     }
 
     def "a clone with no origin attempts no push and stays silent"() {
@@ -100,7 +101,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         def events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
+            repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
         }
 
         then:
@@ -117,7 +118,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         repository.recordOutcome(TASK_ID, new TaskOutcome.Aborted(TaskState.atStageStart('work'),
-                new AttemptKey(TASK_ID, 'work', 0), 'violation'))
+                new AttemptKey(TASK_ID, 'work', 0), UntrustedText.subprocess('violation')))
 
         then:
         1 * delegate.recordOutcome(TASK_ID, _) >> {

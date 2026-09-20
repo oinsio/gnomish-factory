@@ -63,7 +63,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     }
 
     private String tip(Path repo, String ref = 'HEAD') {
-        runner.run(repo, 'rev-parse', ref).stdout().trim()
+        runner.run(repo, 'rev-parse', ref).stdout().forParsing().trim()
     }
 
     def "no remote-tracking ref (no origin configured) reports NO_REMOTE_TRACKING_REF and mutates nothing"() {

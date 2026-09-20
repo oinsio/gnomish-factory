@@ -170,7 +170,7 @@ class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
                 return gone()
             }
             if (args == DockerLifecycleCommands.listFactoryContainersWithLabels(PROJECT)) {
-                return new DockerResult(1, '', 'Error response from daemon: filter failed')
+                return DockerResult.of(1, '', 'Error response from daemon: filter failed')
             }
             if (args == DockerLifecycleCommands.listFactoryVolumesWithLabels(PROJECT)) {
                 return ok("gnomish-vol-k1\tcom.github.oinsio.gnomish.task=k1,com.github.oinsio.gnomish.mode=manual\n")
@@ -197,7 +197,7 @@ class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
     def "a docker runtime outage aborts the whole pass and reaches the caller"() {
         given:
         docker.onRun = { List<String> args ->
-            throw new DockerUnavailableException('down', null)
+            throw new DockerUnavailableException('down', null as Throwable)
         } as Closure<DockerResult>
 
         when:

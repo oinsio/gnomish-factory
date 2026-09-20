@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * The egress guard is down and the factory could not bring it back (NFR-R1):
  * thrown after the restart path — start the stopped container, or recreate it —
@@ -29,5 +31,18 @@ public final class GuardUnavailableException extends RuntimeException {
      */
     public GuardUnavailableException(String message, Throwable cause) {
         super(message, cause);
+    }
+
+    /**
+     * The form for a failure the daemon itself explained: the guard could not be started, run or
+     * connected, and docker said why. The reason is {@link UntrustedText} rather than a {@code
+     * String} so the daemon's answer cannot reach the message unrendered (design D5 of
+     * type-untrusted-text); the message composes it through the carrier's own log exit.
+     *
+     * @param message what the guard could not do; never null
+     * @param detail what docker said about it; never null
+     */
+    public GuardUnavailableException(String message, UntrustedText detail) {
+        super(message + ": " + detail);
     }
 }

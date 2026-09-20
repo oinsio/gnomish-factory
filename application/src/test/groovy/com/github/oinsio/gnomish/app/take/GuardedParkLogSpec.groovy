@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -37,16 +38,16 @@ class GuardedParkLogSpec extends Specification {
     Tracker tracker = Mock(Tracker)
 
     private static TrackerTask task(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot('PROJ-9', 'title', 'body'), state, AbortFacts.none(), false)
+        new TrackerTask(REF, new TaskSnapshot('PROJ-9', UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
     }
 
-    private String recoveredPark(Runnable receipt) {
+    private void recoveredPark(Runnable receipt) {
         GuardedPark.attempt(
                 tracker,
                 REF,
                 INSTANCE,
                 ParkReason.ESCALATION,
-                { note -> 'parked for a human' },
+                'parked for a human',
                 VirtualTimeRetries.terminalWrite(),
                 new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), receipt),
                 LoggerFactory.getLogger(GuardedParkLogSpec),

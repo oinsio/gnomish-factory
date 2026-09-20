@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
  * an allowlisted one passes. Extracted from {@link EnvironmentSelfCheck} for file size; the
  * behavior is unchanged.
  */
+@UntrustedParser
 record EgressSelfCheckProbes(
         TaskExecutionEnvironment environment, EgressGuard guard, String key, List<String> allowlist, Sleeper sleeper) {
 
@@ -84,18 +86,22 @@ record EgressSelfCheckProbes(
                     "-x",
                     guard.proxyUrl(),
                     url(DENIED_PROBE_HOST));
-            if (probe.output().strip().endsWith("403")) {
+            // @UntrustedParser warrant (design D11): the guard's own status code, read out of the
+            //     probe's output as a boolean — the output itself never leaves as text.
+            if (probe.output().forParsing().strip().endsWith("403")) {
                 log.debug("self-check probe denied-host passed for {}: guard denies non-allowlisted", key);
                 return "guard denies non-allowlisted";
             }
             if (probe.exitCode() == 0) {
                 break;
             }
-            log.debug(
-                    "self-check probe denied-host retrying for {}: guard not answering yet ({})",
-                    key,
-                    LogText.forLog(probe.toString()));
+            // A Probe renders its output through the carrier's log exit (below), so what reaches
+            // the record here is already inert — a second LogText wrapper would only re-escape it.
+            log.debug("self-check probe denied-host retrying for {}: guard not answering yet ({})", key, probe);
         }
+        // The observation goes in as the Probe, not as its carrier: `Probe.toString` is where this
+        // family's output leaves through the log exit (below), so the message is inert by
+        // construction and the detail keeps the exit code beside the output (design D5, D6).
         throw new SelfCheckFailedException(
                 "denied-host", "expected the guard's 403 for " + DENIED_PROBE_HOST + ", observed: " + probe);
     }
@@ -153,12 +159,21 @@ record EgressSelfCheckProbes(
         }
     }
 
-    /** One probe's observation; {@code toString} is the diagnostic detail a failure carries. */
-    private record Probe(int exitCode, String output) {
+    /**
+     * One probe's observation; {@code toString} is the diagnostic detail a failure carries — and
+     * the reason the output leaves through the carrier's log exit here: that detail is
+     * concatenated into a {@link SelfCheckFailedException} message and into a log record, where
+     * what a hostile in-box {@code curl} wrote must already be one inert line (design D6 of
+     * type-untrusted-text).
+     *
+     * @param exitCode the probe command's exit code
+     * @param output what the probe wrote, as in-container text
+     */
+    private record Probe(int exitCode, UntrustedText output) {
 
         @Override
         public String toString() {
-            return "exit " + exitCode + ", output: " + output.strip();
+            return "exit " + exitCode + ", output: " + output.forLog();
         }
     }
 }

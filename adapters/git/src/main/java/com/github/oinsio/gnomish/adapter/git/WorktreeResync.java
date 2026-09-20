@@ -52,10 +52,7 @@ final class WorktreeResync {
         }
     }
 
-    private static IllegalStateException failed(String context, String command, GitCommandResult result) {
-        return new IllegalStateException(context + "; " + command + " failed (" + result.termination() + ", exit "
-                + result.exitCode() + "): " + result.stderr().trim()
-                + ". Continuing would let salvage commit the discarded line back on top of the adopted tip; run that"
-                + " command in the working tree by hand, then resume the task.");
+    private static GitResyncFailedException failed(String context, String command, GitCommandResult result) {
+        return new GitResyncFailedException(context, command, result.termination(), result.exitCode(), result.stderr());
     }
 }

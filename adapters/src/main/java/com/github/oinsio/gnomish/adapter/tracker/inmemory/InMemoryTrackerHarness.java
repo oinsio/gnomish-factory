@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -98,7 +99,8 @@ public record InMemoryTrackerHarness(InMemoryTracker adapter) {
     public void edit(TaskRef ref, String title, String body) {
         adapter.lock.lock();
         try {
-            requireSeeded(ref).snapshot(new TaskSnapshot(ref.id(), title, body));
+            requireSeeded(ref)
+                    .snapshot(new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)));
         } finally {
             adapter.lock.unlock();
         }

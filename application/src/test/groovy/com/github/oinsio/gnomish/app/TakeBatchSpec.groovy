@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -38,7 +39,7 @@ class TakeBatchSpec extends Specification {
         given:
         def refs = ['a', 'b', 'c']
         def perRef = { String ref ->
-            ref == 'b' ? new TakeResult.Skipped('b refused') : new TakeResult.Delivered(null, "$ref delivered")
+            ref == 'b' ? new TakeResult.Skipped(UntrustedText.tracker('b refused')) : new TakeResult.Delivered(null, "$ref delivered")
         }
 
         when:
@@ -48,7 +49,7 @@ class TakeBatchSpec extends Specification {
         outcomes*.ref() == ['a', 'b', 'c']
         outcomes[0].result() instanceof TakeResult.Delivered
         outcomes[1].result() instanceof TakeResult.Skipped
-        (outcomes[1].result() as TakeResult.Skipped).reason() == 'b refused'
+        (outcomes[1].result() as TakeResult.Skipped).reason() == UntrustedText.tracker('b refused')
         outcomes[2].result() instanceof TakeResult.Delivered
     }
 

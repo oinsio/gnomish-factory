@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -32,7 +33,7 @@ import spock.lang.Specification
  */
 class GitFreshTaskSupportSpec extends Specification {
 
-    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
+    private static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     /** The caller's single peel — what the branch starts from (FR15). */
     private static final ObjectId LAW_COMMIT = ObjectId.of('0123456789abcdef0123456789abcdef01234567')
@@ -57,7 +58,7 @@ class GitFreshTaskSupportSpec extends Specification {
         given:
         def taskRepository = Stub(TaskRepository) {
             createTask(_, _, _, _) >> {
-                throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'gnomish/PROJ-1')
+                throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('gnomish/PROJ-1'))
             }
         }
         when:
@@ -69,6 +70,34 @@ class GitFreshTaskSupportSpec extends Specification {
         ex.message.startsWith('could not start git-mode task "PROJ-1"')
         ex.message.contains('branch exists')
         ex.message.contains('--resume')
+    }
+
+    // FR5, design D5 of type-untrusted-text: a `getMessage()` fold is a mint site. The lower
+    // exception's message may quote what git said, and this one is built from it and printed to
+    // the operator, so the quote re-enters a carrier at the fold instead of travelling as the
+    // raw String the lower exception happens to hold.
+    def "re-mints the folded detail, so a forged record in it cannot survive the fold"() {
+        given: 'a git-layer failure whose detail forges a second record and drives the terminal'
+        def hostile = "boom\n[2J2026-01-01 00:00:00 ERROR forged record\r"
+        def taskRepository = Stub(TaskRepository) {
+            createTask(_, _, _, _) >> {
+                throw new GitTaskRepositoryException(
+                'PROJ-1', TaskLifecycleEvent.STARTED, 'git commit', UntrustedText.subprocess(hostile))
+            }
+        }
+
+        when:
+        GitFreshTaskSupport.createTask(
+                taskRepository, 'PROJ-1', CONTEXT, LAW_COMMIT, BasePin.UNPINNED, TaskState.atStageStart('build'))
+
+        then: 'the usage error still names the failure'
+        def ex = thrown(UsageException)
+        ex.message.contains('git commit')
+
+        and: 'and nothing in it can open a second record or drive a terminal'
+        !ex.message.contains('\n')
+        !ex.message.contains('\r')
+        !ex.message.contains('')
     }
 
     // FR7: only the git-layer failure is remapped. Any other fault propagates unchanged.
@@ -147,7 +176,12 @@ class GitFreshTaskSupportSpec extends Specification {
     def "unreachableOnManualPath names the underdetermined reason in its message"() {
         given:
         def resolution = new BaseResolution.Underdetermined(
-                UnderdeterminedCause.DESIGNATOR_CONFLICT, ['a', 'b'], 'the task names more than one base')
+                UnderdeterminedCause.DESIGNATOR_CONFLICT,
+                [
+                    UntrustedText.tracker('a'),
+                    UntrustedText.tracker('b')
+                ],
+                'the task names more than one base')
 
         expect:
         def ex = GitFreshTaskSupport.unreachableOnManualPath(resolution)

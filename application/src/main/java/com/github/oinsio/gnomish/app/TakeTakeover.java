@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -127,10 +128,11 @@ final class TakeTakeover {
     /** Refuses an unconfirmed takeover, always naming the holder; the headless case also points at the flag. */
     private static TakeResult refuse(TakeoverConfirmation.Decision decision, String holder) {
         if (decision == TakeoverConfirmation.Decision.UNAVAILABLE) {
-            return new TakeResult.Skipped(
-                    "Task is claimed by another instance (" + holder
-                            + ") — refusing to take it without confirmation. Re-run with --takeover to take it over headlessly.");
+            return new TakeResult.Skipped(UntrustedText.factory("Task is claimed by another instance (" + holder
+                    + ") — refusing to take it without confirmation. Re-run with --takeover to take it over"
+                    + " headlessly."));
         }
-        return new TakeResult.Skipped("Takeover of the task held by " + holder + " was declined — nothing changed.");
+        return new TakeResult.Skipped(
+                UntrustedText.factory("Takeover of the task held by " + holder + " was declined — nothing changed."));
     }
 }

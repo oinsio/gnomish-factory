@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -126,7 +127,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Finished
 
         and: 'B resumed at the recorded position rather than starting the task over'
-        def reclaimCommits = commitsSince(tipBeforeReclaim)
+        def reclaimCommits = commitsSince(tipBeforeReclaim, TASK_BRANCH)
         !reclaimCommits.isEmpty()
         reclaimCommits.every {
             !subjectOf(it).startsWith('gnomish: task started')
@@ -148,7 +149,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
 
         then: 'C declines it without claiming — the branch already says the work is done (the reopened-finished refusal)'
         def thirdRun = thrown(TakeExitCodeException)
-        thirdRun.exitCode() == TakeExitCodeMapper.exitCodeFor(new TakeResult.Skipped('declined'))
+        thirdRun.exitCode() == TakeExitCodeMapper.exitCodeFor(new TakeResult.Skipped(UntrustedText.tracker('declined')))
 
         and: 'the second pickup changed nothing: the branch is untouched, the task is Finished again, no round ran (NFR-R1)'
         gitOutput(projectDir, 'rev-parse', TASK_BRANCH) == tipAfterDelivery
@@ -174,7 +175,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
         // resolve it (FR13, D15 of add-base-ref-resolution).
         def base = currentBranch(projectDir)
         repository.createTask(
-                new TaskContext(TASK_ID, 'Add widgets', 'please add widgets', List.<Decision> of()),
+                new TaskContext(TASK_ID, UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets'), List.<Decision> of()),
                 TaskStart.commit(projectDir, base),
                 TaskStart.pin(base, BaseRule.REPOSITORY_DEFAULT_BRANCH),
                 TaskState.atStageStart('build'))
@@ -220,24 +221,5 @@ advancement: auto
 ''')
         commitAll(projectDir, 'relax the build stage')
         pushOrigin(projectDir)
-    }
-
-    /**
-     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
-     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this base only binds it to the
-     * spec's own repository.
-     */
-    protected ClaimEpoch stampOf(String rev) {
-        stampOf(projectDir, rev)
-    }
-
-    /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
-    protected String subjectOf(String rev) {
-        subjectOf(projectDir, rev)
-    }
-
-    /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
-    protected List<String> commitsSince(String exclusiveFrom) {
-        commitsIn(projectDir, "${exclusiveFrom}..${TASK_BRANCH}")
     }
 }

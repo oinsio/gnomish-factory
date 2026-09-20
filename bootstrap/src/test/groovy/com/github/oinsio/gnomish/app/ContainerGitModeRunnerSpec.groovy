@@ -6,8 +6,6 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -97,10 +95,6 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
                 LiveConsoleIO.onStdout())
         runner.run(cloneDir, base, pipeline(), segments(), context(taskId), TaskState.atStageStart('build'),
                 RunArguments.InteractiveMode.ALL)
-    }
-
-    private static TaskContext context(String taskId) {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
     private static InputStream lines(String... answers) {

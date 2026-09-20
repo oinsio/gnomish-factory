@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -17,7 +18,7 @@ class EngineEventTaskIdSpec extends Specification {
     }
 
     private static CheckRef sampleCheckRef() {
-        new CheckRef(0, 'command:./gradlew test')
+        new CheckRef(0, UntrustedText.manifest('command:./gradlew test'))
     }
 
     private static CheckResult sampleCheckResult() {

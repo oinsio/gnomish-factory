@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ final class ContainerTipReader {
     /** The branch tip's {@code state.json} as its wire DTO — the domain state plus what it omits. */
     private static StateJsonDto readStateDto(ContainerRunSupport support) {
         byte[] bytes = support.gitObjects.readBlob(tip(support), ".gnomish-task/state.json", FILE_READ_CAP);
-        return StateJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8));
+        return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
     /**
@@ -71,7 +72,8 @@ final class ContainerTipReader {
     /** Reads the branch tip's {@code task.json} as bare objects — context, outcome, escalation (FR17). */
     static TaskRecord readTaskJson(ContainerRunSupport support) {
         byte[] bytes = support.gitObjects.readBlob(tip(support), ".gnomish-task/task.json", FILE_READ_CAP);
-        return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8)));
+        return TaskJsonMapper.fromDto(
+                TaskJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8))));
     }
 
     /**

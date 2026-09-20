@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -11,11 +10,10 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
-import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -35,17 +33,13 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     Path repo
     Path bareRepo
 
-    def toolEvent = new AgentProgressEvent.ToolStarted('Bash')
+    def toolEvent = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash'))
 
     def setup() {
-        repo = initWorkingRepo(tempDir)
-        new File(repo.toFile(), 'a.txt').text = 'first'
-        runner.run(repo, 'add', 'a.txt')
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
+        repo = initTaskWorkingRepo(tempDir)
 
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(repo, 'origin', bareRepo.toString())
     }
 
     /** A request over the spec's own working repo — the undisturbed case. */
@@ -61,14 +55,13 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
                 'instructions.md', [],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
         new StageExecutor.Request(
-                new TaskContext('PROJ-1', 'title', 'body', []),
+                new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 stage, new DirectoryWorkspace(workspace), attempt, [])
     }
 
-    private void gnomeCommit(String fileName = 'gnome.txt') {
-        new File(repo.toFile(), fileName).text = 'gnome work'
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'gnome commit')
+    /** One gnome commit on the task branch, through the fixture's own write/add/commit step. */
+    private void gnomeCommit() {
+        commit(repo, 'gnome.txt', 'gnome work')
     }
 
     // FR1: the decorated round's listener notices a gnome commit between two progress events
@@ -84,8 +77,8 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         round.roundListener().onProgress(toolEvent)
 
         then:
-        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() ==
-                runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() ==
+                currentHead(repo)
     }
 
     // FR1: one fresh listener per round (the listener's documented lifecycle): each openRound
@@ -131,10 +124,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "the wiring adds no git invocations beyond the listener's per-event rev-parse"() {
         given: 'a git wrapper that logs every invocation before delegating to the real binary'
         Path invocationLog = tempDir.resolve('git-invocations.log')
-        Path countingGit = tempDir.resolve('counting-git.sh')
-        Files.writeString(countingGit, "#!/bin/sh\necho \"\$@\" >> '${invocationLog}'\nexec git \"\$@\"\n")
-        Files.setPosixFilePermissions(countingGit, PosixFilePermissions.fromString('rwxr-xr-x'))
-        def countingRunner = new GitProcessRunner(countingGit.toString())
+        def countingRunner = new GitProcessRunner(recordingGit(invocationLog).toString())
         def source = new MidRoundPushRounds(new PassThroughRounds(), countingRunner)
 
         when: 'a round opens (baseline read) and two stationary events arrive'
@@ -146,6 +136,11 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         then:
         afterOpen == 1
         invocationCount(invocationLog) == 3
+    }
+
+    /** How many git invocations the recording stand-in has logged so far. */
+    private int invocationCount(Path log) {
+        recordedSubcommands(log).size()
     }
 
     // NFR-O1 (design D4): the suppressor is shared across the decorator's rounds — a tip that
@@ -167,6 +162,9 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         warnings[0].formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
         warnings[0].formattedMessage.contains('taskId=PROJ-1')
         logs.list.findAll { it.level == Level.DEBUG }.size() >= 1
+
+        cleanup:
+        logs.detach()
     }
 
     // NFR-R1: the wiring preserves the listener contract — a failing push inside onProgress
@@ -191,6 +189,9 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         delegate.round.closed
         logs.list.findAll { it.level == Level.WARN }*.formattedMessage
         .any { it.startsWith(OperatorEvent.PUSH_FAILED.head()) }
+
+        cleanup:
+        logs.detach()
     }
 
     // NFR-R1: a failing rev-parse skips the observation and never throws — the round closes
@@ -215,58 +216,8 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         .any {
             it.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
         }
-    }
 
-    private static int invocationCount(Path log) {
-        Files.exists(log) ? Files.readAllLines(log).size() : 0
-    }
-
-    /** A recording delegate whose rounds keep the seam's default no-op listener. */
-    static class PassThroughRounds implements RoundEnvironmentSource {
-
-        FakeRound round
-
-        @Override
-        Round openRound(StageExecutor.Request request) {
-            round = new FakeRound()
-            round
-        }
-
-        static class FakeRound implements Round {
-
-            def environment = [:] as TaskExecutionEnvironment
-            boolean closed
-            boolean discarded
-
-            @Override
-            TaskExecutionEnvironment environment() {
-                environment
-            }
-
-            @Override
-            Path decisionFilePath() {
-                Path.of('decision.json')
-            }
-
-            @Override
-            Map<String, String> decisionEnvFragment() {
-                [GNOMISH_DECISION_FILE: 'decision.json']
-            }
-
-            @Override
-            void closeRound() {
-                closed = true
-            }
-
-            @Override
-            Optional<String> readDecision() {
-                Optional.of('decision-content')
-            }
-
-            @Override
-            void discard() {
-                discarded = true
-            }
-        }
+        cleanup:
+        logs.detach()
     }
 }

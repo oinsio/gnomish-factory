@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -42,7 +43,7 @@ public record ParsedMarker(
         String instance,
         Instant at,
         int version,
-        String humanText,
+        UntrustedText humanText,
         @Nullable String reason,
         @Nullable GithubCommentIdentity identity,
         @Nullable ClaimEpoch epoch) {}

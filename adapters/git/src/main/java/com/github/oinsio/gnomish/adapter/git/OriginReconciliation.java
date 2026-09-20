@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -111,7 +110,7 @@ public final class OriginReconciliation {
                     taskId,
                     branch,
                     touchpoint,
-                    LogText.forLog(result.stderr()));
+                    result.stderr().forLog());
         }
     }
 }

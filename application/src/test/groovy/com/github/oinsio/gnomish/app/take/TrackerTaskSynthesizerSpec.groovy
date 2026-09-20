@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -46,7 +47,7 @@ class TrackerTaskSynthesizerSpec extends Specification {
     // FR11: id/title/body flow from the snapshot into TaskContext verbatim
     def "the snapshot's id, title and body flow verbatim into TaskContext"() {
         given: 'a task snapshot frozen at first claim'
-        def snapshot = new TaskSnapshot('PROJ-42', 'Fix the widget', 'The widget is broken.')
+        def snapshot = new TaskSnapshot('PROJ-42', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('The widget is broken.'))
         def definition = pipelineWith([
             stage('plan'),
             stage('implement')
@@ -56,13 +57,13 @@ class TrackerTaskSynthesizerSpec extends Specification {
         def synthesized = TrackerTaskSynthesizer.synthesize(snapshot, definition)
 
         then: 'the resulting context carries the snapshot fields unchanged'
-        synthesized.context() == new TaskContext('PROJ-42', 'Fix the widget', 'The widget is broken.', [])
+        synthesized.context() == new TaskContext('PROJ-42', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('The widget is broken.'), [])
     }
 
     // FR11: a freshly claimed task has collected no human decisions yet
     def "the initial context starts with an empty decisions list"() {
         given:
-        def snapshot = new TaskSnapshot('PROJ-1', 'Title', 'Body')
+        def snapshot = new TaskSnapshot('PROJ-1', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'))
         def definition = pipelineWith([stage('plan')])
 
         when:
@@ -76,7 +77,7 @@ class TrackerTaskSynthesizerSpec extends Specification {
     // stage — no --from-stage support for take
     def "the initial state positions at the pipeline's first declared stage"() {
         given: 'a pipeline whose first declared stage is "plan"'
-        def snapshot = new TaskSnapshot('PROJ-7', 'Title', 'Body')
+        def snapshot = new TaskSnapshot('PROJ-7', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'))
         def definition = pipelineWith([
             stage('plan'),
             stage('implement'),
@@ -94,7 +95,7 @@ class TrackerTaskSynthesizerSpec extends Specification {
     // ordering — reversing the declared stages changes which one is first
     def "the start stage follows declaration order, not stage name"() {
         given: 'the same stages declared in reverse order'
-        def snapshot = new TaskSnapshot('PROJ-9', 'Title', 'Body')
+        def snapshot = new TaskSnapshot('PROJ-9', UntrustedText.tracker('Title'), UntrustedText.tracker('Body'))
         def definition = pipelineWith([
             stage('review'),
             stage('implement'),
@@ -112,13 +113,13 @@ class TrackerTaskSynthesizerSpec extends Specification {
     // permits an empty body (many tracker issues have no description)
     def "an empty snapshot body flows through unchanged"() {
         given:
-        def snapshot = new TaskSnapshot('PROJ-3', 'Title only', '')
+        def snapshot = new TaskSnapshot('PROJ-3', UntrustedText.tracker('Title only'), UntrustedText.tracker(''))
         def definition = pipelineWith([stage('plan')])
 
         when:
         def synthesized = TrackerTaskSynthesizer.synthesize(snapshot, definition)
 
         then:
-        synthesized.context().body() == ''
+        synthesized.context().body().forLog() == ''
     }
 }

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.status;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The terminal result of a task run, mirroring {@link TaskOutcome}'s four sealed
@@ -65,7 +66,7 @@ public sealed interface Outcome permits Outcome.Completed, Outcome.Paused, Outco
      * @param failedAt the attempt key of the round whose persist failed; never null
      * @param cause the failure detail, stack trace preserved; never blank
      */
-    record Aborted(AttemptKey failedAt, String cause) implements Outcome {}
+    record Aborted(AttemptKey failedAt, UntrustedText cause) implements Outcome {}
 
     /**
      * Derives the report-model {@code Outcome} from the engine's {@link

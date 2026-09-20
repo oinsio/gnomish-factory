@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.DenialRead;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * <p>Implements FR7, NFR-O1, NFR-R1 of add-sandbox-core; FR2, NFR-S1 of
  * polish-sandbox-forensics.
  */
+@UntrustedParser
 public final class EgressGuard {
 
     private static final Logger log = LoggerFactory.getLogger(EgressGuard.class);
@@ -112,9 +113,10 @@ public final class EgressGuard {
         create();
         DockerResult recreated = docker.run(GuardCommands.inspectGuardRunning(key));
         if (!recreated.ok() || !running(recreated)) {
-            throw new GuardUnavailableException("egress guard for " + key + " (container "
-                    + FactoryDockerLabels.guardName(key) + ") could not be started: "
-                    + recreated.stderr().strip());
+            throw new GuardUnavailableException(
+                    "egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key)
+                            + ") could not be started",
+                    recreated.stderr());
         }
     }
 
@@ -230,7 +232,9 @@ public final class EgressGuard {
         DeclaredVolumeOverrides overrides;
         try {
             overrides = DeclaredVolumeOverrides.resolve(docker, guardImage, Set.of(GuardCommands.CONFIG_MOUNT));
-        } catch (IllegalStateException e) {
+        } catch (DockerCommandFailedException e) {
+            // The lower message is already inert — composed from the carrier docker wrote (design
+            // D5) — so it is folded as text and the original stays attached as the cause.
             throw new GuardUnavailableException(
                     "reading the declared volumes of the egress guard image for " + key + " (container "
                             + FactoryDockerLabels.guardName(key) + ") failed: " + e.getMessage(),
@@ -243,15 +247,17 @@ public final class EgressGuard {
         DockerResult run = docker.run(GuardCommands.runGuard(
                 key, guardImage, configDir.toAbsolutePath().toString(), ownership, overrides));
         if (!run.ok()) {
-            throw new GuardUnavailableException("docker run of the egress guard for " + key + " (container "
-                    + FactoryDockerLabels.guardName(key) + ") failed: "
-                    + run.stderr().strip());
+            throw new GuardUnavailableException(
+                    "docker run of the egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key)
+                            + ") failed",
+                    run.stderr());
         }
         DockerResult bridge = docker.run(GuardCommands.connectBridge(key));
         if (!bridge.ok() && !bridge.stderr().contains("already exists")) {
-            throw new GuardUnavailableException("connecting the egress guard for " + key + " (container "
-                    + FactoryDockerLabels.guardName(key) + ") to the bridge failed: "
-                    + bridge.stderr().strip());
+            throw new GuardUnavailableException(
+                    "connecting the egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key)
+                            + ") to the bridge failed",
+                    bridge.stderr());
         }
     }
 
@@ -267,11 +273,13 @@ public final class EgressGuard {
                     "egress guard repair step '{}' for {} did not succeed: {}",
                     step,
                     key,
-                    LogText.forLog(result.stderr().strip()));
+                    result.stderr().forLog());
         }
     }
 
+    // @UntrustedParser warrant (design D11): the inspect answer becomes one boolean — is the guard
+    //     container running — and no text leaves the carrier.
     private static boolean running(DockerResult state) {
-        return state.stdout().strip().equals("true");
+        return "true".equals(state.stdout().forParsing().strip());
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -76,26 +77,26 @@ class VerdictSpec extends Specification {
     // FR4: CannotVerify exposes its reason and details as constructed
     def "CannotVerify exposes reason and details as constructed"() {
         when: 'a CannotVerify is created'
-        def cv = new Verdict.CannotVerify('binary not found', 'PATH=/usr/bin')
+        def cv = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('PATH=/usr/bin'))
 
         then: 'both components are exposed exactly as constructed'
-        cv.reason() == 'binary not found'
-        cv.details() == 'PATH=/usr/bin'
+        cv.reason().forLog() == 'binary not found'
+        cv.details().forLog() == 'PATH=/usr/bin'
     }
 
     // FR4/NFR-O1: details holds the preserved stack trace, but may be empty when there is none
     def "CannotVerify accepts empty details"() {
         when: 'a CannotVerify is created with no underlying detail'
-        def cv = new Verdict.CannotVerify('check id unknown', '')
+        def cv = new Verdict.CannotVerify(UntrustedText.subprocess('check id unknown'), UntrustedText.subprocess(''))
 
         then: 'the empty details are exposed as constructed'
-        cv.details() == ''
+        cv.details().forLog() == ''
     }
 
     // FR4: reason is the human-facing short cause — a blank reason is meaningless and rejected
     def "CannotVerify rejects a blank reason with the component name in the message"() {
         when: 'a CannotVerify is created with a blank reason'
-        new Verdict.CannotVerify(reason, 'details')
+        new Verdict.CannotVerify(UntrustedText.subprocess(reason), UntrustedText.subprocess('details'))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -114,7 +115,7 @@ class VerdictSpec extends Specification {
         verdict || expected
         new Verdict.Pass() || 'pass'
         new Verdict.Fail([]) || 'fail'
-        new Verdict.CannotVerify('r', '') || 'cannot-verify'
+        new Verdict.CannotVerify(UntrustedText.subprocess('r'), UntrustedText.subprocess('')) || 'cannot-verify'
     }
 
     private static String label(Verdict verdict) {

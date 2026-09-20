@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.board.WorkingRow
 import com.github.oinsio.gnomish.dashboard.BoardSectionView
 import com.github.oinsio.gnomish.dashboard.DaemonSnapshotView
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -39,13 +40,13 @@ class DashboardBoardFixtures {
     /** One row in each of the three lists — the shape most block assertions need. */
     static BoardModel boardModel() {
         def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, null)
+            new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, null)
         ]
         def workingRows = [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1', null)
+            new WorkingRow(new TaskRef('task-2'), UntrustedText.tracker('Working title'), 'gnome-1', null)
         ]
         def awaitingRows = [
-            new AwaitingHumanRow(new TaskRef('task-3'), 'Parked title', ParkReason.ESCALATION)
+            new AwaitingHumanRow(new TaskRef('task-3'), UntrustedText.tracker('Parked title'), ParkReason.ESCALATION)
         ]
         new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), false, GENERATED_AT)
     }
@@ -53,7 +54,7 @@ class DashboardBoardFixtures {
     /** A board holding one working row only, for the claim-marker cases. */
     static BoardModel workingOnly(String holder, ClaimVersion claim) {
         new BoardModel([], [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', holder, claim)
+            new WorkingRow(new TaskRef('task-2'), UntrustedText.tracker('Working title'), holder, claim)
         ],
         [], ReadySummary.tally([]), false, GENERATED_AT)
     }

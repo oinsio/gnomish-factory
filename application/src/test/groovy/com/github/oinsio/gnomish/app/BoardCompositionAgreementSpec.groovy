@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.board.json.BoardJsonMapper
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -59,13 +60,13 @@ class BoardCompositionAgreementSpec extends Specification implements Application
     def "the dashboard's BoardComposition.compose call agrees with gnomish board's own model for the same tracker state, including the in-backoff deadline"() {
         given: 'the same tracker state (an in-backoff Ready row, a plain Ready row, a Working row, an AwaitingHuman row) shared by both callers'
         def ready = [
-            new ReadyTask(new TaskRef('r-1'), new AbortFacts(1, BACKOFF_LAST_ABORT_AT), false, false, 'Fix flaky spec'),
-            new ReadyTask(new TaskRef('r-2'), AbortFacts.none(), false, false, 'Add widgets')
+            new ReadyTask(new TaskRef('r-1'), new AbortFacts(1, BACKOFF_LAST_ABORT_AT), false, false, UntrustedText.tracker('Fix flaky spec')),
+            new ReadyTask(new TaskRef('r-2'), AbortFacts.none(), false, false, UntrustedText.tracker('Add widgets'))
         ]
         def open = [
             new OpenTask(new TaskRef('w-1'), new TrackerTaskState.Working('someone'),
-            new ClaimVersion('marker-1', NOW - Duration.ofMinutes(3), new ClaimEpoch(1)), 'Refactor retry module'),
-            new OpenTask(new TaskRef('h-1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'Needs a decision')
+            new ClaimVersion('marker-1', NOW - Duration.ofMinutes(3), new ClaimEpoch(1)), UntrustedText.tracker('Refactor retry module')),
+            new OpenTask(new TaskRef('h-1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, UntrustedText.tracker('Needs a decision'))
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)
         def factory = new RecordingTrackerAdapterFactory(tracker)

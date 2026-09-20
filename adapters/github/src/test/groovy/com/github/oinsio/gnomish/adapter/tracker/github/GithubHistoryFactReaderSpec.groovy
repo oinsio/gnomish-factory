@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -15,7 +16,7 @@ import spock.lang.Specification
 class GithubHistoryFactReaderSpec extends Specification {
 
     private static ParsedMarker marker(GithubMarkerKind kind) {
-        new ParsedMarker(kind, 'gnomish-factory-a1', Instant.parse('2026-07-20T11:00:00Z'), 1, '', null, null, null)
+        new ParsedMarker(kind, 'gnomish-factory-a1', Instant.parse('2026-07-20T11:00:00Z'), 1, UntrustedText.tracker(''), null, null, null)
     }
 
     def "an empty marker list yields both facts false"() {

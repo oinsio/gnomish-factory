@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
 /**
@@ -24,7 +25,7 @@ class ClaimFixtures {
     }
 
     static OpenTask workingBy(TaskRef ref, String instance, ClaimVersion v) {
-        new OpenTask(ref, new TrackerTaskState.Working(instance), v, 'fixture title')
+        new OpenTask(ref, new TrackerTaskState.Working(instance), v, UntrustedText.tracker('fixture title'))
     }
 
     /** The live claim footprint of {@code workingBy} — the guard a reap is now called with. */

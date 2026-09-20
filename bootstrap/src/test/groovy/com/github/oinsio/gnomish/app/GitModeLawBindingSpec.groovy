@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -97,7 +98,7 @@ exec sh '${scriptPath}' "\$@"
                 TaskGitFixture.real(),
                 worktreesRoot,
                 LiveConsoleIO.onStdout())
-        def context = new TaskContext('LAW-1', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('LAW-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run: attempt 1 tampers + fails files_exist, attempt 2 completes'
         runner.run(cloneDir, null, pipeline(), context, TaskState.atStageStart('build'),

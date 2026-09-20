@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerKillWindows
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Shared
 import spock.lang.Specification
@@ -84,7 +85,7 @@ class GithubKillWindowSpec extends Specification {
         'abort' | 3 | { FixtureSeeder s, FixtureIssue i ->
             s.seedWorkingWithClaim(i, GithubKillWindowWorld.HOLDER)
         } | { Tracker t, TaskRef r ->
-            t.recordAbort(r, new AbortRecord('durability broke',
+            t.recordAbort(r, new AbortRecord(UntrustedText.subprocess('durability broke'),
             GithubKillWindowWorld.HOLDER, Instant.parse('2026-07-20T10:00:00Z'),
             RecoveryCause.INSTANCE_CRASH))
         }

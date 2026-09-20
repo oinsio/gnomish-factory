@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -31,10 +32,12 @@ public final class UnreadableLawFileException extends RuntimeException {
     /**
      * @param ref the law-file reference exactly as declared in the stage manifest
      *     (relative to the {@code .gnomish/} law-source root)
-     * @param reason a short, human-readable cause captured when the file was frozen,
-     *     folded into the exception message for diagnosability
+     * @param reason a short, human-readable cause captured when the file was frozen, folded into
+     *     the exception message through its own log exit — the cause quotes the target
+     *     repository's paths and its filesystem's words, so the parameter is the carrier rather
+     *     than a {@code String} (design D5 of type-untrusted-text)
      */
-    public UnreadableLawFileException(String ref, String reason) {
+    public UnreadableLawFileException(String ref, UntrustedText reason) {
         super("law file could not be read: " + ref + " (" + reason + ")");
     }
 }

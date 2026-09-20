@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.gitobjects.GitObjectsException;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.TreeEntry;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
@@ -68,10 +69,11 @@ public final class GitObjectsLawSource implements LawSource {
     @Override
     public Read read(String ref) {
         return switch (LawPathWalk.walk(root, ref, tree)) {
-            case LawPathWalk.Escapes escapes -> new Unreadable("path escapes the configuration root: " + escapes.ref());
+            case LawPathWalk.Escapes escapes ->
+                new Unreadable(UntrustedText.manifest("path escapes the configuration root: " + escapes.ref()));
             case LawPathWalk.Symlinked symlinked ->
-                new Unreadable(
-                        "a symlink is not a law file at '" + repoPath(symlinked.segment()) + "' in " + lawCommit.hex());
+                new Unreadable(UntrustedText.manifest("a symlink is not a law file at '" + repoPath(symlinked.segment())
+                        + "' in " + lawCommit.hex()));
             case LawPathWalk.File file -> readBlob(repoPath(file.relative()));
             case LawPathWalk.Absent absent -> noLawFile(repoPath(absent.relative()));
             case LawPathWalk.Directory directory -> notARegularFile(repoPath(directory.relative()));
@@ -125,16 +127,17 @@ public final class GitObjectsLawSource implements LawSource {
         try {
             return new Text(new String(gitObjects.readBlob(lawCommit, path, readCapBytes), StandardCharsets.UTF_8));
         } catch (GitObjectsException e) {
-            return new Unreadable(e.getClass().getSimpleName() + ": " + e.getMessage());
+            return new Unreadable(UntrustedText.manifest(e.getClass().getSimpleName() + ": " + e.getMessage()));
         }
     }
 
     private Unreadable noLawFile(String path) {
-        return new Unreadable("no law file at '" + path + "' in " + lawCommit.hex());
+        return new Unreadable(UntrustedText.manifest("no law file at '" + path + "' in " + lawCommit.hex()));
     }
 
     private Unreadable notARegularFile(String path) {
-        return new Unreadable("not a regular file, so not a law file: '" + path + "' in " + lawCommit.hex());
+        return new Unreadable(
+                UntrustedText.manifest("not a regular file, so not a law file: '" + path + "' in " + lawCommit.hex()));
     }
 
     private List<LawEntry> entries(String path) {

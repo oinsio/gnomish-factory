@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -107,7 +108,7 @@ exec sh '${scriptPath}' "\$@"
         and: 'a captured-stdin file the fake writes its one prompt to'
         def captureFile = File.createTempFile('fake-agent-stdin', '.log')
         captureFile.deleteOnExit()
-        def context = new TaskContext('BASE-1', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('BASE-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run based on release/1.18'
         runner(captureFile.absolutePath).run(cloneDir, 'release/1.18', pipeline(), context,
@@ -139,7 +140,7 @@ exec sh '${scriptPath}' "\$@"
         and: 'a captured-stdin file the fake writes its one prompt to'
         def captureFile = File.createTempFile('fake-agent-stdin', '.log')
         captureFile.deleteOnExit()
-        def context = new TaskContext('BASE-2', 'title', 'body', List.<Decision> of())
+        def context = new TaskContext('BASE-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run with no --base'
         runner(captureFile.absolutePath).run(cloneDir, null, pipeline(), context,

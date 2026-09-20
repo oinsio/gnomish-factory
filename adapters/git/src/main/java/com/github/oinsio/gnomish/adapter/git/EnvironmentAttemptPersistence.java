@@ -1,24 +1,16 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
-import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.engine.ToolCall;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
-import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -31,19 +23,13 @@ import java.util.List;
  * the environment channel ({@code putFile}), committed in-box (hooks off at
  * argv level), harvested, and then verified at the boundary.
  *
- * <p>Harvest-boundary integrity (D16), all factory-side and trusted:
- *
- * <ul>
- *   <li><b>boundary protocol</b> — {@code .gnomish-task/} untouched by the gnome
- *       between the previous tip and the snapshot commit, with the single
- *       decision-file carve-out ({@link HarvestedBoundaryCheck}, FR23);
- *   <li><b>parent-check</b> — the harvested state commit's parent must be the
- *       snapshot commit; a daemon-inserted commit aborts;
- *   <li><b>read-back</b> — the harvested {@code state.json} and trace must be
- *       byte-identical to what the factory wrote (bare-object reads via {@link
- *       GitObjects}, no checkout, no hooks); in-box tampering between {@code
- *       putFile} and the commit aborts.
- * </ul>
+ * <p>Harvest-boundary integrity (D16) is factory-side and trusted, and owned by
+ * two checks this class only sequences: the <b>boundary protocol</b> — {@code
+ * .gnomish-task/} untouched by the gnome between the previous tip and the
+ * snapshot commit, with the single decision-file carve-out ({@link
+ * HarvestedBoundaryCheck}, FR23) — and, on the harvested state commit itself, the
+ * parent-check and the byte-exact read-back ({@link HarvestedStateCommitCheck},
+ * FR22).
  *
  * <p>The branch tip this class resolves — the baseline for the next round's
  * boundary check and the commit the read-back reads from — is verified before
@@ -55,6 +41,27 @@ import java.util.List;
  * turns a thrown persist into {@code Aborted}, the branch keeps the evidence,
  * and the environment is kept untouched. This is a strict port: any failure to
  * durably commit throws, never returns.
+ *
+ * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round
+ * with the same durable sequence — {@code state.json} and the round's trace file
+ * written first, then one commit stamped with the claim epoch that carries both,
+ * so neither medium can leave a branch on which a round's state landed without
+ * its trace (or the other way round). The denial cursor this class commits inside
+ * {@code state.json} ({@link EnvironmentRoundDocuments}) is deliberately
+ * environment-side only and is not part of the synchronized invariant: host mode
+ * has no egress guard, so there is no denial source to mirror.
+ *
+ * <p>Kill windows (crash-consistency rule). The durable step is the harvest: the
+ * in-box commit lives in a disposable environment, so it becomes branch state only
+ * once the fast-forward-only fetch lands it in the factory clone, and the push to
+ * origin is a later step owned by {@link PushBestEffortAttemptPersistence}. A kill
+ * before the harvest — during the {@code putFile} writes, or between them and the
+ * in-box commit — dies with the box and freezes "round not closed": the clone and
+ * origin still read the previous tip, and the next pickup sees no round rather than
+ * a half-written one. A kill after the harvest but before the push freezes "round
+ * harvested locally, not pushed", the same window the host twin's commit-before-push
+ * gap leaves, converged by the next push of this branch. The sequence is not atomic
+ * across those steps and does not claim to be.
  *
  * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
  * harden-logging-observability.
@@ -71,10 +78,11 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private final TaskExecutionEnvironment environment;
     private final GitProcessRunner runner;
     private final Path cloneDir;
-    private final GitObjects gitObjects;
     private final String branch;
     private final AttemptCommitRef attemptCommit;
     private final HarvestedBoundaryCheck boundaryCheck;
+    private final HarvestedStateCommitCheck stateCommitCheck;
+    private final EnvironmentRoundDocuments documents;
     private final ClaimEpochSource epochs;
     private String previousTip;
 
@@ -100,10 +108,11 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
-        this.gitObjects = gitObjects;
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.attemptCommit = attemptCommit;
         this.boundaryCheck = new HarvestedBoundaryCheck(runner, cloneDir);
+        this.stateCommitCheck = new HarvestedStateCommitCheck(gitObjects);
+        this.documents = new EnvironmentRoundDocuments(environment);
         this.epochs = epochs;
         this.previousTip = currentTip();
     }
@@ -115,9 +124,9 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
         boundaryCheck.verify(taskId, previousTip, snapshot, key);
 
-        byte[] stateBytes = renderState(taskId, key, state);
-        byte[] traceBytes = renderTrace(trace);
-        String tracePath = ".gnomish-task/" + TraceLineWriter.relativePath(key);
+        byte[] stateBytes = documents.state(taskId, key, state);
+        byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);
+        String tracePath = GnomishTaskPaths.DIR + TraceLineWriter.relativePath(key);
         environment.putFile(STATE_PATH, stateBytes);
         environment.putFile(tracePath, traceBytes);
 
@@ -125,9 +134,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         environment.harvest();
 
         String tip = currentTip();
-        verifyParent(taskId, tip, snapshot);
-        readBack(taskId, tip, STATE_PATH, stateBytes);
-        readBack(taskId, tip, tracePath, traceBytes);
+        stateCommitCheck.verify(taskId, tip, snapshot, tracePath, stateBytes, traceBytes);
 
         previousTip = tip;
     }
@@ -147,71 +154,6 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "in-box state commit", commit.output());
         }
-    }
-
-    private void verifyParent(String taskId, String tip, String snapshot) {
-        String parent = gitObjects
-                .resolveRef(tip + "^")
-                .map(ObjectId::hex)
-                .orElseThrow(() -> new RoundBoundaryViolationException(
-                        taskId, "harvested state commit " + tip + " has no readable parent"));
-        if (!parent.equals(snapshot)) {
-            throw new RoundBoundaryViolationException(
-                    taskId,
-                    "harvested state commit's parent " + parent + " is not the snapshot commit " + snapshot
-                            + " (a commit was inserted inside the environment)");
-        }
-    }
-
-    private void readBack(String taskId, String tip, String path, byte[] written) {
-        byte[] harvested;
-        try {
-            // Cap = written length + 1: byte-identical content fits exactly, and any longer
-            // in-box replacement trips the cap and lands in the violation below.
-            harvested = gitObjects.readBlob(gitObjects.resolveRef(tip).orElseThrow(), path, written.length + 1L);
-        } catch (RuntimeException e) {
-            throw new RoundBoundaryViolationException(taskId, "read-back of " + path + " failed: " + e);
-        }
-        if (!Arrays.equals(harvested, written)) {
-            throw new RoundBoundaryViolationException(
-                    taskId,
-                    path + " harvested from the environment differs from what the factory wrote (in-box"
-                            + " tampering)");
-        }
-    }
-
-    /**
-     * Renders {@code state.json} for this round, carrying the environment's denial
-     * cursor (FR5 of fix-denial-report-attachment): the round's denials are already
-     * on the state being written, so committing the position that delimits them in
-     * the same commit is what lets a resuming instance continue the delta instead of
-     * replaying the guard container's whole surviving log onto its first round.
-     *
-     * <p>The position asked for here is the one the round's own {@code readDenials} left behind
-     * (design D7 of fix-denial-attribution-durability): asking does not advance it, so the cursor
-     * this commit carries delimits exactly the denials the state beside it records — it can lag
-     * that record after a lost commit, never lead it.
-     */
-    private byte[] renderState(String taskId, AttemptKey key, TaskState state) {
-        EgressCursorDto cursor = environment
-                .denialCursor()
-                .map(c -> new EgressCursorDto(c.source(), c.position()))
-                .orElse(null);
-        try {
-            return TaskStateJson.mapper()
-                    .writeValueAsString(StateJsonMapper.toDto(state, cursor))
-                    .getBytes(StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "serializing state.json", e);
-        }
-    }
-
-    private static byte[] renderTrace(ToolTrace trace) {
-        StringBuilder content = new StringBuilder();
-        for (ToolCall call : trace.calls()) {
-            content.append(TraceLineWriter.renderLine(call)).append('\n');
-        }
-        return content.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     /**

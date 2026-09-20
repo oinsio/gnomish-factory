@@ -5,8 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
-import java.io.InterruptedIOException
-import java.io.UncheckedIOException
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -105,7 +103,7 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
         then: 'the shutdown resolves as infrastructure, not as a thrown read failure'
         failure == null
         verdict instanceof Verdict.CannotVerify
-        (verdict as Verdict.CannotVerify).reason().toLowerCase().contains('interrupted')
+        (verdict as Verdict.CannotVerify).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'no findings read was attempted at all'
         environments.every { it.reads.isEmpty() }

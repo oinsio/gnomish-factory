@@ -1,13 +1,14 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.IsolationLevel;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -41,6 +42,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR8, NFR-O1, NFR-R1, UX2 of add-sandbox-core.
  */
+@UntrustedParser
 public final class EnvironmentSelfCheck {
 
     /**
@@ -114,17 +116,19 @@ public final class EnvironmentSelfCheck {
     private String probeRunsAsNonRoot() {
         ExecHandle handle = environment.exec(new ExecCommand(List.of("id", "-u"), Map.of(), null, true));
         CapturedExec probe = EgressSelfCheckProbes.capture(handle, "self-check probe non-root");
-        String output = probe.output().strip();
+        UntrustedText output = probe.output();
         int exitCode = probe.exitCode();
         if (exitCode != 0) {
             throw new SelfCheckFailedException(
-                    "non-root", "could not read the in-box uid: exit " + exitCode + ", output: " + output);
+                    "non-root", "could not read the in-box uid: exit " + exitCode + ", output", output);
         }
-        if (output.equals("0")) {
+        // @UntrustedParser warrant (design D11): what leaves here is a boolean — is the in-box uid
+        //     zero — and the uid itself travels on as the carrier, rendered by its log exit.
+        if ("0".equals(output.forParsing().strip())) {
             throw new SelfCheckFailedException(
                     "non-root", "the in-box user is root (uid 0); D16 requires a non-root image user");
         }
-        log.debug("self-check probe non-root passed for {}: in-box uid {}", key, LogText.forLog(output));
+        log.debug("self-check probe non-root passed for {}: in-box uid {}", key, output.forLog());
         return "in-box uid " + output;
     }
 
@@ -137,19 +141,20 @@ public final class EnvironmentSelfCheck {
             throw new SelfCheckFailedException(
                     "isolation", "passport does not declare guarded container isolation: " + passport);
         }
-        String internal =
-                docker.run(GuardCommands.inspectNetworkInternal(key)).stdout().strip();
-        if (!internal.equals("true")) {
-            throw new SelfCheckFailedException(
-                    "isolation", "task network is not internal-only (Internal=" + internal + ")");
+        // @UntrustedParser warrant (design D11): both inspect answers leave as booleans — is the
+        //     network internal, is the runtime the configured one — and the values themselves
+        //     travel on as carriers, rendered by their own log exit.
+        UntrustedText internal =
+                docker.run(GuardCommands.inspectNetworkInternal(key)).stdout();
+        if (!"true".equals(internal.forParsing().strip())) {
+            throw new SelfCheckFailedException("isolation", "task network is not internal-only, Internal", internal);
         }
-        String runtime = docker.run(GuardCommands.inspectRuntime(key)).stdout().strip();
-        if (!runtime.equals(expectedRuntime)) {
+        UntrustedText runtime = docker.run(GuardCommands.inspectRuntime(key)).stdout();
+        if (!expectedRuntime.equals(runtime.forParsing().strip())) {
             throw new SelfCheckFailedException(
-                    "isolation", "container runtime is '" + runtime + "', expected '" + expectedRuntime + "'");
+                    "isolation", "expected container runtime '" + expectedRuntime + "', got", runtime);
         }
-        log.debug(
-                "self-check probe isolation passed for {}: internal network, runtime {}", key, LogText.forLog(runtime));
+        log.debug("self-check probe isolation passed for {}: internal network, runtime {}", key, runtime.forLog());
         return "internal network, runtime " + runtime;
     }
 }

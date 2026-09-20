@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
 /**
@@ -39,6 +41,7 @@ import java.nio.file.Path;
  *
  * <p>Implements FR12, NFR-S1 of add-git-workflow; FR13 of harden-logging-observability.
  */
+@UntrustedParser
 final class RoundBoundaryCheck {
 
     private final GitProcessRunner runner;
@@ -103,7 +106,8 @@ final class RoundBoundaryCheck {
      */
     boolean isOnExpectedBranch() {
         GitCommandResult result = runner.run(worktreeRoot, "symbolic-ref", "--short", "HEAD");
-        return result.exitCode() == 0 && expectedBranch.equals(result.stdout().trim());
+        return result.exitCode() == 0
+                && expectedBranch.equals(result.stdout().forParsing().trim());
     }
 
     /**
@@ -119,20 +123,22 @@ final class RoundBoundaryCheck {
     private void checkOnTaskBranch(String taskId) {
         if (!isOnExpectedBranch()) {
             throw new RoundBoundaryViolationException(
-                    taskId, "HEAD is not on the task branch \"" + expectedBranch + "\"");
+                    taskId, UntrustedText.factory("HEAD is not on the task branch \"" + expectedBranch + "\""));
         }
     }
 
     private void checkNoHistoryRewrite(String taskId, String previousTip) {
         if (!isAncestor(previousTip)) {
             throw new RoundBoundaryViolationException(
-                    taskId, "previous tip " + previousTip + " is no longer an ancestor of HEAD (history rewrite)");
+                    taskId,
+                    UntrustedText.factory(
+                            "previous tip " + previousTip + " is no longer an ancestor of HEAD (history rewrite)"));
         }
     }
 
     private void checkGnomishTaskUntouched(String taskId, AttemptKey key, String previousTip) {
         GitCommandResult result =
-                runner.run(worktreeRoot, "diff", "--name-only", previousTip, "HEAD", "--", ".gnomish-task/");
+                runner.run(worktreeRoot, "diff", "--name-only", previousTip, "HEAD", "--", GnomishTaskPaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
         // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
         // round aborts as infrastructure rather than blaming the gnome for what git never said.
@@ -140,8 +146,9 @@ final class RoundBoundaryCheck {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "round boundary diff", result.cannotVerifyDetail());
         }
-        if (!result.stdout().trim().isEmpty()) {
-            throw new RoundBoundaryViolationException(taskId, ".gnomish-task/ was modified by the gnome");
+        if (!result.stdout().forParsing().trim().isEmpty()) {
+            throw new RoundBoundaryViolationException(
+                    taskId, UntrustedText.factory(".gnomish-task/ was modified by the gnome"));
         }
     }
 }

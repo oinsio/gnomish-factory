@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -35,7 +36,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
     private static final Instant NOW = Instant.parse('2026-08-02T12:00:00Z')
 
     private static ReadyTask task(String id, boolean finished, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, finished, 'fixture title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, finished, UntrustedText.tracker('fixture title'))
     }
 
     private static FeedCycle cycle(Tracker tracker, int wipLimit = 2) {

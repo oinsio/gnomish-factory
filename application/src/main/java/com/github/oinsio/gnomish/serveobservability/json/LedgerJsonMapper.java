@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcome;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -28,6 +29,12 @@ import org.jspecify.annotations.Nullable;
  * default} arm, mirroring {@link SnapshotJsonMapper}'s idiom.
  *
  * <p>Implements FR10, FR11, FR12, FR13 conventions of add-serve-observability.
+ *
+ * <p>Not an {@code @UntrustedExit} (design D2 of type-untrusted-text): every field of every
+ * ledger line is a {@code String}, a number or a wire token minted by this module, so nothing
+ * here reads {@code UntrustedText.raw()} and the marker would widen the allowlist for nothing —
+ * D2's membership rule is the {@code raw()} call, not the family. A ledger line that later carries the
+ * carrier adds the marker in the same change that adds the field.
  */
 public final class LedgerJsonMapper {
 
@@ -141,6 +148,7 @@ public final class LedgerJsonMapper {
      * @return the equivalent DTO
      */
     public SweepActionLineDto toDto(SweepActionLine line) {
+        Duration age = line.age();
         return new SweepActionLineDto(
                 1,
                 "sweepAction",
@@ -152,7 +160,7 @@ public final class LedgerJsonMapper {
                 line.taskKey(),
                 toCategory(line.category()),
                 line.reason(),
-                line.age() == null ? null : line.age().toSeconds());
+                age == null ? null : age.toSeconds());
     }
 
     /**

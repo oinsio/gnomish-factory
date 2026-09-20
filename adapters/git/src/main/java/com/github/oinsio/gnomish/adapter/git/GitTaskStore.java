@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -17,17 +18,18 @@ import java.nio.file.Path;
 /**
  * The git-subprocess implementation of {@link TaskStoreGit} (FR12b, design D12 of
  * split-into-modules): hands out the per-run {@link TaskLifecycleStore} / {@link AttemptPersistence}
- * bound to one clone or worktree, and walks a task's usage history.
+ * bound to one clone or worktree, walks a task's usage history, and reads the two branch documents
+ * ({@code task.json}, {@code state.json}) back out of a worktree.
  *
- * <p>All three delegate to this package's existing collaborators over one shared {@link
- * GitProcessRunner}, which is what makes every collaborator a run hands out coherent — the same
- * runner, hence the same per-clone mutation lock (design D8 of add-git-workflow).
+ * <p>The handed-out collaborators and the history walk delegate to this package's existing classes
+ * over one shared {@link GitProcessRunner}, which is what makes every collaborator a run hands out
+ * coherent — the same runner, hence the same per-clone mutation lock (design D8 of
+ * add-git-workflow). The two document reads need no subprocess: they read the worktree's files
+ * directly, minting each as a branch document at the read.
  *
  * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules.
  */
 public final class GitTaskStore implements TaskStoreGit {
-
-    private static final String TASK_DIR = ".gnomish-task";
 
     private final GitProcessRunner runner;
     private final UsageHistoryWalker usageWalker;
@@ -63,19 +65,19 @@ public final class GitTaskStore implements TaskStoreGit {
 
     @Override
     public TaskState readRecordedState(Path worktree) {
-        Path stateJson = worktree.resolve(TASK_DIR).resolve("state.json");
+        Path stateJson = worktree.resolve(GnomishTaskPaths.STATE_JSON_PATH);
         return StateJsonMapper.fromDto(StateJsonMapper.readDto(read(stateJson, "state.json")));
     }
 
     @Override
     public TaskRecord readTaskRecord(Path worktree) {
-        Path taskJson = worktree.resolve(TASK_DIR).resolve("task.json");
+        Path taskJson = worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH);
         return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(read(taskJson, "task.json")));
     }
 
-    private static String read(Path file, String label) {
+    private static UntrustedText read(Path file, String label) {
         try {
-            return Files.readString(file);
+            return UntrustedText.branchDocument(Files.readString(file));
         } catch (IOException e) {
             throw new UncheckedIOException("failed to read " + label + " at " + file, e);
         }

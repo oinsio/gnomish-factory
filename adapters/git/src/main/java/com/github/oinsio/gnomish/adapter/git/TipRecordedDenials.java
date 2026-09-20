@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import com.github.oinsio.gnomish.sandbox.environment.ContainerIdSyntax;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -60,15 +62,42 @@ public final class TipRecordedDenials {
                         LogText.forLog(shape.label()));
                 yield DenialRestoration.none();
             }
-            case TipEnvelopeRead.Loaded(BranchShape ignored, String taskJson, String stateJson) -> {
+            case TipEnvelopeRead.Loaded(BranchShape ignored, UntrustedText taskJson, UntrustedText stateJson) -> {
                 StateJsonDto state = StateJsonMapper.readDto(stateJson);
                 TaskJsonDto task = TaskJsonMapper.readDto(taskJson);
                 yield new DenialRestoration(
                         Optional.ofNullable(newest(state.egressCursor(), task.egressCursor()))
-                                .map(c -> new DenialCursor(c.source(), c.position())),
+                                .flatMap(TipRecordedDenials::restored),
                         RecordedDenialIdentities.of(state, task));
             }
         };
+    }
+
+    /**
+     * The offered cursor, when the id it names still has the shape a denial source's identity may
+     * have (task 5.3, design D11 of type-untrusted-text).
+     *
+     * <p>The id stays a {@code String} — it is an identity two leases compare across two media, not
+     * prose a sink renders — so what this reader owes it is the gate its producer applied, not a
+     * mint: {@code GuardSourceIdentity} held the live id to {@link ContainerIdSyntax} at the daemon,
+     * and this is the same gate on the restored half, which arrives from a document another
+     * instance wrote. A restored id that fails it offers no position at all, which the environment
+     * already degrades safely: it reads its denial source from the start (FR4 of
+     * fix-denial-attribution-durability), and the refusal leaves a DEBUG trace so that re-read is
+     * attributable.
+     */
+    private static Optional<DenialCursor> restored(EgressCursorDto cursor) {
+        Optional<DenialCursor> position =
+                ContainerIdSyntax.of(cursor.source()).map(source -> new DenialCursor(source, cursor.position()));
+        if (position.isEmpty()) {
+            // logging.md, "Best effort must still leave a trace": the committed position is
+            // dropped and the run re-reads the whole tail, which only the refused id explains.
+            log.debug(
+                    "committed denial position names '{}', which is not a denial source id;"
+                            + " the run reads its denial source from the start",
+                    LogText.forLog(cursor.source()));
+        }
+        return position;
     }
 
     /**

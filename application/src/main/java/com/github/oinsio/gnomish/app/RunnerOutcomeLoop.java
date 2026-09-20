@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
-import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -116,19 +115,6 @@ public final class RunnerOutcomeLoop {
     }
 
     /**
-     * Delegates to {@link EscalationResumeDialog#renderEscalation}; kept here as the public
-     * entry point tests and callers already use.
-     *
-     * <p>Implements FR9, D8 of add-manual-run.
-     *
-     * @param report the escalation reason to render; never null
-     * @return the rendered text block; never null, never blank
-     */
-    String renderEscalation(EscalationReport report) {
-        return EscalationResumeDialog.renderEscalation(report);
-    }
-
-    /**
      * Renders a final status summary for a {@code Completed} run and prints it (FR9): exit 0 is
      * Spring Boot's default for a returning runner, so this neither throws nor calls {@link
      * System#exit}. {@code currentStage}/{@code attemptLimit} are {@code null} (pipeline
@@ -184,7 +170,10 @@ public final class RunnerOutcomeLoop {
     private void handleAborted(TaskContext context, TaskOutcome.Aborted aborted) {
         var finalState = aborted.finalState();
         var failedAt = aborted.failedAt();
-        errorConsole.print("Aborted: " + aborted.cause() + ConsoleIO.LINE_END);
+        // The console exit, explicitly (design D6 of type-untrusted-text): an operator reading an
+        // abort needs the whole rendered chain with its line structure, which is exactly what the
+        // log exit would take away — one line, tail only.
+        errorConsole.print("Aborted: " + aborted.cause().forConsole() + ConsoleIO.LINE_END);
         errorConsole.print("Task '" + context.taskId() + "': the round at stage '" + failedAt.stage()
                 + "', attempt " + failedAt.attempt() + " was not persisted. Last known state: position="
                 + finalState.position() + ", attemptsUsed=" + finalState.attemptsUsed() + ", "

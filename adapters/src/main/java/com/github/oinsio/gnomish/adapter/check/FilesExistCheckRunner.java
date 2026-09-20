@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.InvalidTreePathException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -75,7 +76,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         try {
             files = readFiles(check.params());
         } catch (MalformedParamsException e) {
-            return new Verdict.CannotVerify(e.reason(), "");
+            return new Verdict.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         }
 
         if (workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace) {
@@ -90,7 +91,9 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         for (String file : files) {
             PathSafety.Resolution resolution = PathSafety.resolveWithinRoot(root, file);
             if (resolution instanceof PathSafety.Escapes(String ref)) {
-                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + ref, "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + ref),
+                        NoCheckDetails.NO_DETAILS);
             }
             PathSafety.Within within = (PathSafety.Within) resolution;
             if (!Files.exists(within.path())) {
@@ -111,7 +114,8 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     private Verdict runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
         if (attemptReader == null) {
             return new Verdict.CannotVerify(
-                    "files_exist has no factory-clone reader bound for the sandboxed workspace", "");
+                    UntrustedText.factory("files_exist has no factory-clone reader bound for the sandboxed workspace"),
+                    NoCheckDetails.NO_DETAILS);
         }
         ObjectId commit = ObjectId.of(workspace.attemptCommitSha());
         List<Finding> findings = new ArrayList<>();
@@ -121,7 +125,9 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
                     findings.add(new Finding("missing file: " + file, file, null));
                 }
             } catch (InvalidTreePathException e) {
-                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + file, "");
+                return new Verdict.CannotVerify(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + file),
+                        NoCheckDetails.NO_DETAILS);
             }
         }
         return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
@@ -142,9 +148,9 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     @DoNotMutate
     private static Verdict opaqueWorkspaceVerdict(Workspace workspace) {
         return new Verdict.CannotVerify(
-                "files_exist requires a DirectoryWorkspace, got "
-                        + workspace.getClass().getName(),
-                "");
+                UntrustedText.factory("files_exist requires a DirectoryWorkspace, got "
+                        + workspace.getClass().getName()),
+                NoCheckDetails.NO_DETAILS);
     }
 
     /**

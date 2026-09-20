@@ -79,6 +79,12 @@ dependencies {
     // constant. `implementation`, not `api`: the enum is named only inside log calls,
     // never in a signature this module exports.
     implementation project(':operatorevent')
+    // The untrusted-text leaf (FR1, FR10, design D3/D11 of type-untrusted-text): `DockerResult`
+    // carries docker's two streams as `UntrustedText`, and this module's parsers read them
+    // through `forParsing()` under `@UntrustedParser`. `implementation`, not `api`: both the
+    // record and the annotated classes are package-private, so no carrier travels on this
+    // module's own surface.
+    implementation project(':untrustedtext')
 
     // Shared fakes (FR7, design D8), test scope only: RecordingDockerCli /
     // ScriptedSandboxDocker and the TaskExecutionEnvironment port-contract
@@ -115,10 +121,10 @@ layering {
         ':operatorevent',
         ':sandbox:core',
         ':subprocess',
-        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
-        // `:logtext`, whose `LogText` is a facade over it. No source in this module names
-        // it; the layering gate walks the transitive graph, so the reach is listed where
-        // it arrives.
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, FR10, design
+        // D3/D11 of type-untrusted-text): reached through `:logtext`, whose `LogText` is a
+        // facade over it, and now declared directly — `DockerResult` carries the two streams
+        // and this module's parsers read them through the parsing exit.
         ':untrustedtext',
     ]
 }

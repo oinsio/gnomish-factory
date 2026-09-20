@@ -9,11 +9,13 @@ import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -34,18 +36,18 @@ class StageBriefingSpec extends Specification {
     def "renders all five sections with recognizable content"() {
         given:
         def briefing = new StageBriefing(PipelineLaw.ofContent(['instructions.md': 'Follow the coding standard.']))
-        def context = new TaskContext('task-1', 'Add login page', 'Implement OAuth login.',
+        def context = new TaskContext('task-1', UntrustedText.tracker('Add login page'), UntrustedText.tracker('Implement OAuth login.'),
                 [
                     new Decision('Use Google OAuth only', 'build', 'alice', null)
                 ])
         def stage = stage('instructions.md')
         def feedback = [
-            new CheckResult(new CheckRef(0, 'command:./gradlew test'),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
             new Verdict.Fail([
                 new Finding('tests are red', 'BuildSpec.groovy', null)
             ]), Duration.ofSeconds(1)),
-            new CheckResult(new CheckRef(1, 'external:ci'),
-            new Verdict.CannotVerify('ci unreachable', ''), Duration.ofSeconds(2))
+            new CheckResult(new CheckRef(1, UntrustedText.manifest('external:ci')),
+            new Verdict.CannotVerify(UntrustedText.subprocess('ci unreachable'), UntrustedText.subprocess('')), Duration.ofSeconds(2))
         ]
         def request = new StageExecutor.Request(context, stage, workspace(), 0, feedback)
 
@@ -67,7 +69,7 @@ class StageBriefingSpec extends Specification {
     def "a decision with a null author renders as unattributed"() {
         given:
         def briefing = new StageBriefing(PipelineLaw.ofContent(['instructions.md': 'No special rules.']))
-        def context = new TaskContext('task-6', 'Null author decision', '',
+        def context = new TaskContext('task-6', UntrustedText.tracker('Null author decision'), UntrustedText.tracker(''),
                 [
                     new Decision('Ship it', 'build', null, null)
                 ])
@@ -84,7 +86,7 @@ class StageBriefingSpec extends Specification {
     def "empty feedback, decisions and inputs render without crashing"() {
         given:
         def briefing = new StageBriefing(PipelineLaw.ofContent(['instructions.md': 'No special rules.']))
-        def context = new TaskContext('task-2', 'Empty task', '', [])
+        def context = new TaskContext('task-2', UntrustedText.tracker('Empty task'), UntrustedText.tracker(''), [])
         def stage = new StageDefinition(
                 'build',
                 'purpose',
@@ -110,8 +112,8 @@ class StageBriefingSpec extends Specification {
     def "D14: control content comes from the frozen law regardless of the workspace instance"() {
         given: 'an opaque, non-DirectoryWorkspace still gets the frozen control content'
         def briefing = new StageBriefing(PipelineLaw.ofContent(['instructions.md': 'Frozen instructions.']))
-        def context = new TaskContext('task-4', 'Opaque workspace', '', [])
-        def opaqueWorkspace = new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}
+        def context = new TaskContext('task-4', UntrustedText.tracker('Opaque workspace'), UntrustedText.tracker(''), [])
+        def opaqueWorkspace = new Workspace() {}
         def request = new StageExecutor.Request(context, stage('instructions.md'), opaqueWorkspace, 0, [])
 
         when:
@@ -125,7 +127,7 @@ class StageBriefingSpec extends Specification {
     def "a control ref the frozen law could not read degrades to a placeholder naming the ref"() {
         given:
         def briefing = new StageBriefing(PipelineLaw.ofContent([:]))
-        def context = new TaskContext('task-3', 'Missing control file', 'body', [])
+        def context = new TaskContext('task-3', UntrustedText.tracker('Missing control file'), UntrustedText.tracker('body'), [])
         def request = new StageExecutor.Request(context, stage('does-not-exist.md'), workspace(), 0, [])
 
         when:

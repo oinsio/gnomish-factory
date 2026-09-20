@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.JudgeUsage;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolUsage;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,13 @@ import java.util.Map;
  * byte-identical to what the DTO-sourced mapping produced.
  *
  * <p>Implements FR14, NFR-C1 of add-git-workflow.
+ *
+ * <p>Annotated {@link UntrustedExit} (design D2 of type-untrusted-text): the {@code --json}
+ * document is a parser's input, written byte for byte, so a check's own words go in as they
+ * arrived and JSON encoding — not a rendering exit — is what bounds them. Rendering here would
+ * corrupt the very output the machine plane exists to keep verbatim.
  */
+@UntrustedExit
 public final class UsageReportJsonMapper {
 
     private final ObjectMapper mapper;
@@ -93,17 +100,19 @@ public final class UsageReportJsonMapper {
         long durationMillis = check.duration().toMillis();
         return switch (check.verdict()) {
             case Verdict.Pass pass ->
-                new CheckDto(check.checkRef().label(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
+                new CheckDto(
+                        check.checkRef().label().raw(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
             case Verdict.Fail fail ->
-                new CheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null, null);
+                new CheckDto(
+                        check.checkRef().label().raw(), "fail", toFindings(fail), durationMillis, null, null, null);
             case Verdict.CannotVerify cannotVerify ->
                 new CheckDto(
-                        check.checkRef().label(),
+                        check.checkRef().label().raw(),
                         "cannotVerify",
                         List.of(),
                         durationMillis,
-                        cannotVerify.reason(),
-                        cannotVerify.details(),
+                        cannotVerify.reason().raw(),
+                        cannotVerify.details().raw(),
                         null);
         };
     }

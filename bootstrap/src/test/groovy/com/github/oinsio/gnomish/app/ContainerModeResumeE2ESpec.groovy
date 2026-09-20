@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -128,7 +129,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         taskId = "CTN-RES-${System.nanoTime() % 100000}"
         def sandboxProps = sandbox('decision-then-plain')
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
-        def context = new TaskContext(taskId, 'title', 'body', List.<Decision> of())
+        def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'instance one runs with an immediately-EOF console and dies at the escalation dialog'
         def gitOne = TaskGitFixture.real()
@@ -193,7 +194,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
                 new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.MANUAL, ClaimEpochSource.NONE)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
+        support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'
         def environment = support.lease().environmentFor('work')

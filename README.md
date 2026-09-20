@@ -26,6 +26,7 @@ Built on a pure ports-and-adapters architecture (Java 25), the factory provides 
 - [Using the factory](#using-the-factory)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
+- [Supported platforms](#supported-platforms)
 - [Building](#building)
 - [Documentation](#documentation)
 - [Development process](#development-process)
@@ -138,6 +139,21 @@ Java 25 LTS on virtual threads, built with Gradle 9.x. Minimal Spring Boot (`spr
 ## Project structure
 
 The build is a layered Gradle module tree with a one-way dependency direction: `:domain` (the pure stage engine) at the bottom, `:application` (use cases + ports) above it, adapter modules realizing the ports, and `:bootstrap` as the composition root — the only module that knows which realization is bound to which port. The direction is enforced, not documented: `verifyModuleLayering`, the dependency-analysis plugin, and ArchUnit rules all fail `./gradlew check` naming the offending edge. The module map and diagram: [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md#module-structure).
+
+## Supported platforms
+
+The factory runs on **macOS and Linux**. Windows is supported only through **WSL2**, where the factory is an ordinary Linux installation and nothing about it is special.
+
+Running the factory directly on Windows (outside WSL2) is not supported, and the reason is not one missing detail — the host side of the factory is built on POSIX assumptions:
+
+- **Verify commands run through `sh -c`.** A `command` check from a stage manifest is a single shell line — pipes, `&&`, redirects, quoting — handed to `sh`; Windows ships no such shell. Microsoft's [Coreutils for Windows](https://learn.microsoft.com/en-us/windows/core-utils/overview) (2026) provides native `grep`, `cat`, `find` and friends, but deliberately no shell, so it does not close this gap.
+- **The child environment is composed from POSIX variable names.** Every subprocess starts from a cleared environment filled with an explicit allowlist (`PATH`, `HOME`, `TMPDIR`, the locale variables). On Windows the variables a native binary needs to start at all — `SystemRoot`, `TEMP`, `PATHEXT`, `COMSPEC` — would never reach the child.
+- **Termination has no cooperative phase.** The subprocess discipline is "ask politely, wait out the kill grace, then force". Windows has no POSIX signals, so both steps collapse into an immediate kill and an agent gets no chance to persist its attempt.
+- **Container-side POSIX details.** Guard configuration is made world-readable with POSIX permission bits, the sandbox self-check reads `id -u`, and the in-box channels run `sh -c`.
+
+Beyond the host, the isolation surfaces are POSIX-only by design: the Docker adapter drives a Linux box, and the planned virtual-machine adapter targets the macOS and Linux hypervisor and packet-filter stacks.
+
+Docker is required only for the sandbox executor and the Testcontainers E2E layer; the `api` executor and host-mode `agent-cli` runs need none. Building the project is platform-neutral — the Gradle wrapper and the auto-provisioned toolchain work anywhere a JDK does — but the test suite shares the runtime's POSIX assumptions, and CI verifies Linux only.
 
 ## Building
 

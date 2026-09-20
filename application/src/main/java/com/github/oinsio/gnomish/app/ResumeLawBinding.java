@@ -10,8 +10,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.ResumeBaseReport;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
@@ -113,8 +113,10 @@ final class ResumeLawBinding {
         return switch (baseRefGit.resolveForResume(cloneDir, name, pinnedRef.kind())) {
             case ResumeBaseOutcome.Bound(var ignoredRef, String commit, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit));
-            case ResumeBaseOutcome.Refused(String report) -> new Parked(park(finalState, ref, tracker, name, report));
-            case ResumeBaseOutcome.Unavailable(String reason) -> new Released(release(ref, tracker, name, reason));
+            case ResumeBaseOutcome.Refused(UntrustedText refusal) ->
+                new Parked(park(finalState, ref, tracker, name, refusal));
+            case ResumeBaseOutcome.Unavailable(UntrustedText reason) ->
+                new Released(release(ref, tracker, name, reason));
         };
     }
 
@@ -167,14 +169,14 @@ final class ResumeLawBinding {
     }
 
     private static TakeResult park(
-            TaskState finalState, TaskRef ref, Tracker tracker, String pinnedRef, String report) {
-        String fullReport = ResumeBaseReport.unresolved(ref.id(), pinnedRef, report);
+            TaskState finalState, TaskRef ref, Tracker tracker, String pinnedRef, UntrustedText refusal) {
+        String fullReport = ResumeBaseReport.unresolved(ref.id(), pinnedRef, refusal);
         log.error(
                 OperatorEvent.RESUME_PINNED_REF_UNRESOLVED.head()
                         + "parking task {}: its pinned base ref '{}' no longer resolves: {}",
                 ref.id(),
-                LogText.forLog(pinnedRef),
-                LogText.forLog(report));
+                pinnedRef,
+                refusal.forLog());
         parkBestEffort(tracker, ref, fullReport);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, fullReport);
     }
@@ -192,23 +194,27 @@ final class ResumeLawBinding {
         }
     }
 
-    private static TakeResult release(TaskRef ref, Tracker tracker, String pinnedRef, String reason) {
+    private static TakeResult release(TaskRef ref, Tracker tracker, String pinnedRef, UntrustedText reason) {
         log.warn(
                 OperatorEvent.RESUME_BASE_REFRESH_UNAVAILABLE.head()
                         + "releasing claim on task {}: origin never answered the resume refresh of its pinned"
                         + " base ref '{}': {}",
                 ref.id(),
-                LogText.forLog(pinnedRef),
-                LogText.forLog(reason));
+                pinnedRef,
+                reason.forLog());
         releaseBestEffort(tracker, ref);
-        // Sanitized here, not at the sinks: this text becomes TakeResult.InfrastructureUnavailable's
-        // reason, which SlotOutcomeLog and the drain/batch summaries log whole. The pinned ref is
-        // read back from the task branch's task.json and never passed a ref-syntax check, so it is
-        // untrusted in its own right (FR6 of harden-logging-observability).
-        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " claim released (the reaper returns"
-                + " it to Ready after the claim TTL): origin did not answer the resume refresh of its pinned base ref '"
-                + LogText.forLog(pinnedRef) + "': "
-                + LogText.forLog(reason));
+        // The reason leaves its carrier through the log exit here rather than at each sink: what is
+        // built is one message the sinks log whole, and minting the composed line keeps the field a
+        // carrier so no sink can take it raw (design D4 of type-untrusted-text). The composed line
+        // is the factory's own sentence around an already-neutralized quote, so it is minted in the
+        // factory's family rather than in the one the quote came from (design D3). The pinned ref
+        // beside it is not untrusted text: PinnedRefGate holds every task.json baseRef to
+        // RefNameSyntax at the read, so a malformed one never reaches this far (NG4, task 12.2 of
+        // add-base-ref-resolution).
+        return new TakeResult.InfrastructureUnavailable(
+                UntrustedText.factory("Task " + ref.id() + " claim released (the reaper returns it to Ready after"
+                        + " the claim TTL): origin did not answer the resume refresh of its pinned base ref '"
+                        + pinnedRef + "': " + reason.forLog()));
     }
 
     private static void releaseBestEffort(Tracker tracker, TaskRef ref) {

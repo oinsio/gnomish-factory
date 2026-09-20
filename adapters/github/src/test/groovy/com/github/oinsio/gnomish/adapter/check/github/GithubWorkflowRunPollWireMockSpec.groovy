@@ -1,20 +1,13 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
+import static com.github.oinsio.gnomish.adapter.check.github.GithubWorkflowPollFixture.pollFor
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.tomakehurst.wiremock.WireMockServer
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
-import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -41,26 +34,6 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
 
     def cleanup() {
         wireMock.stop()
-    }
-
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r ->
-                    r.statusCode() >= 500 || r.statusCode() == 429
-                })
-                .build()
-    }
-
-    private static GithubWorkflowRunPoll pollFor(String baseUrl) {
-        def httpClient = new GithubHttpClient(baseUrl, 'tok', fastRetryConfig())
-        def cache = new GithubConditionalRequestCache(httpClient)
-        new GithubWorkflowRunPoll(
-                new GithubWorkflowRunQuery(cache, 'acme', 'widgets'),
-                new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'),
-                new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5)))
     }
 
     def "a network error classifies as CannotVerify with a non-blank reason and preserved detail"() {
@@ -108,22 +81,25 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
 
     def "a client-side rejection classifies as CannotVerify with a status-specific, actionable reason"() {
         given:
-        wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(status).withBody('{"message":"nope"}')))
+        wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(httpStatus).withBody('{"message":"nope"}')))
         def poll = pollFor(wireMock.baseUrl())
 
         when:
-        def status0 = poll.poll('ci.yml', 'abc123')
+        def status = poll.poll('ci.yml', 'abc123')
 
         then: 'the reason names the check, the status, and the diagnosis — not a bare code'
-        status0 instanceof PollStatus.CannotVerify
-        def cannotVerify = status0 as PollStatus.CannotVerify
+        status instanceof PollStatus.CannotVerify
+        def cannotVerify = status as PollStatus.CannotVerify
         cannotVerify.reason().contains("'ci.yml'")
-        cannotVerify.reason().contains(status as String)
+        cannotVerify.reason().contains(httpStatus as String)
         cannotVerify.reason().contains(diagnosisFragment)
         cannotVerify.details().contains('GithubWorkflowRunUnverifiableException')
 
+        and: 'no byte of it came from GitHub, so it is not filed under the tracker family (design D3)'
+        cannotVerify.reason().provenance() == Provenance.MANIFEST
+
         where:
-        status | diagnosisFragment
+        httpStatus | diagnosisFragment
         401 | 'token is invalid or expired'
         403 | 'lacks permission'
         404 | 'no workflow by that file name'

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,7 +74,8 @@ public class InMemoryTracker implements Tracker {
         return withLock(() -> {
             TrackedTask task = store.get(ref);
             if (task == null) {
-                TaskSnapshot gone = new TaskSnapshot(ref.id(), ref.id(), "");
+                TaskSnapshot gone =
+                        new TaskSnapshot(ref.id(), UntrustedText.factory(ref.id()), UntrustedText.factory(""));
                 return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none(), false);
             }
             return new TrackerTask(

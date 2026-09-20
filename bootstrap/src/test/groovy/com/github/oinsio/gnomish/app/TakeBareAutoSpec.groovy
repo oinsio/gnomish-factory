@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -71,12 +72,12 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {
-        new ReadyTask(new TaskRef(taskId), facts, returned, false, 'fixture title')
+        new ReadyTask(new TaskRef(taskId), facts, returned, false, UntrustedText.tracker('fixture title'))
     }
 
     private static TrackerTask trackerTask(String taskId) {
         new TrackerTask(
-                new TaskRef(taskId), new TaskSnapshot(taskId, 'title', 'body'),
+                new TaskRef(taskId), new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false)
     }
 
@@ -193,7 +194,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-a1')
         1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-b2')
         result instanceof TakeResult.Skipped
-        def reason = (result as TakeResult.Skipped).reason().toLowerCase()
+        def reason = (result as TakeResult.Skipped).reason().forLog().toLowerCase()
         reason.contains('claimed') || reason.contains('race')
     }
 
@@ -233,7 +234,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         then:
         0 * tracker.claim(*_)
         result instanceof TakeResult.Skipped
-        def reason = (result as TakeResult.Skipped).reason().toLowerCase()
+        def reason = (result as TakeResult.Skipped).reason().forLog().toLowerCase()
         reason.contains('wip') && reason.contains('limit')
     }
 
@@ -273,7 +274,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     def "a finished entry observed in the feed is declined and never claimed"() {
         given:
         tracker.listReady(_) >> [
-            new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, true, 'fixture title'),
+            new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, true, UntrustedText.tracker('fixture title')),
             ready('PROJ-2')
         ]
         tracker.fetchTask(new TaskRef('PROJ-2')) >> trackerTask('PROJ-2')

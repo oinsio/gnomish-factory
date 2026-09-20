@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -24,7 +25,7 @@ public final class RefTipSource implements BranchTipSource {
     }
 
     @Override
-    public Optional<String> readAtTip(String path) {
+    public Optional<UntrustedText> readAtTip(String path) {
         return tip.readAtTip(path);
     }
 

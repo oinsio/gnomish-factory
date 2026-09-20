@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeLifecycleAbortSpecBase} (task
@@ -36,7 +37,7 @@ class InMemoryTakeLifecycleAbortSpec extends TakeLifecycleAbortSpecBase {
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
         realTracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(realTracker)
-        harness.seed(ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
         armedTracker = new ThrowOnNextFetchTracker(realTracker)
         [
             armedTracker,

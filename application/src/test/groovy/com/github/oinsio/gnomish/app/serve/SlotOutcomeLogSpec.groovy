@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -56,8 +57,8 @@ class SlotOutcomeLogSpec extends Specification {
         result || detail
         new TakeResult.Delivered(state(), 'shipped it') || 'shipped it'
         new TakeResult.AwaitingHuman(state(), ParkReason.ESCALATION, 'stuck here') || 'stuck here'
-        new TakeResult.Aborted(state(), 'clone failed') || 'clone failed'
-        new TakeResult.Revoked(state(), 'claim taken') || 'claim taken'
+        new TakeResult.Aborted(state(), UntrustedText.subprocess('clone failed')) || 'clone failed'
+        new TakeResult.Revoked(state(), UntrustedText.tracker('claim taken')) || 'claim taken'
         new TakeResult.EmptyQueue() || 'empty-queue'
     }
 
@@ -68,7 +69,7 @@ class SlotOutcomeLogSpec extends Specification {
         def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec)
 
         when:
-        outcomeLog.detail(ref, new TakeResult.Skipped('lost claim race'))
+        outcomeLog.detail(ref, new TakeResult.Skipped(UntrustedText.tracker('lost claim race')))
 
         then:
         capture.list.size() == 1
@@ -89,7 +90,7 @@ class SlotOutcomeLogSpec extends Specification {
         def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec, Level.DEBUG)
 
         when:
-        outcomeLog.detail(ref, new TakeResult.InfrastructureUnavailable('origin never answered'))
+        outcomeLog.detail(ref, new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered')))
 
         then:
         capture.list.size() == 1
@@ -134,8 +135,8 @@ class SlotOutcomeLogSpec extends Specification {
         where:
         result << [
             new TakeResult.EmptyQueue(),
-            new TakeResult.Skipped('lost claim race'),
-            new TakeResult.InfrastructureUnavailable('origin never answered')
+            new TakeResult.Skipped(UntrustedText.tracker('lost claim race')),
+            new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered'))
         ]
     }
 

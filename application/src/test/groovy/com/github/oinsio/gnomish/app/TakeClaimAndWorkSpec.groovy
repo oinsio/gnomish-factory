@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.OriginContact
-import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
@@ -34,12 +33,14 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Unroll
 
 /**
  * FR9, FR10, FR14 (design D3, D16) of add-tracker-port and FR1 of add-claim-heartbeat: the claim
@@ -97,6 +98,21 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 readyTask(), tracker, INSTANCE)
     }
 
+    /** The branch ports of a task that has no branch yet — every fresh-claim scenario's input. */
+    private TaskBranchGit freshBranches() {
+        Stub(TaskBranchGit) {
+            locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
+        }
+    }
+
+    /** A base-ref port whose configured refresh origin cannot be reached. */
+    private BaseRefGit unavailableBaseRefGit() {
+        Stub(BaseRefGit) {
+            refresh(_, _) >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
+        }
+    }
+
     // FR9, UX2: losing the claim race is a refusal, not a failure — it names the holder and stops
     // before anything touches git, because a task we do not hold is not ours to work on.
     def "refuses a lost claim race, naming the holder, without reaching git"() {
@@ -133,14 +149,11 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> Stub(TaskLifecycleStore) {
                 createTask(_, _, _, _) >> {
-                    throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
+                    throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('x'))
                 }
             }
         }
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
+        def branches = freshBranches()
 
         and:
         def git = new TaskGit(
@@ -166,7 +179,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Mock(TaskStoreGit)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.Unavailable('origin did not answer whether gnomish/PROJ-1 exists')
+            locate(_, _) >> new BranchLocation.Unavailable(UntrustedText.factory('origin did not answer whether gnomish/PROJ-1 exists'))
         }
 
         when:
@@ -334,16 +347,13 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     def "FR9: an underdetermined base parks through a throwing tracker without reaching the abort protocol"() {
         given:
         def tracker = Mock(Tracker)
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
+        def branches = freshBranches()
         def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), Stub(BaseRefGit), new ClaimEpochBook())
         // A conflicting designator (two values named for the same base) is Underdetermined before
         // any refresh is even attempted — the same shape FreshClaimBaseBindingSpec drives at the
         // unit level, here driven through the real claim/dispatch stack.
-        def conflictingTask = new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+        def conflictingTask = new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false,
                 TaskDesignators.of('base', Designator.conflict(['a', 'b'])))
 
@@ -370,15 +380,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     def "FR9: an unreachable base-refresh origin releases through a throwing tracker without reaching the abort protocol"() {
         given:
         def tracker = Mock(Tracker)
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
-        def unavailableBaseRefGit = Stub(BaseRefGit) {
-            refresh(_, _) >> new BaseRefreshOutcome.Unavailable('connection timed out')
-        }
-        def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), unavailableBaseRefGit, new ClaimEpochBook())
+        def git = new TaskGit(Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
+                UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = claim(claimAndWork(git, tracker, Stub(RunAssembly)), tracker)
@@ -397,25 +400,17 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
     // FR9, M4 of add-base-ref-resolution: the release is plain — no abort marker, no comment — so a
     // task's abort-backoff accounting is untouched by an infrastructure release. Seeded with two
-    // prior aborts on record; both the mock-interaction proof (recordAbort/postNote never called)
-    // and a follow-up fetchTask prove the count is still two afterward.
+    // prior aborts on record; the mock-interaction proof is what carries it — recordAbort and
+    // postNote are never called, and the facts are never even re-read.
     def "FR9: a base-refresh release touches neither the abort facts nor posts a comment"() {
         given:
         def tracker = Mock(Tracker)
         def facts = new AbortFacts(2, Instant.parse('2026-07-24T09:00:00Z'))
-        def taskWithAborts = new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+        def taskWithAborts = new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), facts, false)
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
-        def unavailableBaseRefGit = Stub(BaseRefGit) {
-            refresh(_, _) >> new BaseRefreshOutcome.Unavailable('connection timed out')
-        }
-        def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), unavailableBaseRefGit, new ClaimEpochBook())
+        def git = new TaskGit(Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
+                UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
         def subject = claimAndWork(git, tracker, Stub(RunAssembly))
-        tracker.fetchTask(REF) >> taskWithAborts
 
         when:
         def result = subject.claimAndWork(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
@@ -431,8 +426,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         0 * tracker.postNote(*_)
         0 * tracker.park(*_)
 
-        and: 'the abort facts on record are unchanged by the release'
-        tracker.fetchTask(REF).abortFacts().count() == 2
+        and: 'the abort facts on record are untouched — the release neither re-reads nor rewrites them'
+        0 * tracker.fetchTask(_)
     }
 
     // FR9, M4 of add-base-ref-resolution: once the configured remote recovers, a later take on the
@@ -449,13 +444,10 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> freshRecord()
         }
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
+        def branches = freshBranches()
         def recoveringBaseRefGit = Stub(BaseRefGit) {
             refresh(_, _) >>> [
-                new BaseRefreshOutcome.Unavailable('connection timed out'),
+                new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out')),
                 new BaseRefreshOutcome.Refreshed('main', 'c0ffee', BaseRefKind.BRANCH, OriginContact.CONTACTED),
             ]
         }
@@ -494,6 +486,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // Working behind a dead runner until its lease expires — the very outcome the crash-abort arm
     // exists to prevent. Reachable in practice: the sandbox mode selector refuses a container-bound
     // pipeline whose prerequisites are unmet with a UsageException, after the claim is held.
+    @Unroll
     def "releases the claim when a deliberate #kind aborts a claimed run"() {
         given:
         def tracker = Mock(Tracker)
@@ -564,10 +557,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> freshRecord()
         }
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }
+        def branches = freshBranches()
         def beat = new RecordingBeat()
         def git = new TaskGit(
                 store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
@@ -611,11 +601,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
         // FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.
-        def baseRefGit = Stub(BaseRefGit) {
-            resolveForResume(_, _, _) >> { Path cloneDir, String ref, BaseRefKind kind ->
-                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
-            }
-        }
+        def baseRefGit = resumingBaseRefGit()
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
 
         when:

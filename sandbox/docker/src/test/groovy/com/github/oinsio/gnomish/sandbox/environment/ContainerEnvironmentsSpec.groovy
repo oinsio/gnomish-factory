@@ -67,8 +67,8 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     def "FR5: a restored cursor reaches the guard of the round environment"() {
         given: 'the guard container named by the committed cursor is the live one'
         docker.onRun = { List<String> args ->
-            args == GuardCommands.inspectGuardId(KEY) ? new DockerResult(0, 'sha256:container-1\n', '')
-            : new DockerResult(0, '', '')
+            args == GuardCommands.inspectGuardId(KEY) ? DockerResult.of(0, 'sha256:container-1\n', '')
+            : DockerResult.of(0, '', '')
         }
         def seam = environments(KEY)
 
@@ -87,8 +87,8 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     def "FR5: a restored cursor is offered to the round box alone, not to the #role box"() {
         given: 'the guard container named by the committed cursor is the round box\'s, not this role\'s'
         docker.onRun = { List<String> args ->
-            args == GuardCommands.inspectGuardId(KEY + suffix) ? new DockerResult(0, 'sha256:role-box\n', '')
-            : new DockerResult(0, '', '')
+            args == GuardCommands.inspectGuardId(KEY + suffix) ? DockerResult.of(0, 'sha256:role-box\n', '')
+            : DockerResult.of(0, '', '')
         }
         def seam = environments(KEY)
 

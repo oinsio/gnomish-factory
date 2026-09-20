@@ -34,7 +34,7 @@ class EgressGuardSpec extends Specification {
     }
 
     private static DockerResult ok(String stdout = '') {
-        new DockerResult(0, stdout, '')
+        DockerResult.of(0, stdout, '')
     }
 
     /**
@@ -50,7 +50,7 @@ class EgressGuardSpec extends Specification {
     }
 
     private static DockerResult failed(String stderr = 'boom') {
-        new DockerResult(1, '', stderr)
+        DockerResult.of(1, '', stderr)
     }
 
     /** The run argv this spec's guard really issues, overrides included. */
@@ -347,15 +347,15 @@ class EgressGuardSpec extends Specification {
         where: 'each of the three throw sites'
         site | refuse
         'never comes up' | { List<String> args ->
-            args == GuardCommands.inspectGuardRunning('k1') ? new DockerResult(0, 'false\n', '') : new DockerResult(0, '', '')
+            args == GuardCommands.inspectGuardRunning('k1') ? DockerResult.of(0, 'false\n', '') : DockerResult.of(0, '', '')
         }
         'run refused' | { List<String> args ->
-            args[0] == 'run' ? new DockerResult(1, '', 'image not found') : new DockerResult(1, '', 'No such object')
+            args[0] == 'run' ? DockerResult.of(1, '', 'image not found') : DockerResult.of(1, '', 'No such object')
         }
         'bridge refused' | { List<String> args ->
             args == GuardCommands.connectBridge('k1')
-            ? new DockerResult(1, '', 'network not found')
-            : (args == GuardCommands.inspectGuardRunning('k1') ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+            ? DockerResult.of(1, '', 'network not found')
+            : (args == GuardCommands.inspectGuardRunning('k1') ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', ''))
         }
     }
 
@@ -632,6 +632,36 @@ class EgressGuardSpec extends Specification {
         }
     }
 
+    // FR10, design D11 of type-untrusted-text: the id is docker's stdout, and it is kept out of
+    //     the untrusted plane by being parsed — held to ContainerIdSyntax here rather than carried.
+    //     An answer that is not an id is refused, which degrades exactly as an unreadable one does.
+    def "FR10: an identity answer that is not an id shape commits no cursor"() {
+        given: 'a daemon whose identity probe answers with a hostile line instead of an id'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
+        ]
+        docker.onRun = daemon { List<String> args ->
+            args == GuardCommands.inspectGuardId('k1')
+            ? ok("sha256:c1\u001B[2J 2026-01-01 ERROR forged\n")
+            : ok(logsSince(args, log))
+        }
+        def g = guard()
+
+        when:
+        def cursor = null
+        def logged = captureDebug(GuardSourceIdentity) {
+            cursor = g.readDenials().positionAfter()
+        }
+
+        then: 'nothing that could drive a terminal or forge a record becomes a denial source'
+        cursor.isEmpty()
+
+        and: 'and the refusal is traced, like every other unidentifiable source'
+        logged.any {
+            it.level == Level.DEBUG && it.formattedMessage.contains('empty or malformed')
+        }
+    }
+
     def "FR5: the identity of the guard container is probed once and reused"() {
         given:
         def log = [
@@ -714,7 +744,7 @@ class EgressGuardSpec extends Specification {
         ]
         docker.onRun = daemon { List<String> args ->
             if (args == GuardCommands.inspectGuardId('k1')) {
-                throw new DockerUnavailableException('docker daemon is unreachable', null)
+                throw new DockerUnavailableException('docker daemon is unreachable', null as Throwable)
             }
             ok(logsSince(args, log))
         }
@@ -882,7 +912,7 @@ class EgressGuardSpec extends Specification {
         def down = false
         docker.onRun = daemon { List<String> args ->
             if (down) {
-                throw new DockerUnavailableException('docker daemon is unreachable', null)
+                throw new DockerUnavailableException('docker daemon is unreachable', null as Throwable)
             }
             ok(logsSince(args, log))
         }

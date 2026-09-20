@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -37,7 +38,7 @@ import spock.lang.Specification
 class QualityFailureSpec extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
+    static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
     def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -84,7 +85,7 @@ class QualityFailureSpec extends Specification {
         given: 'a stage whose check fails once then cannot verify, run by a Completed executor each round'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << fail('findingA')
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         executor.scripted << completed()
 
@@ -119,7 +120,7 @@ class QualityFailureSpec extends Specification {
         def failB = fail('findingB')
         builtinRunner.scripted << failA
         builtinRunner.scripted << failB
-        builtinRunner.scripted << new Verdict.CannotVerify('binary not found', 'no such tool')
+        builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         executor.scripted << completed()
         executor.scripted << completed()
         executor.scripted << completed()

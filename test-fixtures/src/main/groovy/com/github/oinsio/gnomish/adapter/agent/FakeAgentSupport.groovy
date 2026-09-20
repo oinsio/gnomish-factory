@@ -2,6 +2,15 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
+import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
+import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 
 /**
  * Shared seam for CLI-adapter specs that point {@link FactoryProperties} at
@@ -11,8 +20,14 @@ import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
  * reliably preserved by Gradle's resource copy / a fresh checkout — see
  * {@code fake-agent/README.md}) and needs {@code GNOMISH_FAKE_SCENARIO} set
  * before it runs. This wraps both into one tiny generated shell script so a
- * real {@link CliStageExecutor} (running the round through the task environment
+ * real {@code CliStageExecutor} (running the round through the task environment
  * port) can invoke it as a plain binary path.
+ *
+ * <p>Also the single owner of the {@code StageExecutor.Request}/{@code TaskContext}
+ * fixture shape every fake-agent-driven spec in {@code :adapters:agent} built by
+ * hand ({@code requestFor}/{@code context()} were duplicated, byte for byte, across
+ * four spec files — the rule-of-three trigger in {@code manual-sync-pairs.md}):
+ * {@link #requestFor} and {@link #defaultTaskContext} are that one definition.
  *
  * <p>Not production code: test-support only, never PIT-mutated.
  */
@@ -48,5 +63,32 @@ final class FakeAgentSupport {
             wrapper.absolutePath
         }
         new FactoryProperties('factory-01', path, envPassthrough, null, null)
+    }
+
+    /**
+     * The {@code TaskContext} every fake-agent-driven spec builds for its round: a
+     * fixed task id and untrusted-tracker title/body, no prior decisions.
+     */
+    static TaskContext defaultTaskContext() {
+        new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
+    }
+
+    /**
+     * A one-stage {@code StageExecutor.Request} against {@code workspaceDir}, settings
+     * merged into the {@code build} stage's executor settings — the fixture shape every
+     * {@code CliStageExecutor} spec here drives a round through.
+     *
+     * @param workspaceDir the round's workspace, expected to already carry
+     *     {@code instructions.md}
+     * @param settings the executor settings for the {@code build} stage (e.g.
+     *     {@code roundTimeout}); defaults to none
+     */
+    static StageExecutor.Request requestFor(Path workspaceDir, Map<String, Object> settings = [:]) {
+        def stage = new StageDefinition(
+                'build', 'purpose', [], [],
+                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', settings),
+                'instructions.md', [],
+                new AutonomyLimits(3), AdvancementMode.AUTO)
+        new StageExecutor.Request(defaultTaskContext(), stage, new DirectoryWorkspace(workspaceDir), 0, [])
     }
 }

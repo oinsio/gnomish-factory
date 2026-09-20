@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * What one resume-time base-ref resolution established: the current tip a resumed task rebinds its
  * law to, or which of the two failure classes stopped it (design D13 of add-base-ref-resolution).
@@ -35,9 +37,10 @@ public sealed interface ResumeBaseOutcome {
      * configured origin nor, absent one, in the clone's own local refs. The task parks with this
      * report rather than falling back to the pinned SHA.
      *
-     * @param report one operator-facing paragraph naming the ref and what stood in the way
+     * @param report one operator-facing paragraph naming the ref and what stood in the way; carried
+     *     for the reason {@link BaseRefreshOutcome.Refused} states (design D4 of type-untrusted-text)
      */
-    record Refused(String report) implements ResumeBaseOutcome {}
+    record Refused(UntrustedText report) implements ResumeBaseOutcome {}
 
     /**
      * A configured {@code origin} never answered the narrow fetch, so the ref's freshness could not
@@ -46,5 +49,5 @@ public sealed interface ResumeBaseOutcome {
      *
      * @param reason one sentence naming what the invocation did, credentials already scrubbed
      */
-    record Unavailable(String reason) implements ResumeBaseOutcome {}
+    record Unavailable(UntrustedText reason) implements ResumeBaseOutcome {}
 }

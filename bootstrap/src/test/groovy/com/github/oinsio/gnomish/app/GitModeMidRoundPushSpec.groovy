@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import org.slf4j.Logger
@@ -127,7 +128,7 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
         try {
             runner.run(cloneDir, null,
                     new PipelineDefinition('1', new AutonomyLimits(3), [stage()]),
-                    new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()),
+                    new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                     TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE)
         } finally {
             System.out = originalOut

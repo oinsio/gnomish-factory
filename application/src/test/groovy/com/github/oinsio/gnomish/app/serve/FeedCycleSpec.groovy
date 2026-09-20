@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
@@ -50,7 +51,7 @@ class FeedCycleSpec extends Specification {
         // returned() == true so OpenFrontGate.isStillEligible short-circuits to eligible
         // without invoking the openFrontCount supplier — the scenario isolates the claim
         // race outcome, not the WIP-gate re-check (that is FeedAutomatonSpec's job).
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, UntrustedText.tracker('fixture title'))
     }
 
     private static FeedCycle cycle(
@@ -205,7 +206,7 @@ class FeedCycleSpec extends Specification {
                 claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false, 'fixture title')
+        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
 
         when:
         cycle(tracker, ledger).claimOrAbandon([fresh])

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -21,7 +22,7 @@ class BriefingSectionsSpec extends Specification {
     def "renders the task goal with a non-empty body"() {
         given:
         def out = new StringBuilder()
-        def context = new TaskContext('task-1', 'Add login page', 'Implement OAuth login.', [])
+        def context = new TaskContext('task-1', UntrustedText.tracker('Add login page'), UntrustedText.tracker('Implement OAuth login.'), [])
 
         when:
         BriefingSections.renderTaskGoal(out, context)
@@ -33,7 +34,7 @@ class BriefingSectionsSpec extends Specification {
     def "renders the task goal without a body line when body is empty"() {
         given:
         def out = new StringBuilder()
-        def context = new TaskContext('task-1', 'Title only', '', [])
+        def context = new TaskContext('task-1', UntrustedText.tracker('Title only'), UntrustedText.tracker(''), [])
 
         when:
         BriefingSections.renderTaskGoal(out, context)
@@ -45,7 +46,7 @@ class BriefingSectionsSpec extends Specification {
     def "renders input artifacts by kind and producer id"() {
         given:
         def out = new StringBuilder()
-        def inputs = [
+        List<ArtifactInput> inputs = [
             new ArtifactInput.Internal('design-doc'),
             new ArtifactInput.Source()
         ]
@@ -74,7 +75,7 @@ class BriefingSectionsSpec extends Specification {
         given:
         def out = new StringBuilder()
         def feedback = [
-            new CheckResult(new CheckRef(0, 'command:./gradlew test'),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
             new Verdict.Fail([
                 new Finding('tests are red', 'BuildSpec.groovy', null)
             ]),
@@ -93,8 +94,8 @@ class BriefingSectionsSpec extends Specification {
         given:
         def out = new StringBuilder()
         def feedback = [
-            new CheckResult(new CheckRef(1, 'external:ci'),
-            new Verdict.CannotVerify('ci unreachable', ''), Duration.ofSeconds(2))
+            new CheckResult(new CheckRef(1, UntrustedText.manifest('external:ci')),
+            new Verdict.CannotVerify(UntrustedText.subprocess('ci unreachable'), UntrustedText.subprocess('')), Duration.ofSeconds(2))
         ]
 
         when:
@@ -179,7 +180,7 @@ class BriefingSectionsSpec extends Specification {
     def "renderExecutorBriefing composes all five sections in order"() {
         given:
         def out = new StringBuilder()
-        def context = new TaskContext('task-1', 'Add login page', 'Implement OAuth login.',
+        def context = new TaskContext('task-1', UntrustedText.tracker('Add login page'), UntrustedText.tracker('Implement OAuth login.'),
                 [
                     new Decision('Use Google OAuth only', 'build', 'alice', null)
                 ])
@@ -187,7 +188,7 @@ class BriefingSectionsSpec extends Specification {
             new ArtifactInput.Internal('design-doc')
         ]
         def feedback = [
-            new CheckResult(new CheckRef(0, 'command:./gradlew test'),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
             new Verdict.Fail([
                 new Finding('tests are red', 'BuildSpec.groovy', null)
             ]),

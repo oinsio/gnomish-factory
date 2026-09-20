@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,8 +46,11 @@ public record InteractiveStageExecutor(DialogConsole console, StageBriefing brie
         long startNanos = System.nanoTime();
         String answer = console.ask(ROUND_PROMPT, List.of(COMPLETE_ANSWER, ASK_ANSWER));
         if (ASK_ANSWER.equals(answer)) {
-            String question = console.prompt(QUESTION_PROMPT);
-            List<String> options = collectOptions();
+            // The human at the console stands in for the gnome here, so the question and its
+            // options enter as the same carrier a real round's decision file mints (design D3 of
+            // type-untrusted-text): this executor is the agent, and what it answers is AGENT text.
+            UntrustedText question = UntrustedText.agent(console.prompt(QUESTION_PROMPT));
+            List<UntrustedText> options = collectOptions();
             // No denials: the operator drives this round on the host, with no sandboxed
             // environment and therefore no egress guard to have blocked anything.
             return new ExecutionResult.DecisionNeeded(question, options, usage(startNanos), trace(request), List.of());
@@ -54,14 +58,14 @@ public record InteractiveStageExecutor(DialogConsole console, StageBriefing brie
         return new ExecutionResult.Completed(usage(startNanos), trace(request), List.of());
     }
 
-    private List<String> collectOptions() {
-        List<String> options = new ArrayList<>();
+    private List<UntrustedText> collectOptions() {
+        List<UntrustedText> options = new ArrayList<>();
         while (true) {
             String option = console.prompt(OPTION_PROMPT);
             if (option.isEmpty()) {
                 return options;
             }
-            options.add(option);
+            options.add(UntrustedText.agent(option));
         }
     }
 

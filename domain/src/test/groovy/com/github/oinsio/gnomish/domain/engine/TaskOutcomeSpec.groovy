@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -70,12 +71,12 @@ class TaskOutcomeSpec extends Specification {
         def key = sampleKey()
 
         when: 'an Aborted outcome is created'
-        def outcome = new TaskOutcome.Aborted(state, key, 'disk full: java.io.IOException ...')
+        def outcome = new TaskOutcome.Aborted(state, key, UntrustedText.subprocess('disk full: java.io.IOException ...'))
 
         then: 'each component is exposed exactly as constructed'
         outcome.finalState() == state
         outcome.failedAt() == key
-        outcome.cause() == 'disk full: java.io.IOException ...'
+        outcome.cause() == UntrustedText.subprocess('disk full: java.io.IOException ...')
     }
 
     // FR10: finalState() is reachable through the TaskOutcome interface for every variant
@@ -88,7 +89,7 @@ class TaskOutcomeSpec extends Specification {
             new TaskOutcome.Completed(sampleState()),
             new TaskOutcome.Paused(sampleState(), 'build'),
             new TaskOutcome.Escalated(sampleState(), sampleReport()),
-            new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom')
+            new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('boom'))
         ]
     }
 
@@ -108,7 +109,7 @@ class TaskOutcomeSpec extends Specification {
     // FR10: Aborted requires a non-blank cause — a persistence failure must describe itself
     def "Aborted rejects a blank cause with the component named"() {
         when: 'an Aborted is created with a blank cause'
-        new TaskOutcome.Aborted(sampleState(), sampleKey(), cause)
+        new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess(cause))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -128,7 +129,7 @@ class TaskOutcomeSpec extends Specification {
         new TaskOutcome.Completed(sampleState()) | 'completed'
         new TaskOutcome.Paused(sampleState(), 'build') | 'paused: build'
         new TaskOutcome.Escalated(sampleState(), sampleReport()) | 'escalated'
-        new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom') | 'aborted: boom'
+        new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('boom')) | 'aborted: boom'
     }
 
     // FR10: Completed outcomes are values — equal content means equal outcomes
@@ -160,12 +161,12 @@ class TaskOutcomeSpec extends Specification {
     // FR10: Aborted outcomes are values — equal content means equal outcomes
     def "Aborted outcomes with the same components are equal values"() {
         expect: 'equal content is equal'
-        new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom') ==
-                new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom')
+        new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('boom')) ==
+                new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('boom'))
 
         and: 'a differing cause makes them unequal'
-        new TaskOutcome.Aborted(sampleState(), sampleKey(), 'a') !=
-                new TaskOutcome.Aborted(sampleState(), sampleKey(), 'b')
+        new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('a')) !=
+                new TaskOutcome.Aborted(sampleState(), sampleKey(), UntrustedText.subprocess('b'))
     }
 
     private static String describe(TaskOutcome outcome) {

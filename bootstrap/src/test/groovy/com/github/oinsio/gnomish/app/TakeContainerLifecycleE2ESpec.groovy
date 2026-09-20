@@ -19,11 +19,10 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
-import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
-import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -149,7 +148,7 @@ tracker:
         given: 'a Ready task seeded in a real (in-memory) tracker, and a fake-agent-backed stage'
         def tracker = new InMemoryTracker()
         new InMemoryTrackerHarness(tracker).seed(
-                REF, new TaskSnapshot(REF.id(), 'Add widgets', 'please add widgets'),
+                REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')),
                 new TrackerTaskState.Ready(), AbortFacts.none())
         def trackerFactory = new FixedTrackerAdapterFactory({ tracker })
         FakeAgentSandboxImage.ensureBuilt('plain-round')

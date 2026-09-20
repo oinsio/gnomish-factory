@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * A single located validation problem found in a {@code .gnomish/} configuration
  * tree. Every error names its location — file plus field/stage locator — so the
@@ -23,11 +25,21 @@ public record ConfigError(String file, String where, String message) {
     }
 
     /**
-     * One-line human-readable form {@code <file>: <where>: <message>} — the shape
-     * future reporting presents to the configuration author (UX2).
+     * One-line human-readable form {@code <file>: <where>: <message>} — the shape reporting
+     * presents to the configuration author (UX2), and the manifest family's one mint (design D10
+     * of type-untrusted-text).
+     *
+     * <p>The record's three components stay factory-authored {@code String}s: the message is a
+     * template the factory wrote, and its 97 constructor sites span the domain's own rules, the
+     * {@code .gnomish/} loader, the vendor bundle and the SPI validator interfaces a third-party
+     * plugin implements — minting at each of them would put minting outside the mint table and
+     * outside the factory. The fragment a message quotes (a key, a type token, a URL) is the
+     * untrusted part, and it leaves the loader here, in the one line that owns it.
+     *
+     * @return the located error as manifest text; never blank
      */
-    public String render() {
-        return file + ": " + where + ": " + message;
+    public UntrustedText render() {
+        return UntrustedText.manifest(file + ": " + where + ": " + message);
     }
 
     /**

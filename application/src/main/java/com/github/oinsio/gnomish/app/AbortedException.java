@@ -5,7 +5,7 @@ import java.io.Serial;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Signals that {@link RunnerOutcomeLoop#handleAborted} finished reporting a broken
+ * Signals that {@link RunnerOutcomeLoop}'s {@code handleAborted} step finished reporting a broken
  * durability guarantee: the cause and unpersisted-state summary are already printed to
  * {@link System#err} by the time this is thrown. Without this exception, {@code
  * Aborted} was indistinguishable from {@code Completed} at the CLI boundary — both
@@ -40,7 +40,10 @@ public final class AbortedException extends RuntimeException {
      *     com.github.oinsio.gnomish.app.port.TaskRepository} (FR1, FR6, FR8 of add-git-workflow)
      */
     public AbortedException(TaskOutcome.Aborted outcome) {
-        super(outcome.cause());
+        // The cause is a rendered exception chain quoting whatever the failed persist captured
+        // (design D5 of type-untrusted-text): it leaves the carrier through the log exit, since an
+        // exception message is read on the log plane.
+        super(outcome.cause().forLog());
         this.outcome = outcome;
     }
 

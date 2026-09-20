@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -12,11 +10,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -26,7 +22,7 @@ import spock.lang.TempDir
  * that it is handed this invocation's own project directory and its liveness verdict, and that a
  * pass which fails never fails the take.
  */
-class TakeCommandSweepSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+class TakeCommandSweepSpec extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
 
@@ -70,20 +66,13 @@ tracker:
         tracker.listOpen() >> { openTasks }
         // Finished -> Skipped: the shortest run that still passes through the sweep call site.
         tracker.fetchTask(_) >> new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none(), false)
+                REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Finished(), AbortFacts.none(), false)
     }
 
     private TakeCommand newCommand(SandboxLifecyclePass pass) {
-        TakeCommandFactory.of(
-                newAssembly(testProperties(instanceName: 'gnomish-factory')),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                testProperties(instanceName: 'gnomish-factory'),
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: fakeFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), pass, ContainerTakeSupport.hostOnly())
+        newTakeCommand(
+                testProperties(instanceName: 'gnomish-factory'), worktreesRoot, [github: fakeFactory(tracker)],
+                TakeCommandSeams.DEFAULTS, pass)
     }
 
     def "the startup sweep pass runs once, for this invocation's own directory and liveness verdict"() {

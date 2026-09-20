@@ -27,10 +27,17 @@ class FinishEffectSpec extends Specification {
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
 
+    /**
+     * The final report is assembled from the task's title, its attempts and whatever the checks
+     * said, so it crosses this record carried and is rendered through the comment exit at the
+     * write (design D6, D7 of type-untrusted-text, task 6.3).
+     */
+    static final String SUMMARY = 'all stages passed'
+
     Tracker tracker = Mock(Tracker)
 
     private FinishEffect effect(Runnable cleanup) {
-        new FinishEffect(tracker, REF, INSTANCE, 'all stages passed', VirtualTimeRetries.terminalWrite(),
+        new FinishEffect(tracker, REF, INSTANCE, SUMMARY, VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered(cleanup), LoggerFactory.getLogger(FinishEffectSpec))
     }
 
@@ -55,7 +62,7 @@ class FinishEffectSpec extends Specification {
         effect({ cleanupRuns++ }).drive()
 
         then: 'the finish is written, and only then does the destructive tail run'
-        1 * tracker.finish(REF, 'all stages passed')
+        1 * tracker.finish(REF, SUMMARY)
         cleanupRuns == 1
 
         and: 'FR15 of harden-logging-observability: the unverifiable probe is a coded WARN naming the task'
@@ -122,7 +129,7 @@ class FinishEffectSpec extends Specification {
         given:
         def cleanupRuns = 0
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.finish(REF, 'all stages passed') >> {
+        tracker.finish(REF, SUMMARY) >> {
             throw new TrackerUnavailableException('tracker down')
         }
         def logs = LogCaptureSupport.attach(FinishEffectSpec)

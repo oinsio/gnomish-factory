@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The state transitions {@code park} and {@code finish} write, the {@code finished} fact derived
@@ -25,7 +26,7 @@ class InMemoryTerminalStateSpec extends AbstractInMemoryTrackerSpec {
 
     private TaskRef seedWorking(String id) {
         def ref = new TaskRef(id)
-        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
         ref
     }
 

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +19,13 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Best-effort throughout (NFR-R1): a daemon that will not answer costs cross-process
  * de-duplication, never the round's own findings.
+ *
+ * <p>This is the parser that makes the id a value rather than untrusted text: docker's stdout is
+ * read through the parsing exit and held to {@link ContainerIdSyntax}, so what leaves here is inert
+ * by shape — which is what lets {@code DenialCursor.source} stay a {@code String} that two leases
+ * on two media can compare (design D11 of type-untrusted-text).
  */
+@UntrustedParser
 final class GuardSourceIdentity {
 
     private static final Logger log = LoggerFactory.getLogger(GuardSourceIdentity.class);
@@ -25,8 +33,14 @@ final class GuardSourceIdentity {
     private final DockerCli docker;
     private final String key;
 
-    /** The live container's runtime id, re-probed after {@link #recreated()}. */
-    private @Nullable String sourceId;
+    /**
+     * The live container's runtime id, re-probed after {@link #recreated()}. Volatile: {@link
+     * GuardDenialReads} calls {@link #current()} with no lock held (lock-scope.md — the probe is a
+     * blocking docker call), so this field's own visibility is what publishes the cached answer
+     * across callers rather than a monitor. A redundant probe from two racing callers is harmless —
+     * the daemon's answer for one container id is idempotent — so no further coordination is owed.
+     */
+    private volatile @Nullable String sourceId;
 
     GuardSourceIdentity(DockerCli docker, String key) {
         this.docker = docker;
@@ -60,13 +74,18 @@ final class GuardSourceIdentity {
             log.debug("egress guard id for {} is unreadable; this attempt commits no denial cursor", key, e);
             return null;
         }
-        String id = probe.stdout().strip();
-        if (!probe.ok() || id.isEmpty()) {
+        // @UntrustedParser warrant (design D11): docker's answer becomes a container id held to
+        //     ContainerIdSyntax — which is what makes the string inert enough to be logged, put in
+        //     a finding and committed to a branch, and what lets a later lease compare it.
+        Optional<String> id =
+                probe.ok() ? ContainerIdSyntax.of(probe.stdout().forParsing().strip()) : Optional.empty();
+        if (id.isEmpty()) {
             // throwable-not-subject: docker answered; the answer is simply not an id.
-            log.debug("egress guard id for {} came back empty; this attempt commits no denial cursor", key);
+            log.debug(
+                    "egress guard id for {} came back empty or malformed; this attempt commits no denial cursor", key);
             return null;
         }
-        sourceId = id;
-        return id;
+        sourceId = id.get();
+        return sourceId;
     }
 }

@@ -5,14 +5,8 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Files
 import java.nio.file.Path
@@ -52,7 +46,7 @@ class LargeStreamRoundSpec extends Specification {
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor('megabyte-round'), clock, EXECUTOR_LAW)
 
         when:
-        def result = executor.execute(requestFor())
+        def result = executor.execute(FakeAgentSupport.requestFor(workspaceDir))
 
         then:
         result instanceof ExecutionResult.Completed
@@ -66,7 +60,7 @@ class LargeStreamRoundSpec extends Specification {
                 FakeAgentSupport.propertiesFor('judge-verdict-pass-megabyte'), clock, JUDGE_LAW)
 
         when:
-        def vote = voter.vote(judgeCheck(), context(), new DirectoryWorkspace(workspaceDir))
+        def vote = voter.vote(judgeCheck(), FakeAgentSupport.defaultTaskContext(), new DirectoryWorkspace(workspaceDir))
 
         then:
         vote.verdict() instanceof Verdict.Pass
@@ -80,7 +74,7 @@ class LargeStreamRoundSpec extends Specification {
 
         when:
         long startedAt = System.nanoTime()
-        def result = executor.execute(requestFor(['roundTimeout': '30s']))
+        def result = executor.execute(FakeAgentSupport.requestFor(workspaceDir, ['roundTimeout': '30s']))
         long elapsedMillis = (System.nanoTime() - startedAt).intdiv(1_000_000)
 
         then:
@@ -108,7 +102,7 @@ class LargeStreamRoundSpec extends Specification {
         when: 'the round runs on another thread'
         def finished = new AtomicBoolean()
         def round = Thread.startVirtualThread {
-            executor.execute(requestFor())
+            executor.execute(FakeAgentSupport.requestFor(workspaceDir))
             finished.set(true)
         }
 
@@ -120,20 +114,7 @@ class LargeStreamRoundSpec extends Specification {
         round.join()
     }
 
-    private StageExecutor.Request requestFor(Map<String, Object> settings = [:]) {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', settings),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(context(), stage, new DirectoryWorkspace(workspaceDir), 0, [])
-    }
-
     private static VerifyCheck.Judge judgeCheck() {
         new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
-    }
-
-    private static TaskContext context() {
-        new TaskContext('TASK-1', 'title', 'body', [])
     }
 }

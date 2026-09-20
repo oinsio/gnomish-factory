@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -109,11 +110,14 @@ class ReferenceRunSpec extends Specification {
     def "a task is driven end to end through all four check types to a manual pause"() {
         given: 'a four-stage pipeline and a task with no decisions yet'
         def pipeline = pipeline()
-        def context0 = new TaskContext('TASK-1', 'add a feature', 'body', [])
+        def context0 = new TaskContext('TASK-1', UntrustedText.tracker('add a feature'), UntrustedText.tracker('body'), [])
 
         and: 'run-1 fakes: the design executor asks a human instead of completing'
         def exec1 = new ScriptedExecutor([
-            new ExecutionResult.DecisionNeeded('which db?', ['postgres', 'mysql'],
+            new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+                UntrustedText.agent('postgres'),
+                UntrustedText.agent('mysql')
+            ],
             ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'design', 0), []), [])
         ])
         def ports1 = portsFor(exec1, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
@@ -125,13 +129,13 @@ class ReferenceRunSpec extends Specification {
         then: 'the run escalates the decision without burning an attempt and stays at design'
         outcome1 instanceof TaskOutcome.Escalated
         def report = outcome1.report() as EscalationReport.DecisionNeeded
-        report.question() == 'which db?'
-        report.options() == ['postgres', 'mysql']
+        report.question().forLog() == 'which db?'
+        report.options()*.forLog() == ['postgres', 'mysql']
         outcome1.finalState().attemptsUsed() == 0
 
         when: 'the human answers: the caller appends the decision and resumes from the design stage'
         def decision = new Decision('use postgres', 'design', 'alice', Instant.parse('2026-07-16T00:00:00Z'))
-        def context1 = new TaskContext('TASK-1', 'add a feature', 'body', [decision])
+        def context1 = new TaskContext('TASK-1', UntrustedText.tracker('add a feature'), UntrustedText.tracker('body'), [decision])
 
         and: 'run-2 fakes scripted for the rest of the pipeline'
         // design: executor completes, judge passes

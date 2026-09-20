@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -61,7 +62,11 @@ final class JudgeRoundExecution {
             // Factory-set protocol layer (D6, FR9): a judge vote needs only the AI seam variables.
             launched = environment.exec(new ExecCommand(command, AgentAiSeam.fromFactoryEnvironment(), prompt, false));
         } catch (ProcessStartException e) {
-            return cannotVerify(check, "agent CLI process failed to start", factoryProperties.agentCliBinary(), e);
+            return cannotVerify(
+                    check,
+                    "agent CLI process failed to start",
+                    UntrustedText.factory(factoryProperties.agentCliBinary()),
+                    e);
         }
 
         // Same shared drain as the executor round (FR6 of fix-round-stdout-drain), started
@@ -72,7 +77,9 @@ final class JudgeRoundExecution {
             if (wait instanceof ExecHandle.Wait.TimedOut) {
                 // Still decided before the drain's events are consulted (FR3).
                 return cannotVerify(
-                        check, "agent round exceeded roundTimeout and was killed", "roundTimeout: " + roundTimeout);
+                        check,
+                        "agent round exceeded roundTimeout and was killed",
+                        UntrustedText.factory("roundTimeout: " + roundTimeout));
             }
             if (wait instanceof ExecHandle.Wait.Interrupted) {
                 // The never-throw contract again, and a cause of its own: blaming the budget for a
@@ -81,7 +88,7 @@ final class JudgeRoundExecution {
                 return cannotVerify(
                         check,
                         "agent round wait was interrupted and the process tree was killed",
-                        "roundTimeout: " + roundTimeout);
+                        UntrustedText.factory("roundTimeout: " + roundTimeout));
             }
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
@@ -102,28 +109,34 @@ final class JudgeRoundExecution {
         }
     }
 
-    private static String messageOf(RuntimeException e) {
-        return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+    /**
+     * The exception's own words as agent text: what a round's failure says quotes the stream the
+     * agent CLI wrote, so it leaves this class through an exit like every other agent output
+     * (design D3, D5 of type-untrusted-text).
+     */
+    private static UntrustedText messageOf(RuntimeException e) {
+        return UntrustedText.agent(
+                e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
     }
 
     /** The two exits whose cause is a decision rather than a throwable (timeout, interrupt). */
-    private static Vote cannotVerify(VerifyCheck.Judge check, String reason, String details) {
+    private static Vote cannotVerify(VerifyCheck.Judge check, String reason, UntrustedText details) {
         log.warn(
                 OperatorEvent.JUDGE_CANNOT_VERIFY_BY_DECISION.head() + CANNOT_VERIFY_LINE,
                 check.criteriaFile(),
                 reason,
-                details);
-        return new Vote(new Verdict.CannotVerify(reason, details), Map.of());
+                details.forLog());
+        return new Vote(new Verdict.CannotVerify(UntrustedText.factory(reason), details), Map.of());
     }
 
     /** The four exits carrying a throwable, which is passed trailing so the stack survives. */
-    private static Vote cannotVerify(VerifyCheck.Judge check, String reason, String details, Throwable cause) {
+    private static Vote cannotVerify(VerifyCheck.Judge check, String reason, UntrustedText details, Throwable cause) {
         log.warn(
                 OperatorEvent.JUDGE_CANNOT_VERIFY_BY_THROWABLE.head() + CANNOT_VERIFY_LINE,
                 check.criteriaFile(),
                 reason,
-                details,
+                details.forLog(),
                 cause);
-        return new Vote(new Verdict.CannotVerify(reason, details), Map.of());
+        return new Vote(new Verdict.CannotVerify(UntrustedText.factory(reason), details), Map.of());
     }
 }

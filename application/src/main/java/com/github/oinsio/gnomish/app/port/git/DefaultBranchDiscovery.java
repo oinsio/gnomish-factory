@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.baseref.DefaultBranch;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * What one bounded remote read established about the repository's default branch — the
@@ -38,7 +39,7 @@ public sealed interface DefaultBranchDiscovery {
      *
      * @param reason one sentence for an operator report
      */
-    record Undetermined(String reason) implements DefaultBranchDiscovery {}
+    record Undetermined(UntrustedText reason) implements DefaultBranchDiscovery {}
 
     /**
      * Origin never answered — unreachable, cut off on its deadline, or interrupted. The one
@@ -47,5 +48,5 @@ public sealed interface DefaultBranchDiscovery {
      *
      * @param reason one sentence for an operator report, credentials already scrubbed
      */
-    record Unavailable(String reason) implements DefaultBranchDiscovery {}
+    record Unavailable(UntrustedText reason) implements DefaultBranchDiscovery {}
 }

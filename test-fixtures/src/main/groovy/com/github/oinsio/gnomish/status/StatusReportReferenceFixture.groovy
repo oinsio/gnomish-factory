@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 
@@ -55,25 +56,28 @@ final class StatusReportReferenceFixture {
 
     /** The sample task's identity and its single answered decision. */
     static TaskContext referenceContext() {
-        new TaskContext(TASK_ID, TITLE, 'body', [referenceDecision()])
+        new TaskContext(TASK_ID, UntrustedText.tracker(TITLE), UntrustedText.tracker('body'), [referenceDecision()])
     }
 
     /** The escalation the canonical document carries under {@code lastEscalation}. */
     static EscalationReport referenceEscalation() {
-        new EscalationReport.DecisionNeeded('Refactor the retry helper or patch in place?', ['refactor', 'patch'])
+        new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor the retry helper or patch in place?'), [
+            UntrustedText.agent('refactor'),
+            UntrustedText.agent('patch')
+        ])
     }
 
     /** The live-only activity: mid-verification of the sample's failing check. */
     static Activity referenceActivity() {
-        new Activity.Verifying(new CheckRef(0, 'command:./gradlew test'), Instant.parse('2026-07-16T14:41:02Z'))
+        new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), Instant.parse('2026-07-16T14:41:02Z'))
     }
 
     /** One quality-failure attempt (a passing and a failing check) plus the task totals. */
     static TaskState referenceTaskState() {
-        def passCheck = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def passCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def failFinding = new Finding('command exited with 1', null, '…output tail…')
         def failCheck = new CheckResult(
-                new CheckRef(1, 'command:./gradlew test'), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
+                new CheckRef(1, UntrustedText.manifest('command:./gradlew test')), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
 
         def attempt = new AttemptRecord(
                 1, AttemptRecord.Result.QUALITY_FAILURE, Instant.parse('2026-07-16T14:35:10Z'),
@@ -99,9 +103,9 @@ final class StatusReportReferenceFixture {
         [
             new EscalationReport.AttemptsExhausted(ATTEMPT_LIMIT),
             referenceEscalation(),
-            new EscalationReport.CannotVerify(new CheckRef(0, 'external:ci'), 'timeout', 'poll exceeded 5m'),
-            new EscalationReport.PipelineMismatch('removed-stage'),
-            new EscalationReport.CannotExecute('round timed out after 15m', [
+            new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('external:ci')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('poll exceeded 5m')),
+            new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('removed-stage')),
+            new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out after 15m'), [
                 Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443',
                         'paste.example.com:443/upload',

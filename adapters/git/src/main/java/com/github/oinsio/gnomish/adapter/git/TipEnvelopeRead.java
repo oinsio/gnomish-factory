@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The result of {@link TipEnvelopeReader#read}: either a shape with nothing to render, or the
@@ -12,5 +13,5 @@ sealed interface TipEnvelopeRead {
     record NoState(BranchShape shape) implements TipEnvelopeRead {}
 
     /** The tip's shape carries state, and both envelopes were read from it. */
-    record Loaded(BranchShape shape, String taskJson, String stateJson) implements TipEnvelopeRead {}
+    record Loaded(BranchShape shape, UntrustedText taskJson, UntrustedText stateJson) implements TipEnvelopeRead {}
 }

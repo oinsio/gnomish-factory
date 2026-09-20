@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.port.contract.PortContractSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
@@ -84,7 +85,7 @@ abstract class TrackerContract extends Specification implements PortContractSupp
      * @param abortFacts the fixture task's abort history
      */
     protected void seedTask(Tracker adapter, TaskRef ref, TrackerTaskState state, AbortFacts abortFacts) {
-        seedTask(adapter, ref, new TaskSnapshot(ref.id(), 'fixture title', 'fixture body'), state, abortFacts)
+        seedTask(adapter, ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('fixture title'), UntrustedText.tracker('fixture body')), state, abortFacts)
     }
 
     /**
@@ -139,7 +140,7 @@ abstract class TrackerContract extends Specification implements PortContractSupp
 
         then: 'the task is present, still carrying its unfiltered abort facts'
         result == [
-            new ReadyTask(ref, UNEXPIRED_BACKOFF, false, false, 'fixture title')
+            new ReadyTask(ref, UNEXPIRED_BACKOFF, false, false, UntrustedText.tracker('fixture title'))
         ]
     }
 
@@ -153,15 +154,15 @@ abstract class TrackerContract extends Specification implements PortContractSupp
         def adapter = tracker.get()
         def refA = new TaskRef('fixture:ready-title-a')
         def refB = new TaskRef('fixture:ready-title-b')
-        seedTask(adapter, refA, new TaskSnapshot(refA.id(), 'Fix the widget', 'body a'), new TrackerTaskState.Ready(), AbortFacts.none())
-        seedTask(adapter, refB, new TaskSnapshot(refB.id(), 'Polish the gadget', 'body b'), new TrackerTaskState.Ready(), AbortFacts.none())
+        seedTask(adapter, refA, new TaskSnapshot(refA.id(), UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body a')), new TrackerTaskState.Ready(), AbortFacts.none())
+        seedTask(adapter, refB, new TaskSnapshot(refB.id(), UntrustedText.tracker('Polish the gadget'), UntrustedText.tracker('body b')), new TrackerTaskState.Ready(), AbortFacts.none())
 
         when: 'listReady is called'
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'each entry carries its own task title'
-        result.find { it.ref() == refA }.title() == 'Fix the widget'
-        result.find { it.ref() == refB }.title() == 'Polish the gadget'
+        result.find { it.ref() == refA }.title().forLog() == 'Fix the widget'
+        result.find { it.ref() == refB }.title().forLog() == 'Polish the gadget'
     }
 
     // FR4, NFR-R1: concurrent claim() race on one Ready task yields exactly one Acquired,

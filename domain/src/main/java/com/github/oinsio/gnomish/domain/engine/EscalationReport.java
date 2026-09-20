@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -72,7 +73,7 @@ public sealed interface EscalationReport
      * @param options the candidate answers, free text; defensively copied,
      *     unmodifiable, possibly empty
      */
-    record DecisionNeeded(String question, List<String> options) implements EscalationReport {
+    record DecisionNeeded(UntrustedText question, List<UntrustedText> options) implements EscalationReport {
 
         public DecisionNeeded {
             question = requireNonBlank(question, "question");
@@ -84,7 +85,7 @@ public sealed interface EscalationReport
          * nothing cannot be answered (FR6). Explicit static method for the same PIT
          * mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException(
                         "EscalationReport.DecisionNeeded." + component + " must not be blank");
@@ -106,7 +107,7 @@ public sealed interface EscalationReport
      * @param reason why the verdict could not be obtained; never blank
      * @param details a preserved stack trace or extra detail; never null, may be empty
      */
-    record CannotVerify(CheckRef check, String reason, String details) implements EscalationReport {
+    record CannotVerify(CheckRef check, UntrustedText reason, UntrustedText details) implements EscalationReport {
 
         public CannotVerify {
             reason = requireNonBlank(reason, "reason");
@@ -117,7 +118,7 @@ public sealed interface EscalationReport
          * the verdict could not be obtained (FR4). Explicit static method for the
          * same PIT mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException("EscalationReport.CannotVerify." + component + " must not be blank");
             }
@@ -132,9 +133,11 @@ public sealed interface EscalationReport
      *
      * <p>Implements FR10 of add-stage-engine.
      *
-     * @param staleStage the recorded stage name absent from the pipeline; never blank
+     * @param staleStage the recorded stage name absent from the pipeline — read back off a task
+     *     branch some instance wrote, which is why it is carried where a live pipeline's stage
+     *     names are validated {@code String}s (design D3, NG4 of type-untrusted-text); never blank
      */
-    record PipelineMismatch(String staleStage) implements EscalationReport {
+    record PipelineMismatch(UntrustedText staleStage) implements EscalationReport {
 
         public PipelineMismatch {
             staleStage = requireNonBlank(staleStage, "staleStage");
@@ -145,7 +148,7 @@ public sealed interface EscalationReport
          * missing stage (FR9). Explicit static method for the same PIT mutation-gate
          * reason as {@link AttemptsExhausted#requireAtLeastOne}.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException(
                         "EscalationReport.PipelineMismatch." + component + " must not be blank");
@@ -175,7 +178,7 @@ public sealed interface EscalationReport
      * @param denials the egress denials of the round that could not execute; defensively
      *     copied, unmodifiable, possibly empty; never an input to any verdict
      */
-    record CannotExecute(String cause, List<Denial> denials) implements EscalationReport {
+    record CannotExecute(UntrustedText cause, List<Denial> denials) implements EscalationReport {
 
         public CannotExecute {
             cause = requireNonBlank(cause, "cause");
@@ -187,7 +190,7 @@ public sealed interface EscalationReport
          * the executor infrastructure failure (NFR-O1). Explicit static method for
          * the same PIT mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException(
                         "EscalationReport.CannotExecute." + component + " must not be blank");

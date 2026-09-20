@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -15,6 +17,7 @@ import org.slf4j.LoggerFactory;
  * the decision tree so the evaluator's action logic stays free of argv/output plumbing (mirrors
  * {@code DockerCommands}/{@code DockerOutput}'s existing split).
  */
+@UntrustedParser
 final class SandboxLifecycleObjectReader {
 
     private static final Logger log = LoggerFactory.getLogger(SandboxLifecycleObjectReader.class);
@@ -38,13 +41,13 @@ final class SandboxLifecycleObjectReader {
     List<ListedDockerObject> list(ObjectKind kind, List<String> listArgv) {
         DockerResult result = docker.run(listArgv);
         if (!result.ok()) {
-            throw new DockerUnavailableException(
-                    "docker could not list factory " + kind + " objects: "
-                            + result.stderr().strip(),
-                    null);
+            throw new DockerUnavailableException("docker could not list factory " + kind + " objects", result.stderr());
         }
         List<ListedDockerObject> objects = new ArrayList<>();
-        for (String line : DockerOutput.lines(result.stdout())) {
+        // @UntrustedParser warrant (design D11): the listing becomes typed objects — a docker
+        //     object name, its kind and its parsed labels; what stays a String is the object name
+        //     the factory then passes back to docker as an argument, never renders.
+        for (String line : DockerOutput.lines(result.stdout().forParsing())) {
             int tab = line.indexOf('\t');
             String name = tab == -1 ? line : line.substring(0, tab);
             String rawLabels = tab == -1 ? "" : line.substring(tab + 1);
@@ -59,7 +62,10 @@ final class SandboxLifecycleObjectReader {
         if (!result.ok()) {
             return Optional.empty();
         }
-        String[] parts = result.stdout().strip().split("\\s+");
+        // @UntrustedParser warrant (design D11): the inspect line becomes a boolean and three
+        //     Instants; nothing leaves as text but the unparseable value the DEBUG line below
+        //     names, which goes through the log choke point.
+        String[] parts = result.stdout().forParsing().strip().split("\\s+");
         if (parts.length != 4) {
             return Optional.empty();
         }
@@ -92,7 +98,8 @@ final class SandboxLifecycleObjectReader {
     Optional<Instant> createdAt(String name, List<String> inspectCreatedAtArgv) {
         DockerResult result = docker.run(inspectCreatedAtArgv);
         return result.ok()
-                ? Optional.ofNullable(parseOrNull(name, result.stdout().strip()))
+                ? Optional.ofNullable(
+                        parseOrNull(name, result.stdout().forParsing().strip()))
                 : Optional.empty();
     }
 
@@ -110,7 +117,10 @@ final class SandboxLifecycleObjectReader {
         try {
             return Instant.parse(unquote(value));
         } catch (DateTimeParseException e) {
-            log.debug("sandbox lifecycle sweep skipped {}: unparseable docker timestamp '{}'", name, value);
+            log.debug(
+                    "sandbox lifecycle sweep skipped {}: unparseable docker timestamp '{}'",
+                    name,
+                    LogText.forLog(value));
             return null;
         }
     }

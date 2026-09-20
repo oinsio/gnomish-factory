@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,7 +70,10 @@ public final class JudgeCriteriaPreflight {
                             + "judge vote cannot verify for criteria {}: unreadable criteria file",
                     check.criteriaFile(),
                     e);
-            return Optional.of(new Verdict.CannotVerify(message, message));
+            // The criteria file is the target repository's own: a path its `.gnomish/` manifest
+            // named, and whatever the read failure said about it (design D3's manifest family).
+            UntrustedText carried = UntrustedText.manifest(message);
+            return Optional.of(new Verdict.CannotVerify(carried, carried));
         }
     }
 }

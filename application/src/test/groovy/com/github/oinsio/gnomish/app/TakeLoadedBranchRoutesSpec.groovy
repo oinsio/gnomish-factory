@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -32,7 +33,7 @@ class TakeLoadedBranchRoutesSpec extends Specification {
     private static ResumeBootstrap bootstrap(RecordedOutcome outcome, boolean pending) {
         new ResumeBootstrap(
                 'PROJ-1',
-                new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()),
+                new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 outcome,
                 null,
                 Path.of('/tmp/unused'),
@@ -67,8 +68,11 @@ class TakeLoadedBranchRoutesSpec extends Specification {
         where:
         label | outcome | report || decision
         'Escalated + AttemptsExhausted' | escalated() | new EscalationReport.AttemptsExhausted(3) || true
-        'Escalated + DecisionNeeded' | escalated() | new EscalationReport.DecisionNeeded('Q?', ['a', 'b']) || true
-        'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute('adapter crashed', []) || false
+        'Escalated + DecisionNeeded' | escalated() | new EscalationReport.DecisionNeeded(UntrustedText.agent('Q?'), [
+            UntrustedText.agent('a'),
+            UntrustedText.agent('b')
+        ]) || true
+        'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), []) || false
         'Escalated + no report' | escalated() | null || false
         'Paused + stale AttemptsExhausted' | paused() | new EscalationReport.AttemptsExhausted(3) || false
         'null outcome + AttemptsExhausted' | null | new EscalationReport.AttemptsExhausted(3) || false

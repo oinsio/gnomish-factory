@@ -47,8 +47,8 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
 
         then: 'the vote is CannotVerify, naming the unfinished drain, not an exception'
         def verdict = vote.verdict() as Verdict.CannotVerify
-        verdict.reason().contains('drain did not finish')
-        verdict.details().contains('tail-drain-grace')
+        verdict.reason().forLog().contains('drain did not finish')
+        verdict.details().forLog().contains('tail-drain-grace')
 
         cleanup:
         stuck.set(true)
@@ -84,8 +84,8 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
 
         then:
         def verdict = vote.verdict() as Verdict.CannotVerify
-        verdict.reason().contains('interrupted')
-        !verdict.details().contains('tail-drain-grace')
+        verdict.reason().forLog().contains('interrupted')
+        !verdict.details().forLog().contains('tail-drain-grace')
 
         cleanup:
         Thread.interrupted()

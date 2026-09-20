@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -65,6 +66,16 @@ import org.jspecify.annotations.Nullable;
  * argument taken from the claim, never derived per medium. A binding that changes on one side and not the other would make the
  * same task read different law in host and container mode.
  *
+ * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.take.RevocationHandler}: both must end
+ * a revoked claim with the same stop note and the same two tracker writes — the "Work stopped:"
+ * heading over the revocation reason taken through the comment plane's fenced shape, then {@code
+ * postNote} followed by {@code release}, and never {@code park}, {@code recordAbort} or {@code
+ * finish} (FR15 of add-tracker-port). Only the salvage mechanics differ by medium, which is why
+ * this end calls {@link SandboxRunSupport#revocationSalvageAndPush} where the host end salvages
+ * against a worktree path. The note is what a human reads on the thread of a task that stopped
+ * without a verdict, so a wording or an exit that changed on one medium alone would make the two
+ * modes report the same event differently.
+ *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
  * add-tracker-port and add-sandbox-core.
  */
@@ -99,12 +110,18 @@ record TakeContainerEngineExecution(
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
             support.revocationSalvageAndPush(taskId);
-            String note = "Work stopped: " + RevocationDetectedException.reasonFor(revocation.get())
-                    + ". Uncommitted work was"
-                    + " salvage-committed and the branch left in place for whoever resumes this task.";
+            // The reason names what the tracker held — the new claim's holder, a closure reason —
+            // so it leaves through the comment plane at the write, with the factory's own sentences
+            // outside the fence (design D7 of type-untrusted-text). The fenced shape, not the
+            // inline one: the note is a heading over one capture, so the label describes the block
+            // it spans truthfully (design D6, revised 2026-09-19).
+            UntrustedText reason = UntrustedText.tracker(RevocationDetectedException.reasonFor(revocation.get()));
+            String note = "Work stopped:\n" + reason.forComment()
+                    + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
+                    + " this task.";
             tracker.postNote(ref, note);
             tracker.release(ref);
-            return new TakeResult.Revoked(outcome.finalState(), note);
+            return new TakeResult.Revoked(outcome.finalState(), UntrustedText.factory(note));
         }
 
         settleTerminalBoundary(support, outcome);

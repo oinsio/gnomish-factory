@@ -49,7 +49,7 @@ final class DashboardInProgressCardRenderer {
 
     private static void appendRows(StringBuilder out, BoardModel model) {
         for (WorkingRow row : model.workingRows()) {
-            appendRow(out, "", row.ref().id(), row.title(), workingNote(row, model.generatedAt()));
+            appendRow(out, "", row.ref().id(), row.title().forConsole(), workingNote(row, model.generatedAt()));
         }
         for (ReadyRow row : model.readyRows()) {
             String annotation = BoardLabels.eligibilityAnnotation(row.eligibilityReason());
@@ -57,7 +57,7 @@ final class DashboardInProgressCardRenderer {
                     out,
                     " row__dot--ready",
                     row.ref().id(),
-                    row.title(),
+                    row.title().forConsole(),
                     annotation == null ? null : DashboardHtmlFormatter.escape(annotation));
         }
         String marker = BoardLabels.truncationMarker(model);

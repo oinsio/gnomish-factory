@@ -73,10 +73,14 @@ class ModuleBuildFileSpec extends Specification {
     /**
      * The shared leaf modules whose emptiness is load-bearing, each mapped to the exact set of
      * production-scope dependency declarations its build file may carry. {@code :subprocess} and
-     * {@code :atomicfile} declare nothing at all, and so do {@code :baseref}, {@code
-     * :untrustedtext} and {@code :operatorevent}, whose emptiness is the constructive half of a
-     * security property (NFR-S3 of add-base-ref-resolution, NFR-S1 of split-logtext-leaves): a
-     * policy that can import nothing cannot reach a tracker, a remote or a configuration format.
+     * {@code :atomicfile} declare nothing at all, and so do {@code :untrustedtext} and {@code
+     * :operatorevent}, whose emptiness is the constructive half of a security property (NFR-S1 of
+     * split-logtext-leaves). {@code :baseref} carries the same property (NFR-S3 of
+     * add-base-ref-resolution) with one edge rather than none: the untrusted-text leaf, admitted
+     * at task 6.1 of type-untrusted-text so the policy's own refusal can carry a tracker's
+     * designator values in the type a report may only render through an exit. The leaf is itself
+     * dependency-free, so the reach it adds is nil — a policy that can import nothing but a
+     * character-class table still cannot reach a tracker, a remote or a configuration format.
      * {@code :logtext} declares the SLF4J API and the BOM that pins it — MDC propagation is not
      * expressible without the API, while a logging <em>backend</em> stays the composition root's
      * choice — plus the one internal edge FR7 of split-logtext-leaves grants it, to the
@@ -98,18 +102,23 @@ class ModuleBuildFileSpec extends Specification {
         ] as Set,
         subprocess: [] as Set,
         atomicfile: [] as Set,
-        baseref: [] as Set,
+        baseref: [
+            "api project(':untrustedtext')"
+        ] as Set,
         untrustedtext: [] as Set,
         operatorevent: [] as Set,
     ]
 
     /**
-     * The internal half of the same registry: the project edges a leaf may declare. Only
-     * {@code :logtext} has one — the untrusted-text leaf its {@code LogText} facade delegates to
-     * (FR7 of split-logtext-leaves); every other leaf reaches nothing internal at all.
+     * The internal half of the same registry: the project edges a leaf may declare. Two leafs have
+     * one each, and it is the same leaf both times — {@code :logtext}'s {@code LogText} facade
+     * delegates to the untrusted-text leaf (FR7 of split-logtext-leaves), and {@code :baseref}
+     * names the carrier on its own surface (task 6.1 of type-untrusted-text); every other leaf
+     * reaches nothing internal at all.
      */
     private static final Map<String, Set<String>> LEAF_ALLOWED_PROJECTS = [
         logtext: [':untrustedtext'] as Set,
+        baseref: [':untrustedtext'] as Set,
     ]
 
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,

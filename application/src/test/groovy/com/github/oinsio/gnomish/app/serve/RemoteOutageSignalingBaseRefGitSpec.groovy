@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,7 +43,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
     //     outcome still handed back so the claim releases as before.
     def "an unavailable refresh opens the gate and is forwarded"() {
         given:
-        def outage = new BaseRefreshOutcome.Unavailable('connection refused')
+        def outage = new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection refused'))
         def git = signaling([refresh: { Path d, String r ->
                 outage
             }] as BaseRefGit)
@@ -86,7 +87,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
     // FR14: a refusal means origin answered but no base was refreshed — neither signal fires.
     def "a refused refresh signals nothing and is forwarded"() {
         given:
-        def refused = new BaseRefreshOutcome.Refused('no such ref')
+        def refused = new BaseRefreshOutcome.Refused(UntrustedText.subprocess('no such ref'))
         def git = signaling([refresh: { Path d, String r ->
                 refused
             }] as BaseRefGit)
@@ -119,10 +120,10 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
 
         where:
         outcome | opens | confirms
-        new ResumeBaseOutcome.Unavailable('timed out') | true | false
+        new ResumeBaseOutcome.Unavailable(UntrustedText.subprocess('timed out')) | true | false
         new ResumeBaseOutcome.Bound('main', 'abc', OriginContact.CONTACTED) | false | true
         new ResumeBaseOutcome.Bound('main', 'abc', OriginContact.CLONE_ONLY) | false | false
-        new ResumeBaseOutcome.Refused('gone') | false | false
+        new ResumeBaseOutcome.Refused(UntrustedText.subprocess('gone')) | false | false
     }
 
     // UX1, FR2, FR3, NFR-O1 of signal-outage-gate-on-origin-contact — the operator-facing promise,

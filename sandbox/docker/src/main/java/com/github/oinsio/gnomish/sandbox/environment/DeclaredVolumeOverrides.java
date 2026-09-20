@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.sandbox.environment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +31,24 @@ import java.util.Set;
  * compile. Nothing here names a path of any particular image — the set is read
  * from the image at creation time (G2).
  *
+ * <p><b>The one path that does not come through here</b>, recorded as the single-owner
+ * exemption this mechanism is allowed ({@code implementation.md}, old-way sweep): the Testcontainers
+ * E2E fixtures that start third-party images the factory does not run in production —
+ * {@code GiteaContainerFixture} ({@code gitea/gitea}, which declares {@code /data}) and
+ * {@code GiteaActionsRunnerFixture} ({@code gitea/act_runner}, which declares nothing). They
+ * are test infrastructure, not factory containers, so the {@code execution-environment}
+ * requirement does not reach them; and the anonymous volume they cause cannot outlive its
+ * container, because Testcontainers' reaper removes the container with {@code docker rm -f -v}.
+ * The mechanism exists for objects that survive their container, which these do not. A fixture
+ * that ever stops being reaped — a container started outside Testcontainers, or one kept alive
+ * past the JVM — leaves this exemption and needs the override, via {@code withTmpFs}.
+ *
  * <p>Implements FR1, FR2, FR3, NFR-R1, NFR-R2 of fix-image-declared-volumes.
  *
  * @param paths the declared paths to override, in the order the runtime reported
  *     them; never null, already stripped of the factory's explicit destinations
  */
+@UntrustedParser
 record DeclaredVolumeOverrides(List<String> paths) {
 
     /**
@@ -85,14 +99,13 @@ record DeclaredVolumeOverrides(List<String> paths) {
      * @param image the image reference the container will run; never blank
      * @param explicitDestinations the in-container paths this container mounts itself
      * @return the overrides; never null, empty when the image declares nothing new
-     * @throws IllegalStateException if the runtime refused the inspect or answered a
+     * @throws DockerCommandFailedException if the runtime refused the inspect or answered a
      *     shape other than {@code null} or a JSON object of paths
      */
     static DeclaredVolumeOverrides resolve(DockerCli docker, String image, Set<String> explicitDestinations) {
         DockerResult result = docker.run(DockerCommands.inspectImageVolumes(image));
         if (!result.ok()) {
-            throw new IllegalStateException("docker image inspect of " + image + " failed: "
-                    + LogText.forLog(result.stderr().strip()));
+            throw new DockerCommandFailedException("image inspect", image, null, result.stderr());
         }
         List<String> overridden = new ArrayList<>();
         for (String declared : declaredPaths(image, result.stdout())) {
@@ -109,22 +122,31 @@ record DeclaredVolumeOverrides(List<String> paths) {
      * both are normal answers and anything else is a shape this parser refuses to guess at
      * (fail closed, design D4).
      */
-    private static List<String> declaredPaths(String image, String answer) {
+    private static List<String> declaredPaths(String image, UntrustedText answer) {
         JsonNode node;
         try {
-            node = MAPPER.readTree(answer);
+            // @UntrustedParser warrant (design D11): docker's inspect answer becomes the list of
+            //     declared volume paths, which travel into a `docker run` argv as mount
+            //     destinations and are never rendered to a reader; the answer itself leaves this
+            //     class only through the carrier's log exit, in the messages below.
+            node = MAPPER.readTree(answer.forParsing());
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException(
-                    "docker image inspect of " + image + " returned unparseable declared volumes: "
-                            + LogText.forLog(answer),
+            throw new DockerCommandFailedException(
+                    "image inspect",
+                    image,
+                    null,
+                    UntrustedText.subprocess("unparseable declared volumes: " + answer),
                     e);
         }
         if (node.isNull()) {
             return List.of();
         }
         if (!node.isObject()) {
-            throw new IllegalStateException("docker image inspect of " + image
-                    + " returned declared volumes of an unexpected shape: " + LogText.forLog(answer));
+            throw new DockerCommandFailedException(
+                    "image inspect",
+                    image,
+                    null,
+                    UntrustedText.subprocess("declared volumes of an unexpected shape: " + answer));
         }
         List<String> declared = new ArrayList<>();
         for (Map.Entry<String, JsonNode> property : node.properties()) {

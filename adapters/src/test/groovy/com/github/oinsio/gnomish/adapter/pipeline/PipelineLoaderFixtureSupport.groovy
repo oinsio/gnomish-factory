@@ -97,7 +97,10 @@ advancement: auto
 
     /** Renders every located error of an invalid outcome, in order — shared by specs asserting on them. */
     static List<String> renderedErrors(LoadOutcome outcome) {
-        (outcome as LoadOutcome.Invalid).errors().collect { it.render() }
+        // The manifest exit, so a spec asserts on the line an author would read (design D10).
+        (outcome as LoadOutcome.Invalid).errors().collect {
+            it.render().forConsole()
+        }
     }
 
     /** The {@code build} manifest: consumes {@code plan-doc}, builtin + external checks, manual advancement. */

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -91,7 +92,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         where:
         label | delegated | write
         'started' | 'createTask' | { TaskLifecycleStore s ->
-            s.createTask(new TaskContext(TASK_ID, 't', 'b', []), TaskStart.ANY, TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
+            s.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('t'), UntrustedText.tracker('b'), []), TaskStart.ANY, TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
         }
         'resumed' | 'appendDecision' | { TaskLifecycleStore s ->
             s.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH), TaskState.atStageStart('work'))

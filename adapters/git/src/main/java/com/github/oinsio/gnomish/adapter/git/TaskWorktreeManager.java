@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ import java.nio.file.Path;
  *
  * <p>Implements FR6, FR8 of add-git-workflow (design D6).
  */
+@UntrustedParser
 public final class TaskWorktreeManager {
 
     private final GitProcessRunner runner;
@@ -86,7 +88,7 @@ public final class TaskWorktreeManager {
         // /private/tmp/... rather than /tmp/...; toRealPath() matches that, toAbsolutePath()
         // would not.
         String needle = "worktree " + realPath(worktreePath);
-        return list.stdout().lines().anyMatch(line -> line.trim().equals(needle));
+        return list.stdout().forParsing().lines().anyMatch(line -> line.trim().equals(needle));
     }
 
     private static Path realPath(Path path) {

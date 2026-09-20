@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -99,7 +100,7 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
 
     private TakeResult reparkRestatingQuestion(
             EscalationReport.DecisionNeeded decisionNeeded, TaskState finalState, Tracker tracker, TaskRef ref) {
-        String report = EscalationResumeDialog.renderEscalation(decisionNeeded);
+        String report = EscalationResumeDialog.renderEscalation(decisionNeeded, ReportPlane.COMMENT);
         tracker.park(ref, ParkReason.ESCALATION, report);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.ESCALATION, report);
     }

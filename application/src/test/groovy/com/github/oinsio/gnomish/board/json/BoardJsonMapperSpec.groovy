@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -31,7 +32,7 @@ class BoardJsonMapperSpec extends Specification {
     def mapper = new BoardJsonMapper()
 
     private static ReadyTask readyTask(String id, AbortFacts abortFacts, boolean returned, boolean finished) {
-        new ReadyTask(new TaskRef(id), abortFacts, returned, finished, "title for ${id}")
+        new ReadyTask(new TaskRef(id), abortFacts, returned, finished, UntrustedText.tracker("title for ${id}"))
     }
 
     def "top-level document carries version 1, generatedAt, and truncated"() {
@@ -100,7 +101,7 @@ class BoardJsonMapperSpec extends Specification {
             readyTask('github:o/r#4', AbortFacts.none(), false, false)
         ]
         def open = [
-            new OpenTask(new TaskRef('github:o/r#10'), new TrackerTaskState.Working('holder-a'), null, 'working title')
+            new OpenTask(new TaskRef('github:o/r#10'), new TrackerTaskState.Working('holder-a'), null, UntrustedText.tracker('working title'))
         ]
         def model = BoardModel.build(ready, open, false, NOW, BASE, CAP, NOW, 3, 3)
 
@@ -136,7 +137,7 @@ class BoardJsonMapperSpec extends Specification {
         def updatedAt = NOW - Duration.ofMinutes(3)
         def open = [
             new OpenTask(new TaskRef('github:o/r#20'), new TrackerTaskState.Working('holder-b'),
-            new ClaimVersion('marker-1', updatedAt, new ClaimEpoch(1)), 'working title')
+            new ClaimVersion('marker-1', updatedAt, new ClaimEpoch(1)), UntrustedText.tracker('working title'))
         ]
         def model = BoardModel.build([], open, false, NOW)
 
@@ -152,7 +153,7 @@ class BoardJsonMapperSpec extends Specification {
     def "a Working row with an absent claim marker renders claimUpdatedAt as explicit JSON null"() {
         given:
         def open = [
-            new OpenTask(new TaskRef('github:o/r#21'), new TrackerTaskState.Working('holder-c'), null, 'working title')
+            new OpenTask(new TaskRef('github:o/r#21'), new TrackerTaskState.Working('holder-c'), null, UntrustedText.tracker('working title'))
         ]
         def model = BoardModel.build([], open, false, NOW)
 
@@ -168,9 +169,9 @@ class BoardJsonMapperSpec extends Specification {
     def "AwaitingHuman rows render lowercase park-reason labels"() {
         given:
         def open = [
-            new OpenTask(new TaskRef('github:o/r#30'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'escalated title'),
-            new OpenTask(new TaskRef('github:o/r#31'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, 'infra title'),
-            new OpenTask(new TaskRef('github:o/r#32'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, 'checkpoint title')
+            new OpenTask(new TaskRef('github:o/r#30'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, UntrustedText.tracker('escalated title')),
+            new OpenTask(new TaskRef('github:o/r#31'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, UntrustedText.tracker('infra title')),
+            new OpenTask(new TaskRef('github:o/r#32'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, UntrustedText.tracker('checkpoint title'))
         ]
         def model = BoardModel.build([], open, false, NOW)
 

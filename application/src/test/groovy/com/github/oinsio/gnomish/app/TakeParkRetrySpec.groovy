@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -41,7 +42,7 @@ class TakeParkRetrySpec extends Specification {
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
     static final TaskState STATE = TaskState.atStageStart('build')
-    static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
+    static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     Tracker tracker = Mock()
     AtomicReference<Instant> now = new AtomicReference<>(Instant.parse('2026-01-01T00:00:00Z'))

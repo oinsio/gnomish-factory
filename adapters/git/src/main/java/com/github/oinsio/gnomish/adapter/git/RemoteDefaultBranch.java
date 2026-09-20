@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery;
 import com.github.oinsio.gnomish.baseref.DefaultBranch;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -24,6 +26,7 @@ import java.util.Optional;
  *
  * <p>Implements FR5, FR9, NFR-P1 of add-base-ref-resolution.
  */
+@UntrustedParser
 public final class RemoteDefaultBranch {
 
     /**
@@ -69,10 +72,10 @@ public final class RemoteDefaultBranch {
             }
             return new DefaultBranchDiscovery.Unavailable(read.failureDetail("default-branch read"));
         }
-        return symrefBranch(read.stdout())
+        return symrefBranch(read.stdout().forParsing())
                 .map(RemoteDefaultBranch::discovered)
-                .orElseGet(() -> new DefaultBranchDiscovery.Undetermined(
-                        "origin answered but named no default branch: its HEAD points at no ref"));
+                .orElseGet(() -> new DefaultBranchDiscovery.Undetermined(UntrustedText.factory(
+                        "origin answered but named no default branch: its HEAD points at no ref")));
     }
 
     /**
@@ -89,9 +92,10 @@ public final class RemoteDefaultBranch {
      */
     private static DefaultBranchDiscovery discovered(String branch) {
         return DefaultBranch.violation(branch)
-                .<DefaultBranchDiscovery>map(
-                        violation -> new DefaultBranchDiscovery.Undetermined("origin named a default branch '"
-                                + LogText.forLog(branch) + "' that is not a usable branch name: " + violation))
+                .<DefaultBranchDiscovery>map(violation ->
+                        new DefaultBranchDiscovery.Undetermined(UntrustedText.factory("origin named a default"
+                                + " branch '" + LogText.forLog(branch) + "' that is not a usable branch name: "
+                                + violation)))
                 .orElseGet(() -> new DefaultBranchDiscovery.Discovered(new DefaultBranch(branch)));
     }
 

@@ -1,24 +1,14 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
-import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
-import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
 import spock.lang.Specification
 
 /**
@@ -29,90 +19,27 @@ import spock.lang.Specification
  * declineFinished}/{@code acknowledgeDecision}/{@code recordProgress} actually invoke their
  * collaborator (the delegating call is not silently dropped). Split from {@code GithubTrackerSpec}
  * to keep each spec within the file-size cap; both use real collaborators over WireMock (the
- * collaborator classes are {@code final}, so mocking them is not an option).
+ * collaborator classes are {@code final}, so mocking them is not an option). The WireMock/tracker
+ * scaffolding is shared with {@code GithubTrackerSpec} via {@link GithubTrackerWireMockFixture}.
  *
  * <p>Implements FR1, FR4 of add-tracker-port; FR1 of fix-abort-progress-reset.
  */
-class GithubTrackerDelegationSpec extends Specification {
+class GithubTrackerDelegationSpec extends Specification implements GithubTrackerWireMockFixture {
 
-    private static final int ISSUE_NUMBER = 50
     private static final String READY_FEED_URL =
     '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'
     private static final String WORKING_FEED_URL =
     '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aworking&sort=created&direction=asc&per_page=100'
     private static final String NEEDS_HUMAN_FEED_URL =
     '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aneeds-human&sort=created&direction=asc&per_page=100'
-    private static final String COMMENTS_URL =
-    "/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments?per_page=100"
-    private static final String POST_COMMENTS_URL =
-    "/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"
-
-    WireMockServer wireMock
-
-    def setup() {
-        wireMock = new WireMockServer(0)
-        wireMock.start()
-        // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
-        // the thread first. Specs that need a populated thread add their own, more recent stub.
-        wireMock.stubFor(get(urlMatching('.*/comments\\?per_page=100'))
-                .willReturn(aResponse()
-                .withStatus(200).withBody('[]')))
-    }
-
-    def cleanup() {
-        wireMock.stop()
-    }
-
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
-    }
-
-    private static final GithubStateLabels LABELS =
-    new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered')
-
-    private GithubTracker newTracker() {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        def labelOps = new GithubLabelOps(httpClient)
-        def cache = new GithubConditionalRequestCache(httpClient)
-        new GithubTracker(
-                new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
-                GithubDesignatorRules.none()),
-                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
-                new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
-                'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
-                new GithubCorrespondence(markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
-                new GithubDecisions(httpClient, markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
-                new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1'),
-                new GithubOpenQuery(cache, 'acme', 'widgets', LABELS),
-                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
-                'gnomish:working', 'gnomish:ready'),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'), LABELS))
-    }
-
-    private TaskRef ref() {
-        new TaskRef(GithubTaskId.build(wireMock.baseUrl(), 'acme', 'widgets', ISSUE_NUMBER).canonicalId())
-    }
+    // Not interpolated from the trait's ISSUE_NUMBER: a class-level static field initializer here
+    // runs before the trait's static field is guaranteed initialized (Groovy trait static-init
+    // ordering), which previously produced stub URLs for the wrong issue number.
+    private static final String COMMENTS_URL = '/repos/acme/widgets/issues/50/comments?per_page=100'
+    private static final String POST_COMMENTS_URL = '/repos/acme/widgets/issues/50/comments'
 
     private void stubGet(String url, String body) {
         wireMock.stubFor(get(urlEqualTo(url)).willReturn(aResponse().withStatus(200).withBody(body)))
-    }
-
-    private void stubComment() {
-        wireMock.stubFor(post(urlEqualTo(POST_COMMENTS_URL))
-                .willReturn(aResponse().withStatus(201).withBody('{"id":1,"body":"whatever"}')))
-    }
-
-    private void stubLabelTransition(String removedLabelEncoded) {
-        wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/labels"))
-                .willReturn(aResponse().withStatus(200).withBody('[]')))
-        wireMock.stubFor(delete(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/labels/${removedLabelEncoded}"))
-                .willReturn(aResponse().withStatus(200).withBody('[]')))
     }
 
     def "listReady returns the feed collaborator's non-empty result, not a substituted empty list"() {
@@ -125,7 +52,7 @@ class GithubTrackerDelegationSpec extends Specification {
 
         then: 'the tracker forwards the collaborator list unchanged (an emptyList substitute would fail this)'
         result.size() == 1
-        result[0].title() == 'Fix the widget'
+        result[0].title().forLog() == 'Fix the widget'
     }
 
     def "listOpen returns the open-query collaborator's non-empty result, not a substituted empty list"() {
@@ -207,9 +134,5 @@ class GithubTrackerDelegationSpec extends Specification {
         then: 'the delegated call fired — a dropped void call would post no comment at all'
         wireMock.verify(postRequestedFor(urlEqualTo(POST_COMMENTS_URL))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"progress"'))))
-    }
-
-    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

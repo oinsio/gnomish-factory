@@ -7,13 +7,19 @@ import java.util.regex.Pattern
 
 /**
  * Extraction of SLF4J call sites from production sources, shared by the convention gates of
- * harden-logging-observability: ThrowableConventionGateSpec (FR7, D9), UntrustedLogTextGateSpec
- * (FR6, D9) and LogContractGateSpec (FR16, D15). All of them need the same thing — one log call's
- * full argument list, however many lines it spans — so the parser lives here once.
+ * harden-logging-observability: ThrowableConventionGateSpec (FR7, D9), UntrustedTextSinkGateSpec
+ * (FR6, D9; successor to the accessor-name gate this parser was first written for) and
+ * LogContractGateSpec (FR16, D15). All of them need the same thing — one log call's full argument
+ * list, however many lines it spans — so the parser lives here once.
  *
  * <p>The scan runs over comment-stripped code ({@link RepoSourceTree#code}), because a convention
  * gate must judge what the compiler sees; the raw lines are kept alongside so an in-place
  * exemption comment can still be found (see {@link #exempted}).
+ *
+ * <p>What is specific here is the SLF4J shape — the receiver forms, the level methods, the fluent
+ * chain. Delimiting a call's parentheses past its string literals is not: it belongs to every
+ * Java-source gate, so it lives in {@link JavaCallSites} and this class delimits through it
+ * (type-untrusted-text design D2, where the sink gate became the second family needing it).
  */
 class LogCallSites {
 
@@ -103,7 +109,7 @@ class LogCallSites {
         def matcher = LOG_CALL.matcher(code)
         while (matcher.find()) {
             int line = code.take(matcher.start()).count('\n') + 1
-            int close = closingParen(code, matcher.end() - 1)
+            int close = JavaCallSites.closingParen(code, matcher.end() - 1)
             if (close < 0) {
                 unparsed << "${path}:${line}".toString()
                 continue
@@ -169,7 +175,7 @@ class LogCallSites {
             if (i >= code.length() || code.charAt(i) != ('(' as char)) {
                 return -1
             }
-            int close = closingParen(code, i)
+            int close = JavaCallSites.closingParen(code, i)
             if (close < 0) {
                 return -1
             }
@@ -178,43 +184,5 @@ class LogCallSites {
             }
             i = close + 1
         }
-    }
-
-    /**
-     * Index of the paren closing the one at {@code open}, skipping string and character literals so
-     * a message like {@code "still failing ({})"} cannot unbalance the count. Returns -1 when the
-     * source does not close it (a comment-stripping artifact), so the caller records that site as
-     * unparsed rather than swallowing the rest of the file — or dropping it silently.
-     */
-    private static int closingParen(String code, int open) {
-        int depth = 0
-        for (int i = open; i <code.length(); i++) {
-            char c = code.charAt(i)
-            if (c == '"' as char || c == '\'' as char) {
-                i = endOfLiteral(code, i)
-                if (i < 0) {
-                    return -1
-                }
-            } else if (c == '(' as char) {
-                depth++
-            } else if (c == ')' as char && --depth == 0) {
-                return i
-            }
-        }
-        -1
-    }
-
-    /** Index of the quote closing the literal opened at {@code start}, honouring backslash escapes. */
-    private static int endOfLiteral(String code, int start) {
-        char quote = code.charAt(start)
-        for (int i = start + 1; i <code.length(); i++) {
-            char c = code.charAt(i)
-            if (c == '\\' as char) {
-                i++
-            } else if (c == quote) {
-                return i
-            }
-        }
-        -1
     }
 }

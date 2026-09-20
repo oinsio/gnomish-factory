@@ -33,6 +33,20 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// FR4 of type-untrusted-text: 0.7.0 -> 0.8.0, the sixth BREAKING move. Free text the tracker
+// or a check controls is now carried as `UntrustedText` rather than `String`, which retypes
+// components on this module's own surface and on the `:domain` types it re-exposes — so every
+// affected record loses its old canonical constructor and accessor signature:
+// `TaskSnapshot.title` and `TaskSnapshot.body` (this module's own port DTO — an adapter author
+// now mints them, which is the point of the break); `AbortRecord.cause` (likewise its own);
+// and, among the re-exposed `:domain` types inside the semver promise, `Verdict.CannotVerify`
+// with both its components, together with the `PollStatus.CannotVerify`,
+// `EscalationReport.CannotVerify`/`CannotExecute` and attempt/execution records that carry the
+// same retyped text. Pre-1.0, a breaking change is a MINOR bump; `compat-baseline/` was
+// regenerated (`updateApiCompatibilityBaseline`) in the same commit over the current four-jar
+// set — `gnomish-plugin-api`, `domain`, `untrustedtext`, `operatorevent` — so a reviewer sees
+// the break and the bump that accepts it in one diff.
+//
 // FR8 of split-logtext-leaves: 0.6.0 -> 0.7.0, a NON-breaking move. No signature on this
 // module's surface changed — `FindingsSanitizer` keeps `strip`, `capTail` and `forLog` — but the
 // two JDK-only leafs this change carves out of `:logtext`, `:untrustedtext` and `:operatorevent`,
@@ -83,7 +97,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.7.0'
+version = '0.8.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 
@@ -102,15 +116,14 @@ dependencies {
     // "single declared dependency" contract is unaffected.
     api project(':domain')
 
-    // `implementation`, not `api` (FR3 of split-logtext-leaves): `FindingsSanitizer` is a facade
-    // over the `:untrustedtext` leaf's primitives, and every one of its signatures is `String`, so
-    // the leaf is behind this module's surface rather than on it. It reaches a third party anyway
-    // — as a runtime artifact resolved with this one — so the "single declared dependency"
-    // promise is unaffected, and the leaf being JDK-only is what makes the edge free of anything
-    // this POM must not carry. This module is the leaf's only declared consumer below the
-    // adapters: `:domain` takes its own edge in `type-untrusted-text`, with the first domain
-    // type that names it.
-    implementation project(':untrustedtext')
+    // `api` since task 6.3 of type-untrusted-text, `implementation` before it: the leaf was
+    // behind this module's surface while `FindingsSanitizer` — a facade whose every signature is
+    // `String` — was its only consumer here. `AbortRecord.cause` and `TaskSnapshot.title/body` put
+    // the carrier *on* the published surface, so a third-party adapter compiles against it and the
+    // scope must say so. It reached a third party either way, as a runtime artifact resolved with
+    // this one, so the "single declared dependency" promise is unaffected, and the leaf being
+    // JDK-only is what keeps the edge free of anything this POM must not carry.
+    api project(':untrustedtext')
 
     // Shared fakes and port-contract suites (FR7, design D8), test scope only.
     testImplementation project(':test-fixtures')
@@ -135,7 +148,10 @@ layering {
         // reach is listed where it arrives.
         ':operatorevent',
         // The untrusted-text leaf (FR3, FR11, design D9 of split-logtext-leaves): declared
-        // directly above, because `FindingsSanitizer` names it.
+        // directly above, because `FindingsSanitizer` names it — and, since FR4 of
+        // type-untrusted-text, because `TaskSnapshot` and `AbortRecord` carry it on the
+        // published surface, which is why the declaration is `api` rather than
+        // `implementation`.
         ':untrustedtext',
     ]
 }

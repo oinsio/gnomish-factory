@@ -35,6 +35,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -96,7 +97,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         List<ReadyTask> listReady(int limit) {
             calls << "listReady($limit)".toString()
             finishedCount.get() == 0 ? [
-                new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
+                new ReadyTask(REF, AbortFacts.none(), false, false, UntrustedText.tracker('fixture title'))
             ] : []
         }
 

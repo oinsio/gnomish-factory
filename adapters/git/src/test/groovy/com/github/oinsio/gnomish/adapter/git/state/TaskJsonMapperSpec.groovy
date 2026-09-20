@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git.state
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.app.port.tracker.fake.TrackerFixtureText
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -15,6 +16,8 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.Provenance
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
@@ -29,7 +32,7 @@ import spock.lang.Specification
 class TaskJsonMapperSpec extends Specification {
 
     def someContext = new TaskContext(
-    "task-1", "Fix flaky test", "body text",
+    "task-1", UntrustedText.tracker("Fix flaky test"), UntrustedText.tracker("body text"),
     [
         new Decision("patch in place", "plan", "operator", Instant.parse("2026-07-16T14:21:30Z"))
     ])
@@ -61,7 +64,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto maps a decision with null author/stage/at"() {
         given:
-        def context = new TaskContext("task-1", "t", "b", [
+        def context = new TaskContext("task-1", UntrustedText.tracker("t"), UntrustedText.tracker("b"), [
             new Decision("just a note", null, null, null)
         ])
 
@@ -120,7 +123,7 @@ class TaskJsonMapperSpec extends Specification {
     def "toDto renders outcome aborted with failedAt and cause"() {
         given:
         def failedAt = new AttemptKey("task-1", "implement", 2)
-        def outcome = new TaskOutcome.Aborted(someState(), failedAt, "disk full")
+        def outcome = new TaskOutcome.Aborted(someState(), failedAt, UntrustedText.subprocess("disk full"))
 
         when:
         def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false, BasePin.UNPINNED)
@@ -131,7 +134,10 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto renders lastEscalation independently of outcome"() {
         given:
-        def lastEscalation = new EscalationReport.DecisionNeeded("Refactor or patch?", ["refactor", "patch"])
+        def lastEscalation = new EscalationReport.DecisionNeeded(UntrustedText.agent("Refactor or patch?"), [
+            UntrustedText.agent("refactor"),
+            UntrustedText.agent("patch")
+        ])
 
         when:
         def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation, false, BasePin.UNPINNED)
@@ -149,10 +155,13 @@ class TaskJsonMapperSpec extends Specification {
         where:
         report | expected
         new EscalationReport.AttemptsExhausted(3) | new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3)
-        new EscalationReport.DecisionNeeded("Q?", ["a", "b"]) | new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"])
-        new EscalationReport.CannotVerify(new CheckRef(0, "command:./gradlew test"), "timeout", "detail") | new EscalationReportDto.CannotVerify("cannotVerify", "command:./gradlew test", "timeout", "detail")
-        new EscalationReport.PipelineMismatch("removed-stage") | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage")
-        new EscalationReport.CannotExecute("adapter crashed", []) | new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed", [])
+        new EscalationReport.DecisionNeeded(UntrustedText.agent("Q?"), [
+            UntrustedText.agent("a"),
+            UntrustedText.agent("b")
+        ]) | new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"])
+        new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), UntrustedText.subprocess("timeout"), UntrustedText.subprocess("detail")) | new EscalationReportDto.CannotVerify("cannotVerify", "command:./gradlew test", "timeout", "detail")
+        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage")) | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage")
+        new EscalationReport.CannotExecute(UntrustedText.subprocess("adapter crashed"), []) | new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed", [])
     }
 
     def "round-trip: serialize then deserialize a full TaskJsonDto tree is equal"() {
@@ -289,11 +298,79 @@ class TaskJsonMapperSpec extends Specification {
         '''
 
         when:
-        def dto = TaskJsonMapper.readDto(json)
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         dto.version() == 1
         dto.taskId() == "task-1"
+    }
+
+    // NFR-R2, FR1 of type-untrusted-text: the wire format did not change when the carrier
+    //     arrived, so a task.json written before it existed — plain strings everywhere — still
+    //     parses, and every free-text field the reader lifts out comes back a branch-document
+    //     carrier rather than a plain string the rest of the factory could launder.
+    def "a task.json written before the carrier existed reads into branch-document carriers"() {
+        given: 'a document with no carrier anywhere in it, holding hostile text in every free field'
+        def hostile = 'fatal: \u001B[2K refused'
+        // JSON-escaped by the same mapper the writer uses, so the fixture is the document a
+        // pre-carrier factory really wrote rather than one hand-escaped beside it.
+        def quoted = TaskStateJson.mapper().writeValueAsString(hostile)
+        def json = """
+        {
+          "version": 1,
+          "taskId": "task-1",
+          "title": ${quoted},
+          "body": ${quoted},
+          "createdAt": "2026-07-18T09:00:00Z",
+          "baseCommit": "abc123",
+          "decisions": [],
+          "outcome": {"type": "aborted", "failedAt": "implement#0", "cause": ${quoted}},
+          "lastEscalation": {"type": "cannotExecute", "cause": ${quoted}, "denials": []}
+        }
+        """
+
+        when:
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
+
+        then: 'the text is carried, and tagged with the medium it was read from'
+        content.context().title() == UntrustedText.branchDocument(hostile)
+        content.context().title().provenance() == Provenance.BRANCH_DOCUMENT
+        content.context().body().provenance() == Provenance.BRANCH_DOCUMENT
+
+        and: 'including the two causes this task typed'
+        (content.outcome() as RecordedOutcome.Aborted).cause() == UntrustedText.branchDocument(hostile)
+        (content.outcome() as RecordedOutcome.Aborted).cause().provenance() == Provenance.BRANCH_DOCUMENT
+        (content.lastEscalation() as EscalationReport.CannotExecute).cause().provenance() == Provenance.BRANCH_DOCUMENT
+
+        and: 'byte for byte: the reader mints, it does not render'
+        (content.outcome() as RecordedOutcome.Aborted).cause().forParsing() == hostile
+    }
+
+    // FR1, NFR-R2: the round trip this change owes — what the writer held and what the reader
+    //     minted are one value, although the two carry different provenances (design D1, revised
+    //     2026-09-17). The wire keeps the raw bytes; the writer is an exit, the reader a mint.
+    def "a cause written to task.json equals the cause read back, and the wire keeps its bytes"() {
+        given: 'an abort cause captured from a subprocess, with hostile bytes in it'
+        def written = UntrustedText.subprocess('fatal: \u001B[2K refused\nCaused by: boom')
+        def outcome = new TaskOutcome.Aborted(
+                TaskState.atStageStart('implement'), new AttemptKey('task-1', 'implement', 0), written)
+
+        when: 'it is serialized and read back the way the branch does it'
+        def json = TaskStateJson.mapper().writeValueAsString(
+                TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false, BasePin.UNPINNED))
+        def readBack = (TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
+                .outcome() as RecordedOutcome.Aborted).cause()
+
+        then: 'the two carriers are one value, under two provenances'
+        readBack == written
+        readBack.hashCode() == written.hashCode()
+        readBack.provenance() == Provenance.BRANCH_DOCUMENT
+        written.provenance() == Provenance.SUBPROCESS
+
+        and: 'and every exit renders them identically'
+        readBack.forLog() == written.forLog()
+        readBack.forConsole() == written.forConsole()
+        readBack.forComment() == written.forComment()
     }
 
     def "readDto refuses an unsupported version before attempting to bind the DTO shape"() {
@@ -303,7 +380,7 @@ class TaskJsonMapperSpec extends Specification {
         def json = '{"version": 2, "somethingElseEntirely": true}'
 
         when:
-        TaskJsonMapper.readDto(json)
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         def e = thrown(UnsupportedStateFileVersionException)
@@ -318,7 +395,7 @@ class TaskJsonMapperSpec extends Specification {
         def json = '{"taskId": "task-1"}'
 
         when:
-        TaskJsonMapper.readDto(json)
+        TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         def e = thrown(UnsupportedStateFileVersionException)
@@ -346,7 +423,7 @@ class TaskJsonMapperSpec extends Specification {
     //     finding shape a check's findings and an attempt's denials use.
     def "toDto carries a CannotExecute escalation's denials under lastEscalation"() {
         given: 'an escalation for a round that recorded two egress denials'
-        def escalation = new EscalationReport.CannotExecute("round timed out", [
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [
             Denial.unidentified(new Finding(
                     "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")),
             Denial.unidentified(new Finding("egress denied: 10.0.0.5:22", null, null))
@@ -367,7 +444,7 @@ class TaskJsonMapperSpec extends Specification {
     //     instance reads back — the escalation round-trips with its denials intact.
     def "fromDto reads a CannotExecute escalation's denials back into the domain report"() {
         given:
-        def escalation = new EscalationReport.CannotExecute("round timed out", [
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [
             Denial.unidentified(new Finding(
                     "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST"))
         ])
@@ -399,10 +476,10 @@ class TaskJsonMapperSpec extends Specification {
         '''
 
         when:
-        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json))
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json)))
 
         then: 'it parses, and the escalation reports no denials'
-        content.lastEscalation() == new EscalationReport.CannotExecute("adapter crashed", [])
+        content.lastEscalation() == new EscalationReport.CannotExecute(UntrustedText.subprocess("adapter crashed"), [])
     }
 
     // FR2 of fix-denial-attribution-durability: the cursor is additive under contract v1 —
@@ -424,7 +501,7 @@ class TaskJsonMapperSpec extends Specification {
         '''
 
         when:
-        def dto = TaskJsonMapper.readDto(json)
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then: 'it parses, and no position is offered to a resuming run'
         dto.egressCursor() == null
@@ -450,7 +527,7 @@ class TaskJsonMapperSpec extends Specification {
         '''
 
         when:
-        def dto = TaskJsonMapper.readDto(json)
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(json))
 
         then:
         dto.egressCursor() == new EgressCursorDto("sha256:guard-container", "2026-07-18T09:00:00.000000001Z")
@@ -461,11 +538,11 @@ class TaskJsonMapperSpec extends Specification {
     def "withEgressCursor replaces only the cursor"() {
         given:
         def dto = TaskJsonMapper.toDto(
-                new TaskContext("task-1", "Title", "Body", []),
+                new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), []),
                 "abc123",
                 Instant.parse("2026-07-18T09:00:00Z"),
                 null,
-                new EscalationReport.CannotExecute("round timed out", []),
+                new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), []),
                 true, BasePin.UNPINNED)
 
         when:
@@ -493,7 +570,7 @@ class TaskJsonMapperSpec extends Specification {
     def "withTrackerWritePending replaces only the marker"() {
         given:
         def dto = TaskJsonMapper.toDto(
-                new TaskContext("task-1", "Title", "Body", []),
+                new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), []),
                 "abc123",
                 Instant.parse("2026-07-18T09:00:00Z"),
                 null,
@@ -512,7 +589,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "fromDto maps lastEscalation back to a domain EscalationReport"() {
         given:
-        def lastEscalation = new EscalationReport.PipelineMismatch("removed-stage")
+        def lastEscalation = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage"))
         def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation, false, BasePin.UNPINNED)
 
         when:
@@ -537,7 +614,7 @@ class TaskJsonMapperSpec extends Specification {
         new TaskOutcome.Completed(someState()) | new RecordedOutcome.Completed()
         new TaskOutcome.Paused(someState(), "implement") | new RecordedOutcome.Paused("implement")
         new TaskOutcome.Escalated(someState(), new EscalationReport.AttemptsExhausted(3)) | new RecordedOutcome.Escalated(new EscalationReport.AttemptsExhausted(3))
-        new TaskOutcome.Aborted(someState(), new AttemptKey("task-1", "implement", 2), "disk full") | new RecordedOutcome.Aborted(new AttemptKey("task-1", "implement", 2).toString(), "disk full")
+        new TaskOutcome.Aborted(someState(), new AttemptKey("task-1", "implement", 2), UntrustedText.subprocess("disk full")) | new RecordedOutcome.Aborted(new AttemptKey("task-1", "implement", 2).toString(), UntrustedText.branchDocument("disk full"))
     }
 
     private static TaskState someState() {
@@ -548,7 +625,7 @@ class TaskJsonMapperSpec extends Specification {
     //     like the attempt path, so a resume merges a re-read of a drained round's denials too
     def "FR7: an escalation denial's identity survives the task.json round-trip"() {
         given: 'a drained denial the guard stamped'
-        def escalation = new EscalationReport.CannotExecute("round timed out", [
+        def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [
             new Denial(
                     new Finding("egress denied: paste.example.com:443", "paste.example.com:443", "kind=connect"),
                     new DenialIdentity('sha256:container-1', '2026-08-19T10:05:00.000000001Z'))
@@ -562,7 +639,7 @@ class TaskJsonMapperSpec extends Specification {
         json.contains('"identity":{"source":"sha256:container-1","at":"2026-08-19T10:05:00.000000001Z"}')
 
         and: 'and rebuilds identical'
-        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json)).lastEscalation() == escalation
+        TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json))).lastEscalation() == escalation
     }
 
     // FR7: "unknown, keep" — a denial entry written before identities existed still parses
@@ -587,7 +664,7 @@ class TaskJsonMapperSpec extends Specification {
         '''
 
         when:
-        def escalation = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json)).lastEscalation()
+        def escalation = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(json))).lastEscalation()
 
         then:
         (escalation as EscalationReport.CannotExecute).denials()*.identity() == [null]

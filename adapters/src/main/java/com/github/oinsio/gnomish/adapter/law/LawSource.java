@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.util.List;
 
@@ -37,17 +38,29 @@ public interface LawSource {
     /**
      * The law file's content.
      *
+     * <p>A {@code String} rather than an {@link UntrustedText} carrier, although the bytes are the
+     * target repository's own (design D4's manifest family covers the <em>reason</em> beside it,
+     * not the content). The content has two readers and no third: the prompt builders, which write
+     * it into the agent's own instructions — the law <em>is</em> the instruction, so there is
+     * nothing for an exit to neutralize — and the two console adapters, whose writes leave through
+     * {@code ConsoleIO#print}, the human path that already renders anything a terminal would obey
+     * (FR5 of harden-untrusted-text-sinks). A carrier here would therefore add a type to a value
+     * no sink renders differently for holding it. Revisit if the content ever reaches a log line
+     * or a tracker comment: those planes have no sink backstop of their own.
+     *
      * @param text the file's text, decoded as UTF-8
      */
     record Text(String text) implements Read {}
 
     /**
-     * The law file could not be read — absent, refused by the traversal guard, over the read cap,
-     * or an I/O fault.
+     * Why one law file could not be read. The reason is {@link UntrustedText}: it quotes the
+     * target repository's own paths and whatever the filesystem or the object store said about
+     * them, and it travels into an exception message and a cannot-verify verdict (design D4, D5
+     * of type-untrusted-text).
      *
-     * @param reason a human-readable reason, carried to the point of use
+     * @param reason the captured cause, as manifest-family text
      */
-    record Unreadable(String reason) implements Read {}
+    record Unreadable(UntrustedText reason) implements Read {}
 
     /** What a path is, as far as reading law from it goes. */
     enum FileStatus {

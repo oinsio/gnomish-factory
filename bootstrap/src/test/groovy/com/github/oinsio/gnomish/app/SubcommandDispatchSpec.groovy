@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -125,7 +126,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), TaskGitFixture.real().epochs())
-                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+                .createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
         def originalOut = System.out

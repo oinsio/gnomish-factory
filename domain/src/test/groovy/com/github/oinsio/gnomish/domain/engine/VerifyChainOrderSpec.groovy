@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * VerifyOrchestrator chain ordering, task 4.1 — the verify chain runs in strict manifest
@@ -67,7 +68,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
         given: 'a command that cannot verify, then a builtin that would pass'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
         def commandRunner = new ScriptedCommandCheckRunner([
-            new Verdict.CannotVerify('binary not found', '')
+            new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess(''))
         ])
         def checks = [
             command('missing-bin'),

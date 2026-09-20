@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -22,10 +19,11 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -59,7 +57,7 @@ class TakeCrashAbortSpec extends Specification {
 
     private static TrackerTask claimedTask(AbortFacts facts) {
         new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
+                REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Working(INSTANCE.value()), facts, false)
     }
 
@@ -142,7 +140,7 @@ class TakeCrashAbortSpec extends Specification {
 
         when:
         def result = null
-        def events = capture {
+        def events = LogCaptureSupport.capture(TakeCrashAbort, Level.WARN) {
             result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,
             new RuntimeException('boom'))
         }
@@ -160,20 +158,5 @@ class TakeCrashAbortSpec extends Specification {
         warn.formattedMessage.contains('PROJ-1')
         warn.formattedMessage.contains('first abort in the streak')
         warn.throwableProxy.message == 'tracker unreachable'
-    }
-
-    /** Runs {@code emit} with a {@link ListAppender} attached to TakeCrashAbort's own logger. */
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(TakeCrashAbort)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
     }
 }

@@ -9,19 +9,22 @@ import com.github.oinsio.gnomish.adapter.git.RefTipSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Shared project/pipeline fixture and {@link TakeCommand} factory for {@link
- * TakeLifecycleEscalateResumeSpecBase} (task 6.2, M3, NFR-R3): a single-stage, attempt-limit-1
- * pipeline whose {@code files_exist} check fails deterministically (forcing an {@code
- * AttemptsExhausted} escalation on the first attempt), plus {@link #newCommand}, which builds a
- * brand-new {@link TakeCommand}/{@link ManualRunAssembly}/{@link FactoryProperties} trio sharing
- * no field or object with any other command built by a prior call (NFR-R3) — only the shared
- * {@link Tracker}, {@link TrackerAdapterFactory}, and {@code worktreesRoot} fields cross between
- * instances, exactly as two real factory processes on one machine would share the tracker service
- * and the machine-local {@code ~/.gnomish/worktrees} convention.
+ * Shared project/pipeline fixture and {@link TakeCommand} factory, originally written for {@link
+ * TakeLifecycleEscalateResumeSpecBase} (task 6.2, M3, NFR-R3) and now also mixed in by {@link
+ * TakeLifecycleCrashReapReclaimSpecBase}, {@code TakeParkOriginOrderingSpecBase}, and {@code
+ * TakeParkReconcileLifecycleSpecBase}: a single-stage, attempt-limit-1 pipeline whose {@code
+ * files_exist} check fails deterministically (forcing an {@code AttemptsExhausted} escalation on
+ * the first attempt), plus {@link #newCommand}, which builds a brand-new {@link TakeCommand}/
+ * {@link ManualRunAssembly}/{@link FactoryProperties} trio sharing no field or object with any
+ * other command built by a prior call (NFR-R3) — only the shared {@link Tracker}, {@link
+ * TrackerAdapterFactory}, and {@code worktreesRoot} fields cross between instances, exactly as two
+ * real factory processes on one machine would share the tracker service and the machine-local
+ * {@code ~/.gnomish/worktrees} convention.
  *
  * <p>Split out of the spec base purely to respect the file-size guidance
  * (`.claude/rules/process-invariants.md`) — a plain trait, not a reusable port abstraction.
@@ -127,5 +130,26 @@ tracker:
     BranchShape shapeAt(String rev) {
         new BranchShapeClassifier().classify(
                 new BranchTipFactsReader().read(new RefTipSource(new GitProcessRunner(), projectDir, rev)))
+    }
+
+    /**
+     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
+     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this trait only binds it to
+     * the spec's own repository. Shared by {@link TakeLifecycleCrashReapReclaimSpecBase} and {@link
+     * TakeLifecycleEscalateResumeSpecBase}, which both mix in this trait for their two-instance
+     * fixture.
+     */
+    ClaimEpoch stampOf(String rev) {
+        stampOf(projectDir, rev)
+    }
+
+    /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
+    String subjectOf(String rev) {
+        subjectOf(projectDir, rev)
+    }
+
+    /** The commits {@code exclusiveFrom} does not already carry on {@code branch}, oldest first — one tenure's work. */
+    List<String> commitsSince(String exclusiveFrom, String branch) {
+        commitsIn(projectDir, "${exclusiveFrom}..${branch}")
     }
 }

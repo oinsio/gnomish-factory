@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -20,11 +21,18 @@ public final class BranchLocationUnavailableException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     /**
+     * The reason is a sentence the factory composed around git's stderr, so it arrives as a
+     * carrier and leaves it here through the log exit {@link UntrustedText#forLog()}. This message
+     * is rendered into a log record and into the abort diagnosis, and the log-call gate cannot see
+     * inside an exception's text — so the rendering happens where the untrusted text enters it
+     * ({@code .claude/rules/logging.md}, "Carry untrusted text in UntrustedText; neutralize it at
+     * the exit").
+     *
      * @param taskId the task whose branch could not be located; never blank
      * @param reason what stopped the lookup, from {@link BranchLocation.Unavailable#reason()}
      */
-    public BranchLocationUnavailableException(String taskId, String reason) {
-        super("could not establish whether the task branch for " + taskId + " exists on origin: " + reason
+    public BranchLocationUnavailableException(String taskId, UntrustedText reason) {
+        super("could not establish whether the task branch for " + taskId + " exists on origin: " + reason.forLog()
                 + "; aborting instead of claiming a fresh branch");
     }
 }

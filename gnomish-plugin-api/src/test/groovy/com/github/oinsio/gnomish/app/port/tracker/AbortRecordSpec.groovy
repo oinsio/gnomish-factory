@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
 
 /**
- * AbortRecord: the write-side payload for {@code recordAbort} — a free-text
+ * AbortRecord: the write-side payload for {@code recordAbort} — the carried
  * cause, the aborting instance's identifier, and when it happened (design D1
- * sketch, FR14). Implements FR14 of add-tracker-port.
+ * sketch, FR14). Implements FR14 of add-tracker-port; the cause is
+ * {@link UntrustedText} by design D4 of type-untrusted-text, so the adapter that
+ * publishes the marker is the one that renders it.
  */
 class AbortRecordSpec extends Specification {
 
@@ -16,10 +19,10 @@ class AbortRecordSpec extends Specification {
         def at = Instant.parse('2026-07-20T10:00:00Z')
 
         when:
-        def record = new AbortRecord('build failed', 'instance-a', at)
+        def record = new AbortRecord(cause('build failed'), 'instance-a', at)
 
         then: 'each component is exposed exactly as constructed, not an empty stand-in'
-        record.cause() == 'build failed'
+        record.cause() == cause('build failed')
         record.instance() == 'instance-a'
         record.at() == at
     }
@@ -31,29 +34,46 @@ class AbortRecordSpec extends Specification {
         def at = Instant.parse('2026-07-20T10:00:00Z')
 
         expect: 'an explicitly categorized record keeps its category'
-        new AbortRecord('repair failed', 'instance-a', at, RecoveryCause.RECOVERY_FAILURE).category() ==
+        new AbortRecord(cause('repair failed'), 'instance-a', at, RecoveryCause.RECOVERY_FAILURE).category() ==
                 RecoveryCause.RECOVERY_FAILURE
 
         and: 'one written without a category reads as a crashed run'
-        new AbortRecord('build failed', 'instance-a', at).category() == RecoveryCause.INSTANCE_CRASH
+        new AbortRecord(cause('build failed'), 'instance-a', at).category() == RecoveryCause.INSTANCE_CRASH
     }
 
     // FR14: an abort marker with no explanation or no attributable instance cannot be
     //     reconstructed usefully by another instance
     def "blank #component is rejected with the component name in the message"() {
         when:
-        new AbortRecord(cause, instance, Instant.parse('2026-07-20T10:00:00Z'))
+        new AbortRecord(cause(causeText), instance, Instant.parse('2026-07-20T10:00:00Z'))
 
         then:
         def failure = thrown(IllegalArgumentException)
         failure.message.contains("AbortRecord.$component")
 
         where:
-        cause | instance | component
+        causeText | instance | component
         '' | 'instance-a' | 'cause'
         '   ' | 'instance-a' | 'cause'
         'build failed' | '' | 'instance'
         'build failed' | '\t' | 'instance'
+    }
+
+    // D4 of type-untrusted-text: the marker's cause is whatever a subprocess, an agent or a
+    //     container said, so it crosses the published contract carried rather than rendered.
+    def "the cause crosses the contract as a carrier, so the adapter chooses the rendering"() {
+        given:
+        def esc = Character.toString(27 as char)
+        def hostile = UntrustedText.subprocess('build failed' + esc + '[2J')
+
+        when:
+        def record = new AbortRecord(hostile, 'instance-a', Instant.parse('2026-07-20T10:00:00Z'))
+
+        then: 'the carrier arrives whole — nothing was rendered on the way in'
+        record.cause() == hostile
+
+        and: 'and every exit is still available to whoever writes it'
+        !record.cause().forComment().contains(esc)
     }
 
     // FR14: abort records are values — equal content means equal records
@@ -62,6 +82,12 @@ class AbortRecordSpec extends Specification {
         def at = Instant.parse('2026-07-20T10:00:00Z')
 
         expect:
-        new AbortRecord('build failed', 'instance-a', at) == new AbortRecord('build failed', 'instance-a', at)
+        new AbortRecord(cause('build failed'), 'instance-a', at) ==
+                new AbortRecord(cause('build failed'), 'instance-a', at)
+    }
+
+    /** A cause as the abort handler mints it: whatever the failed run said. */
+    private static UntrustedText cause(String text) {
+        UntrustedText.subprocess(text)
     }
 }

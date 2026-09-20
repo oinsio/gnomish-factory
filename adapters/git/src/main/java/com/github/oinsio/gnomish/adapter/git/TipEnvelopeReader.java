@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 
 /**
@@ -30,8 +31,8 @@ final class TipEnvelopeReader {
      *     TipEnvelopeRead.Loaded} with both envelope texts
      */
     TipEnvelopeRead read(BranchTipSource source) {
-        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
+        Optional<UntrustedText> taskJson = source.readAtTip(TASK_JSON_PATH);
+        Optional<UntrustedText> stateJson = source.readAtTip(STATE_JSON_PATH);
         BranchShape shape = classifier.classify(facts.factsFrom(taskJson, stateJson, source.cleanupCommitInHistory()));
         if (!shape.tipCarriesState()) {
             return new TipEnvelopeRead.NoState(shape);

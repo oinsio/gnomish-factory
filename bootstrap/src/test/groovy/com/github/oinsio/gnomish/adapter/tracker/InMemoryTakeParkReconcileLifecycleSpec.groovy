@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeParkReconcileLifecycleSpecBase}
@@ -25,7 +26,7 @@ class InMemoryTakeParkReconcileLifecycleSpec extends TakeParkReconcileLifecycleS
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
         sharedTracker = new InMemoryTracker()
         new InMemoryTrackerHarness(sharedTracker).seed(
-                ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+                ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
         [
             sharedTracker,
             new FixedTrackerAdapterFactory({ sharedTracker })
@@ -40,6 +41,6 @@ class InMemoryTakeParkReconcileLifecycleSpec extends TakeParkReconcileLifecycleS
     @Override
     void reopenAsReady(TaskRef ref, String title, String body) {
         new InMemoryTrackerHarness(sharedTracker).seed(
-                ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
+                ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
     }
 }

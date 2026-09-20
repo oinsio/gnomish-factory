@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -51,8 +52,11 @@ import org.slf4j.LoggerFactory;
  * producer renders a whole exception chain, and a comment body over the
  * tracker's limit is rejected, which a best-effort write swallows — losing the
  * abort marker and, with it, the honesty of the consecutive-abort accounting.
- * The ERROR log and the returned {@link TakeResult} keep the full uncapped text:
- * the bound is the tracker's, not the diagnostic record's.
+ * The returned {@link TakeResult} keeps the full uncapped text: that bound is
+ * the tracker's, not the diagnostic record's. The ERROR log renders the cause
+ * through the carrier's log exit instead, under the log plane's own bound — a
+ * cause is untrusted text, and a log record is one line (design D5 of
+ * type-untrusted-text, {@code .claude/rules/logging.md}).
  *
  * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port; FR1, NFR-R1 of
  * cap-abort-cause-length.
@@ -95,7 +99,7 @@ public record AbortHandler(Tracker tracker, Clock clock) {
     public TakeResult handle(
             TaskRef ref,
             TaskState finalState,
-            String cause,
+            UntrustedText cause,
             AbortFacts facts,
             int threshold,
             InstanceId instanceId,
@@ -104,7 +108,7 @@ public record AbortHandler(Tracker tracker, Clock clock) {
     }
 
     /**
-     * {@link #handle(TaskRef, TaskState, String, AbortFacts, int, InstanceId, RecoveryCause)} for a
+     * {@link #handle(TaskRef, TaskState, UntrustedText, AbortFacts, int, InstanceId, RecoveryCause)} for a
      * trigger that still holds the exception itself (design D7 of harden-untrusted-text-sinks).
      *
      * <p>The two triggers differ in what they can give the log. An uncaught take-run exception is
@@ -122,7 +126,7 @@ public record AbortHandler(Tracker tracker, Clock clock) {
     public TakeResult handle(
             TaskRef ref,
             TaskState finalState,
-            String cause,
+            UntrustedText cause,
             AbortFacts facts,
             int threshold,
             InstanceId instanceId,
@@ -133,7 +137,7 @@ public record AbortHandler(Tracker tracker, Clock clock) {
                     OperatorEvent.INFRASTRUCTURE_ABORT.head() + "Infrastructure abort on task {} ({}): {}",
                     ref.id(),
                     category.wireValue(),
-                    cause);
+                    cause.forLog());
         } else {
             log.error(
                     OperatorEvent.INFRASTRUCTURE_ABORT_UNCAUGHT.head() + "Infrastructure abort on task {} ({})",
@@ -163,7 +167,12 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      * round.
      */
     public TakeResult handle(
-            TaskRef ref, TaskState finalState, String cause, AbortFacts facts, int threshold, InstanceId instanceId) {
+            TaskRef ref,
+            TaskState finalState,
+            UntrustedText cause,
+            AbortFacts facts,
+            int threshold,
+            InstanceId instanceId) {
         return handle(ref, finalState, cause, facts, threshold, instanceId, RecoveryCause.INSTANCE_CRASH);
     }
 
@@ -193,8 +202,13 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      * the abort protocol itself, since the caller still needs a {@link
      * TakeResult} back regardless of whether the tracker write landed.
      */
-    private void recordAbortBestEffort(TaskRef ref, String cause, InstanceId instanceId, RecoveryCause category) {
+    private void recordAbortBestEffort(
+            TaskRef ref, UntrustedText cause, InstanceId instanceId, RecoveryCause category) {
         try {
+            // The carrier goes in whole (design D4, D7 of type-untrusted-text): the adapter that
+            // publishes the marker is the one that renders it, at the comment it writes, so the
+            // exit sits where the plane is known. The abort-cause budget applied above stays the
+            // only bound on it.
             tracker.recordAbort(ref, new AbortRecord(cause, instanceId.value(), clock.instant(), category));
         } catch (RuntimeException e) {
             log.error(

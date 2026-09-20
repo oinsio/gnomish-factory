@@ -2,10 +2,11 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -43,7 +44,13 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR8, NFR-R1, NFR-O2, D5 of add-agent-executor; FR15 of
  * add-sandbox-core.
+ *
+ * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): a findings-funnel entry. The
+ * text it puts in a {@code Finding} passes the funnel's own sanitizer — a distinct control at a
+ * distinct trust boundary, which deliberately keeps line structure — so it reads the carrier's
+ * raw text rather than a log exit's flattened line.
  */
+@UntrustedExit
 public final class JudgeVerdictExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(JudgeVerdictExtractor.class);
@@ -55,31 +62,35 @@ public final class JudgeVerdictExtractor {
     /**
      * Extracts a {@link Verdict} from a judge round's final message (FR8).
      *
-     * @param finalMessage the agent's final result text, verbatim; never null
+     * @param message the agent's final result text, as the round captured it; never null
      * @return {@link Verdict.Pass}, {@link Verdict.Fail}, or {@link
      *     Verdict.CannotVerify} — never null, never throws
      */
-    public Verdict extract(String finalMessage) {
-        if (finalMessage.isBlank()) {
-            return cannotVerify("judge produced no final message", finalMessage);
+    public Verdict extract(UntrustedText message) {
+        if (message.isBlank()) {
+            return cannotVerify("judge produced no final message", message);
         }
 
+        // An exit owner reads the bytes as the judge wrote them: the verdict is a JSON document
+        // this class parses and republishes as findings through the funnel, and a rendering would
+        // break the parse before the funnel ever saw it (design D2).
+        String finalMessage = message.raw();
         String unfenced = stripFence(finalMessage);
         String jsonObject = firstJsonObject(unfenced);
         if (jsonObject == null) {
-            return cannotVerify("no JSON verdict object found in the judge's final message", finalMessage);
+            return cannotVerify("no JSON verdict object found in the judge's final message", message);
         }
 
         JsonNode node;
         try {
             node = MAPPER.readTree(jsonObject);
         } catch (Exception e) {
-            return cannotVerify("judge verdict JSON was malformed", finalMessage);
+            return cannotVerify("judge verdict JSON was malformed", message);
         }
 
         JsonNode passedNode = node.get("passed");
         if (passedNode == null || !passedNode.isBoolean()) {
-            return cannotVerify("judge verdict JSON is missing a boolean \"passed\" field", finalMessage);
+            return cannotVerify("judge verdict JSON is missing a boolean \"passed\" field", message);
         }
 
         if (passedNode.asBoolean()) {
@@ -87,7 +98,7 @@ public final class JudgeVerdictExtractor {
         }
         List<Finding> findings = findings(node);
         if (findings == null) {
-            return cannotVerify("judge verdict \"findings\" entries must be non-blank strings", finalMessage);
+            return cannotVerify("judge verdict \"findings\" entries must be non-blank strings", message);
         }
         return new Verdict.Fail(findings);
     }
@@ -149,14 +160,17 @@ public final class JudgeVerdictExtractor {
      * The degradation exit (NFR-R1, NFR-O2): the WARN line carries the raw message through
      * the findings funnel's log sanitization (FR15 of add-sandbox-core), while the returned
      * {@code details} keep it verbatim — data stays full-fidelity, only the log sink is
-     * stripped and capped.
+     * stripped and capped. The sentence naming the failure is the factory's own — it says what the
+     * extraction could not do, not what the judge wrote — so it is minted in the factory's family
+     * while {@code details} keeps the judge's, and the two components of a verdict render as one
+     * either way (design D3).
      */
-    private Verdict.CannotVerify cannotVerify(String reason, String rawMessage) {
+    private Verdict.CannotVerify cannotVerify(String reason, UntrustedText rawMessage) {
         log.warn(
                 OperatorEvent.JUDGE_VERDICT_UNEXTRACTABLE.head()
                         + "judge verdict could not be extracted ({}); raw final message: {}",
                 reason,
-                FindingsSanitizer.forLog(rawMessage));
-        return new Verdict.CannotVerify(reason, rawMessage);
+                rawMessage.forLog());
+        return new Verdict.CannotVerify(UntrustedText.factory(reason), rawMessage);
     }
 }

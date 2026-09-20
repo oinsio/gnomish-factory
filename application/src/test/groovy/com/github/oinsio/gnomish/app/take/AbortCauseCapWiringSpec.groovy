@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -36,7 +37,7 @@ class AbortCauseCapWiringSpec extends Specification {
     private AbortHandler handler = new AbortHandler(tracker, CLOCK)
 
     // FR1, NFR-O1 of cap-abort-cause-length: an over-budget cause reaches the
-    // tracker's abort marker already capped, while the ERROR log keeps the full text
+    // tracker's abort marker already capped, while the returned result keeps the full text
     def "an over-budget cause is capped before the recordAbort write"() {
         given: 'a cause far past every tracker comment limit'
         def cause = 'persist failed\n' + ('f' * 200_000) + '\nCaused by: disk full'
@@ -47,20 +48,24 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        def result = handler.handle(REF, STATE, cause, new AbortFacts(0, null), THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE)
 
         then: 'the marker carries the capped cause: bounded, head and tail kept, omission named'
         captured.cause().length() <= AbortCauseBudget.BUDGET_CHARS
-        captured.cause().startsWith('persist failed')
-        captured.cause().endsWith('Caused by: disk full')
+        captured.cause().raw().startsWith('persist failed')
+        captured.cause().raw().endsWith('Caused by: disk full')
         captured.cause().contains('characters omitted')
 
-        and: 'the ERROR log and the returned result keep the full diagnostic text'
+        and: 'the returned result keeps the full diagnostic text — the bound is the tracker\'s'
+        result == new TakeResult.Aborted(STATE, UntrustedText.subprocess(cause))
+
+        // The log plane has its own bound, and it is not the tracker's (rules/logging.md,
+        // design D5 of type-untrusted-text).
+        and: 'while the ERROR log carries the cause through the log exit'
         def event = logs.list.find {
             it.formattedMessage.startsWith(OperatorEvent.INFRASTRUCTURE_ABORT.head())
         }
-        event.formattedMessage.contains(cause)
-        result == new TakeResult.Aborted(STATE, cause)
+        event.formattedMessage.contains(UntrustedText.subprocess(cause).forLog())
 
         cleanup:
         logs.detach()
@@ -79,7 +84,7 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        def result = handler.handle(REF, STATE, cause, facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), facts, THRESHOLD, INSTANCE)
 
         then:
         captured.contains('characters omitted')
@@ -105,7 +110,7 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        handler.handle(REF, STATE, 'z' * 500_000, facts, 1_000_000, INSTANCE, RecoveryCause.RECOVERY_FAILURE)
+        handler.handle(REF, STATE, UntrustedText.subprocess('z' * 500_000), facts, 1_000_000, INSTANCE, RecoveryCause.RECOVERY_FAILURE)
 
         then:
         captured.length() < 32_767
@@ -130,11 +135,13 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when: 'the same cause aborts below the fuse and at it'
-        handler.handle(REF, STATE, cause, new AbortFacts(0, null), THRESHOLD, INSTANCE)
-        handler.handle(REF, STATE, cause, new AbortFacts(THRESHOLD - 1, null), THRESHOLD, INSTANCE)
+        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE)
+        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(THRESHOLD - 1, null), THRESHOLD, INSTANCE)
 
         then:
-        recorded.cause() == cause
+        // The marker carries the carrier itself now (task 6.3): the adapter that publishes it is
+        // the one that renders it, so "unchanged" is the plain identity of the value here.
+        recorded.cause() == UntrustedText.subprocess(cause)
         parked.contains(cause)
         !parked.contains('characters omitted')
 

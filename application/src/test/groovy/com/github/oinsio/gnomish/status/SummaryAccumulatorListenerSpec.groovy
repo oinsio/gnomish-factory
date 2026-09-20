@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
@@ -72,7 +73,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
         new TaskOutcome.Completed(state()) | 'delivered' | Level.INFO
         new TaskOutcome.Paused(state(), 'implement') | 'awaitingHuman' | Level.INFO
         new TaskOutcome.Escalated(state(), new EscalationReport.AttemptsExhausted(3)) | 'awaitingHuman' | Level.INFO
-        new TaskOutcome.Aborted(state(), new AttemptKey(TASK_ID, 'implement', 2), 'push failed') | 'aborted' | Level.WARN
+        new TaskOutcome.Aborted(state(), new AttemptKey(TASK_ID, 'implement', 2), UntrustedText.subprocess('push failed')) | 'aborted' | Level.WARN
     }
 
     // FR3: the wall time is the elapsed run — the difference between the two bookends, never a raw
@@ -130,9 +131,9 @@ class SummaryAccumulatorListenerSpec extends Specification {
         when:
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0))
         listener.onEvent(new EngineEvent.AttemptStarted(key))
-        listener.onEvent(new EngineEvent.CheckStarted(key, new CheckRef(0, 'files_exist')))
+        listener.onEvent(new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))))
         listener.onEvent(new EngineEvent.CheckFinished(key,
-                new CheckResult(new CheckRef(0, 'files_exist'), new Verdict.Pass(), Duration.ZERO)))
+                new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)))
         listener.onEvent(new EngineEvent.ExecutionFinished(key, ExecutorUsage.none()))
         listener.onEvent(new EngineEvent.AttemptFinished(key, state(), new ToolTrace(key, [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state())))

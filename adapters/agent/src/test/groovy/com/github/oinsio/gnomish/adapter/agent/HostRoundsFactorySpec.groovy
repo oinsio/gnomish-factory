@@ -1,16 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -26,17 +20,6 @@ class HostRoundsFactorySpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    private StageExecutor.Request request() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
-    }
-
     // FR2: the factory's rounds behave identically to the host constructor's — a fresh host
     // environment over the workspace root, the temp-dir decision transport's path/env pair,
     // and the seam's default no-op roundListener (the decorator overrides it, nothing else).
@@ -45,7 +28,7 @@ class HostRoundsFactorySpec extends Specification {
         def source = CliStageExecutor.hostRounds(new VirtualClock(), ChildEnvAllowlist.none())
 
         when:
-        def round = source.openRound(request())
+        def round = source.openRound(StageExecutorRequests.request(workspaceDir))
 
         then:
         round.environment() instanceof HostTaskExecutionEnvironment
@@ -53,7 +36,7 @@ class HostRoundsFactorySpec extends Specification {
         round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: round.decisionFilePath().toString()]
 
         when: 'the default listener is exercised'
-        round.roundListener().onProgress(new AgentProgressEvent.ToolStarted('Bash'))
+        round.roundListener().onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash')))
 
         then: 'it is the seam default: a no-op that neither throws nor observes anything'
         noExceptionThrown()

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.LiveActivity;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import org.slf4j.Logger;
@@ -30,7 +31,12 @@ import org.slf4j.LoggerFactory;
  * id/title, stage, attempts, decisions, cumulative usage/totals, activity, escalation, last
  * decision) plus one appended line naming the task branch (D11: "the task branch name" and "a
  * link line for the branch" — {@code renderFull} has no branch concept at all, so it is appended
- * here rather than added to the shared renderer). {@code attemptLimit} is passed as {@code null}
+ * here rather than added to the shared renderer). The block is rendered on the
+ * {@link ReportPlane#COMMENT} plane: its prose is the factory's own and is published as it stands,
+ * while the untrusted fields it quotes — the task title, an escalation detail, a denial's locator —
+ * take the comment exit's inline shape inside it. Fencing the assembled report instead would label
+ * the factory's own lines "untrusted machine output", which is the alternative design D7 rejects.
+ * {@code attemptLimit} is passed as {@code null}
  * to {@link StatusReport#build}, mirroring the exact precedent {@link
  * GitResumeContinuation#reportCompleted} sets for a completed task, where {@code
  * state.position()} is always {@link com.github.oinsio.gnomish.domain.engine.Position.PipelineEnd}
@@ -141,7 +147,7 @@ final class TakeFinishReport {
             TerminalWriteRetry retry,
             FinishTransition transition) {
         var report = StatusReport.build(context, completed.finalState(), null, LiveActivity.idle());
-        String rendered = new StatusTextRenderer().renderFull(report);
+        String rendered = new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report);
         String summary = rendered + "\n" + "Branch: " + branchName;
 
         new FinishEffect(tracker, ref, instanceId, summary, retry, transition, log).drive();

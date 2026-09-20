@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Clock
@@ -63,7 +64,7 @@ class OutageWarnFanOutSpec extends Specification {
         given: 'the whole console, so every emitter in the sequence is counted'
         def console = LogCaptureSupport.attach('ROOT', Level.INFO)
         def task = new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none(),
+                REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')), new TrackerTaskState.Ready(), AbortFacts.none(),
                 false, TaskDesignators.of('base', Designator.absent()))
         def outcomeLog = new SlotOutcomeLog(LoggerFactory.getLogger(TakeSlotRunner))
         def gate = gate()
@@ -74,13 +75,13 @@ class OutageWarnFanOutSpec extends Specification {
         // package-private, and what this spec counts is the log fan-out, not the record's shape
         // (FreshClaimBaseBindingSpec already pins the returned variant and its text).
         def result = new TakeResult.InfrastructureUnavailable(
-                "Task PROJ-1 claim released (the reaper returns it to Ready after the claim TTL): origin did not answer the refresh of its resolved base"
-                + " ref 'main': connection timed out")
-        gate.openOnFailure(result.reason())
+                UntrustedText.subprocess("Task PROJ-1 claim released (the reaper returns it to Ready after the claim TTL): origin did not answer the refresh of its resolved base"
+                + " ref 'main': connection timed out"))
+        gate.openOnFailure(result.reason().forLog())
         outcomeLog.detail(REF, result)
 
         then:
-        1 * baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable('connection timed out')
+        1 * baseRefGit.refresh(ROOT, 'main') >> new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection timed out'))
         1 * tracker.release(REF)
 
         and: 'the released claim is stated once by the layer that decided it, the transition once by the gate — and the slot adds no third line for either'

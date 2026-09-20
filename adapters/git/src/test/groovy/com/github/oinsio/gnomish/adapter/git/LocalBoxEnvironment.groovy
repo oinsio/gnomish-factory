@@ -95,7 +95,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
         def fetch = runner.run(
                 cloneDir, 'fetch', '--no-recurse-submodules', workingCopy.toString(), branch + ':' + branch)
         if (fetch.exitCode() != 0) {
-            if (fetch.stderr().contains('non-fast-forward')) {
+            if (fetch.stderr().forParsing().contains('non-fast-forward')) {
                 throw new HarvestRefusedException(branch, fetch.stderr())
             }
             throw new HarvestFailedException(branch, fetch.stderr())

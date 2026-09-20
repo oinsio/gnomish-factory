@@ -4,14 +4,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import java.nio.file.Files
 import java.nio.file.Path
@@ -50,14 +44,8 @@ abstract class AbstractDenialRoundSpec extends Specification {
                 { AgentProgressEvent e -> } as AgentProgressListener, LAW, source)
     }
 
+    // Delegates to FakeAgentSupport#requestFor, the single owner of this fixture shape.
     protected StageExecutor.Request requestFor(Map<String, Object> settings = [:]) {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', settings),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
+        FakeAgentSupport.requestFor(workspaceDir, settings)
     }
 }

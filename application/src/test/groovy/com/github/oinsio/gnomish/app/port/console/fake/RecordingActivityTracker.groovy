@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app.port.console.fake
 
 import com.github.oinsio.gnomish.app.port.console.ActivityTracker
 import com.github.oinsio.gnomish.status.Activity
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.time.Instant
 import org.jspecify.annotations.Nullable
 
 /**
@@ -41,7 +43,7 @@ class RecordingActivityTracker implements ActivityTracker {
         markCount++
         prompts << prompt
         def previous = current
-        current = new Activity.AwaitingInput(prompt, java.time.Instant.EPOCH)
+        current = new Activity.AwaitingInput(UntrustedText.agent(prompt), Instant.EPOCH)
         previous
     }
 

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
  * The terminal outcome a task repository recorded for a task, as the resume path reads it back:
@@ -47,5 +48,5 @@ public sealed interface RecordedOutcome {
      * @param failedAt human-readable identity of the round whose persist failed
      * @param cause the failure detail, stack trace preserved
      */
-    record Aborted(String failedAt, String cause) implements RecordedOutcome {}
+    record Aborted(String failedAt, UntrustedText cause) implements RecordedOutcome {}
 }
