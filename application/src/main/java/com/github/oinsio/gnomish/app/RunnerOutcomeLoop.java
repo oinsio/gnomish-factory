@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
-import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -113,19 +112,6 @@ public final class RunnerOutcomeLoop {
                 yield null;
             }
         };
-    }
-
-    /**
-     * Delegates to {@link EscalationResumeDialog#renderEscalation}; kept here as the public
-     * entry point tests and callers already use.
-     *
-     * <p>Implements FR9, D8 of add-manual-run.
-     *
-     * @param report the escalation reason to render; never null
-     * @return the rendered text block; never null, never blank
-     */
-    String renderEscalation(EscalationReport report) {
-        return EscalationResumeDialog.renderEscalation(report);
     }
 
     /**

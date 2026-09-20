@@ -5,15 +5,17 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.slf4j.MDC;
 
 /**
- * Locates, materializes, and loads the resumed task's bundle for {@code take --resume} (design
- * D3, FR9): the same branch-locate/narrow-fetch/worktree-materialize/divergence-reconcile steps
- * {@link GitResumeRunner#bootstrap} performs for manual-run {@code --resume}, reused rather than
- * reimplemented. Extracted from {@link TakeResumeRunner} purely to keep both files within the
- * project's file-size guidance (`.claude/rules/process-invariants.md`).
+ * Locates, materializes, and loads the resumed task's bundle for worktree-mode resume (design D3,
+ * FR9): the single owner of the branch-locate/narrow-fetch/worktree-materialize/
+ * divergence-reconcile sequence. Both resume entry points delegate here rather than reimplementing
+ * it — {@link TakeResumeRunner#bootstrap} for tracker-driven {@code take --resume} and {@link
+ * GitResumeRunner#bootstrap} for manual-run {@code run --resume} — so the two flows cannot drift
+ * apart in what a resumed worktree is brought to before {@code task.json} is read.
  *
  * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must harden the clone,
  * reconcile the remote on resume-start, and build the same resume bundle shape (context,
@@ -40,6 +42,9 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
      * @param taskId the tracker's original taskId, as supplied to {@code take --resume}
      * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
      * @throws UsageException if no branch for {@code taskId} is found
+     * @throws BranchLocationUnavailableException if origin could not be asked whether the branch
+     *     exists — a network failure is not a missing branch, so it is reported apart from the
+     *     usage error (FR6 of harden-task-branch-contract)
      * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if local and origin
      *     have truly diverged while no claim is held on the task: the automatic discard is the
      *     claim protocol's arbitration, so the claimless {@code run --resume} caller stops and
@@ -54,7 +59,7 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         // "Origin could not be asked" is not "no such branch" (FR6 of harden-task-branch-contract):
         // reporting it as a usage error would tell the operator to check their taskId when the
         // network is what failed.
-        if (location instanceof BranchLocation.Unavailable(String reason)) {
+        if (location instanceof BranchLocation.Unavailable(UntrustedText reason)) {
             throw new BranchLocationUnavailableException(taskId, reason);
         }
         if (location instanceof BranchLocation.NotFound) {

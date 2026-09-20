@@ -5,21 +5,31 @@ import java.nio.file.Path
 import java.util.function.Predicate
 
 /**
- * Shared repository-tree scanning for whole-tree architecture gates (see
- * ProjectIdentityDerivationGateSpec, DiscoveredRegistryOnlySpec, GithubPluginAbsenceSpec,
- * ModuleBuildFileSpec, ApiCompatibilityGateSpec): every one of them resolves the same {@code
- * repoRoot} system property and scans the same {@code src/main} tree, so the scan lives here once
- * instead of once per gate.
+ * Shared repository-tree scanning for whole-tree architecture gates (RawCaptureGateSpec,
+ * UntrustedTextSinkGateSpec, LogContractGateSpec, ProjectIdentityDerivationGateSpec,
+ * DiscoveredRegistryOnlySpec, GithubPluginAbsenceSpec, ModuleBuildFileSpec,
+ * ApiCompatibilityGateSpec and the boundary specs beside them — {@code grep -rl RepoSourceTree}
+ * enumerates them): every one resolves the same {@code repoRoot} system property and scans the
+ * same source tree, so the scan lives here once instead of once per gate.
  */
 class RepoSourceTree {
 
-    /** A mis-resolved repoRoot would make a source-tree gate pass over an empty file set. */
-    static final int KNOWN_PRODUCTION_SOURCES = 100
+    /**
+     * A mis-resolved repoRoot, or a walk that stopped early, would make a source-tree gate pass
+     * over a set far too small to have reached the tree. The floor is therefore near the real
+     * count (1310 sources at the time of writing, 1211 for the narrowest filtered scan) rather
+     * than at a token 100, which a scan reaching 8% of the build would still satisfy. It stays a
+     * floor and is never pinned to the exact count, which every commit moves. Raise it when the
+     * smallest filtered scan outgrows it; lower it only alongside a real deletion.
+     */
+    static final int KNOWN_PRODUCTION_SOURCES = 1000
 
     /** The repository root wired by bootstrap's {@code test} task (see verification.gradle). */
     static Path repoRoot() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
+        def property = System.getProperty('repoRoot')
+        assert property: 'repoRoot system property is not set (see bootstrap/verification.gradle)'
+        def root = Path.of(property)
+        assert Files.isDirectory(root): "repoRoot does not point at a directory: $property"
         root
     }
 
@@ -27,15 +37,7 @@ class RepoSourceTree {
     static List<File> productionSources(Predicate<String> extraFilter = {
                 true
             }) {
-        Files.walk(repoRoot()).withCloseable { paths ->
-            paths.filter { Files.isRegularFile(it) }
-            .map { repoRoot().relativize(it).toString() }
-            .filter { it.contains('/src/main/') }
-            .filter { it.endsWith('.java') || it.endsWith('.groovy') }
-            .filter { extraFilter.test(it) }
-            .map { repoRoot().resolve(it).toFile() }
-            .toList()
-        }
+        sources('/src/main/', extraFilter)
     }
 
     /** A mis-resolved repoRoot would make a test-source gate pass over an empty file set. */
@@ -49,15 +51,41 @@ class RepoSourceTree {
     static List<File> testSources(Predicate<String> extraFilter = {
                 true
             }) {
+        sources('/src/test/', extraFilter)
+    }
+
+    /**
+     * Every {@code .java}/{@code .groovy} source under the given source-set marker, excluding
+     * build output, narrowed by the caller's relative-path predicate.
+     */
+    private static List<File> sources(String sourceSetMarker, Predicate<String> extraFilter) {
         Files.walk(repoRoot()).withCloseable { paths ->
             paths.filter { Files.isRegularFile(it) }
             .map { repoRoot().relativize(it).toString() }
-            .filter { it.contains('/src/test/') }
+            .filter { it.contains(sourceSetMarker) }
             .filter { it.endsWith('.java') || it.endsWith('.groovy') }
+            .filter { !buildOutput(it, sourceSetMarker) }
             .filter { extraFilter.test(it) }
             .map { repoRoot().resolve(it).toFile() }
             .toList()
         }
+    }
+
+    /**
+     * Whether a path is a build-output copy of a source rather than the source itself. Gradle and
+     * Spotless mirror whole source sets under a module's {@code build} directory, so
+     * {@code adapters/git/build/spotless-clean/spotlessJava/src/main/java/Foo.java} matches the
+     * source-set marker exactly as the original does — and a whole-tree gate would then see one
+     * offending line twice, the second time at a path no allowlist can name, because the copy is
+     * created and deleted by whichever Gradle task happened to run last.
+     *
+     * <p>Only the module prefix — the part before the source-set marker — is examined. A plain
+     * {@code contains('/build/')} would also drop real sources: {@code build} is a package name
+     * here ({@code build-logic/src/main/groovy/com/github/oinsio/gnomish/build/}), and
+     * {@code build-logic} is a real module that every gate must keep scanning.
+     */
+    private static boolean buildOutput(String relativePath, String sourceSetMarker) {
+        relativePath.substring(0, relativePath.indexOf(sourceSetMarker)).tokenize('/').contains('build')
     }
 
     /** A file's source with every comment removed: what the compiler actually sees. */

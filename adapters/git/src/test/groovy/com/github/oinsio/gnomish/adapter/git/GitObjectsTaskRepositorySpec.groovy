@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.app.port.tracker.fake.TrackerFixtureText
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -83,8 +82,8 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         TaskStart.commit(bareDir, 'refs/heads/base')
     }
 
-    private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
-        new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), decisions)
+    private static TaskContext sampleContext() {
+        new TaskContext('PROJ-1', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), [])
     }
 
     private static String refFor(String taskId) {
@@ -179,7 +178,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def anchors = capture.list.findAll {
             it.formattedMessage.startsWith('task lifecycle commit written')
         }
-        anchors.size() >= 2
+        anchors.size() == 2
         anchors.every {
             it.level == Level.INFO && it.formattedMessage.contains('PROJ-1')
         }
@@ -270,12 +269,11 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
                 ])
-        def logs = LogCaptureSupport.attach(GitObjectsTaskRepository)
+        def logs = LogCaptureSupport.attach(LifecycleEgressCursor)
 
         when:
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then: 'the escalation and its denials are recorded; only the position is missing'
         noExceptionThrown()
@@ -288,6 +286,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         events[0].level == Level.WARN
         events[0].formattedMessage.startsWith(OperatorEvent.ESCALATION_DENIAL_POSITION_UNREADABLE.head())
         events[0].throwableProxy.message == 'no environment leased yet'
+
+        cleanup:
+        logs.detach()
     }
 
     // FR3: a position may lag the record carrying its denials, never lead it — so a park with no
@@ -404,6 +405,11 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
         ]) | ({
             throw new IllegalStateException('no environment leased yet')
+        } as DenialCursorSource)
+        'an environment holding no position yet' | new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
+            Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
+        ]) | ({
+            Optional.empty()
         } as DenialCursorSource)
     }
 
@@ -633,7 +639,6 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         when:
         repository.finishCleanup('PROJ-1')
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == tip
@@ -642,6 +647,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         events.size() == 1
         events[0].level == Level.DEBUG
         events[0].formattedMessage.contains('cleanup commit for task PROJ-1 is a no-op')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR10, FR5: the other idempotent tail commit — clearing a pending marker on a tip whose
@@ -657,14 +665,17 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         when:
         repository.confirmTerminalWrite('PROJ-1')
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == tip
 
         and:
         events.size() == 1
+        events[0].level == Level.DEBUG
         events[0].formattedMessage.contains('pending-marker clear for task PROJ-1 is a no-op')
+
+        cleanup:
+        logs.detach()
     }
 
     def "FR25/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, history preserved"() {

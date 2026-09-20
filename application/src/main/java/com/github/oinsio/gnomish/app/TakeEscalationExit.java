@@ -11,19 +11,20 @@ import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Closes the gap {@link TakeOutcomeMapper} deliberately leaves open for a fresh {@code
- * Escalated} outcome (task 5.8, design D12): {@link TakeOutcomeMapper#map} decides only the
- * {@link ParkReason} and produces placeholder report text, never calling the tracker — this
+ * Escalated} outcome (task 5.8, design D12): {@link TakeOutcomeMapper#map} decides the
+ * {@link ParkReason} and renders report text, never calling the tracker — this
  * class builds the real, operator-facing report and performs the actual {@link
  * Tracker#park(TaskRef, ParkReason, String)} call, so a take run ends identically with or
  * without a TTY: park with the report, then exit (FR13, UX3). There is no in-run decision
  * wait — the return path is stated in the report text itself, not a console prompt.
  *
- * <p>The reason split is reused verbatim from {@link TakeOutcomeMapper#map}, not
+ * <p>The reason split is reused verbatim from {@link TakeOutcomeMapper#parkReason}, not
  * reimplemented: {@code AttemptsExhausted}/{@code DecisionNeeded} need a human decision
  * ({@link ParkReason#ESCALATION}); {@code CannotVerify}/{@code CannotExecute}/{@code
  * PipelineMismatch} need an environment or pipeline fix followed by a bare retry ({@link
@@ -58,7 +59,7 @@ final class TakeEscalationExit {
      * GuardedPark#attempt}, which precedes it with the claim-still-ours check (FR7, design D6 of
      * add-claim-heartbeat): when the claim was reaped or taken over mid-run, the park is skipped
      * with a WARN rather than overwriting the new holder's tracker state — the run still returns
-     * the mapped {@link TakeResult.AwaitingHuman} (the branch carries the outcome; the residual
+     * the {@link TakeResult.AwaitingHuman} built here (the branch carries the outcome; the residual
      * TOCTOU costs at most a stray label).
      *
      * <p>Implements FR13, D12, UX3 of add-tracker-port; FR7 of add-claim-heartbeat.
@@ -86,12 +87,12 @@ final class TakeEscalationExit {
      * As {@link #exit(TaskOutcome.Escalated, Tracker, TaskRef, InstanceId)}, but wraps the
      * git-unfenced {@code tracker.park} write in {@code retry} via {@link GuardedPark#attempt} — a
      * tracker outage at the park line is retried with backoff for the bounded hold-the-slot period
-     * (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code onConfirmed} once (and only once)
-     * the park has landed, clearing the branch's durable "tracker-write pending" marker so a later
-     * resume reads the park as settled. On give-up the marker is left set and an ERROR names the
-     * unreconciled park; the run still returns {@link TakeResult.AwaitingHuman} (the branch carries
-     * the park), and reconcile-on-resume completes the deferred park later. When the pre-write
-     * claim-still-ours check shows the claim moved, neither the park nor {@code onConfirmed} runs
+     * (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code transition}'s receipt once (and
+     * only once) the park has landed, clearing the branch's durable "tracker-write pending" marker
+     * so a later resume reads the park as settled. On give-up the marker is left set and an ERROR
+     * names the unreconciled park; the run still returns {@link TakeResult.AwaitingHuman} (the
+     * branch carries the park), and reconcile-on-resume completes the deferred park later. When the
+     * pre-write claim-still-ours check shows the claim moved, neither the park nor its receipt runs
      * (the marker stays for the successor's reconcile, never clobbering its state).
      *
      * <p>Implements FR13, D12, UX3 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
@@ -113,22 +114,14 @@ final class TakeEscalationExit {
             InstanceId instanceId,
             TerminalWriteRetry retry,
             ParkTransition transition) {
-        var mapped = (TakeResult.AwaitingHuman) TakeOutcomeMapper.map(escalated);
-        ParkReason reason = mapped.reason();
+        var escalation = escalated.report();
+        ParkReason reason = TakeOutcomeMapper.parkReason(escalation);
 
-        String rendered = EscalationResumeDialog.renderEscalation(escalated.report());
+        String rendered = EscalationResumeDialog.renderEscalation(escalation, ReportPlane.COMMENT);
         String returnPath = reason == ParkReason.ESCALATION ? ESCALATION_RETURN_PATH : INFRA_RETURN_PATH;
 
         String report = GuardedPark.attempt(
-                tracker,
-                ref,
-                instanceId,
-                reason,
-                note -> rendered + "\n\n" + returnPath + (note.isEmpty() ? "" : "\n" + note),
-                retry,
-                transition,
-                log,
-                "park");
+                tracker, ref, instanceId, reason, rendered + "\n\n" + returnPath, retry, transition, log, "park");
         return new TakeResult.AwaitingHuman(escalated.finalState(), reason, report);
     }
 }

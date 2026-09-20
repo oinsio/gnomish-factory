@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,7 +82,7 @@ public final class UsageHistoryWalker {
         String ref =
                 switch (location) {
                     case BranchLocation.NotFound ignored -> null;
-                    case BranchLocation.Unavailable(String reason) ->
+                    case BranchLocation.Unavailable(UntrustedText reason) ->
                         throw new BranchLocationUnavailableException(taskId, reason);
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();

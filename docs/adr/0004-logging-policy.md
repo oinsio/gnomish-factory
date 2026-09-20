@@ -145,11 +145,12 @@ operator's screen, and each is load-bearing on its own:
    newlines so one event stays one line, and caps length — that is the log plane's
    exit. `forConsole()` is the operator console's: it makes controls **visible**
    instead of removing them, and preserves line structure and length.
-   `forComment()` is the tracker's, applied by `TrackerFence`. Two further ways out
+   `forComment()` is the tracker's, applied by the carrier itself. Two further ways out
    exist for text that is not headed for a reader, each with its own annotated
    allowlist: `raw()`, for the `@UntrustedExit` writers that put bytes on a machine
-   medium (the JSON/state/ledger/snapshot documents, the `--json` mappers, the
-   findings funnel), and `forParsing()`, for the `@UntrustedParser` classes that
+   medium (the branch's JSON/state documents, the `--json` mappers, the judge
+   findings funnel — and only where a `raw()` call warrants the marker, which a
+   gate asserts), and `forParsing()`, for the `@UntrustedParser` classes that
    convert captured text into a value that is no longer untrusted text; queries
    that yield a boolean or an int are open to everyone. `LogText` (`:logtext`) and
    `FindingsSanitizer` (`gnomish-plugin-api`, line structure preserved

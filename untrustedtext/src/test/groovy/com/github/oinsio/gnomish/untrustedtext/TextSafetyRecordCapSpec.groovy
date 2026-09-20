@@ -3,12 +3,13 @@ package com.github.oinsio.gnomish.untrustedtext
 import spock.lang.Specification
 
 /**
- * {@link TextSafety#capRecord}: the bound the log sink puts on one whole rendered record, as opposed
- * to {@link TextSafety#capTail}'s bound on one untrusted excerpt. The two caps answer different
+ * {@link TextSafety#capRecord}: the bound the log sink puts on one rendered record component — a
+ * formatted message, an MDC value, a whole rendered throwable — as opposed to
+ * {@link TextSafety#capTail}'s bound on one untrusted excerpt. The two caps answer different
  * questions and therefore keep different ends of the text: an excerpt is capped to its tail,
- * because the error is at the end of command output; a record is capped to its head, because the
- * timestamp, the level, the logger and the operator-event code are at the start and are what makes
- * the record findable at all.
+ * because the error is at the end of command output; a component is capped to its head, because
+ * the operator-event code — and, for a throwable, the top-level message and throw site — is at the
+ * start and is what makes the record findable at all.
  *
  * <p>FR1, FR2 of harden-untrusted-text-sinks (design D2).
  */
@@ -41,16 +42,21 @@ class TextSafetyRecordCapSpec extends Specification {
         when:
         def capped = TextSafety.capRecord(flood)
 
-        then: 'the head — where the timestamp, the level and the event code live — survives'
+        then: 'the head — where the event code and a throwable top-level message live — survives'
         capped.startsWith('HEAD-')
 
         and: 'the marker is visible and names the drop in the record itself'
         capped ==~ /^HEAD-x+ \[record truncated, dropped \d+ of \d+ chars]$/
 
+        and: 'the head is exactly the cap less the marker reserve, not merely something short enough'
+        def headChars = TextSafety.RECORD_CAP_CHARS - TextSafety.TRUNCATION_MARKER_RESERVE
+        capped.indexOf(' [record truncated') == headChars
+
         and: 'the counts are the truth about this record'
         def match = capped =~ /dropped (\d+) of (\d+) chars]$/
-        match[0][1] as int == flood.length() - capped.indexOf(' [record truncated')
-        match[0][2] as int == flood.length()
+        match.find()
+        match.group(1) as int == flood.length() - headChars
+        match.group(2) as int == flood.length()
 
         and: 'the result is within the bound it exists to enforce'
         capped.length() <= TextSafety.RECORD_CAP_CHARS
@@ -107,7 +113,7 @@ class TextSafetyRecordCapSpec extends Specification {
     }
 
     def "the cap is the value design D2 chose, stated once"() {
-        expect: '16 KB — two orders above the longest legitimate summary, below the async queue budget'
+        expect: '16 KB — two orders above the longest legitimate summary, above the widest forLog output'
         TextSafety.RECORD_CAP_CHARS == 16_384
     }
 

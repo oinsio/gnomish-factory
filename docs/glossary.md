@@ -455,17 +455,24 @@ trusted/task tier split, and the law-root rule.
   convention: `UntrustedText` in the `:untrustedtext` leaf holds the bytes as
   captured together with their provenance, and a capture accessor returns the
   carrier rather than a string. It has four ways out, each with its own
-  allowlist: queries that yield a boolean or an int (open to all); the three
-  exits `forLog()`, `forConsole()` and `forComment()`, each applying its plane's
+  allowlist: queries that yield a boolean or an int (open to all); the exits
+  `forLog()`, `forConsole()`, `forComment()` and `forCommentInline()`, each
+  applying its plane's
   notation; `forParsing()`, for the `@UntrustedParser` classes that turn the text
   into a value that is no longer untrusted text; and `raw()`, for the
   `@UntrustedExit` classes that write the bytes to a machine medium. A build gate
   holds all four. *Not:* a secret value, which is never written anywhere at all.
   *Never:* raw string, tainted string.
-- **Provenance** — which trust boundary a piece of untrusted text crossed to
-  reach the factory, fixed at the mint and part of the carrier's identity: one of
-  *subprocess output*, *in-container command output*, *agent output*, *tracker
-  text*, *target-repository manifest*, *task-branch document*. It names the
+- **Provenance** — where a piece of text in a carrier came from, fixed at the
+  mint: one of *subprocess output*, *in-container command output*, *agent
+  output*, *tracker text*, *target-repository manifest*, *task-branch document*,
+  *operator-supplied argument*, *factory-composed text*. The last two are inside
+  the trust boundary and are families all the same, because the field they land
+  in is a carrier on every other code path. Provenance is evidence a report may
+  name, never a policy input, and it is deliberately **outside** the carrier's
+  identity: two carriers are equal when their text is equal, so a value minted at
+  a subprocess, written to a task-branch document and read back as a
+  branch-document carrier is still the value that was written. It names the
   source family, not the call site, and it is re-stated rather than inherited when
   a value is lifted out of a document another instance wrote. *Not:* the exit,
   which is chosen by the plane the text is leaving for, not by where it came from.

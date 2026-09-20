@@ -121,7 +121,11 @@ public final class GithubWorkflowRunPoll {
                                 + " (check the checkId)";
                     default -> "the GitHub API rejected the runs query";
                 };
-        return UntrustedText.tracker(
+        // Not TRACKER: no byte of this sentence came from GitHub — the status code is an int and
+        // every cause is a literal. What it does interpolate raw is the manifest's own checkId, so
+        // the sentence keeps that capture's family (design D3 of type-untrusted-text), the same
+        // shape ShellCommandCheckRunner's "failed to start command: " + check.command() uses.
+        return UntrustedText.manifest(
                 "external check '" + checkId + "' cannot be verified (HTTP " + statusCode + "): " + cause);
     }
 

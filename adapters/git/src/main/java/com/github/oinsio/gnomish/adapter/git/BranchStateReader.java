@@ -80,7 +80,7 @@ public final class BranchStateReader {
             // Inspection reports what it knows, never a guess: "origin could not be asked" is not
             // "no such task", and answering NotFound here would tell an operator their branch is
             // gone because their network blinked (FR6).
-            case BranchLocation.Unavailable(String reason) ->
+            case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
             case BranchLocation.Local local -> readAt(cloneDir, local.ref());
             case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, tracking.ref());

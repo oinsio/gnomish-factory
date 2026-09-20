@@ -1,14 +1,15 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+
 /**
  * The outcome of {@code TaskBranchLocator#locate}: exactly one of a local branch, a
  * remote-tracking branch (already present or just narrow-fetched — callers do not need to tell
  * these apart, both are read the same way), "not found anywhere", or "origin never answered".
- * Modeled as a sealed interface rather than a thrown exception because all three are expected,
- * caller-decidable
- * outcomes (a healthy task branch, a peer instance's in-progress task, a merged-and-deleted
- * branch), not defects — matching the {@code BranchCreationResult} precedent in the adapter that
- * implements this port.
+ * Modeled as a sealed interface rather than a thrown exception because all four are expected,
+ * caller-decidable outcomes (a healthy task branch, a peer instance's in-progress task, a
+ * merged-and-deleted branch, an origin that could not be asked), not defects — matching the
+ * {@code BranchCreationResult} precedent in the adapter that implements this port.
  *
  * <p>Both {@link Local#ref()} and {@link RemoteTracking#ref()} are fully-qualified refs ({@code
  * refs/heads/...} / {@code refs/remotes/origin/...}) rather than short names, so a caller can feed
@@ -56,7 +57,15 @@ public sealed interface BranchLocation {
      * equivalent to {@link NotFound} — a caller that routes this to a fresh claim forks a second
      * branch for a task that already has one (FR6).
      *
-     * @param reason what stopped the lookup, for the abort diagnosis and the repair log
+     * <p>The reason quotes git's own stderr, so it is {@link UntrustedText} rather than a
+     * {@code String}: a remote speaks through that stream, and the sentence travels into
+     * {@link BranchLocationUnavailableException}'s message, a log record and the abort diagnosis.
+     * Carrying it typed is what keeps every one of those sinks taking an exit instead of the raw
+     * bytes (FR1, FR2 of type-untrusted-text) — the same shape {@link DefaultBranchDiscovery} and
+     * {@link BaseRefreshOutcome} already use in this package.
+     *
+     * @param reason what stopped the lookup, for the abort diagnosis and the repair log;
+     *     credentials already scrubbed
      */
-    record Unavailable(String reason) implements BranchLocation {}
+    record Unavailable(UntrustedText reason) implements BranchLocation {}
 }

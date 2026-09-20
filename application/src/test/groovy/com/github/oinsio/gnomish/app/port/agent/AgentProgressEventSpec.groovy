@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.app.port.agent
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
+import spock.lang.Unroll
 
 /**
  * FR7, design D10 of add-agent-executor and FR1, design D4 of type-untrusted-text: the progress
@@ -24,9 +26,13 @@ class AgentProgressEventSpec extends Specification {
         when:
         def event = new AgentProgressEvent.RoundStarted(model, sessionId)
 
-        then: 'both travel on as the carriers they arrived in — same text, same provenance'
+        then: 'both travel on as the carriers they arrived in — same text'
         event.model() == model
         event.sessionId() == sessionId
+
+        and: 'identity is the text alone, so the provenance is asserted in its own right'
+        event.model().provenance() == Provenance.AGENT
+        event.sessionId().provenance() == Provenance.AGENT
     }
 
     def "FR1: RoundFinished carries the round's final message as the carrier"() {
@@ -43,6 +49,7 @@ class AgentProgressEventSpec extends Specification {
         event.summary().forParsing() == "done\n[2Jwith an escape in it"
     }
 
+    @Unroll
     def "an event with a blank #component is refused, naming it"() {
         when:
         build.call()
@@ -59,7 +66,9 @@ class AgentProgressEventSpec extends Specification {
         'sessionId' | {
             new AgentProgressEvent.RoundStarted(UntrustedText.agent('m'), UntrustedText.agent(''))
         }
-        'name' | { new AgentProgressEvent.ToolStarted(' ') }
+        'name' | {
+            new AgentProgressEvent.ToolStarted(UntrustedText.agent(' '))
+        }
     }
 
     def "a RoundFinished with no summary at all is a mapping bug, not wire data"() {

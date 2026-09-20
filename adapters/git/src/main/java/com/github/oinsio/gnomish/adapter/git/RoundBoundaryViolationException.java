@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -25,9 +26,12 @@ public final class RoundBoundaryViolationException extends RuntimeException {
     /**
      * @param taskId the task whose round-boundary check failed
      * @param reason what protocol rule was violated, e.g. {@code "HEAD is not on the task
-     *     branch"} or {@code ".gnomish-task/ was modified by the gnome"}
+     *     branch"} or {@code ".gnomish-task/ was modified by the gnome"}. An {@link UntrustedText}
+     *     because one arm of the check quotes what git printed — the paths the gnome touched — and
+     *     a {@code String} parameter there would be the escape hatch design D5 of
+     *     type-untrusted-text closes: the carrier composes the message through its log exit.
      */
-    public RoundBoundaryViolationException(String taskId, String reason) {
-        super("round-boundary protocol violated for taskId \"" + taskId + "\": " + reason);
+    public RoundBoundaryViolationException(String taskId, UntrustedText reason) {
+        super("round-boundary protocol violated for taskId \"" + taskId + "\": " + reason.forLog());
     }
 }

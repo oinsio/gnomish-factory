@@ -10,12 +10,13 @@ import spock.lang.Specification
  * rather than instructions, and mentions and issue references broken so published text cannot
  * ping a team or cross-link an issue.
  *
- * <p>The logic arrives here from {@code app.findings.TrackerFence}, which becomes a delegate: one
- * owner for the rendering, reachable from the leaf every carrier already reaches.
+ * <p>The logic arrives here from {@code app.findings.TrackerFence}, the {@code String} facade
+ * that has since been retired: one owner for the rendering, reachable from the leaf every carrier
+ * already reaches, and these are the cases that facade's own spec used to assert.
  */
 class TextSafetyCommentSpec extends Specification {
 
-    private static final String ZWSP = '​'
+    private static final String ZWSP = AdversarialCorpus.ch(0x200B)
 
     private static final String ESC = AdversarialCorpus.ch(0x1B)
 
@@ -59,6 +60,37 @@ class TextSafetyCommentSpec extends Specification {
         then:
         fenced.readLines()[1] == '~~~~~~~~'
         fenced.readLines().last() == '~~~~~~~~'
+    }
+
+    def "an indented tilde run cannot close the fence early either — #label"() {
+        when: 'the content carries a blank-but-not-empty line and an indented tilde run'
+        def fenced = TextSafety.forComment('  \n' + indent + '~~~~~~')
+
+        then: 'the fence still outruns it — a closing fence may be indented, so the run counts'
+        fenced.readLines()[1] == '~~~~~~~'
+        fenced.readLines().last() == '~~~~~~~'
+
+        where:
+        label | indent
+        'three spaces' | '   '
+        'one space' | ' '
+        'a tab' | '\t'
+    }
+
+    def "the fence is sized after stripping, not before — #label"() {
+        when: 'a tilde run the content splits with a character the strip layer removes'
+        def fenced = TextSafety.forComment('~~' + hidden + '~~~')
+
+        then: 'the joined run of five is what the fence must outrun, not the two halves of it'
+        fenced.readLines()[2] == '~~~~~'
+        fenced.readLines()[1] == '~~~~~~'
+        fenced.readLines().last() == '~~~~~~'
+
+        where:
+        label | hidden
+        'a zero-width space' | ZWSP
+        'an escape sequence' | ESC + '[0m'
+        'a bidi override' | AdversarialCorpus.ch(0x202E)
     }
 
     def "escape sequences are stripped before publication"() {

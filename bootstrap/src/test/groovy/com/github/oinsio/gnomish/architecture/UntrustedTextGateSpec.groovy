@@ -16,6 +16,7 @@ import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.domain.JavaMethod
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
+import java.lang.annotation.Annotation
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -31,7 +32,7 @@ import spock.lang.Specification
  *   <li><b>Rule (a2)</b> — {@link UntrustedText#forParsing()} is read only inside a class marked
  *       {@link UntrustedParser}. Machine-readable capture is read for the opposite reason prose is
  *       — to become a value, not to be shown — so it leaves through its own way out with its own
- *       allowlist, rather than widening rule (a)'s seven classes to thirty-three and leaving them
+ *       allowlist, rather than widening rule (a)'s nine classes to thirty-six and leaving them
  *       meaning nothing (design D11). The pinned set is a map, class to what it converts the text
  *       into, so the warrant is read beside the name; and the one mechanical half of the
  *       membership criterion — a "parser" that hands the text straight back — is checked on the
@@ -69,24 +70,26 @@ class UntrustedTextGateSpec extends Specification {
     /**
      * Every production class allowed to read the raw text, by design D2: the carrier itself, the
      * machine writers whose media carry raw bytes bounded by their own encoding — the two branch
-     * documents, the ledger and snapshot, and the two {@code --json} mappers that write a check's
-     * own words into a parser's input (found at task 3.3, when the verdict became a carrier; its
-     * {@code status.json} siblings {@code EscalationMapper} and {@code StatusReportJsonMapper}
-     * joined them at tasks 5.0 and 5.1, when the escalation report and the task title became
-     * carriers, and {@code BoardJsonMapper} with them — {@code board --json} is the same machine
-     * plane) —
-     * and the two funnel entries that build a {@code Finding}. {@code TrackerFence} is deliberately not here —
-     * a {@code String → String} facade over the comment exit never reads {@code raw()}, so
-     * annotating it would widen the allowlist for nothing.
+     * documents and the {@code --json} mappers that write a check's own words into a parser's
+     * input (found at task 3.3, when the verdict became a carrier; its {@code status.json}
+     * siblings {@code EscalationMapper} and {@code StatusReportJsonMapper} joined them at tasks
+     * 5.0 and 5.1, when the escalation report and the task title became carriers, and
+     * {@code BoardJsonMapper} with them — {@code board --json} is the same machine plane) — and
+     * the funnel entry that builds a {@code Finding} from a judge's own words.
+     *
+     * <p>Membership is the fact, not the family: a class that never reads {@code raw()} widens
+     * the allowlist for nothing by being annotated, whatever family its text belongs to (D2).
+     * Three classes held the marker on the family argument alone while reading no raw text —
+     * {@code GithubWorkflowJobsFetcher}, whose job log arrives as a plain {@code String} from the
+     * request cache, and the two serve-observability writers, whose every field is a {@code
+     * String}, a number or a wire token — and all three left the set. The spec below now checks
+     * that reason for every member rather than trusting this list.
      */
     private static final List<String> ANNOTATED_EXITS = [
         'com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor',
-        'com.github.oinsio.gnomish.adapter.check.github.GithubWorkflowJobsFetcher',
         'com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper',
         'com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper',
         'com.github.oinsio.gnomish.board.json.BoardJsonMapper',
-        'com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper',
-        'com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper',
         'com.github.oinsio.gnomish.status.json.AttemptMapper',
         'com.github.oinsio.gnomish.status.json.EscalationMapper',
         'com.github.oinsio.gnomish.status.json.StatusReportJsonMapper',
@@ -277,6 +280,50 @@ class UntrustedTextGateSpec extends Specification {
         .sort() == ANNOTATED_EXITS
     }
 
+    // D2, "annotating it would widen the allowlist for nothing": the pinned list above keeps the
+    //     set from growing quietly, but a marker on a class that reads no raw text widens the
+    //     allowlist just as far while looking reviewed. Three classes carried one until this spec
+    //     was written, each on the family argument rather than on a call.
+    def "FR3: every annotated exit really reads raw()"() {
+        given: 'the carrier declares raw(), so it is the one member that need not call it'
+        def warrantless = warrantlessOwners(productionClasses, UntrustedExit, 'raw')
+
+        expect: 'no annotated class is exempted from a rule it never needed'
+        warrantless == []
+    }
+
+    // D2: the detector is the gate — an annotated class that reads nothing must be named, or the
+    //     spec above would pass just as well over a set it never really inspected.
+    def "FR3: a seeded annotated class that reads no raw text is named"() {
+        given: 'the seeded exit that carries the marker without a raw() call'
+        def warrantless = warrantlessOwners(seededClasses, UntrustedExit, 'raw')
+
+        expect:
+        warrantless.contains(SEEDED_PACKAGE + '.WarrantlessExitSeed')
+    }
+
+    // D11, risk "@UntrustedParser becomes the laundering hatch @UntrustedExit was kept from being":
+    //     rule (a) has carried this warrant half since it was written, and rule (a2) — whose set is
+    //     three times the size — did not. A marker on a class that reads no captured bytes widens
+    //     the parser allowlist exactly as far as a warranted one, while looking reviewed.
+    def "FR10: every annotated parser really reads forParsing()"() {
+        given: 'the carrier declares forParsing(), so it is the one member that need not call it'
+        def warrantless = warrantlessOwners(productionClasses, UntrustedParser, 'forParsing')
+
+        expect: 'no annotated class is exempted from a rule it never needed'
+        warrantless == []
+    }
+
+    // D11: the detector is the gate — the seeded twin of rule (a)'s warrantless exit, for the
+    //     other way out.
+    def "FR10: a seeded annotated class that reads no captured bytes is named"() {
+        given: 'the seeded parser that carries the marker without a forParsing() call'
+        def warrantless = warrantlessOwners(seededClasses, UntrustedParser, 'forParsing')
+
+        expect:
+        warrantless.contains(SEEDED_PACKAGE + '.WarrantlessParserSeed')
+    }
+
     // FR10: the bytes a parse needs are the bytes as captured, so the parsing exit hands them over
     //     uncapped — which makes "who may call it" exactly as much of a question as raw() is.
     def "FR10: rule (a2): only an annotated parser reads the captured bytes"() {
@@ -416,6 +463,27 @@ class UntrustedTextGateSpec extends Specification {
                         access.target.owner.fullName == UntrustedText.name && access.target.name == exit
                     }
                 }
+    }
+
+    /**
+     * Every class carrying {@code marker} that never reaches the gated way out it exempts itself
+     * from — the warrant half both rules are held to (design D2, D11), read once so the exit set
+     * and the parser set cannot be checked to different standards. The carrier itself declares both
+     * ways out, so it is the one member that need not call them.
+     */
+    private static List<String> warrantlessOwners(
+            JavaClasses classes, Class<? extends Annotation> marker, String exit) {
+        classes
+                .findAll {
+                    it.isAnnotatedWith(marker) && it.fullName != UntrustedText.name
+                }
+                .findAll { owner ->
+                    !owner.accessesFromSelf.any {
+                        reaching(exit).test(it)
+                    }
+                }
+                .collect { it.fullName }
+                .sort()
     }
 
     /** The no-argument method of that name, which the caller has already asserted exists. */

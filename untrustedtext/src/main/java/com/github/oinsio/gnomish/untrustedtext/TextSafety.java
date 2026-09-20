@@ -17,8 +17,9 @@ package com.github.oinsio.gnomish.untrustedtext;
  *       ({@link LineFlattening}), so <b>one event is one line</b>;
  *   <li>{@link #forConsole} renders the same table <em>visibly</em> instead of removing it
  *       ({@link ConsoleNotation}), because an operator being attacked must see the attempt;
- *   <li>{@link #capRecord} bounds one whole rendered record at the sink, keeping the head;
- *   <li>{@link #forLog} and {@link #forComment} compose the log-plane and tracker-comment exits.
+ *   <li>{@link #capRecord} bounds one rendered record component at the sink, keeping the head;
+ *   <li>{@link #forLog}, {@link #forComment} and {@link #forCommentInline} compose the log-plane
+ *       and tracker-comment exits.
  * </ul>
  *
  * <p>The log plane's {@code strip → capTail → flatten} is {@link #forLog}, owned here because
@@ -35,8 +36,9 @@ package com.github.oinsio.gnomish.untrustedtext;
  * the worst case, and still a bound (about 12 KB for {@link #DEFAULT_CAP_CHARS}) rather than the
  * unbounded flood the cap exists to stop.
  *
- * <p>Implements FR1, NFR-S1 of split-logtext-leaves; originally FR6, NFR-S1 of
- * harden-logging-observability and FR1, FR2, FR5 of harden-untrusted-text-sinks.
+ * <p>Implements FR1, NFR-S1 of split-logtext-leaves and FR2, NFR-S2 of type-untrusted-text;
+ * originally FR6, NFR-S1 of harden-logging-observability and FR1, FR2, FR5 of
+ * harden-untrusted-text-sinks.
  */
 public final class TextSafety {
 
@@ -48,7 +50,7 @@ public final class TextSafety {
     public static final int DEFAULT_CAP_CHARS = 2_000;
 
     /**
-     * Max characters {@link #capRecord} lets one whole rendered record occupy, from
+     * Max characters {@link #capRecord} lets one rendered record component occupy, from
      * {@link RecordCap} where the bound and its derivation live.
      */
     public static final int RECORD_CAP_CHARS = RecordCap.CAP_CHARS;
@@ -65,11 +67,13 @@ public final class TextSafety {
      * Prepares {@code text} for the operator's terminal: the second exit from {@link CharacterTable},
      * and the mirror image of the log plane. Where the log plane removes what the table names and
      * flattens the text to one line, this one renders the same set <em>visibly</em> — ESC as
-     * {@code ^[}, the other C0 controls in caret notation, DEL as {@code ^?}, the widthless
-     * characters as backslash-u escapes, {@code \r} as the two characters {@code \r} — and keeps
-     * the two characters the table does not name, {@code \n} and {@code \t}, along with the line
-     * structure and the length, exactly as they arrived. No cap: an operator
-     * report is long by design, and its reader is a person who needs all of it.
+     * {@code ^[}, the other C0 controls in caret notation, DEL as {@code ^?}, the C1 controls and
+     * the widthless characters (bidirectional overrides, invisible formats, tag characters) as
+     * backslash-u escapes, {@code \r} as the two characters {@code \r} — and keeps the two
+     * characters the table does not name, {@code \n} and {@code \t}, along with the line
+     * structure, exactly as they arrived. Nothing is dropped and no cap is applied — rendering a
+     * character visibly makes the text longer, never shorter — because an operator report is long
+     * by design and its reader is a person who needs all of it.
      *
      * @param text the raw untrusted text; never null
      * @return the text with nothing left a terminal would execute; never null
@@ -159,7 +163,7 @@ public final class TextSafety {
      * no cap — a comment is read by a person, and a report is long by design.
      *
      * @param text the raw untrusted text; never null
-     * @return the labeled, fenced, escaped block; never null
+     * @return the labeled, fenced block of stripped, mention-broken text; never null
      */
     public static String forComment(String text) {
         return CommentFencing.render(text);
@@ -180,11 +184,12 @@ public final class TextSafety {
     }
 
     /**
-     * Bounds one whole rendered record, the sink's cap rather than the choke point's
-     * ({@link RecordCap}): unlike {@link #capTail} it keeps the <b>head</b>, where the timestamp,
-     * the level, the logger and the operator-event code live. {@value #RECORD_CAP_CHARS} sits
-     * above anything the log plane can produce, so a message the choke point prepared passes here
-     * byte for byte, whatever else the record carries.
+     * Bounds one rendered record component — a formatted message, an MDC value, a whole rendered
+     * throwable — the sink's cap rather than the choke point's ({@link RecordCap}): unlike
+     * {@link #capTail} it keeps the <b>head</b>, where the operator-event code and a throwable's
+     * top-level message live. {@value #RECORD_CAP_CHARS} sits above the widest {@link #forLog}
+     * excerpt at {@link #DEFAULT_CAP_CHARS}, which passes byte for byte; one taken under a far
+     * larger bound is cut here like any flood. Timestamp, level and logger are the pattern's, outside it.
      *
      * @param text the rendered record to bound; never null
      * @return {@code text} unchanged when within the cap, else its marked head; never null

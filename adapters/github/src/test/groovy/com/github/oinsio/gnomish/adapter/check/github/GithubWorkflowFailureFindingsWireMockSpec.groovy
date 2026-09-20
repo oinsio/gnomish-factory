@@ -1,20 +1,12 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
+import static com.github.oinsio.gnomish.adapter.check.github.GithubWorkflowPollFixture.pollFor
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.tomakehurst.wiremock.WireMockServer
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
-import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -30,7 +22,10 @@ class GithubWorkflowFailureFindingsWireMockSpec extends Specification {
     private static final String RUNS_URL = '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'
     private static final String JOBS_URL = '/repos/acme/widgets/actions/runs/1/jobs?per_page=100'
     private static final String RUN_HTML_URL = 'https://github.example/acme/widgets/actions/runs/1'
-    private static final String LONG_LOG = 'x' * 5000
+    private static final int LOG_TAIL_CAP = GithubWorkflowJobsFetcher.LOG_TAIL_CAP_CHARS
+    private static final String LONG_LOG = 'x' * (LOG_TAIL_CAP + 1000)
+    private static final String TRUNCATION_NOTE =
+    "[truncated, showing last ${LOG_TAIL_CAP} of ${LONG_LOG.length()} chars]"
 
     WireMockServer wireMock
 
@@ -41,23 +36,6 @@ class GithubWorkflowFailureFindingsWireMockSpec extends Specification {
 
     def cleanup() {
         wireMock.stop()
-    }
-
-    private static GithubWorkflowRunPoll pollFor(String baseUrl) {
-        def retryConfig = RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r ->
-                    r.statusCode() >= 500 || r.statusCode() == 429
-                })
-                .build()
-        def httpClient = new GithubHttpClient(baseUrl, 'tok', retryConfig)
-        def cache = new GithubConditionalRequestCache(httpClient)
-        new GithubWorkflowRunPoll(
-                new GithubWorkflowRunQuery(cache, 'acme', 'widgets'),
-                new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'),
-                new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5)))
     }
 
     def "a failing run's findings name failed jobs/steps, carry capped log tails and the run URL"() {
@@ -85,20 +63,22 @@ class GithubWorkflowFailureFindingsWireMockSpec extends Specification {
         def poll = pollFor(wireMock.baseUrl())
 
         when:
-        def status = poll.poll('ci.yml', 'abc123') as PollStatus.Fail
+        def status = poll.poll('ci.yml', 'abc123')
 
         then:
-        status.findings().size() == 2
+        status instanceof PollStatus.Fail
+        def findings = (status as PollStatus.Fail).findings()
+        findings.size() == 2
 
-        def buildFinding = status.findings().find { it.location() == 'build' }
+        def buildFinding = findings.find { it.location() == 'build' }
         buildFinding.message().contains('build')
         buildFinding.message().contains('Compile')
         !buildFinding.message().contains('Test')
         buildFinding.details().contains(RUN_HTML_URL)
-        buildFinding.details().contains('[truncated, showing last 4000 of 5000 chars]')
-        buildFinding.details().endsWith('x' * 4000)
+        buildFinding.details().contains(TRUNCATION_NOTE)
+        buildFinding.details().endsWith('x' * LOG_TAIL_CAP)
 
-        def lintFinding = status.findings().find { it.location() == 'lint' }
+        def lintFinding = findings.find { it.location() == 'lint' }
         lintFinding.message().contains('lint')
         lintFinding.message().contains('Run lint')
         lintFinding.details().contains(RUN_HTML_URL)

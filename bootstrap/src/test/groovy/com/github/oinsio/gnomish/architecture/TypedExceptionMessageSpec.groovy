@@ -7,16 +7,20 @@ import com.github.oinsio.gnomish.adapter.git.GitPersistFailedException
 import com.github.oinsio.gnomish.adapter.git.GitResyncFailedException
 import com.github.oinsio.gnomish.adapter.git.HarvestFailedException
 import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
+import com.github.oinsio.gnomish.adapter.git.RoundBoundaryViolationException
 import com.github.oinsio.gnomish.adapter.git.WorktreeCreationFailedException
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException
+import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
+import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerCommandFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import com.github.oinsio.gnomish.subprocess.Termination
+import com.github.oinsio.gnomish.testsupport.CarrierConstructors
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
@@ -42,8 +46,11 @@ import spock.lang.Specification
  */
 class TypedExceptionMessageSpec extends Specification {
 
+    /** The escape character, written as a name rather than as a byte no diff viewer shows. */
+    private static final String ESC = Character.toString(27)
+
     /** What an attacker would put in a captured stream to forge a record or drive a terminal. */
-    private static final String HOSTILE = "boom\n[2J2026-01-01 00:00:00 ERROR forged record\r"
+    private static final String HOSTILE = "boom\n${ESC}[2J2026-01-01 00:00:00 ERROR forged record\r"
 
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()
@@ -59,15 +66,7 @@ class TypedExceptionMessageSpec extends Specification {
     //     two sets are the same set, read two ways.
     def "FR5: the table names every production throwable that declares a carrier detail"() {
         given: 'every production throwable with an UntrustedText constructor parameter'
-        def declared = productionClasses
-                .findAll { it.isAssignableTo(Throwable) }
-                .findAll { owner ->
-                    owner.constructors.any {
-                        it.rawParameterTypes*.name.contains(UntrustedText.name)
-                    }
-                }
-                .collect { it.simpleName }
-                .toSet()
+        def declared = CarrierConstructors.throwableTypeNamesIn(productionClasses)
 
         expect: 'the derivation really found the family — an empty answer would pass any table'
         declared.size() >= 15
@@ -89,7 +88,7 @@ class TypedExceptionMessageSpec extends Specification {
         and: 'so nothing in it can open a second record or drive a terminal'
         !message.contains('\n')
         !message.contains('\r')
-        !message.contains('')
+        !message.contains(ESC)
 
         where:
         [exception, mint, build] << carriers()
@@ -109,6 +108,15 @@ class TypedExceptionMessageSpec extends Specification {
     /** Every exception design D5 gives a carrier, with the family its detail comes from. */
     private static List<List> carriers() {
         [
+            [
+                // The reason is a sentence the factory composed around git's stderr, quoted
+                // through the log exit — `FACTORY`, not `SUBPROCESS` (design D3, task 7.6).
+                'BranchLocationUnavailableException',
+                { String raw -> UntrustedText.factory(raw) },
+                { UntrustedText carried ->
+                    new BranchLocationUnavailableException('GF-1', carried)
+                }
+            ],
             [
                 'BranchStateFileMissingException',
                 { String raw -> UntrustedText.subprocess(raw) },
@@ -187,6 +195,17 @@ class TypedExceptionMessageSpec extends Specification {
                 }
             ],
             [
+                // The re-stating arm delegates to the arm above for its message and only attaches
+                // the lower failure as a cause, so the carrier's rendering must survive that
+                // delegation — the day it composes a message of its own, this row is what asks.
+                'DockerCommandFailedException (restated cause)',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new DockerCommandFailedException(
+                    'create network', 'k1', 'gnomish-box-k1', carried, new IllegalStateException('lower'))
+                }
+            ],
+            [
                 'DockerUnavailableException',
                 { String raw -> UntrustedText.subprocess(raw) },
                 { UntrustedText carried ->
@@ -212,6 +231,32 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.agent(raw) },
                 { UntrustedText carried ->
                     new MissingResultEventException(carried)
+                }
+            ],
+            [
+                // The read-volume arm is the one production takes when the drain kept byte
+                // accounting; it appends factory prose after the carrier, so the carrier's
+                // rendering must still survive byte for byte rather than being re-flattened.
+                'MissingResultEventException (read volume)',
+                { String raw -> UntrustedText.agent(raw) },
+                { UntrustedText carried ->
+                    new MissingResultEventException(carried, 65_528L, 3)
+                }
+            ],
+            [
+                // The harvested-boundary arm quotes the paths git printed; the other arms compose
+                // factory prose, so the parameter is the carrier either way (task 7.10).
+                'RoundBoundaryViolationException',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new RoundBoundaryViolationException('T-1', carried)
+                }
+            ],
+            [
+                'TaskListingFailedException',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new TaskListingFailedException('refs/heads/gnomish/*', 128, carried)
                 }
             ],
             [

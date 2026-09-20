@@ -6,12 +6,14 @@
  * published here rather than kept behind the engine (design D3 of
  * close-plugin-api-compilability-gap).
  *
- * <p><strong>Deliberate split package.</strong> {@code app.findings} also exists in {@code
- * :application}, which owns the funnel's other half — {@code TrackerFence}, the
- * fenced-publication renderer, which is NOT contract surface and deliberately stayed behind.
- * Keeping the package identical is what made the move zero-churn for every first-party caller
- * (same FQN, same imports). The build is classpath-based, not JPMS — a non-goal project-wide —
- * so the split is legal; revisit only if modules ever arrive.
+ * <p>The funnel's other half — the fenced-publication renderer — is no longer a class of its own:
+ * it is {@code untrustedtext.UntrustedText#forComment}, the carrier's comment exit, over the
+ * shared rendering in {@code untrustedtext.TextSafety} (design D7 of type-untrusted-text). The
+ * {@code String} facade that used to stand in front of it, {@code app.findings.TrackerFence} in
+ * {@code :application}, was retired once its last caller held a carrier and took the exit
+ * directly; nothing now publishes to the tracker without one. This package name therefore exists
+ * in this module alone. The sanitizer kept it when it moved here, which made the move zero-churn
+ * for every first-party caller (same FQN, same imports).
  *
  * <p>Implements FR2, NFR-S1 of close-plugin-api-compilability-gap.
  *

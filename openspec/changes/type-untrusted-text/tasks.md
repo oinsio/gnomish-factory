@@ -78,7 +78,7 @@ group ends with the module gates green; the sink invariant from
       of `forParsing()` fails; an annotated one passes; an annotated parser whose
       method returns the text straight back (`return result.stdout().forParsing();`)
       fails, naming the method. Keep rule (a) unchanged — `raw()` stays the closed
-      exit set rule (a) already pins (M6); tasks 2.4, 3.3 and 5.0 grow it to twelve. Verify: red on each seeded case, green on the tree.
+      exit set rule (a) already pins (M6); tasks 2.4, 3.3 and 5.0 grow it to twelve, and task 7.8 trims it to nine. Verify: red on each seeded case, green on the tree.
 
 ## 3. Cut A families: git, docker, in-box, agent
 
@@ -180,7 +180,8 @@ group ends with the module gates green; the sink invariant from
       — plus `:adapters:check` and `:application:check`, which cut A reaches too (the
       check runners and the `--json` mappers) — and the sink invariant spec (NFR-R1).
       Rules (a), (a2), (b), (c) all green with no allowlist; `@UntrustedExit` names the
-      twelve classes of 2.4 as amended at 3.3 and 5.0, and `@UntrustedParser` exactly the 27 of
+      twelve classes of 2.4 as amended at 3.3 and 5.0 (nine after task 7.8), and
+      `@UntrustedParser` exactly the 27 of
       3.1–3.3, each pinned with what it converts to (M6). Verify: BUILD SUCCESSFUL,
       PIT 100%.
       **One gate outside this list is red until task 7.1, by construction of the cut:**
@@ -387,7 +388,7 @@ group ends with the module gates green; the sink invariant from
       "forParsing()" --include=*.java` over production sources — every hit is in a class
       annotated `@UntrustedParser` and listed in 2.6's pinned map, and the method it sits
       in converts the text rather than returning it (the review obligation of D11);
-      (5) `grep -rn "@UntrustedExit" --include=*.java` — exactly the twelve classes of
+      (5) `grep -rn "@UntrustedExit" --include=*.java` — exactly the classes of
       design D2 (M6). Record all five with their hit lists in the task report. Verify: as
       stated.
       **Sweep report.** All five run over `src/main` only, `/build/` excluded. Three of the
@@ -437,7 +438,7 @@ group ends with the module gates green; the sink invariant from
       mentions only**, the carrier-bearing results pointing their readers at the parsing exit,
       with no call. D11's review obligation holds at every one of the 27: the pinned map states
       the converted value, and ArchUnit rule (a2) fails the build on an unannotated caller.
-      (5) **`@UntrustedExit`** — 11 production classes plus the carrier itself, twelve in all — the count the task text above now carries, corrected from the "seven" it was written with:
+      (5) **`@UntrustedExit`** — 11 production classes plus the carrier itself, twelve in all — the count the task text above now carried, corrected from the "seven" it was written with:
       `JudgeVerdictExtractor`, `GithubWorkflowJobsFetcher`, `StateJsonMapper`, `TaskJsonMapper`,
       `BoardJsonMapper`, `LedgerJsonMapper`, `SnapshotJsonMapper`, `AttemptMapper`,
       `EscalationMapper`, `StatusReportJsonMapper`, `UsageReportJsonMapper` — plus
@@ -445,7 +446,9 @@ group ends with the module gates green; the sink invariant from
       classes in `:bootstrap` are test sources and outside the scan. The counts this task's text
       and M6 were written with — "seven" and "nine" — both predate tasks 2.4, 3.3 and 5.0, which
       amended the list while it was being written; both were corrected to twelve in place once
-      this sweep established the number. The pinned `ANNOTATED_EXITS` in `UntrustedTextGateSpec`
+      this sweep established the number. **This sweep counted the markers and not their warrants**,
+      which is the half task 7.8 went back for: three of the twelve read no raw text, and the set
+      is nine. The pinned `ANNOTATED_EXITS` in `UntrustedTextGateSpec`
       is the enforced set, it fails the build on growth, and it is green. **No sweep found an unlisted old-way
       survivor.**
 - [x] 7.4 Retarget the capture gate (FR11, design D12). `UntrustedLogTextGateSpec` keeps
@@ -554,3 +557,74 @@ group ends with the module gates green; the sink invariant from
       "outside the mint table" reason predates `FACTORY`, so it now says what is actually
       true of a `ConfigError` mint — `FACTORY` prose carrying no capture, at 97 sites, some
       of them in third-party SPI implementations the factory does not own.
+- [x] 7.8 The exit allowlist is trimmed to its warrants, and the warrant is gated (FR3,
+      design D2, added 2026-09-20). The 2026-09-20 review found three of the twelve
+      `@UntrustedExit` classes reading no raw text at all: `GithubWorkflowJobsFetcher`,
+      whose job log arrives as a plain `String` from `GithubConditionalRequestCache` and is
+      bounded by `FindingsSanitizer`, and `LedgerJsonMapper` / `SnapshotJsonMapper`, whose
+      every field is a `String`, a number or a wire token minted in `:application`. Each was
+      annotated on D2's *family* argument — "a machine writer" — while D2's own reason for
+      keeping `TrackerFence` out ("never reads `raw()`, so annotating it would widen the
+      allowlist for nothing") applied to all three. Task 7.3's sweep counted the markers and
+      not their warrants, so it reported the set as consistent.
+      Markers removed, each class's javadoc now stating why it is *not* an exit;
+      `ANNOTATED_EXITS` pinned at nine; D2, M6 and 7.3's sweep entry corrected.
+      Enforcement, per `implementation.md` item 4: `UntrustedTextGateSpec` gains
+      "every annotated exit really reads `raw()`" — the annotated production classes minus
+      the carrier itself, each asserted to reach `UntrustedText.raw()` through
+      `accessesFromSelf` (so a method reference counts, as in rule (a)) — with
+      `WarrantlessExitSeed` as its detector, an annotated class whose only argument is a
+      wire token. Verify: `:bootstrap:test` green on the gate spec; `:adapters:github:check`
+      and `:application:check` green, including the dependency-analysis gate — both modules
+      keep `api project(':untrustedtext')` on a surface that survives the removal
+      (`ParsedMarker`'s carrier component; the `status.json` / `board --json` / `usage.json`
+      mappers' markers), and both build files' rationales are rewritten to say so.
+- [x] 7.9 The capture gate sees both JDK stream vocabularies and the on-demand import
+      (FR11, design D12, added 2026-09-20). `RawCaptureGateSpec`'s patterns, written at
+      task 7.4, recognized only `getInputStream()` / `getErrorStream()` and only the
+      single-name import `java.net.http.HttpResponse` — so an adapter reading
+      `process.inputReader()` (the charset-decoding reader JDK 17 added, and the shorter
+      name a new adapter is likelier to reach for) or writing `import java.net.http.*`
+      passed the gate that exists for exactly that adapter. Both are reachable today:
+      nothing in the build forbids an on-demand import, palantir-java-format neither adds
+      nor expands one, and the reader methods are plain `Process` members.
+      `PROCESS_STREAM` now matches `inputReader` / `errorReader` as well, deliberately
+      leaving the write-side members out (`getOutputStream`, `outputWriter` carry text out,
+      not in); `HTTP_RESPONSE_IMPORT` becomes a pattern accepting `HttpResponse` or `*`.
+      Four seeded cases added — the two readers, the on-demand import, plus
+      `outputWriter()` and a `body()` with no HTTP import on the not-flagged side. The
+      allowlist is unchanged: no production file matches the widened patterns, which the
+      reached-every-file assertion confirms. Verify: `:bootstrap:test` green on
+      `RawCaptureGateSpec`, every new seed red without the widening.
+- [x] 7.10 Three `FACTORY` survivors of 7.6, and the last two `String` detail parameters
+      (FR4, NFR-S1, design D3, D5, added 2026-09-20). The 2026-09-20 review reported the
+      fold row as contradicting D3's family rule and asked for "fold = factory"; it does
+      not — D3 names the fold row as a place captured text keeps its capture family, and
+      all five reported folds (`ContainerMaterializer:163`, `GitFreshTaskSupport:75`,
+      `JudgeCriteriaPreflight:75`, `GithubTransportException:21`, `InBoxGitCommand:74`)
+      already follow it. Three *other* sites in the same report were real, all missed by
+      7.6's sweep for the same reason: their mint argument is not a leading string literal,
+      so a grep keyed on one never saw them.
+      `ShellCommandCheckRunner:229` filed "command not executable (exit 126)" /
+      "command not found (exit 127)" — two literals behind a ternary — as `SUBPROCESS`;
+      `GithubWorkflowRunPoll.misconfigurationReason` filed a sentence built from an int and
+      four literals as `TRACKER`, in the same class whose sibling constant 7.6 converted;
+      `HttpExternalCheckClient:113` filed `EgressRefusal.Reason.label()`, a constant the
+      guard's own enum owns, as `MANIFEST`; a fourth, found when the review's finding was
+      re-checked, is `HttpExternalCheckClient.cannotVerify` — the fold of a send failure,
+      filed `TRACKER` on a path the task tracker never touches, beside a `reason` already
+      minted `MANIFEST` in the same return. Now `factory`, `manifest` (the sentence
+      interpolates the manifest's `checkId` raw) and `factory` respectively, each pinned by
+      a `provenance()` assertion in the spec that already drove the path; the send-failure
+      fold takes `manifest` for the endpoint the manifest named.
+      The two remaining exception constructors taking a rendered `String` detail —
+      `RoundBoundaryViolationException` (the harvested-boundary arm handed it
+      `paths.forLog()`) and `TaskListingFailedException` (handed `result.stderr().forLog()`,
+      the shape `logging.md`'s own example already shows taking the carrier whole) — take
+      `UntrustedText`, closing the escape hatch `implementation.md` item 3 names; the
+      eight prose call sites mint `FACTORY`, and the one that interpolates a throwable raw
+      (`EnvironmentAttemptPersistence:177`) keeps `SUBPROCESS` per D3.
+      Verify: `:adapters:check`, `:adapters:git:check`, `:adapters:github:check`,
+      `:application:check`, `:bootstrap:check` green; the two new constructor specs red
+      against the `String` signatures, the five `provenance()` assertions red against the
+      previous families.

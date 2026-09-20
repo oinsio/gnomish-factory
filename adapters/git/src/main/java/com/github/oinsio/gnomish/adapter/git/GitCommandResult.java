@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.TextSafety;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
@@ -43,6 +44,20 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * @param termination how the invocation ended
  */
 record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr, Termination termination) {
+
+    /**
+     * How many characters of git's stderr one detail below quotes. Deliberately well under
+     * {@link TextSafety#DEFAULT_CAP_CHARS}, and that is the whole point: every caller quotes these
+     * sentences inside prose of its own — {@link CommitBaseFetch} and {@link RefreshedTip} add the
+     * refusal's explanation, {@link TaskBranchLocator} names what origin said, {@link
+     * GitPersistFailedException} names the round it failed to persist — and the log exit's cap
+     * keeps the <em>tail</em>. A detail sized to the log cap therefore fills it by itself, and the
+     * exit then drops exactly the head: the caller's prose and this sentence's own "the fetch
+     * exited 128" opening, leaving a record that is git's words and nothing naming what failed.
+     * The headroom between this bound and the log cap is what that prose, and the truncation
+     * marker the cap writes, fit into.
+     */
+    private static final int STDERR_CAP_CHARS = 1_400;
 
     /**
      * Captures one invocation's streams: the single place git's text becomes untrusted text, and
@@ -92,7 +107,7 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
                 switch (termination()) {
                     case TIMED_OUT -> "the " + what + " timed out";
                     case INTERRUPTED -> "the " + what + " was interrupted";
-                    case EXITED -> "the " + what + " exited " + exitCode() + ": " + stderr().forLog();
+                    case EXITED -> "the " + what + " exited " + exitCode() + ": " + stderr().excerpt(STDERR_CAP_CHARS);
                 });
     }
 
@@ -109,6 +124,6 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
      */
     UntrustedText cannotVerifyDetail() {
         return UntrustedText.factory("the boundary could not be verified (git " + termination() + ", exit " + exitCode()
-                + "): " + stderr().forLog());
+                + "): " + stderr().excerpt(STDERR_CAP_CHARS));
     }
 }

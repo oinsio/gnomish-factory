@@ -62,11 +62,11 @@ public record AgentActivityEnricher(StatusSnapshotHolder holder) implements Agen
         }
     }
 
-    private void onToolStarted(String toolName) {
+    private void onToolStarted(UntrustedText toolName) {
         if (holder.activity().activity() instanceof Activity.Executing executing) {
-            // The agent named the tool, so the live activity carries the agent's word (design D3).
-            holder.updateActivity(new Activity.Executing(
-                    executing.since(), UntrustedText.agent(toolName), executing.toolCalls() + 1));
+            // The agent named the tool, and the port already carries it as the agent text it was
+            // minted as at the stream (design D3) — this side only counts the call.
+            holder.updateActivity(new Activity.Executing(executing.since(), toolName, executing.toolCalls() + 1));
         }
     }
 

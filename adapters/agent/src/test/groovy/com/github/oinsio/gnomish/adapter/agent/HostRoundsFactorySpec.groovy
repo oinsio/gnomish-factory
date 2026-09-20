@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -35,7 +36,7 @@ class HostRoundsFactorySpec extends Specification {
         round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: round.decisionFilePath().toString()]
 
         when: 'the default listener is exercised'
-        round.roundListener().onProgress(new AgentProgressEvent.ToolStarted('Bash'))
+        round.roundListener().onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash')))
 
         then: 'it is the seam default: a no-op that neither throws nor observes anything'
         noExceptionThrown()

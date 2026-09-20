@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.check.github;
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,12 +18,13 @@ import java.util.stream.Collectors;
  * <p>Implements FR6, NFR-C1 of add-external-check-github-actions; FR15, NFR-C1 of
  * add-sandbox-core.
  *
- * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): a findings-funnel entry. The
- * text it puts in a {@code Finding} passes the funnel's own sanitizer — a distinct control at a
- * distinct trust boundary, which deliberately keeps line structure — so it reads the carrier's
- * raw text rather than a log exit's flattened line.
+ * <p>Not an {@code @UntrustedExit} (design D2 of type-untrusted-text): the job log reaches this
+ * class as a plain {@code String} from the conditional-request cache, never as an
+ * {@code UntrustedText}, so it has no {@code raw()} call to warrant and the marker would widen
+ * the allowlist for nothing — D2's membership rule is the {@code raw()} call, not the family. What
+ * bounds the text here is the findings funnel: {@link FindingsSanitizer} strips ANSI/control
+ * sequences and keeps only the capped tail.
  */
-@UntrustedExit
 public record GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, String owner, String repo) {
 
     private static final String SUCCESS_CONCLUSION = "success";
@@ -62,12 +62,7 @@ public record GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, Str
     private List<GithubWorkflowJob> fetchJobs(long runId) {
         String path = "/repos/%s/%s/actions/runs/%d/jobs?per_page=100".formatted(owner, repo, runId);
         String cacheKey = "check-jobs:" + owner + "/" + repo + ":" + runId;
-        var result = cache.get(cache.httpClient().newRequest(path), cacheKey);
-        String body =
-                switch (result) {
-                    case GithubConditionalRequestCache.Fresh fresh -> GithubFreshBody.require(fresh);
-                    case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
-                };
+        String body = GithubFreshBody.of(cache.get(cache.httpClient().newRequest(path), cacheKey));
         return GithubWorkflowJobsParser.parseJobs(body);
     }
 
@@ -87,10 +82,6 @@ public record GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, Str
     private String fetchLog(long jobId) {
         String path = "/repos/%s/%s/actions/jobs/%d/logs".formatted(owner, repo, jobId);
         String cacheKey = "check-log:" + owner + "/" + repo + ":" + jobId;
-        var result = cache.get(cache.httpClient().newRequest(path), cacheKey);
-        return switch (result) {
-            case GithubConditionalRequestCache.Fresh fresh -> GithubFreshBody.require(fresh);
-            case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
-        };
+        return GithubFreshBody.of(cache.get(cache.httpClient().newRequest(path), cacheKey));
     }
 }

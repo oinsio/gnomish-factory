@@ -153,16 +153,18 @@ can name one type. This change introduces it and moves the codebase onto it.
   travels with the value as evidence, not as part of its identity, so a value
   written to a durable medium and read back equals the value written;
   `raw()` returns the text;
-  `toString()` returns exactly `forLog()`; `forLog()`, `forConsole()` and
-  `forComment()` render through the leaf's owner primitives; a mint per
+  `toString()` returns exactly `forLog()`; `forLog()`, `forConsole()`,
+  `forComment()` and `forCommentInline()` render through the leaf's owner
+  primitives; a mint per
   provenance (`UntrustedText.subprocess(String)`, …); a bounded
   `excerpt(int)` for reports.
 - FR2: The identity `exit(mint(x)) == primitive(x)` SHALL hold for every exit
   and every provenance over the adversarial corpus, and `toString()` SHALL
   equal `forLog()` byte for byte.
 - FR3: `raw()` SHALL be called only from classes annotated `@UntrustedExit` in
-  the leaf — the three exits, the JSON/state writers that carry raw bytes to a
-  machine medium, and the findings funnel entry — enforced by an architecture
+  the leaf — the carrier itself, which holds the exits, and the writers that
+  carry raw bytes to a machine medium: the JSON/state mappers and the judge
+  verdict extractor — enforced by an architecture
   spec; the annotation lives in the leaf so the gate keys on the class, not on
   a name list in build logic. Parsing a machine-readable capture is a
   different way out with a different allowlist (FR10), so this set does not
@@ -209,7 +211,7 @@ can name one type. This change introduces it and moves the codebase onto it.
   the type as the second; `.claude/rules/logging.md` SHALL replace the
   accessor list and the "honest debt" paragraph with the type rule;
   `docs/glossary.md` SHALL define *untrusted text* and *provenance*.
-- FR10: The carrier SHALL offer two ways out besides the three exits and
+- FR10: The carrier SHALL offer two ways out besides the exits and
   `raw()`: queries that yield no text (`isBlank()`, `contains(String)`,
   `length()`), open to every caller; and `forParsing()`, which yields the
   bytes as captured and SHALL be callable only from classes annotated
@@ -278,8 +280,13 @@ can name one type. This change introduces it and moves the codebase onto it.
   allowlisted exemptions. Measured at the close of cut B; at the close of cut A
   rule (b) is declared over cut A's families only (design D9) — the vocabulary
   grows by family, never by an exemption.
-- M2: `grep -rn "\.stderr()\|\.stdout()\|\.output()" --include=*.java` over
-  production sources finds only `UntrustedText`-returning accessors.
+- M2: every capture accessor in rule (b)'s vocabulary returns the carrier —
+  `UntrustedTextGateSpec` rule (b) is green over the whole tree with no
+  exemption, and `RawCaptureGateSpec`'s allowlist names every source that reads
+  raw bytes, each with the family it mints. Counted by the two gates, not by a
+  grep over accessor names: `GitExec.Result.stderr` (the mechanics carve-out of
+  design D3) and `ExecHandle.output()` (an `InputStream`, not text) answer the
+  same names for reasons the type rule never covered.
 - M3: every production text-carrying `Tracker` write (the eight park writers,
   `FinishEffect`, `DecisionAck`, the two stop notes) and every `new AbortRecord(`
   passes `TrackerPublicationOwnerSpec`; every `forComment()` caller in
@@ -289,13 +296,16 @@ can name one type. This change introduces it and moves the codebase onto it.
   builder output and never call the exit themselves (design D7).
 - M4: `logging.md` contains no "honest debt" paragraph and no accessor list.
 - M5: PIT 100% in every touched module; `./gradlew check` green.
-- M6: `@UntrustedExit` names exactly the twelve classes design D2 lists — it
-  does not grow to admit a parser; `@UntrustedParser` names exactly the 27
-  design D11 lists, each yielding a converted value. Both sets are pinned in
-  `UntrustedTextGateSpec` and fail the build on growth. (Both counts are the
-  ones the pinned sets enforce; the "nine" and "26" this metric carried until
-  task 7.3's sweep predate tasks 2.4, 3.3, 5.0 and 6.1, each of which admitted
-  a class while the metric was already written.)
+- M6: `@UntrustedExit` names exactly the nine classes design D2 lists, every
+  one of which really reads `raw()` — it does not grow to admit a parser, and it
+  does not hold a marker no call warrants; `@UntrustedParser` names exactly the
+  27 design D11 lists, each yielding a converted value. Both sets are pinned in
+  `UntrustedTextGateSpec` and fail the build on growth, and the exit set's
+  warrant is a spec of its own. (The counts are the ones the pinned sets
+  enforce; the "nine" and "26" this metric carried until task 7.3's sweep
+  predate tasks 2.4, 3.3, 5.0 and 6.1, each of which admitted a class while the
+  metric was already written, and the "twelve" it then carried counted three
+  markers that task 7.8 removed as unwarranted.)
 
 ## Open Questions
 

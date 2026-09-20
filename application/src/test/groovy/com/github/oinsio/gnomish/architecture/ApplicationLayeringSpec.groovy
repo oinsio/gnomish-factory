@@ -3,9 +3,11 @@ package com.github.oinsio.gnomish.architecture
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
+import java.nio.file.Paths
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -21,17 +23,22 @@ import spock.lang.Specification
  * to a class outside the import scope into a stub carrying its real package name, so the rule sees
  * an {@code adapter.*} dependency whether or not that adapter is on the classpath.
  *
- * <p>The companion coverage assertion is the same guard {@code DomainPuritySpec} carries: a package
- * rename that moved application code outside the selectors below would otherwise let the gate pass
- * vacuously.
+ * <p>Two companion coverage assertions keep the allowlist honest, because an allowlist that has
+ * fallen behind the code passes vacuously. The first is the guard {@code DomainPuritySpec} carries:
+ * every listed package must still contribute production classes the rule constrains, so a package
+ * rename fails here rather than quietly shrinking the gate. The second is the reverse direction —
+ * every package this module's own output actually holds must be listed — so a newly added package
+ * cannot escape the gate by never being named.
  */
 class ApplicationLayeringSpec extends Specification {
 
     /** Every package this module owns; the union is what the layering rule constrains. */
     private static final List<String> APPLICATION_PACKAGES = [
+        'com.github.oinsio.gnomish',
         'com.github.oinsio.gnomish.app',
+        'com.github.oinsio.gnomish.app.base',
+        'com.github.oinsio.gnomish.app.branch',
         'com.github.oinsio.gnomish.app.console',
-        'com.github.oinsio.gnomish.app.findings',
         'com.github.oinsio.gnomish.app.git',
         'com.github.oinsio.gnomish.app.lease',
         'com.github.oinsio.gnomish.app.port',
@@ -41,8 +48,10 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.app.port.git',
         'com.github.oinsio.gnomish.app.port.pipeline',
         'com.github.oinsio.gnomish.app.port.run',
+        'com.github.oinsio.gnomish.app.sandboxlifecycle',
         'com.github.oinsio.gnomish.app.serve',
         'com.github.oinsio.gnomish.app.take',
+        'com.github.oinsio.gnomish.app.terminal',
         'com.github.oinsio.gnomish.app.workspace',
         'com.github.oinsio.gnomish.board',
         'com.github.oinsio.gnomish.board.json',
@@ -97,5 +106,24 @@ class ApplicationLayeringSpec extends Specification {
 
         where:
         applicationPackage << APPLICATION_PACKAGES
+    }
+
+    def "the allowlist names every package this module's production output holds"() {
+        given: "this module's own compiled output root, told apart from its dependencies' classes"
+        def moduleOutputRoot = Paths.get(FactoryProperties.protectionDomain.codeSource.location.toURI())
+
+        when: 'every package contributing production classes from that output is collected'
+        def ownPackages = productionClasses
+                .findAll {
+                    it.source.present && Paths.get(it.source.get().uri).startsWith(moduleOutputRoot)
+                }
+                .collect { it.packageName }
+                .toSet()
+
+        then: 'the scan really reached this module (an empty scan would pass the next check vacuously)'
+        !ownPackages.isEmpty()
+
+        and: 'no package of this module escapes the layering rule'
+        ownPackages - (APPLICATION_PACKAGES as Set) == [] as Set
     }
 }

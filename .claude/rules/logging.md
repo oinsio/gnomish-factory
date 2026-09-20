@@ -131,7 +131,7 @@ throw new TaskListingFailedException(pattern, exitCode, failure);  // the carrie
   byte-identical to it, so an accidental concatenation is safe text rather than
   a leak; the gate still asks for the explicit call, so intent stays visible.
 - **`forConsole()`** is the operator console's exit (see `ConsoleIO` below);
-  **`forComment()`** is the tracker's, applied by `TrackerFence`.
+  **`forComment()`** is the tracker's, applied by the carrier itself.
 - **`forCommentInline()`** is the same tracker rendering — stripped, mentions and
   issue references broken — without the label and the fence, for a field quoted
   inside a line the factory wrote itself. The fence says "everything between these
@@ -140,9 +140,14 @@ throw new TaskListingFailedException(pattern, exitCode, failure);  // the carrie
   stands. Fencing an assembled report whole labels the factory's own lines untrusted
   and renders every field twice — the defect `ReportPlane` exists to prevent.
 - **`@UntrustedExit`** marks the few classes that write raw bytes to a *machine*
-  medium — the leaf's exit renderers, the JSON/state/ledger/snapshot writers,
-  the `--json` mappers, the findings funnel entry. Rendering there would corrupt
-  the document the machine plane exists to keep verbatim.
+  medium — the leaf's exit renderers, the branch document's JSON/state writers,
+  the `--json` mappers, the judge findings funnel entry. Rendering there would
+  corrupt the document the machine plane exists to keep verbatim. Membership is
+  the `raw()` call, not the family: a machine writer whose every field is a
+  string the factory minted itself reads no raw text, so marking it widens the
+  allowlist for nothing. A
+  gate asserts the call behind every marker, so the annotation cannot be applied
+  on the family argument alone.
 - **`@UntrustedParser`** marks the classes that turn captured text into a value
   that is no longer untrusted text: a typed value, a `String` that passed a
   *named* syntax gate (`RefNameSyntax`, `ModelIdSyntax`, `ContainerIdSyntax`), or

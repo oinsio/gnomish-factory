@@ -108,8 +108,7 @@ public final class TaskBranchLister {
                     pattern + "gnomish/*",
                     result.exitCode(),
                     result.stderr().forLog());
-            throw new TaskListingFailedException(
-                    pattern + "gnomish/*", result.exitCode(), result.stderr().forLog());
+            throw new TaskListingFailedException(pattern + "gnomish/*", result.exitCode(), result.stderr());
         }
         // @UntrustedParser warrant (design D11): every line kept is a ref name for-each-ref
         //     printed, held to the factory's own gnomish/ prefix below, and used only as a git

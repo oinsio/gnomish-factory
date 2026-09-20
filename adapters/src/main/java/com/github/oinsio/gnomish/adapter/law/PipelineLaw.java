@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.law;
 
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The pipeline <em>law</em> of one invocation, frozen (D14, FR19 of add-sandbox-core):
@@ -32,6 +33,11 @@ public final class PipelineLaw {
     /** One frozen law file: either its content, or the reason it could not be read at freeze time. */
     sealed interface Entry permits Content, Unreadable {}
 
+    /**
+     * One frozen law file's content, a {@code String} for the reason {@link LawSource.Text} states:
+     * its readers are the prompt builders and the console's human write path, and neither renders
+     * captured text differently for its being carried.
+     */
     record Content(String text) implements Entry {}
 
     /** Why one frozen law file could not be read, as the carrier it was captured in. */
@@ -57,7 +63,7 @@ public final class PipelineLaw {
      */
     public static PipelineLaw ofContent(Map<String, String> content) {
         return new PipelineLaw(content.entrySet().stream()
-                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, e -> new Content(e.getValue()))));
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new Content(e.getValue()))));
     }
 
     /**

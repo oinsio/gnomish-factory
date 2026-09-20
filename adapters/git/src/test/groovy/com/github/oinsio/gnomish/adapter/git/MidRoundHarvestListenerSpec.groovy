@@ -29,15 +29,18 @@ import spock.lang.TempDir
  * {@link RepeatSuppressor} and this asserts the edges it produces (FR4, UX3 of
  * harden-logging-observability).
  */
-class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFixture {
+class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommitFixture {
 
     static final String BRANCH = 'gnomish/PROJ-9'
+
+    /** The poll rate limit every feature drives the listener under. */
+    static final Duration MIN_INTERVAL = Duration.ofSeconds(30)
 
     @TempDir
     Path tempDir
 
     def runner = new GitProcessRunner()
-    def toolEvent = new AgentProgressEvent.ToolStarted('Bash')
+    def toolEvent = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash'))
 
     Path clone
     Path origin
@@ -51,8 +54,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
 
     def setup() {
         clone = initWorkingRepo(tempDir, 'factory-clone')
-        new File(clone.toFile(), 'a.txt').text = 'first'
-        commitAll(clone)
+        commit(clone, 'a.txt', 'first')
         gitOutput(clone, 'branch', BRANCH)
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(clone, 'origin', origin.toString())
@@ -62,26 +64,19 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         [harvest: onHarvest] as TaskExecutionEnvironment
     }
 
-    /** Advances the (never checked-out) task branch by one plumbing commit, as a harvest would. */
-    private String advanceBranch() {
-        def tree = gitOutput(clone, 'rev-parse', 'HEAD^{tree}')
-        def parent = gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH)
-        def commit = gitOutput(
-                clone, '-c', 'user.email=g@b.c', '-c', 'user.name=g',
-                'commit-tree', tree, '-p', parent, '-m', 'in-box commit')
-        gitOutput(clone, 'update-ref', 'refs/heads/' + BRANCH, commit)
-        commit
-    }
-
-    private MidRoundHarvestListener listener(TaskExecutionEnvironment env, Duration interval = Duration.ofSeconds(30)) {
-        new MidRoundHarvestListener(
-                env, runner, clone, clock, interval, new MidRoundPollContext('PROJ-9', BRANCH, suppressor))
+    private MidRoundHarvestListener listener(
+            TaskExecutionEnvironment env,
+            Duration interval = MIN_INTERVAL,
+            MidRoundPollContext context = new MidRoundPollContext('PROJ-9', BRANCH, suppressor)) {
+        new MidRoundHarvestListener(env, runner, clone, clock, interval, context)
     }
 
     def "FR5: a moved harvested tip is pushed best-effort to origin"() {
         given: 'an environment whose harvest lands one new commit on the branch'
         String pushed = null
-        def l = listener(environment({ pushed = advanceBranch() }))
+        def l = listener(environment({
+            pushed = advanceBranch(clone, BRANCH, 'in-box commit')
+        }))
 
         when:
         l.onProgress(toolEvent)
@@ -104,7 +99,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     def "FR5: polls inside the rate-limit window are skipped — the box cannot cause a fetch storm"() {
         given:
         def harvests = 0
-        def l = listener(environment({ harvests++ }), Duration.ofSeconds(30))
+        def l = listener(environment({ harvests++ }), MIN_INTERVAL)
 
         when: 'three events land within the interval'
         l.onProgress(toolEvent)
@@ -127,7 +122,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     def "FR5: a poll landing exactly at the rate-limit boundary is allowed, not skipped"() {
         given:
         def harvests = 0
-        def l = listener(environment({ harvests++ }), Duration.ofSeconds(30))
+        def l = listener(environment({ harvests++ }), MIN_INTERVAL)
 
         when: 'the second event lands exactly minInterval after the first poll'
         l.onProgress(toolEvent)
@@ -141,16 +136,22 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     def "FR5: a refused harvest skips the push and never throws — the round boundary keeps the verdict"() {
         given:
         def l = listener(environment({
-            advanceBranch()
+            advanceBranch(clone, BRANCH, 'in-box commit')
             throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         }))
 
         when:
-        l.onProgress(toolEvent)
+        def events = LogCaptureSupport.capture(MidRoundHarvestListener, Level.WARN) {
+            l.onProgress(toolEvent)
+        }
 
         then: 'no exception escapes the listener and nothing was pushed'
         noExceptionThrown()
         runner.run(origin, 'rev-parse', '--verify', 'refs/heads/' + BRANCH).exitCode() != 0
+
+        and: 'the skipped push is announced once, so the refusal is not silent'
+        events.size() == 1
+        events[0].formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
     }
 
     def "FR4, UX3: an environment that cannot be harvested all round is announced once, then counted"() {
@@ -220,7 +221,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     }
 
     // FR15 of harden-logging-observability: the roll-up is the other edge of the same suppression,
-    // and it is the one an operator acts on — "still failing, 6 times over 6 minutes" is what says
+    // and it is the one an operator acts on — "still failing, 6 times over 5 minutes" is what says
     // the outage is not a blip. The audit found this branch dark while the first-occurrence branch
     // was pinned, which is why it gets its own scenario rather than an extra assertion above.
     def "FR15: a harvest still failing past the roll-up interval is announced again, with its count"() {
@@ -245,6 +246,9 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         rollUps.size() == 1
         rollUps[0].level == Level.WARN
         rollUps[0].formattedMessage.contains('6x')
+        // The streak opened on the first poll and the sixth lands five minutes later, which is
+        // exactly the roll-up interval — the arithmetic a MovableClock would otherwise hide.
+        rollUps[0].formattedMessage.contains('over PT5M')
         rollUps[0].formattedMessage.contains('taskId=PROJ-9')
         rollUps[0].throwableProxy.className == HarvestRefusedException.name
 
@@ -263,23 +267,18 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
             throw new HarvestRefusedException(BRANCH, UntrustedText.subprocess('non-fast-forward'))
         })
 
-        and: 'the first round has already spent a failure'
-        listener(failing).onProgress(toolEvent)
+        and: 'the first round has already spent a failure — captured, so no WARN escapes unwatched'
+        LogCaptureSupport.capture(MidRoundHarvestListener, Level.WARN) {
+            listener(failing).onProgress(toolEvent)
+        }
         now = now.plusSeconds(60)
         suppressorClock.advance(Duration.ofMinutes(1))
 
         when: 'an unrelated round on the other branch fails for the first time'
-        def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
-        new MidRoundHarvestListener(
-                failing,
-                runner,
-                clone,
-                clock,
-                Duration.ofSeconds(30),
-                new MidRoundPollContext('PROJ-10', otherBranch, suppressor))
-                .onProgress(toolEvent)
-        def events = List.copyOf(logs.list)
-        logs.detach()
+        def events = LogCaptureSupport.capture(MidRoundHarvestListener, Level.DEBUG) {
+            listener(failing, MIN_INTERVAL, new MidRoundPollContext('PROJ-10', otherBranch, suppressor))
+            .onProgress(toolEvent)
+        }
 
         then: 'it is that round\'s own first occurrence — a WARN, not someone else\'s repeat'
         def warnings = events.findAll { it.level == Level.WARN }

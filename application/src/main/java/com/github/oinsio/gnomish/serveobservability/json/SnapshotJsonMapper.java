@@ -18,7 +18,6 @@ import com.github.oinsio.gnomish.serveobservability.SweepCounts;
 import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,12 +33,12 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR2, FR3, FR10 conventions of add-serve-observability.
  *
- * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): this writer carries untrusted
- * text to a machine medium, where the document's own encoding bounds it and a neutralized value
- * would corrupt the record. It is therefore one of the few classes that may read
- * {@code UntrustedText.raw()}; the reader on the other side mints the carrier back.
+ * <p>Not an {@code @UntrustedExit} (design D2 of type-untrusted-text): every field of the
+ * snapshot is a {@code String}, a number or a wire token minted by this module, so nothing here
+ * reads {@code UntrustedText.raw()} and the marker would widen the allowlist for nothing — the
+ * membership rule D2 states is the {@code raw()} call, not the family. A snapshot field that
+ * later carries the carrier adds the marker in the same change that adds the field.
  */
-@UntrustedExit
 public final class SnapshotJsonMapper {
 
     private final ObjectMapper mapper;
@@ -154,6 +153,11 @@ public final class SnapshotJsonMapper {
         return new KeptEnvironmentDto(entry.taskKey(), entry.ageSeconds(), entry.untilReapSeconds());
     }
 
+    /**
+     * Package-private rather than private on purpose: {@link LedgerJsonMapper} maps the same
+     * {@link SweepCounts} shape for its sweep-tick line and shares this one mapping instead of
+     * keeping a second copy of the field order.
+     */
     static SweepCountsDto toSweepCounts(SweepCounts counts) {
         return new SweepCountsDto(
                 counts.checkedAlive(),

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -54,8 +55,8 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
     }
 
     def "run(...) maps exit 126 to CannotVerify"() {
-        given:
-        def check = command('exit 126')
+        given: 'a command that prints a distinctive tail before exiting 126'
+        def check = command('echo tail-126-output; exit 126')
 
         when:
         def verdict = runner.run(check, workspace())
@@ -64,11 +65,15 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         verdict instanceof Verdict.CannotVerify
         def cannotVerify = verdict as Verdict.CannotVerify
         cannotVerify.reason().forLog().contains('126')
+
+        and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
+        !cannotVerify.reason().forLog().contains('tail-126-output')
+        cannotVerify.reason().provenance() == Provenance.FACTORY
     }
 
     def "run(...) maps exit 127 to CannotVerify"() {
-        given:
-        def check = command('exit 127')
+        given: 'a command that prints a distinctive tail before exiting 127'
+        def check = command('echo tail-127-output; exit 127')
 
         when:
         def verdict = runner.run(check, workspace())
@@ -77,6 +82,10 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         verdict instanceof Verdict.CannotVerify
         def cannotVerify = verdict as Verdict.CannotVerify
         cannotVerify.reason().forLog().contains('127')
+
+        and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
+        !cannotVerify.reason().forLog().contains('tail-127-output')
+        cannotVerify.reason().provenance() == Provenance.FACTORY
     }
 
     def "a workspace that is not a DirectoryWorkspace yields CannotVerify"() {
@@ -327,7 +336,7 @@ exit 0''')
     }
 
     // FR9 of add-sandbox-core: the base set reaches a check with no tracker and no passthrough.
-    def "FR11: with no tracker configured a base variable still reaches the check"() {
+    def "FR9: with no tracker configured a base variable still reaches the check"() {
         given: 'the default runner (empty allowlist) and a check reporting HOME, then exiting 1'
         def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; exit 1')
 

@@ -49,7 +49,11 @@ class RawCaptureOwners {
         ],
         [
             'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java',
-            'mechanics: drains the channel pipes as bytes; no prose is read out of them',
+            'mechanics: drains the channel pipes as bytes, so the channel file itself is never decoded here; the only text read out is a failed exec\'s stderr, and it travels as the IOException detail rather than as a carrier field',
+        ],
+        [
+            'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/HostChannelFiles.java',
+            'mechanics: reads a host channel file under a byte cap and answers bytes; the caller that turns a channel file into prose mints at its own edge, as its container-mode twin ContainerFileChannel does',
         ],
         // --- HTTP response bodies: the github bundle and the http check transport ---
         [
@@ -137,7 +141,15 @@ class RawCaptureOwners {
             'application/src/main/java/com/github/oinsio/gnomish/serveobservability/json/LedgerLineReader.java',
             'no mint owed: factory-authored — reads back the ledger this factory appended',
         ],
-        // --- the one src/main file outside the running factory that reads files ---
+        // --- the src/main files outside the running factory that capture ---
+        [
+            'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/gitobjects/LocalGitRepoFixture.groovy',
+            'no mint owed: test-time only — drains a fixture git subprocess and answers its stdout to the calling spec, with the same text in the assertion message on a nonzero exit. It is not on any runtime path, and the scan sees it because RepoSourceTree walks every src/main in the build, :test-fixtures included',
+        ],
+        [
+            'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/sandbox/environment/GuardImageAvailability.groovy',
+            'no mint owed: test-time only — drains a docker prerequisite probe whose bytes are discarded, so a spec skips instead of failing offline',
+        ],
         [
             'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/testfixtures/sourcescan/SourceMarkerScan.groovy',
             'no mint owed: build-time only — reads this repository\'s own sources for the whole-tree gates. It is not on any runtime path, and the scan sees it because RepoSourceTree walks every src/main in the build, :test-fixtures included',

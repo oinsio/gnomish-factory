@@ -12,22 +12,36 @@ import java.nio.file.Path;
 
 /**
  * The {@link TaskLifecycleStore} decorator: {@link PushBestEffortTaskRepository}'s behavior for the
- * three base lifecycle writes, plus the same best-effort push after the tracker-write-confirmed
- * commit that only a durable, branch-backed store records (design D1's port-shape note of
- * fix-lifecycle-push).
+ * three base lifecycle writes, plus the same best-effort push after the two commits that only a
+ * durable, branch-backed store records (design D1's port-shape note of fix-lifecycle-push) — the
+ * tracker-write-confirmed commit and the {@code Completed} cleanup commit (FR10 of
+ * harden-task-branch-contract). Each is a lifecycle operation of its own with its own push: the
+ * terminal tracker write runs between the outcome commit and the cleanup commit, so the two cannot
+ * share one push.
  *
  * <p>One decorator class per port rather than one class casting its delegate: the three shared
  * writes are delegated to a {@link PushBestEffortTaskRepository} built over the same delegate, so
  * the push rule exists once and this file holds delegation shims only.
  *
- * <p>Implements FR1, FR2, NFR-O1 of fix-lifecycle-push.
+ * <p>Crash consistency: what is durable before the push is the delegate's commit in the factory
+ * clone, and only a write that succeeded is pushed — a throwing delegate call propagates untouched
+ * and pushes nothing. This decorator adds no durability of its own: a failed push is one WARN
+ * inside {@link LifecyclePush}, never a retry and never a thrown exception, so the lifecycle write
+ * degrades rather than failing (NFR-R1). The window it leaves is "commit recorded locally, origin
+ * behind", and this class does not converge it: {@link OriginReconciliation} delivers the missing
+ * commit at the next task touchpoint on whichever instance picks the task up, and a park's delivery
+ * fence pushes the outcome commit before the tracker announces the park.
+ *
+ * <p>Implements FR1, FR2, NFR-O1, NFR-R1 of fix-lifecycle-push; FR10 of harden-task-branch-contract.
  */
 public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStore {
 
     /**
      * The WARN label for the confirm commit. Not a {@code TaskLifecycleEvent}: that enum is the
-     * closed set of writes {@code ServiceCommitMessages} produces a commit message for, and the
-     * confirm commit reuses {@code RESUMED}'s message rather than owning one.
+     * closed set of writes {@code ServiceCommitMessages.taskEvent} produces a commit message for,
+     * and the confirm commit carries its own fixed message from {@code
+     * ServiceCommitMessages.trackerWriteConfirmed()} instead — the same reason as the cleanup
+     * commit below.
      */
     private static final String TRACKER_WRITE_CONFIRMED = "TRACKER_WRITE_CONFIRMED";
 
@@ -75,12 +89,16 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     @Override
     public void confirmTerminalWrite(String taskId) {
         delegate.confirmTerminalWrite(taskId);
-        push.pushAfter(taskId, TRACKER_WRITE_CONFIRMED, cloneDir, TaskIdSanitizer.branchName(taskId));
+        pushFor(taskId, TRACKER_WRITE_CONFIRMED);
     }
 
     @Override
     public void finishCleanup(String taskId) {
         delegate.finishCleanup(taskId);
-        push.pushAfter(taskId, CLEANUP, cloneDir, TaskIdSanitizer.branchName(taskId));
+        pushFor(taskId, CLEANUP);
+    }
+
+    private void pushFor(String taskId, String event) {
+        push.pushAfter(taskId, event, cloneDir, TaskIdSanitizer.branchName(taskId));
     }
 }

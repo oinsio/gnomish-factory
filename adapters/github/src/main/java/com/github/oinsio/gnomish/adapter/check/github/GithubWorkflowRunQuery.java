@@ -11,9 +11,9 @@ import java.util.Optional;
  * Queries a workflow's runs filtered by head commit and selects the run
  * matching a check's {@code checkId} workflow file, with the highest {@code
  * run_attempt} winning among matches (design D1, D2). This is the run-query
- * building block a later task (3.2) wires into {@code ExternalCheckClient}'s
- * verdict mapping — this class only returns the raw matching run, or empty
- * when none matches.
+ * building block {@link GithubWorkflowRunPoll} wires into the verdict
+ * mapping — this class only returns the raw matching run, or empty when none
+ * matches.
  *
  * <p>Queries {@code GET
  * /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs?head_sha={sha}&per_page=100}
@@ -28,19 +28,15 @@ import java.util.Optional;
  * leaks an unrelated run into the match (FR1). Requests go through the
  * shared {@link GithubConditionalRequestCache} so repeated polls of the same
  * attempt commit cost no rate-limit budget once the run set stops changing
- * (NFR-C1). A fresh response whose status code is a persistent {@code
- * 5xx}/{@code 429}, or a {@code 403} carrying GitHub's rate-limit signal
- * (primary or secondary limit, see {@code GithubRateLimit}) — a Resilience4j
- * {@code retryOnResult} exhaustion, which returns the last response rather
- * than throwing (see {@code GithubRetryConfig}) — is classified as {@link
- * GithubWorkflowRunInfrastructureException} before parsing is attempted, so
- * an error body is never mistaken for an empty runs listing (NFR-R1). Any
- * other non-2xx response — a {@code 401}, a permission {@code 403}, a {@code
- * 404}, or any other {@code 4xx} — is a client-side rejection that retrying
- * and polling cannot fix; it is classified as {@link
- * GithubWorkflowRunUnverifiableException} so a misconfigured {@code checkId}
- * or an invalid token escalates immediately instead of silently polling to
- * the timeout (NFR-R1).
+ * (NFR-C1). The response body is taken through {@link GithubFreshBody}, the
+ * check context's single owner of "conditional result to body": it classifies
+ * a fresh non-2xx fail-closed — {@link
+ * GithubWorkflowRunInfrastructureException} for a persistent {@code
+ * 5xx}/{@code 429} or a rate-limited {@code 403}, {@link
+ * GithubWorkflowRunUnverifiableException} for any other non-2xx — and this
+ * class lets both propagate, so an error body is never mistaken for an empty
+ * runs listing and a misconfigured {@code checkId} or an invalid token
+ * escalates immediately instead of silently polling to the timeout (NFR-R1).
  *
  * <p>Implements FR1, FR5 of add-external-check-github-actions.
  */
@@ -80,12 +76,7 @@ public final class GithubWorkflowRunQuery {
                 .formatted(owner, repo, encodedWorkflowId, URLEncoder.encode(headSha, StandardCharsets.UTF_8));
         String cacheKey = "check-runs:" + owner + "/" + repo + ":" + checkId + ":" + headSha;
 
-        var result = cache.get(cache.httpClient().newRequest(path), cacheKey);
-        String body =
-                switch (result) {
-                    case GithubConditionalRequestCache.Fresh fresh -> GithubFreshBody.require(fresh);
-                    case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
-                };
+        String body = GithubFreshBody.of(cache.get(cache.httpClient().newRequest(path), cacheKey));
 
         List<GithubWorkflowRun> runs = GithubWorkflowRunParser.parseRuns(body);
         return runs.stream()

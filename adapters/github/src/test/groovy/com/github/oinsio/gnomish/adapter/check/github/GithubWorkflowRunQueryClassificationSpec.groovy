@@ -5,16 +5,14 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.adapter.github.GithubFastRetryConfig
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
 import spock.lang.Specification
 
 /**
- * {@link GithubWorkflowRunQuery}'s {@code freshBody} classification of a non-2xx runs response
+ * {@link GithubFreshBody}'s classification, seen through {@link GithubWorkflowRunQuery}, of a
+ * non-2xx runs response
  * (NFR-R1 of add-external-check-github-actions): an error body has no {@code workflow_runs}
  * array, so it MUST be classified — never handed to the parser where it would read as an empty,
  * silently {@code Running} list. Two classes: a transient infrastructure failure ({@code 5xx},
@@ -41,15 +39,11 @@ class GithubWorkflowRunQueryClassificationSpec extends Specification {
 
     private GithubWorkflowRunQuery queryReturning(ResponseDefinitionBuilder response) {
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(response))
-        // Only 5xx retries here, so a rate-limited 403 reaches freshBody as a fresh response —
-        // exactly the Resilience4j retryOnResult exhaustion freshBody must still classify.
-        def retryConfig = RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', retryConfig)
+        // Production's own result predicate, with the backoff collapsed to milliseconds: a 5xx, a
+        // 429 and a rate-limited 403 are retried to exhaustion and then handed back as a fresh
+        // response — exactly the Resilience4j retryOnResult exhaustion GithubFreshBody must still
+        // classify; a permission 403 and the other 4xx are business outcomes and never retried.
+        def httpClient = GithubFastRetryConfig.fastClient(wireMock.baseUrl())
         new GithubWorkflowRunQuery(new GithubConditionalRequestCache(httpClient), 'acme', 'widgets')
     }
 

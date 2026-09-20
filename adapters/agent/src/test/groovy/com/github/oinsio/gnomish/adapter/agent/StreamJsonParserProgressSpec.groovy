@@ -37,7 +37,7 @@ class StreamJsonParserProgressSpec extends Specification {
         then: 'RoundStarted carries the model and session id, one ToolStarted for Write, RoundFinished carries the summary'
         recorded.size() == 3
         recorded[0] == new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-fake-main-1'), UntrustedText.agent('fake-session-plain-1'))
-        recorded[1] == new AgentProgressEvent.ToolStarted('Write')
+        recorded[1] == new AgentProgressEvent.ToolStarted(UntrustedText.agent('Write'))
 
         and: 'RoundFinished carries the fixture\'s real subtype, tokensByModel derived from modelUsage, and summary'
         def finished = recorded[2] as AgentProgressEvent.RoundFinished
@@ -61,7 +61,7 @@ class StreamJsonParserProgressSpec extends Specification {
             it instanceof AgentProgressEvent.ToolStarted
         }
         toolStartedEvents == [
-            new AgentProgressEvent.ToolStarted('Task')
+            new AgentProgressEvent.ToolStarted(UntrustedText.agent('Task'))
         ]
 
         and: 'RoundStarted and RoundFinished still bracket the round'

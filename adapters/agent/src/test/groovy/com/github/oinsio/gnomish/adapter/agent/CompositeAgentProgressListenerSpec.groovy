@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -19,7 +20,7 @@ import spock.lang.Specification
  */
 class CompositeAgentProgressListenerSpec extends Specification {
 
-    private static final AgentProgressEvent EVENT = new AgentProgressEvent.ToolStarted('Read')
+    private static final AgentProgressEvent EVENT = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Read'))
 
     def "onProgress delivers the event to every listener, in list order"() {
         given:

@@ -16,12 +16,14 @@ package com.github.oinsio.gnomish.untrustedtext;
  * characters (which also removes any zero-width space the text arrived with, so the ones below are
  * ours); every {@code @} and {@code #} gains a trailing zero-width space, breaking the mention and
  * reference patterns while keeping the text visually intact; and the block is fenced with a tilde
- * run computed to be longer than any tilde run the content itself opens a line with, so the
- * content cannot close the fence early and smuggle markdown out of it.
+ * run computed to be longer than any tilde run the content starts a line with — leading whitespace
+ * ignored, because a closing fence may be indented — so the content cannot close the fence early
+ * and smuggle markdown out of it.
  *
- * <p>Moved here from {@code app.findings.TrackerFence} (design D7 of type-untrusted-text), which
- * now delegates: the carrier's comment exit and the tracker publication facade must be one
- * rendering, and this leaf is what both can reach.
+ * <p>Moved here from {@code app.findings.TrackerFence} (design D7 of type-untrusted-text), the
+ * {@code String} facade that published fenced text before the carrier existed: the two had to be
+ * one rendering, and this leaf is what every caller can reach. The facade was retired once its
+ * last caller held a carrier and took the exit directly, leaving this as the only owner.
  *
  * <p>Implements FR2, NFR-S2 of type-untrusted-text; originally FR15 of add-sandbox-core.
  */
@@ -37,7 +39,7 @@ final class CommentFencing {
      * Renders {@code text} as a labeled fenced block of untrusted machine output.
      *
      * @param text the raw untrusted text; never null
-     * @return the labeled, fenced, escaped block; never null
+     * @return the labeled, fenced block of stripped, mention-broken text; never null
      */
     static String render(String text) {
         String inert = inert(text);
@@ -66,12 +68,22 @@ final class CommentFencing {
     /**
      * A fence must be strictly longer than any tilde run opening a line of the content — a shorter
      * or equal run inside the block would close the fence early.
+     *
+     * <p>Leading whitespace is skipped before the run is measured: a closing fence may be indented
+     * (CommonMark allows up to three spaces, and a tab is whitespace a renderer may expand), so a
+     * run counted only from column zero would miss {@code "   ~~~~"} and let the content out of the
+     * block. Skipping all leading whitespace over-measures rather than under-measures, and a fence
+     * longer than it strictly had to be costs nothing.
      */
     private static int fenceLength(String text) {
         int longest = 0;
         for (String line : text.split("\n", -1)) {
+            int start = 0;
+            while (start < line.length() && Character.isWhitespace(line.charAt(start))) {
+                start++;
+            }
             int run = 0;
-            while (run < line.length() && line.charAt(run) == '~') {
+            while (start + run < line.length() && line.charAt(start + run) == '~') {
                 run++;
             }
             longest = Math.max(longest, run);

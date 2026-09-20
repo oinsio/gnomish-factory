@@ -4,7 +4,8 @@ import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
-import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.subprocess.Termination;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,10 @@ import org.slf4j.LoggerFactory;
  * settles, left for the caller to abort on. Treating every failed fetch as absence is what forked
  * a duplicate branch for a task that already had one, and it is the status quo this replaces. With
  * no {@code origin} configured there is no one to ask and the clone's own refs are the whole truth,
- * so the local-only run keeps answering {@link BranchLocation.NotFound} exactly as before.
+ * so the local-only run keeps answering {@link BranchLocation.NotFound} exactly as before — but
+ * only when the fetch itself ran to its own exit, since "no origin is configured" is read from a
+ * git invocation that a shutdown or a deadline silences the same way it silenced the fetch, and a
+ * silenced read must not be spent as a second vote for absence.
  *
  * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract.
  */
@@ -101,8 +105,14 @@ public final class TaskBranchLocator {
             return new BranchLocation.RemoteTracking(trackingRef);
         }
         // No origin means no one to ask: whatever this clone holds is the whole truth, and a
-        // purely local run must keep routing fresh rather than aborting forever (UX3).
-        if (!origin.isConfigured(cloneDir)) {
+        // purely local run must keep routing fresh rather than aborting forever (UX3). Only a
+        // fetch that ran to its own exit may take that shortcut. The configuration read is a git
+        // invocation too, and a shutdown or a deadline cuts it short exactly as it cut the fetch
+        // short — "git remote get-url origin failed" is then indistinguishable from "this clone
+        // has no origin", so believing it here would answer absence to a question nobody asked.
+        // A fetch that never exited falls through to the classification instead, where a remote
+        // that did not answer is reported as unestablished (FR6).
+        if (fetch.termination() == Termination.EXITED && !origin.isConfigured(cloneDir)) {
             return new BranchLocation.NotFound();
         }
         return classifyFailedFetch(cloneDir, branchName, fetch);
@@ -118,20 +128,29 @@ public final class TaskBranchLocator {
                 log.debug(
                         "narrow fetch of {} failed and origin confirms it is absent ({})",
                         branchName,
-                        LogText.forLog(why(fetch)));
+                        why(fetch).forLog());
                 yield new BranchLocation.NotFound();
             }
             case Carriage.CARRIES ->
-                new BranchLocation.Unavailable("origin carries " + branchName
-                        + " but the narrow fetch did not deliver it (" + why(fetch) + ")");
+                new BranchLocation.Unavailable(UntrustedText.factory(
+                        "origin carries " + branchName + " but the narrow fetch did not deliver it ("
+                                + why(fetch).forLog() + ")"));
             case Carriage.UNKNOWN ->
-                new BranchLocation.Unavailable(
-                        "origin did not answer whether " + branchName + " exists (" + why(fetch) + ")");
+                new BranchLocation.Unavailable(UntrustedText.factory("origin did not answer whether " + branchName
+                        + " exists (" + why(fetch).forLog() + ")"));
         };
     }
 
-    private static String why(GitCommandResult fetch) {
-        return fetch.failureDetail("fetch").forLog();
+    /**
+     * Why the narrow fetch did not deliver, as the carrier git's stderr arrived in. Kept typed to
+     * its own sinks — every one of the three callers takes {@link UntrustedText#forLog()}
+     * explicitly: {@link #classifyFailedFetch}'s absence trace for the log plane, and that same
+     * switch's two {@code Unavailable} sentences to quote
+     * an already-neutralized fragment into factory prose, which is what keeps the quoting sentence
+     * in the factory's own family rather than the capture's.
+     */
+    private static UntrustedText why(GitCommandResult fetch) {
+        return fetch.failureDetail("fetch");
     }
 
     private boolean refExists(Path cloneDir, String ref) {

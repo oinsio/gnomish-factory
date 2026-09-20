@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -20,25 +19,20 @@ import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * The sandboxed-mode realization of {@link TaskRepository} (design D19): the same four lifecycle
+ * The sandboxed-mode realization of {@link TaskRepository} (design D19): the same five lifecycle
  * write points as {@link GitTaskRepository} — branch creation with {@code task.json}, the resume
- * decision, the terminal {@link TaskOutcome}, and the {@code Completed} cleanup — but created
- * factory-side as plumbing commits over bare git objects through {@link GitObjects}, with no working
- * copy, no checkout, and no hook execution (FR17, FR25). This is the write-side twin of the
- * bare-object reads {@link BranchStateReader}/{@link DeliveredBranchReader} already perform.
+ * decision, the terminal {@link TaskOutcome}, the receipt that clears its pending marker, and the
+ * {@code Completed} cleanup — but created factory-side as plumbing commits over bare git objects
+ * through {@link GitObjects}, with no working copy, no checkout, and no hook execution (FR17,
+ * FR25). This is the write-side twin of the bare-object reads {@link BranchStateReader}/{@link
+ * DeliveredBranchReader} already perform.
  *
  * <p>The in-box channel is unavailable exactly when these writes matter (D19): at creation no
  * environment exists yet, at abort the box is dead or quarantined, and at cleanup it is already
@@ -54,6 +48,15 @@ import org.slf4j.LoggerFactory;
  * last in-box commit was the state commit (D15), so no live environment is required here. Host mode
  * keeps {@link GitTaskRepository}'s worktree commits unchanged (G4, D20).
  *
+ * <p>Crash consistency: every write point is one commit, so each kill window freezes a tip that is
+ * a whole lifecycle state and never a half of one. The terminal sequence is constructive before
+ * destructive — the outcome commit carries the "terminal write pending" intent, the tracker write
+ * follows, {@link #confirmTerminalWrite} records its receipt, and only then does
+ * {@link #finishCleanup} remove the envelope. A pickup that finds the marker still set re-drives
+ * the tracker write; one that finds no envelope at all reads the task as finished, which is why
+ * both tail commits are no-ops on a tip whose envelope has already gone
+ * ({@link GitObjectsTerminalCommits}).
+ *
  * <p>Kept in sync with {@link GitTaskRepository}: both media run the same task-lifecycle write
  * protocol, and in particular both take the task's start point as an already-peeled {@code
  * ObjectId} — the caller's single peel of its law binding — resolve no base <em>name</em> of their
@@ -67,8 +70,6 @@ import org.slf4j.LoggerFactory;
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
-    private static final Logger log = LoggerFactory.getLogger(GitObjectsTaskRepository.class);
-
     private static final String REF_PREFIX = "refs/heads/";
 
     /** The factory identity that authors lifecycle commits when none is supplied (design D19). */
@@ -79,7 +80,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     private final CommitIdentity identity;
     private final Clock clock;
     private final ClaimEpochSource epochs;
-    private final DenialCursorSource denialCursors;
+    private final LifecycleEgressCursor egressCursors;
 
     /**
      * @param gitObjects the bare-object facade opened against the factory clone (git dir + a
@@ -113,7 +114,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         this.identity = identity;
         this.clock = clock;
         this.epochs = epochs;
-        this.denialCursors = denialCursors;
+        this.egressCursors = new LifecycleEgressCursor(denialCursors);
     }
 
     @Override
@@ -146,14 +147,14 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 true,
                 base,
                 // A branch being created has no tip and so no committed cursor to carry forward.
-                writer.putTaskAndState(taskId, dto, initialState, null),
+                writer.putTaskAndState(taskId, dto, initialState, null, TaskLifecycleEvent.STARTED),
                 TaskLifecycleEvent.STARTED);
     }
 
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         String ref = refFor(taskId);
-        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
+        var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
         TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED);
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
@@ -187,7 +188,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 ref,
                 false,
                 tip,
-                writer.putTaskAndState(taskId, dto, resetState, writer.tipStateCursor(taskId, tip)),
+                writer.putTaskAndState(
+                        taskId, dto, resetState, writer.tipStateCursor(taskId, tip), TaskLifecycleEvent.RESUMED),
                 TaskLifecycleEvent.RESUMED);
     }
 
@@ -195,7 +197,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     public void recordOutcome(String taskId, TaskOutcome outcome) {
         TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
         String ref = refFor(taskId);
-        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
+        var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
         TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, event);
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
@@ -215,44 +217,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                         lastEscalation,
                         pending,
                         current.pin())
-                .withEgressCursor(cursorFor(lastEscalation, currentDto.egressCursor()));
-        writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
-    }
-
-    /**
-     * The cursor this lifecycle commit records: the position the environment's last denial read
-     * left behind when the escalation being written is a {@code cannotExecute} carrying denials,
-     * and the tip's own cursor carried forward otherwise (FR3, FR5 of
-     * fix-denial-attribution-durability).
-     *
-     * <p>Only that one escalation kind moves the cursor, because it is the only record on this
-     * write path that carries denials: the round died before its close, so no attempt record was
-     * built and no {@code state.json} commit will delimit them. Recording a position on any other
-     * park would put a position on the branch ahead of the record it delimits — the one failure
-     * mode design D3 rules out, since it silences the gap instead of duplicating it.
-     *
-     * <p>Best-effort (NFR-R1): an environment that cannot answer leaves the escalation cursorless
-     * and the park succeeds. Losing the position costs a re-read, never a denial.
-     */
-    private @Nullable EgressCursorDto cursorFor(
-            @Nullable EscalationReport lastEscalation, @Nullable EgressCursorDto tipCursor) {
-        if (!(lastEscalation instanceof EscalationReport.CannotExecute cannotExecute)
-                || cannotExecute.denials().isEmpty()) {
-            return tipCursor;
-        }
-        Optional<DenialCursor> drained;
-        try {
-            drained = denialCursors.currentPosition();
-        } catch (RuntimeException e) {
-            log.warn(
-                    OperatorEvent.ESCALATION_DENIAL_POSITION_UNREADABLE.head()
-                            + "the environment could not answer its denial position while parking a"
-                            + " cannotExecute escalation; recording the escalation without one, so the"
-                            + " next lease re-reads the guard log from where the last commit left it",
-                    e);
-            return tipCursor;
-        }
-        return drained.map(c -> new EgressCursorDto(c.source(), c.position())).orElse(tipCursor);
+                .withEgressCursor(egressCursors.forEscalation(lastEscalation, currentDto.egressCursor()));
+        writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto, event), event);
     }
 
     /**

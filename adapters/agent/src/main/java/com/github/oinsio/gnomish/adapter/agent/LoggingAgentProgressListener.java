@@ -67,7 +67,7 @@ public final class LoggingAgentProgressListener implements AgentProgressListener
             // FR12 of harden-logging-observability: one line per tool call is per-item detail —
             //     a single round makes dozens, and none of them is a state change of the run.
             case AgentProgressEvent.ToolStarted started ->
-                log.debug("tool started: {}", LogText.forLog(started.name()));
+                log.debug("tool started: {}", started.name().forLog());
             case AgentProgressEvent.RoundFinished finished ->
                 log.info(
                         "round finished: subtype={}, tokensByModel={}, summary={}",

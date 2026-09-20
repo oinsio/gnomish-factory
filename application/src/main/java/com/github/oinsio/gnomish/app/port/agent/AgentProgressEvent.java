@@ -40,8 +40,8 @@ public sealed interface AgentProgressEvent {
     record RoundStarted(UntrustedText model, UntrustedText sessionId) implements AgentProgressEvent {
 
         public RoundStarted {
-            model = requireNonBlank(model, "model");
-            sessionId = requireNonBlank(sessionId, "sessionId");
+            requireNonBlank(model, "model");
+            requireNonBlank(sessionId, "sessionId");
         }
     }
 
@@ -56,12 +56,13 @@ public sealed interface AgentProgressEvent {
      * event.
      *
      * @param name the tool's name, verbatim from {@code
-     *     adapter.agent.ContentBlock.ToolUse#name()}; never blank
+     *     adapter.agent.ContentBlock.ToolUse#name()} and minted as agent text where it is read
+     *     off the stream; never blank
      */
-    record ToolStarted(String name) implements AgentProgressEvent {
+    record ToolStarted(UntrustedText name) implements AgentProgressEvent {
 
         public ToolStarted {
-            name = requireNonBlank(name, "name");
+            requireNonBlank(name, "name");
         }
     }
 
@@ -106,29 +107,18 @@ public sealed interface AgentProgressEvent {
     }
 
     /**
-     * Fails fast on a blank component shared by {@link RoundStarted} and {@link
-     * ToolStarted}. Kept as an explicit static method rather than inline in a
-     * compact constructor: PIT's record filter suppresses all mutations inside a
-     * record's canonical constructor, which would silently exempt this
+     * Fails fast on a blank component shared by {@link RoundStarted} and {@link ToolStarted} —
+     * every one of them is text the agent itself chose, so each travels as the carrier it was
+     * minted in (design D4 of type-untrusted-text) and a listener renders it through an exit
+     * rather than receiving a string this port already flattened. Kept as an explicit static
+     * method rather than inline in a compact constructor: PIT's record filter suppresses all
+     * mutations inside a record's canonical constructor, which would silently exempt this
      * validation from the 100% mutation gate.
      */
-    private static String requireNonBlank(String value, String component) {
+    private static void requireNonBlank(UntrustedText value, String component) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("AgentProgressEvent." + component + " must not be blank");
         }
-        return value;
-    }
-
-    /**
-     * The same fail-fast for the two components the agent itself chose, which travel as the
-     * carrier they were minted in (design D4 of type-untrusted-text) — a listener renders them
-     * through an exit rather than receiving a string this port already flattened.
-     */
-    private static UntrustedText requireNonBlank(UntrustedText value, String component) {
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("AgentProgressEvent." + component + " must not be blank");
-        }
-        return value;
     }
 
     /**

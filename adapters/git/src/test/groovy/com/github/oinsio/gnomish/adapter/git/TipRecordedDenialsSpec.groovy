@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -29,12 +31,12 @@ class TipRecordedDenialsSpec extends Specification {
                 }
     }
 
-    private static String taskJson(String cursor = null, String decisions = '[]') {
+    private static String taskJson(String cursor = null) {
         """
         {
           "version": 1, "taskId": "T-1", "title": "t", "body": "b",
           "createdAt": "2026-09-05T09:00:00Z", "baseCommit": "abc123",
-          "decisions": ${decisions}, "outcome": null, "lastEscalation": null
+          "decisions": [], "outcome": null, "lastEscalation": null
           ${cursor == null ? '' : ', "egressCursor": ' + cursor}
         }
         """
@@ -130,5 +132,33 @@ class TipRecordedDenialsSpec extends Specification {
     def "a tip with no envelopes at all offers no position"() {
         expect:
         cursors.restorable(tip(null, null)).position().isEmpty()
+    }
+
+    // FR4 + logging.md ("best effort must still leave a trace"): a restored id that fails the
+    //     denial-source syntax gate is dropped, and the whole-tail re-read that follows is only
+    //     attributable if the refusal says which id was refused — rendered through the log exit,
+    //     since it came off a document another instance wrote
+    def "a committed position whose source is not a denial source id is dropped with a trace"() {
+        given:
+        // a JSON escape, so the decoded id really holds a line break the syntax gate refuses
+        def hostile = 'guard-1\\nWARN forged'
+
+        when:
+        def events = LogCaptureSupport.capture(TipRecordedDenials, Level.DEBUG) {
+            assert cursors.restorable(tip(
+                    taskJson(),
+                    stateJson(cursor(hostile, '2026-09-05T10:00:00.000000001Z'))))
+            .position()
+            .isEmpty()
+        }
+
+        then: 'one DEBUG line names the refused id and what the run now does instead'
+        def dropped = events.findAll { it.level == Level.DEBUG }
+        dropped.size() == 1
+        dropped.first().formattedMessage.contains('reads its denial source from the start')
+
+        and: 'the refused id reaches the line rendered, never as the bytes the document held'
+        dropped.first().formattedMessage.contains('guard-1')
+        !dropped.first().formattedMessage.contains('\n')
     }
 }

@@ -80,9 +80,9 @@ dependencies {
     implementation project(':operatorevent')
     // The untrusted-text leaf (FR2, FR3, design D2/D7 of type-untrusted-text): `TrackerFence` is a
     // facade over `TextSafety.forComment`, the comment exit the carrier renders through too, and
-    // the serve-observability JSON writers carry `@UntrustedExit`, the marker that allows a machine
-    // writer to read the carrier's raw text. So this module names the leaf directly rather than
-    // reaching it through `:logtext`. `api`, not `implementation`: that marker has runtime
+    // the `status.json`, `board --json` and `usage.json` mappers carry `@UntrustedExit`, the marker
+    // that allows a machine writer to read the carrier's raw text. So this module names the leaf
+    // directly rather than reaching it through `:logtext`. `api`, not `implementation`: that marker has runtime
     // retention and sits on public types, so it travels on this module's own surface — which is
     // what the dependency-analysis gate establishes.
     api project(':untrustedtext')

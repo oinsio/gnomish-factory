@@ -83,10 +83,21 @@ public final class TipRecordedDenials {
      * and this is the same gate on the restored half, which arrives from a document another
      * instance wrote. A restored id that fails it offers no position at all, which the environment
      * already degrades safely: it reads its denial source from the start (FR4 of
-     * fix-denial-attribution-durability).
+     * fix-denial-attribution-durability), and the refusal leaves a DEBUG trace so that re-read is
+     * attributable.
      */
     private static Optional<DenialCursor> restored(EgressCursorDto cursor) {
-        return ContainerIdSyntax.of(cursor.source()).map(source -> new DenialCursor(source, cursor.position()));
+        Optional<DenialCursor> position =
+                ContainerIdSyntax.of(cursor.source()).map(source -> new DenialCursor(source, cursor.position()));
+        if (position.isEmpty()) {
+            // logging.md, "Best effort must still leave a trace": the committed position is
+            // dropped and the run re-reads the whole tail, which only the refused id explains.
+            log.debug(
+                    "committed denial position names '{}', which is not a denial source id;"
+                            + " the run reads its denial source from the start",
+                    LogText.forLog(cursor.source()));
+        }
+        return position;
     }
 
     /**

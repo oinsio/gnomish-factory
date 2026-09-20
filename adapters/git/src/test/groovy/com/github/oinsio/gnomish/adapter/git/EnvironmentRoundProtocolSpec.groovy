@@ -22,10 +22,13 @@ import spock.lang.TempDir
 /**
  * FR21, FR22, FR23 of add-sandbox-core (design D15, D16, D17): the
  * snapshot-first sandboxed round protocol on local repositories — snapshot
- * commit then state commit, the parent-check against daemon-inserted commits,
- * the byte-exact read-back against in-box tampering, the decision-file
- * carve-out with stale-name exclusion, and the snapshot-without-state resume
- * classification that re-verifies without burning an attempt.
+ * commit then state commit, the parent-check against daemon-inserted commits
+ * and against a second parent an in-box {@code MERGE_HEAD} could attach,
+ * the byte-exact read-back against in-box tampering — including the
+ * cannot-read-back outcome when the harvested blob no longer fits the cap —
+ * the decision-file carve-out with stale-name exclusion, and the
+ * snapshot-without-state resume classification that re-verifies without
+ * burning an attempt.
  */
 class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoFixture {
 
@@ -58,7 +61,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         new File(box.workingCopy.toFile(), file).text = content
     }
 
-    private void gnomeCommit(String message = 'gnome commit') {
+    private void gnomeCommit(String message) {
         runner.run(box.workingCopy, 'add', '-A')
         runner.run(box.workingCopy, 'commit', '-m', message)
     }
@@ -129,11 +132,16 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
     }
 
     def "FR21: a round that changed nothing still closes with a distinct attempt commit"() {
+        given: 'the round baseline, and a gnome that wrote nothing at all'
+        def baseline = factoryTip()
+
         when:
         def attempt = snapshotStep.snapshot(TASK, 'implement', 1)
 
-        then:
-        attempt != gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH + '^') || attempt == factoryTip()
+        then: 'the empty round still advanced the branch by one commit of its own'
+        attempt == factoryTip()
+        attempt != baseline
+        gitOutput(cloneDir, 'rev-parse', attempt + '^') == baseline
         gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot implement#1'
     }
 
@@ -168,6 +176,26 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         then:
         def ex = thrown(RoundBoundaryViolationException)
         ex.message.contains('is not the snapshot commit')
+    }
+
+    def "FR22: a state commit with a second parent is refused even when its first parent is the snapshot"() {
+        given: 'a state commit shaped as an in-box MERGE_HEAD would shape it: snapshot first, smuggled history second'
+        gnomeWork()
+        def snapshot = snapshotStep.snapshot(TASK, 'implement', 1)
+        def tree = gitOutput(cloneDir, 'rev-parse', snapshot + '^{tree}')
+        def smuggled = gitOutput(cloneDir, '-c', 'user.email=d@e.f', '-c', 'user.name=d',
+                'commit-tree', tree, '-m', 'smuggled history')
+        def merge = gitOutput(cloneDir, '-c', 'user.email=d@e.f', '-c', 'user.name=d',
+                'commit-tree', tree, '-p', snapshot, '-p', smuggled, '-m', 'gnomish: round implement#1')
+        def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmpMerge')))
+
+        when: 'the harvest boundary judges that tip'
+        new HarvestedStateCommitCheck(gitObjects)
+                .verify(TASK, merge, snapshot, 'trace.jsonl', new byte[0], new byte[0])
+
+        then: 'a matching first parent is not enough — the second parent aborts the round'
+        def ex = thrown(RoundBoundaryViolationException)
+        ex.message.contains('has a second parent')
     }
 
     def "FR22: in-box tampering with state.json between putFile and commit aborts by read-back"() {
@@ -224,6 +252,35 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('trace.jsonl')
     }
 
+    def "FR22: an in-box replacement too long to read back aborts as a failed read-back, not a silent prefix match"() {
+        given: 'a box whose file channel LENGTHENS state.json, so the harvested blob no longer fits the read-back cap'
+        def tamperingBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('tbox4'))) {
+                    @Override
+                    void putFile(String path, byte[] content) {
+                        // The cap is written.length + 1, so any longer replacement trips GitObjects
+                        // instead of reaching the byte comparison — the branch that must abort
+                        // rather than compare a truncated prefix and pass.
+                        def bytes = path.endsWith('state.json')
+                                ? (new String(content, StandardCharsets.UTF_8) + 'x' * 64).getBytes(StandardCharsets.UTF_8)
+                                : content
+                        super.putFile(path, bytes)
+                    }
+                }
+        tamperingBox.materialize(BRANCH, null)
+        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, attemptRef)
+        def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp4')))
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
+        snapshot2.snapshot(TASK, 'implement', 1)
+
+        when:
+        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+
+        then: 'the round aborts naming the file whose read-back could not be obtained'
+        def ex = thrown(RoundBoundaryViolationException)
+        ex.message.contains('read-back of')
+        ex.message.contains('state.json')
+    }
+
     def "FR23: the current round's decision file is the one permitted state-directory write"() {
         given: 'the gnome leaves a decision request for exactly this stage and attempt'
         gnomeWork()
@@ -254,7 +311,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('implement-a9.json')
     }
 
-    def "FR21: any other gnome write under .gnomish-task/ aborts"() {
+    def "FR23: any other gnome write under .gnomish-task/ aborts"() {
         given:
         def stateDir = new File(box.workingCopy.toFile(), '.gnomish-task')
         stateDir.mkdirs()

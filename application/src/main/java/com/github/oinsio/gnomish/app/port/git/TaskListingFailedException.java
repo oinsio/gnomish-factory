@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
@@ -23,10 +24,17 @@ public final class TaskListingFailedException extends RuntimeException {
     /**
      * @param pattern the ref pattern that could not be enumerated; never blank
      * @param exitCode the failing {@code for-each-ref} invocation's exit code
-     * @param detail the command's captured stderr, as the git evidence; may be blank
+     * @param detail the command's captured stderr, as the git evidence; may be blank. An
+     *     {@link UntrustedText} rather than a rendered {@code String}: the detail is git's own
+     *     words, so the carrier reaches the message through its log exit
+     *     {@link UntrustedText#forLog()} here instead of at the call site (design D5 of
+     *     type-untrusted-text). This message is rendered into a log record, and the log-call gate
+     *     cannot see inside an exception's text — so the rendering happens where the untrusted
+     *     text enters it ({@code .claude/rules/logging.md}, "Carry untrusted text in
+     *     UntrustedText; neutralize it at the exit").
      */
-    public TaskListingFailedException(String pattern, int exitCode, String detail) {
+    public TaskListingFailedException(String pattern, int exitCode, UntrustedText detail) {
         super("could not enumerate " + pattern + ": git for-each-ref exited " + exitCode
-                + "; refusing to print an empty task table for a listing that never ran: " + detail);
+                + "; refusing to print an empty task table for a listing that never ran: " + detail.forLog());
     }
 }

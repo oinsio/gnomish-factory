@@ -27,7 +27,12 @@ public enum ReportPlane {
      */
     CONSOLE {
         @Override
-        String render(UntrustedText text) {
+        public String render(UntrustedText text) {
+            return text.forConsole();
+        }
+
+        @Override
+        public String block(UntrustedText text) {
             return text.forConsole();
         }
 
@@ -44,8 +49,13 @@ public enum ReportPlane {
      */
     COMMENT {
         @Override
-        String render(UntrustedText text) {
+        public String render(UntrustedText text) {
             return text.forCommentInline();
+        }
+
+        @Override
+        public String block(UntrustedText text) {
+            return text.forComment();
         }
 
         @Override
@@ -64,7 +74,19 @@ public enum ReportPlane {
      * @param text the carrier to render; never null
      * @return the plane's rendering; never null
      */
-    abstract String render(UntrustedText text);
+    public abstract String render(UntrustedText text);
+
+    /**
+     * Renders one untrusted capture that is machine output end to end — a heading of the factory's
+     * own followed by nothing but the capture. On the comment plane that is the labeled fenced
+     * shape, the one statement a fence can honestly make (design D6, revised 2026-09-19); on the
+     * console plane it is the same rendering {@link #render} gives, because the label and the fence
+     * are markdown devices a terminal only reads as noise.
+     *
+     * @param text the carrier to render; never null
+     * @return the plane's rendering of a whole-capture block; never null
+     */
+    public abstract String block(UntrustedText text);
 
     /**
      * Renders one line of untrusted text that is not yet carried — a finding's message or locator,

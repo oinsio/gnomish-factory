@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +56,7 @@ record AgentProgressEmitter(AgentProgressListener progressListener, TokenUsageMa
                 if (assistant.parentToolUseId() == null) {
                     for (ContentBlock block : assistant.content()) {
                         if (block instanceof ContentBlock.ToolUse toolUse) {
-                            deliver(new AgentProgressEvent.ToolStarted(toolUse.name()));
+                            deliver(new AgentProgressEvent.ToolStarted(UntrustedText.agent(toolUse.name())));
                         }
                     }
                 }

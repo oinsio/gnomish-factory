@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import com.github.oinsio.gnomish.status.ReportPlane;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -62,7 +62,7 @@ public final class EscalationResumeDialog {
      * @return the context/state pair to resume the engine with
      */
     RunnerOutcomeLoop.Resumption handle(TaskContext context, TaskOutcome.Escalated escalated) {
-        String rendered = renderEscalation(escalated.report());
+        String rendered = renderEscalation(escalated.report(), ReportPlane.CONSOLE);
         if (escalated.report() instanceof EscalationReport.PipelineMismatch) {
             throw new InternalErrorException(rendered);
         }
@@ -80,22 +80,31 @@ public final class EscalationResumeDialog {
      * as the tracker park report. Every field it renders is untrusted text — a check's own label
      * derived from the target repository's manifest, a judge's raw message, a command's output
      * tail, a stage name another instance recorded, an executor's failure cause — so each leaves
-     * its carrier through the comment plane before it is assembled into the block (FR15 of
-     * add-sandbox-core; design D6, D7 of type-untrusted-text). The attempt limit is the one
-     * component that is a number.
+     * its carrier through the {@code plane} the caller is bound for before it is assembled into
+     * the block (FR15 of add-sandbox-core; design D6, D7 of type-untrusted-text). The attempt
+     * limit is the one component that is a number.
+     *
+     * <p>The plane is the caller's to choose, for the same reason {@code StatusTextRenderer} takes
+     * one (design D6, revised 2026-09-19): this one render serves two human readers. The resume
+     * dialog and the internal-error message go to the operator's terminal, where the comment
+     * plane's zero-width mention breaks and tilde fences are noise the console sink then escapes
+     * into view — and where the stripping costs the operator the sight of the attack attempt the
+     * console plane exists to show. The take exits publish to the tracker, where those same
+     * devices are the neutralization. Rendering once for the comment plane and printing that is
+     * what this signature exists to make unrepresentable.
      *
      * <p>Which of the plane's two shapes an arm takes is decided by what its fence would be
      * describing (design D6, revised 2026-09-19). An arm whose report is a heading of the factory's
      * own followed by <em>one</em> capture — {@code PipelineMismatch}, {@code CannotExecute} —
-     * takes {@link UntrustedText#forComment()}, because the fenced block really is machine output
-     * end to end and the label is the true statement it makes. An arm that interleaves the
-     * factory's prose with <em>several</em> captures — {@code DecisionNeeded}'s question and its
-     * options, {@code CannotVerify}'s label, reason and detail — takes {@link
-     * UntrustedText#forCommentInline()} field by field: three consecutive labeled fences inside one
-     * assembled report say nothing the headings beside them do not, and the report as a whole is
-     * not machine output, so no fence can honestly span it.
+     * takes {@link ReportPlane#block}, because the fenced block really is machine output end to end
+     * and the label is the true statement it makes. An arm that interleaves the factory's prose
+     * with <em>several</em> captures — {@code DecisionNeeded}'s question and its options, {@code
+     * CannotVerify}'s label, reason and detail — takes {@link ReportPlane#render} field by field:
+     * three consecutive labeled fences inside one assembled report say nothing the headings beside
+     * them do not, and the report as a whole is not machine output, so no fence can honestly span
+     * it. On the console plane the two shapes coincide.
      *
-     * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core.
+     * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core; D6 of type-untrusted-text.
      *
      * <p>Public, and the only render of an escalation anywhere: {@code TakeOutcomeMapper} in the
      * {@code take} package builds its park report through this method too (FR7, design D8 of
@@ -104,27 +113,26 @@ public final class EscalationResumeDialog {
      * front of a human, unfenced and unsanitized.
      *
      * @param report the escalation reason to render; never null
+     * @param plane the human plane this render is bound for; never null
      * @return the rendered text block; never null, never blank
      */
-    public static String renderEscalation(EscalationReport report) {
+    public static String renderEscalation(EscalationReport report, ReportPlane plane) {
         return switch (report) {
             case EscalationReport.AttemptsExhausted attemptsExhausted ->
                 "Attempt limit (" + attemptsExhausted.limit() + ") reached — every attempt failed quality.";
             case EscalationReport.DecisionNeeded decisionNeeded ->
-                "The gnome asked:\n" + decisionNeeded.question().forCommentInline() + "\nOptions:\n"
-                        + decisionNeeded.options().stream()
-                                .map(UntrustedText::forCommentInline)
-                                .collect(Collectors.joining("\n"));
+                "The gnome asked:\n" + plane.render(decisionNeeded.question()) + "\nOptions:\n"
+                        + decisionNeeded.options().stream().map(plane::render).collect(Collectors.joining("\n"));
             case EscalationReport.CannotVerify cannotVerify ->
                 "Could not verify a check named:\n"
-                        + cannotVerify.check().label().forCommentInline() + "\n"
-                        + cannotVerify.reason().forCommentInline() + "\n"
-                        + cannotVerify.details().forCommentInline();
+                        + plane.render(cannotVerify.check().label()) + "\nReason:\n"
+                        + plane.render(cannotVerify.reason()) + "\nDetails:\n"
+                        + plane.render(cannotVerify.details());
             case EscalationReport.PipelineMismatch pipelineMismatch ->
                 "A stage this task recorded is no longer defined in the pipeline:\n"
-                        + pipelineMismatch.staleStage().forComment();
+                        + plane.block(pipelineMismatch.staleStage());
             case EscalationReport.CannotExecute cannotExecute ->
-                "Executor infrastructure failure:\n" + cannotExecute.cause().forComment();
+                "Executor infrastructure failure:\n" + plane.block(cannotExecute.cause());
         };
     }
 

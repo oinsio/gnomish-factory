@@ -46,6 +46,20 @@ import java.nio.file.Path;
  * FR13): a reader can then tell a round this instance wrote under its live claim from one a
  * superseded holder wrote before it was reaped.
  *
+ * <p>Kept in sync with {@link EnvironmentAttemptPersistence}: both must close a round with the
+ * same durable sequence — {@code state.json} and the round's trace file written first, then one
+ * commit stamped with the claim epoch that carries both, so neither medium can leave a branch on
+ * which a round's state landed without its trace (or the other way round).
+ *
+ * <p>Kill windows (crash-consistency rule). The sequence has two durable steps, the commit and the
+ * push, and the durability point is the commit. A kill between the file writes and the commit
+ * freezes "files written, nothing committed": the branch still reads as the previous round's tip,
+ * so the next pickup sees no round at all, and the residue is not attributed to the gnome — {@link
+ * RoundBoundaryCheck} compares two commits and never inspects these not-yet-staged writes. A kill
+ * between the commit and the push freezes "round committed locally, not pushed", the window the
+ * next push of this branch converges by carrying the commit forward. This method is not atomic
+ * across those two steps and does not claim to be.
+ *
  * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow; FR5, FR13 of
  * harden-task-branch-contract; FR13 of harden-logging-observability.
  */
@@ -99,12 +113,12 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         AttemptKey key = trace.key();
-        Path gnomishTaskRoot = worktreeRoot.resolve(".gnomish-task");
+        Path gnomishTaskRoot = worktreeRoot.resolve(GnomishTaskPaths.DIR_NAME);
 
         roundBoundaryCheck.verify(taskId, key, previousTip);
         String tipBeforeThisRound = previousTip;
 
-        writeStateJson(taskId, key, state, gnomishTaskRoot);
+        writeStateJson(taskId, key, state);
         writeTrace(taskId, key, trace, gnomishTaskRoot);
 
         GitCommandResult add = runner.run(worktreeRoot, "add", "-A");
@@ -126,10 +140,10 @@ public final class GitAttemptPersistence implements AttemptPersistence {
                 taskId, key.stage(), key.attempt(), worktreeRoot, branch, roundBoundaryCheck, tipBeforeThisRound);
     }
 
-    private void writeStateJson(String taskId, AttemptKey key, TaskState state, Path gnomishTaskRoot) {
+    private void writeStateJson(String taskId, AttemptKey key, TaskState state) {
         try {
             String json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state));
-            AtomicFileWriter.write(gnomishTaskRoot.resolve("state.json"), json);
+            AtomicFileWriter.write(worktreeRoot.resolve(GnomishTaskPaths.STATE_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "writing state.json", e);
         }

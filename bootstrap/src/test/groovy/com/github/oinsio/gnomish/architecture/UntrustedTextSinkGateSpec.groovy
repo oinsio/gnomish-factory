@@ -79,6 +79,15 @@ class UntrustedTextSinkGateSpec extends Specification {
         (TRACKER): 25,
     ]
 
+    /**
+     * Production throwables {@link #THROWABLE} cannot match, each listed with the reason its
+     * construction is not a text sink at all. {@code ExecutorFailure} wraps a cause and a denial
+     * list — its constructor takes no text, so there is nothing for a carrier to be laundered
+     * through. A throwable that carries text must wear one of the three suffixes instead of
+     * joining this list, which is what the feature below enforces.
+     */
+    private static final Set<String> TEXTLESS_THROWABLES = ['ExecutorFailure'] as Set
+
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
@@ -127,6 +136,13 @@ class UntrustedTextSinkGateSpec extends Specification {
             'Outcome.output',
         ])
 
+        and: 'and the bare-name vocabulary is not empty — the arm the qualified pairs cannot reach'
+        carrierAccessors.containsAll([
+            'sessionId',
+            'stateJson',
+            'taskJson'
+        ])
+
         and: 'and reached every other sink shape too'
         SINKS.every { shape, floor ->
             JavaCallSites.productionCallsOf(shape).size() >= floor
@@ -165,6 +181,21 @@ class UntrustedTextSinkGateSpec extends Specification {
         'tracker acknowledgeDecision' | 'tracker.acknowledgeDecision(ref, detail);'
         'tracker postNote' | 'tracker.postNote(ref, detail);'
         'mint' | 'log.warn("malformed: {}", UntrustedText.container(e.getOriginalMessage()));'
+    }
+
+    // D5: the exemption arm, both halves. It is the one place the scan is told to stay silent, so
+    //     an exemption that swallowed every construction would look identical to a clean tree
+    //     unless the flagged half is asserted beside the silent one.
+    def "FR7: only a throwable declaring a carrier detail is exempt"() {
+        given: 'a construction handed a carrier as itself'
+        def seeded = 'UntrustedText detail = capture();\nthrow new GitPersistFailedException(result.stderr());'
+
+        expect: 'the declared-detail form is the exit contract, so the carrier at the call is correct'
+        violations(seeded, 'Typed.java', ['stderr'] as Set, ['GitPersistFailedException'] as Set) == []
+
+        and: 'and a throwable that still takes a String detail is named exactly as before'
+        violations(seeded, 'Legacy.java', ['stderr'] as Set, ['SomeOtherException'] as Set) ==
+        ['Legacy.java:2']
     }
 
     // D2, M1: the two shapes the retired gate learned to see — carried over so no detector shape
@@ -278,6 +309,10 @@ class UntrustedTextSinkGateSpec extends Specification {
         // which is exactly D11's "make it parsed, do not type it" boundary seen from the scan's
         // side. `cause` stayed listed for one more reason until 6.3 and now has one fewer: the
         // `AbortRecord` twin became a carrier there.
+        // `name` joined when `AgentProgressEvent.ToolStarted.name` became the agent carrier it is
+        // minted as at the stream: every other `name()` in the build — a stage, a branch, a check,
+        // an enum constant — is a parsed identity that stays a String by D11, so the bare name
+        // decides nothing on its own.
         // Each re-enters the scan by itself once its last String twin is typed.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
@@ -293,6 +328,7 @@ class UntrustedTextSinkGateSpec extends Specification {
             'humanText',
             'label',
             'model',
+            'name',
             'note',
             'output',
             'prompt',
@@ -341,6 +377,24 @@ class UntrustedTextSinkGateSpec extends Specification {
 
         and: 'and the scan knows every one of them'
         CarrierArguments.MINTS.toSorted() == mints
+    }
+
+    // D2: the throwable sink is matched by a name suffix, which is evidence about a name rather
+    //     than about a type — so a throwable named otherwise is a sink the scan cannot see, and no
+    //     violation list would ever mention it. The tree is asked directly instead of trusted.
+    def "FR7: the throwable pattern reaches every throwable the factory declares"() {
+        given: 'every production throwable, by simple name'
+        def throwables = productionClasses.findAll {
+            it.isAssignableTo(Throwable)
+        }*.simpleName
+
+        expect: 'the tree really has throwables, so an empty answer cannot pass this'
+        throwables.size() >= 40
+
+        and: 'and a construction of each is matched, unless the type carries no text to launder'
+        throwables.findAll {
+            !THROWABLE.matcher("new ${it}(").find() && !TEXTLESS_THROWABLES.contains(it)
+        }.toSorted() == []
     }
 
     /** Whether this call constructs a throwable that declares its detail as untrusted text. */

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,8 +62,12 @@ public final class ContainerResumeBranch {
             case BranchLocation.RemoteTracking(String trackingRef) -> {
                 GitCommandResult create = runner.run(cloneDir, "branch", branch, trackingRef);
                 if (create.exitCode() != 0) {
+                    // git's stderr is subprocess output and this message is rendered into a log
+                    // record and into the escalation report, so it leaves the carrier through the
+                    // log exit here — where it enters the message the gate cannot see inside
+                    // (.claude/rules/logging.md).
                     throw new IllegalStateException("could not create local branch " + branch + " from " + trackingRef
-                            + ": " + create.stderr());
+                            + ": " + create.stderr().forLog());
                 }
                 // An anchor, not chatter: this instance is adopting work another instance pushed,
                 // and nothing else in the log says the local line was recreated rather than
@@ -77,7 +82,7 @@ public final class ContainerResumeBranch {
             case BranchLocation.NotFound ignored -> false;
             // Unestablished is not absent: routing this to "create the branch" is the duplicate
             // fork FR6 removes, so the container resume aborts and the claim goes back to the pool.
-            case BranchLocation.Unavailable(String reason) ->
+            case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
         };
     }

@@ -38,10 +38,9 @@ import org.slf4j.LoggerFactory;
  * for both fresh start and resume.
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
- * GitTaskRepositoryException}. On {@code Completed} the cleanup commit removing {@code .gnomish-task/}
- * from the branch tip is {@link #finishCleanup}, driven separately as the destructive last step of
- * the completion sequence (FR15, design D4; FR10 of harden-task-branch-contract); prior commits stay
- * reachable as the audit trail (M4).
+ * GitTaskRepositoryException}. The {@code Completed} envelope removal is {@link #finishCleanup},
+ * the destructive last step of the completion sequence (FR15, design D4; FR10 of
+ * harden-task-branch-contract); prior commits stay reachable as the audit trail (M4).
  *
  * <p>Both envelopes are written through the shared {@link AtomicFileWriter} (design D10 of
  * harden-task-branch-contract) — {@code task.json} here, {@code state.json} through {@link
@@ -190,8 +189,12 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * Clears the durable "tracker-write pending" marker for {@code taskId} once its terminal park's
      * tracker write has confirmed landed, committing the cleared {@code task.json} so a later
      * reconcile-on-resume reads the park as settled rather than orphaned (FR10, D10 of
-     * add-claim-heartbeat). The marker rewrite is delegated to {@link TerminalWriteMarker} (file
-     * size); this class owns worktree resolution and the confirming commit.
+     * add-claim-heartbeat). {@link TerminalWriteMarker} owns the envelope edit — it names the kill
+     * windows and the recovery owner; this class owns worktree resolution and the confirming
+     * commit, which it labels {@link TaskLifecycleEvent#RESUMED}. That label records nothing — the
+     * message is the fixed {@link ServiceCommitMessages#trackerWriteConfirmed()} and no reader
+     * parses it — and {@link TerminalWriteMarker} carries the full reasoning for why the confirm
+     * commit owns no event constant of its own, matching what its bare-object twin does.
      *
      * @param taskId the task whose pending marker is cleared; never blank
      */
@@ -215,7 +218,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * this resume carries one, and a host-side lifecycle rewrite must not be what erases it.
      */
     private TaskJsonDto readCurrentDto(String taskId, Path worktree, TaskLifecycleEvent event) {
-        Path taskJson = worktree.resolve(".gnomish-task").resolve("task.json");
+        Path taskJson = worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH);
         UntrustedText json;
         try {
             json = UntrustedText.branchDocument(Files.readString(taskJson));
@@ -226,10 +229,9 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     private void writeAndCommit(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
-        Path gnomishTaskRoot = worktree.resolve(".gnomish-task");
         try {
             String json = TaskStateJson.mapper().writeValueAsString(dto);
-            AtomicFileWriter.write(gnomishTaskRoot.resolve("task.json"), json);
+            AtomicFileWriter.write(worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing task.json", e);
         }
@@ -238,9 +240,11 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     /**
-     * The host medium's task-lifecycle commit choke point — every lifecycle transition this
-     * repository records passes through here, which is why the FR2 anchor of
-     * harden-logging-observability sits here and not at each of the callers above.
+     * The host medium's task-lifecycle commit choke point for the four transitions this class
+     * commits itself — start, resume, outcome, terminal-write receipt — which is why the FR2 anchor
+     * of harden-logging-observability sits here and not at each of those callers. The {@code
+     * Completed} cleanup stages with {@code git rm -r} rather than {@code git add -A}, so it
+     * commits and emits the same anchor inside {@link CleanupCommit} instead.
      *
      * <p>The line goes out after the commit succeeds: an anchor states that the transition is on
      * the branch, and a failed commit has not put it there (its own failure travels as the thrown

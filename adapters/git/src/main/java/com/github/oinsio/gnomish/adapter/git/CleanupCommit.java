@@ -10,22 +10,38 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@code Completed} cleanup commit (FR15/M4 of add-git-workflow): removes {@code
- * .gnomish-task/} from the worktree and index via {@code git rm -r}, then commits the fixed
- * cleanup message. History is untouched — every prior commit stays reachable via {@code git show
- * <sha>:.gnomish-task/...}.
+ * Owns the host medium's destructive last step of a completion: removing {@code .gnomish-task/}
+ * from the task worktree and its index via {@code git rm -r}, then landing the fixed cleanup
+ * commit with the tenure's epoch trailer. {@link GitTaskRepository#finishCleanup(String)} keeps
+ * the surrounding transition — worktree resolution and the epoch lookup — and holds no knowledge
+ * of what the envelope is or how it is removed. History is untouched: every prior commit stays
+ * reachable via {@code git show <sha>:.gnomish-task/...} (M4).
  *
- * <p>It is the destructive last step of the completion sequence and runs only after the
- * constructive ones have their receipts, per the crash-consistency ADR; a tip recording {@code
- * Completed} without it is a finished task awaiting cleanup, never one to re-execute.
+ * <p>Crash consistency ({@code .claude/rules/crash-consistency.md}). This is not a transition of
+ * its own but one durable step of a sequence {@link GitTaskRepository} orders: the {@code
+ * Completed} outcome commit (durable intent, carrying the pending marker), the tracker finish
+ * write, then this removal — destructive last, behind every constructive receipt. Removing the
+ * envelope takes the pending marker with it, so the cleaned tip needs no separate receipt.
  *
- * <p>Extracted from {@link GitTaskRepository} purely to keep that class within the project's
- * file-size guidance; the repository still owns worktree resolution.
+ * <p>The one kill window is between the {@code git rm} and the commit: the worktree and its index
+ * have lost the directory, but nothing durable has moved — an uncommitted worktree is not the
+ * medium anyone reads, so what the next pickup sees is the tip it saw before. That frozen state is
+ * a named shape of the {@code task-branch-contract} capability, a {@code Completed} tip still
+ * carrying its envelope: a finished task awaiting cleanup, never one to re-execute. Its recovery
+ * owner is reconcile-on-resume, which rolls forward by calling this step again; the guard below
+ * makes the second call on an already-cleaned worktree a no-op, so recovery is idempotent and
+ * convergent. The guard reads the worktree rather than the tip, so convergence needs a pickup that
+ * materializes the worktree from the tip — any instance but the one whose stale worktree already
+ * has the removal staged.
  *
- * <p>Kept in sync with {@link GitObjectsTerminalCommits#cleanUp}: both media log the FR2 anchor
- * line ({@code task lifecycle commit written for task {}: event={}}) after the cleanup commit
- * succeeds, the same shape used for every other lifecycle transition
- * (harden-logging-observability).
+ * <p>Kept in sync with {@link GitObjectsTerminalCommits#cleanUp}: both media test the same thing
+ * before doing anything — whether {@code .gnomish-task/}, the directory this step removes, is
+ * still there (here in the worktree, there on the tip) rather than any single file inside it — so
+ * an already-cleaned branch is the same no-op in either mode; and both log the FR2 anchor line
+ * ({@code task lifecycle commit written for task {}: event={}}) after the cleanup commit succeeds,
+ * the same shape used for every other lifecycle transition (harden-logging-observability).
+ *
+ * <p>Implements FR15, M4 of add-git-workflow; FR10, FR13 of harden-task-branch-contract.
  */
 final class CleanupCommit {
 
@@ -39,20 +55,20 @@ final class CleanupCommit {
      * @param runner the git subprocess runner
      * @param worktree the task worktree the state directory is removed from
      * @param taskId the task being completed; for error reporting
-     * @param epoch the tenure this cleanup belongs to, stamped as a trailer (FR13); {@code null}
-     *     where no claim is held
+     * @param epoch the tenure this cleanup belongs to, stamped as a trailer (FR13 of
+     *     harden-task-branch-contract); {@code null} where no claim is held
      */
     static void commit(GitProcessRunner runner, Path worktree, String taskId, @Nullable ClaimEpoch epoch) {
-        if (!Files.exists(worktree.resolve(".gnomish-task"))) {
+        if (!Files.exists(worktree.resolve(GnomishTaskPaths.DIR_NAME))) {
             // Already cleaned: running the destructive step twice equals running it once, which is
             // what lets the completion recovery re-run safely (FR10 of harden-task-branch-contract).
             log.debug("cleanup commit for task {} is a no-op: the worktree carries no envelope", taskId);
             return;
         }
-        GitCommandResult rm = runner.run(worktree, "rm", "-r", ".gnomish-task");
+        GitCommandResult rm = runner.run(worktree, "rm", "-r", GnomishTaskPaths.DIR_NAME);
         if (rm.exitCode() != 0) {
             throw new GitTaskRepositoryException(
-                    taskId, TaskLifecycleEvent.COMPLETED, "git rm -r .gnomish-task", rm.stderr());
+                    taskId, TaskLifecycleEvent.COMPLETED, "git rm -r " + GnomishTaskPaths.DIR_NAME, rm.stderr());
         }
         GitCommandResult commit =
                 runner.run(worktree, "commit", "-m", ClaimEpochTrailer.stamp(ServiceCommitMessages.cleanup(), epoch));

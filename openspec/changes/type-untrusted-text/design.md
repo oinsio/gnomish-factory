@@ -105,9 +105,9 @@ swallowed into a Logback status message, i.e. a lost record.
 **D2 — Raw access by annotation, gate by ArchUnit; no Error Prone
 checker.** `@UntrustedExit` (in the leaf, `RUNTIME` retention, target TYPE)
 marks the classes allowed to call `raw()`: the leaf's three exit renderers,
-`TaskJsonMapper`, `StateJsonMapper`, `LedgerJsonMapper`,
-`SnapshotJsonMapper`, the `Finding`-building funnel entry
-(`FindingsSanitizer` callers in `:adapters`/`:adapters:github`), and — added at
+`TaskJsonMapper`, `StateJsonMapper`, the `Finding`-building funnel entry that
+reads a judge's own words (`JudgeVerdictExtractor` in `:adapters:agent`), and —
+added at
 task 3.3, when `Verdict.CannotVerify` became a carrier — the two `--json`
 mappers that write a check's own words into a parser's input, `AttemptMapper`
 (`status.json`) and `UsageReportJsonMapper` (`usage.json`), joined at task 5.0
@@ -116,10 +116,18 @@ by `AttemptMapper`'s own `status.json` siblings `EscalationMapper` and
 carriers, and by `BoardJsonMapper` — `board --json` is the same machine plane:
 the machine plane's
 contract is byte-for-byte output, so rendering there would corrupt the document
-`ConsoleIO.printMachine` exists to keep verbatim. `TrackerFence`
-is not in the set: it is a `String → String` facade over `TextSafety.forComment`
-(D7) and never reads `raw()`, so annotating it would widen the allowlist for
-nothing. `UntrustedTextGateSpec` (`:bootstrap`, ArchUnit):
+`ConsoleIO.printMachine` exists to keep verbatim. `TrackerFence` was not in the
+set: a `String → String` facade over `TextSafety.forComment` (D7) never reads
+`raw()`, so annotating it would have widened the allowlist for nothing — and the
+facade itself has since been retired (D7). **Membership is the `raw()` call, not the family**, and the same
+argument keeps three machine writers out that an earlier reading of this
+decision put in: `GithubWorkflowJobsFetcher` takes its job log as a plain
+`String` from the request cache and bounds it through `FindingsSanitizer`, and
+`LedgerJsonMapper` / `SnapshotJsonMapper` write only strings, numbers and wire
+tokens their own module minted. None reads `raw()`, so each carried a marker
+that widened the allowlist for nothing; a spec now asserts the warrant for every
+member rather than the list being read for it, and a line that later carries the
+carrier takes the marker in the change that adds the field. `UntrustedTextGateSpec` (`:bootstrap`, ArchUnit):
 (a) `methods().that().areDeclaredInClassesThat().areNotAnnotatedWith(
 UntrustedExit).should().notCallMethod(UntrustedText, "raw")`; (b) methods
 named in the capture vocabulary (`stderr`, `stdout`, `output`, `sessionId`,
@@ -206,6 +214,17 @@ So the mint rule is stated in full, and `Provenance.FACTORY` /
   family, which is why `TakeCrashAbort`'s `"… : " + crash` stays `SUBPROCESS`
   and `EgressRefusal.describe()`'s target stays `MANIFEST`.
 
+*Read the fold row with this rule, not against it.* A fold's message quotes what a
+lower exception said about a capture, so the family it keeps is the capture's — the
+first bullet says so explicitly, and `GithubTransportException`'s `TRACKER`,
+`ContainerMaterializer`'s `SUBPROCESS` and `JudgeCriteriaPreflight`'s `MANIFEST` are
+that rule applied, not exceptions to it. What 7.6's sweep could not see, and task 7.10
+found, is the site whose mint argument is a *variable* holding literals: a ternary over
+two sentences (`ShellCommandCheckRunner`), a sentence assembled from an int and four
+literals (`GithubWorkflowRunPoll.misconfigurationReason`), an enum's own label
+(`EgressRefusal.Reason.label()`). A grep keyed on a leading string literal misses all
+three; the family question is asked of the text, not of its syntax at the call.
+
 `FACTORY` changes no rendering — provenance is evidence, and the exits compute
 the same answer for every family — so no report, log line or comment moves a
 byte. What it buys is that the mint table above is once again a description of
@@ -232,7 +251,7 @@ subprocess wrote, and every count of a family's mints would be wrong.
 | `:adapters:git` | `GitCommandResult.stdout/stderr`; `RemoteBaseRef.Held.Unanswered.reason`; `BaseRefreshOutcome.Refused.report/.Unavailable.reason`; `ResumeBaseOutcome.Refused/.Unavailable`; `DefaultBranchDiscovery.Undetermined/.Unavailable.reason`; `InBoxGitCommand.Outcome` output |
 | `:adapters:agent` | `AgentEvent.InitEvent/AssistantEvent/ResultEvent` text fields; `DecisionFileReader.Decision/Payload` |
 | `:adapters:github` | `ParsedMarker.instance/humanText` |
-| `:application` | `TakeResult.Delivered.summary`, `.AwaitingHuman.report`, `.Aborted.cause`, `.Revoked.note`, `.Skipped.reason`, `.InfrastructureUnavailable.reason` — each becomes `UntrustedText` where the text embeds a carrier, built by the report builders from typed inputs; `StatusReport.title/body`; `Activity.AwaitingInput.prompt`, `Activity.Executing.currentTool` (`status` package); the board rows `ReadyRow.title`, `WorkingRow.title`, `AwaitingHumanRow.title`, which carry the feed's title to the two board surfaces (task 5.1) |
+| `:application` | `TakeResult.Aborted.cause`, `.Revoked.note`, `.Skipped.reason`, `.InfrastructureUnavailable.reason` — each becomes `UntrustedText` because its text embeds a carrier. `Delivered.summary` and `AwaitingHuman.report` stay `String` (revised at task 5.4): each is a report builder's finished output, already rendered once through the comment exit for its two readers (D6), so a carrier there would ask a second rendering of every writer that publishes one; `StatusReport.title/body`; `Activity.AwaitingInput.prompt`, `Activity.Executing.currentTool` (`status` package); the board rows `ReadyRow.title`, `WorkingRow.title`, `AwaitingHumanRow.title`, which carry the feed's title to the two board surfaces (task 5.1) |
 
 Lists (`options`, `values`) are `List<UntrustedText>`. Fields already
 validated by a parser (`taskId`, ref names, stage names, wire tokens) are
@@ -258,7 +277,10 @@ need neither an exit nor the parser marker of D11.
 `JudgeCriteriaPreflight:62`, `ShellCommandCheckRunner:151`,
 `GitObjectsLawSource:128`, `WorkingTreeLawSource:91`,
 `HttpExternalCheckClient:165`, `GithubTransportException:17`,
-`GitFreshTaskSupport:68`. Each exception's
+`GitFreshTaskSupport:68`; joined at task 7.10 by the two the original enumeration
+missed because their detail was already rendered at the one call site rather than
+inside the constructor — `RoundBoundaryViolationException` and
+`TaskListingFailedException`. Each exception's
 constructor takes `UntrustedText` (or an `UntrustedText`-typed cause
 detail) and composes its message with `toString()`; `WorktreeResync` and
 the docker `IllegalStateException` sites move to `GitResyncFailedException`
@@ -347,10 +369,15 @@ truncated and on one line — a visible regression for the duration of the cut.
 text, so nothing changes for it, and hostile text renders visibly instead of
 raw.
 
-**D7 — The comment exit owns tracker publication; `TrackerFence` becomes
-a facade.** The fence/mention/label logic moves into the leaf as the
+**D7 — The comment exit owns tracker publication; `TrackerFence` is retired.**
+The fence/mention/label logic moves into the leaf as the
 `forComment` renderer (`TextSafety` gains it; JDK-only). `TrackerFence.fence`
-delegates. The eight park writers — `FreshClaimBaseBinding`,
+delegated to it until its one consumer (`EscalationResumeDialog`) came to hold a
+carrier and took the exit directly; with no caller left, the facade and its spec
+were deleted (its cases are `TextSafetyCommentSpec`'s), and the `:application`
+half of the split `app.findings` package went with them. A `String → String`
+fence in front of the exit is the escape hatch `implementation.md` item 3 says to
+close: it is the one way to publish fenced text while holding no carrier. The eight park writers — `FreshClaimBaseBinding`,
 `ResumeLawBinding`, `TakeDecisionResume`, `TaskTierLaw`,
 `EpochRecordingTracker`, `AbortHandler`, `GuardedPark`, `TakeQuarantinePark`
 — receive report text whose untrusted parts were rendered by the builders
@@ -448,7 +475,7 @@ a separate allowlist because it answers a separate question, and the two lists
 are read for separate reasons: `@UntrustedExit` answers "who can put untrusted
 bytes in front of a reader", `@UntrustedParser` answers "who converts untrusted
 bytes into a value". Folding parsers into `@UntrustedExit` — the obvious
-shortcut — would take that first list from twelve classes to thirty-nine and
+shortcut — would take that first list from nine classes to thirty-six and
 leave it meaning nothing, which is the whole reason rule (a) exists.
 
 **Membership is by return type, not by intent** ("parse, don't validate"). An
@@ -653,8 +680,8 @@ argued in D11 and carried to the ADR by the same task.
 ## Sync surfaces
 
 **Sync surfaces: none added; one facade retired into its owner.**
-`TrackerFence`'s fence/mention logic moves into the leaf and the class
-becomes a delegate (D7) — one implementation, one owner, no pair. No second
+`TrackerFence`'s fence/mention logic moves into the leaf and the class is
+deleted once nothing calls it (D7) — one implementation, one owner, no pair. No second
 implementation of any rule is introduced: every exit and every mint resolves
 to `:untrustedtext`. The `GitAttemptPersistence ↔ EnvironmentAttemptPersistence`
 registry row narrows again: both now throw `GitPersistFailedException(…,
@@ -666,7 +693,7 @@ the row's invariant is reduced to the commit + state-file sequence.
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
 | `UntrustedText` mints (`:untrustedtext`) | `UntrustedText` | the seven capture families in D3's table, by file | `String` fields on every carrier in D4's table — changed to `UntrustedText`; the `String`-typed constructors deleted | the parameter type; gate rule (b) (`UntrustedTextGateSpec`) for accessor return types; `RawCaptureGateSpec` + `RawCaptureOwners` for the entry side — every capture source either mints or is an allowlisted owner naming its family. *Which* family a mint picks is not gated: `FACTORY` is legitimate in any class, so a mint-caller allowlist would admit every wrong family it was built to catch. The rule above is therefore a review obligation (`/audit-implementation`), and NFR-S1 asks for the capture gate accordingly |
-| `UntrustedText.forLog/forConsole/forComment` (`:untrustedtext`) | `String`, already neutralized | every log call, console print, exception constructor and report builder in D5/D6 | direct `LogText.forLog(...)` calls at sites that now hold a carrier (the `add-base-ref-resolution` per-field calls included) — deleted; `UntrustedLogTextGateSpec` — its accessor pattern narrowed per family as each lands, the spec deleted at task 5.2 when the pattern is empty (no accessor is ever ungated) | gate rules (a) and (c); `UntrustedTextExitIdentitySpec` (FR2) |
+| `UntrustedText.forLog/forConsole/forComment` (`:untrustedtext`) | `String`, already neutralized | every log call, console print, exception constructor and report builder in D5/D6 | direct `LogText.forLog(...)` calls at sites that now hold a carrier (the `add-base-ref-resolution` per-field calls included) — deleted; `UntrustedLogTextGateSpec` — its accessor pattern narrowed per family as each lands, and at task 7.4 the spec retargeted onto raw capture and renamed `RawCaptureGateSpec`, so no accessor is left ungated and no scan is lost | gate rules (a) and (c); `UntrustedTextExitIdentitySpec` (FR2) |
 | `TextSafety.forComment` via `TrackerFence` facade (`:untrustedtext` / `:application`) | fenced comment text | callers of the exit: the builders D7 names (`FreshClaimBaseReport`, `ResumeBaseReport`, `BaseLawReport`, `AbortReportBuilder`, `BranchQuarantineReport`, `EscalationResumeDialog`, the `GuardedPark` report functions), `FinishEffect`, `GithubStateWrites` (abort cause), `DecisionAck`, the two stop-note writers; consumers of the value: the eight park writers (D7) | `FindingsSanitizer.strip(...).replace("@", …)` inside `TrackerFence` — moved; ad-hoc report concatenation in the eight writers — routed through builders; `"aborted: " + record.cause()` in `GithubStateWrites` — routed through the exit | gate rule (c) on every text-carrying `Tracker` method; `TrackerPublicationOwnerSpec` scanning every tracker write site and every `AbortRecord` construction for the *wrong* exit (`LogText`, `FindingsSanitizer`) as well as a raw carrier. The `AbortRecord` constructor left rule (c) at task 6.3, when its `cause` became the carrier: a carrier there is the contract being honoured, not laundering — the same reasoning rule (c) already applies to a throwable that declares its detail as untrusted text |
 | `UntrustedText.forParsing()` (`:untrustedtext`) | the captured bytes, for conversion into a value | the 27 `@UntrustedParser` classes D11 lists, by module | direct `raw()` reads from a parser — never introduced; `String`-typed `stdout`/`output` accessors, which let any class parse without declaring it — changed to the carrier | the annotation; gate rule (a2), whose pinned parser set fails on growth and whose seeded offender returns the text unchanged as a `String` |
 | `ConfigError.render()` (`:domain`) | `UntrustedText`, `MANIFEST` | `BaseLawReport`, `PipelineStartup`, `TakeCommandSupport`, `TrustedTierStartup`, `CheckClientConfiguration` (D10) | `LogText.forLog(error.render())` in `BaseLawReport` — deleted; `render()` returning `String` — changed | the return type; rule (b) does not apply (`ConfigError` is not a carrier) |
@@ -729,7 +756,7 @@ no text leaves the carrier — the same reason FR10's three questions need none.
 signature to carrier-in, carrier-out; `AbortHandler` stays the one caller.
 *Rationale:* it is MarkupSafe's invariant — a transformation of branded text
 returns the brand, which is what makes double-escaping unrepresentable there
-and what keeps the exit allowlist at twelve classes here. The alternative of
+and what keeps the exit allowlist at nine classes here. The alternative of
 annotating `AbortCauseBudget` `@UntrustedExit` is an unchecked conversion in
 `google/safe-html-types`' sense: permitted only inside a self-contained library
 whose safety is checkable without reading its callers, which a take-flow helper

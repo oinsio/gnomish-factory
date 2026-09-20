@@ -38,6 +38,16 @@ public interface LawSource {
     /**
      * The law file's content.
      *
+     * <p>A {@code String} rather than an {@link UntrustedText} carrier, although the bytes are the
+     * target repository's own (design D4's manifest family covers the <em>reason</em> beside it,
+     * not the content). The content has two readers and no third: the prompt builders, which write
+     * it into the agent's own instructions — the law <em>is</em> the instruction, so there is
+     * nothing for an exit to neutralize — and the two console adapters, whose writes leave through
+     * {@code ConsoleIO#print}, the human path that already renders anything a terminal would obey
+     * (FR5 of harden-untrusted-text-sinks). A carrier here would therefore add a type to a value
+     * no sink renders differently for holding it. Revisit if the content ever reaches a log line
+     * or a tracker comment: those planes have no sink backstop of their own.
+     *
      * @param text the file's text, decoded as UTF-8
      */
     record Text(String text) implements Read {}

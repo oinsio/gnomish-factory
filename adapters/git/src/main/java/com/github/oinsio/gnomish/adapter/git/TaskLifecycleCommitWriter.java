@@ -30,8 +30,13 @@ import org.slf4j.LoggerFactory;
 /**
  * The bare-object commit-building plumbing behind {@link GitObjectsTaskRepository} (design D19):
  * reading the current {@code task.json} off a branch tip, serializing an updated one into a tree
- * edit, and building the lifecycle commit with git's atomic compare-and-swap. Extracted from
- * {@link GitObjectsTaskRepository} for file size; the behavior is unchanged.
+ * edit, and building the lifecycle commit with git's atomic compare-and-swap. {@link
+ * GitObjectsTaskRepository} decides which transition to record and hands the commit-building to
+ * this class, so the repository above holds no path spelling and no commit metadata of its own.
+ *
+ * <p>Crash consistency: one transition is one commit, so the compare-and-swap inside {@link #build}
+ * is its only durable step. A kill before it leaves the tip unchanged, and the next pickup reads
+ * the previous envelope pair and re-drives the transition: recovery is a plain roll-forward.
  *
  * <p>Every message it builds goes out through {@link #metadata(String, String)}, which stamps the
  * tenure's claim epoch as a trailer (FR13 of harden-task-branch-contract) — the container-mode twin
@@ -44,10 +49,6 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
 
     /** {@code task.json} is a small factory-authored document; a 1&nbsp;MiB read cap is generous. */
     private static final long TASK_JSON_SIZE_CAP = 1L << 20;
-
-    private static final String STATE_DIR = ".gnomish-task";
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
 
     ObjectId requireTip(String taskId, String ref, TaskLifecycleEvent event) {
         return gitObjects
@@ -68,19 +69,19 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     TaskJsonDto readCurrentDto(String taskId, ObjectId tip, TaskLifecycleEvent event) {
         byte[] bytes;
         try {
-            bytes = gitObjects.readBlob(tip, TASK_JSON_PATH, TASK_JSON_SIZE_CAP);
+            bytes = gitObjects.readBlob(tip, GnomishTaskPaths.TASK_JSON_PATH, TASK_JSON_SIZE_CAP);
         } catch (RuntimeException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
         return TaskJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
-    List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto) {
+    List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
         try {
             byte[] bytes = TaskStateJson.mapper().writeValueAsString(dto).getBytes(StandardCharsets.UTF_8);
-            return List.of(new TreeEdit.PutFile(TASK_JSON_PATH, bytes));
+            return List.of(new TreeEdit.PutFile(GnomishTaskPaths.TASK_JSON_PATH, bytes));
         } catch (JsonProcessingException e) {
-            throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.STARTED, "serializing task.json", e);
+            throw new GitTaskRepositoryException(taskId, event, "serializing task.json", e);
         }
     }
 
@@ -98,16 +99,20 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      * a branch being created has none and passes {@code null}.
      */
     List<TreeEdit> putTaskAndState(
-            String taskId, TaskJsonDto dto, TaskState state, @Nullable EgressCursorDto egressCursor) {
+            String taskId,
+            TaskJsonDto dto,
+            TaskState state,
+            @Nullable EgressCursorDto egressCursor,
+            TaskLifecycleEvent event) {
         try {
             byte[] stateJson = TaskStateJson.mapper()
                     .writeValueAsString(StateJsonMapper.toDto(state, egressCursor))
                     .getBytes(StandardCharsets.UTF_8);
-            List<TreeEdit> edits = new ArrayList<>(putTaskJson(taskId, dto));
-            edits.add(new TreeEdit.PutFile(STATE_JSON_PATH, stateJson));
+            List<TreeEdit> edits = new ArrayList<>(putTaskJson(taskId, dto, event));
+            edits.add(new TreeEdit.PutFile(GnomishTaskPaths.STATE_JSON_PATH, stateJson));
             return List.copyOf(edits);
         } catch (JsonProcessingException e) {
-            throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.STARTED, "serializing state.json", e);
+            throw new GitTaskRepositoryException(taskId, event, "serializing state.json", e);
         }
     }
 
@@ -120,6 +125,11 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      * next run a full re-read of the guard's log tail, never a denial, so it must not fail a
      * transition that is otherwise sound.
      *
+     * <p>Kept in sync with {@link StateFileWrite} (its {@code currentCursor}): both must carry the
+     * cursor their medium already holds into the regenerated {@code state.json}, and both must
+     * degrade to no cursor — never to a failure — when it cannot be read. The media differ, so
+     * nothing shared can enforce it.
+     *
      * @param taskId the task being rewritten; for the trace of a degraded read
      * @param tip the commit the rewrite builds on
      * @return the tip's committed cursor, or {@code null} when there is none to carry
@@ -127,7 +137,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     @Nullable
     EgressCursorDto tipStateCursor(String taskId, ObjectId tip) {
         try {
-            byte[] bytes = gitObjects.readBlob(tip, STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
+            byte[] bytes = gitObjects.readBlob(tip, GnomishTaskPaths.STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
             return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)))
                     .egressCursor();
         } catch (RuntimeException e) {
@@ -186,15 +196,5 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
                 identity,
                 now,
                 ClaimEpochTrailer.stamp(message, epochs.epochFor(taskId).orElse(null)));
-    }
-
-    /** The state-directory tree-edit deletion path for the {@code Completed} cleanup commit. */
-    static String stateDir() {
-        return STATE_DIR;
-    }
-
-    /** The task envelope's path at a tip — the presence test for "this branch still has an envelope". */
-    static String taskJsonPath() {
-        return TASK_JSON_PATH;
     }
 }

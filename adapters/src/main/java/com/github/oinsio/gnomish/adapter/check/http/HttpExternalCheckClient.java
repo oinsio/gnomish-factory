@@ -90,9 +90,7 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
         try {
             request = HttpCheckRequest.build(
                     params, secrets, HttpCheckVariables.of(runContext, attemptCommit(workspace)));
-        } catch (HttpCheckCredentialException e) {
-            return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
-        } catch (HttpCheckVariableException e) {
+        } catch (HttpCheckRequestException e) {
             return new PollStatus.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         }
         String target = request.uri().toString();
@@ -108,16 +106,20 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
                             + "http check '{}' refused before the request left the factory: {}",
                     check.checkId(),
                     LogText.forLog(refusal.describe()));
+            // describe() interpolates the manifest's target raw, so it keeps that family; the
+            // label is a constant the guard's own enum owns, so it is factory prose (design D3
+            // of type-untrusted-text).
             return new PollStatus.CannotVerify(
                     UntrustedText.manifest(refusal.describe()),
-                    UntrustedText.manifest(refusal.reason().label()));
+                    UntrustedText.factory(refusal.reason().label()));
         } catch (IOException e) {
             return cannotVerify(target, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return cannotVerify(target, e);
         }
-        if (params.pendingWhen() != null && params.pendingWhen().matches(response.body())) {
+        HttpCheckCondition pendingWhen = params.pendingWhen();
+        if (pendingWhen != null && pendingWhen.matches(response.body())) {
             return new PollStatus.Running();
         }
         if (isSuccess(response.status()) && params.passWhen().matches(response.body())) {
@@ -164,9 +166,11 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
 
     /** A CannotVerify naming the endpoint and preserving the cause as details (NFR-O1). */
     private static PollStatus.CannotVerify cannotVerify(String target, Exception cause) {
-        // The fold re-mints (design D5 of type-untrusted-text): the failure's message quotes what
-        // the endpoint answered, and it reaches the report as the carrier it was minted in.
-        UntrustedText detail = UntrustedText.tracker(cause.getClass().getName() + ": " + cause.getMessage());
+        // The fold re-mints (design D5 of type-untrusted-text): the failure's message quotes the
+        // endpoint the manifest named and how it answered, so it keeps that family — the same one
+        // the reason beside it takes. Not TRACKER: the task tracker is a different port, and this
+        // path never touches it.
+        UntrustedText detail = UntrustedText.manifest(cause.getClass().getName() + ": " + cause.getMessage());
         return new PollStatus.CannotVerify(UntrustedText.manifest("http check could not reach " + target), detail);
     }
 

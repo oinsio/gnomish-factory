@@ -58,7 +58,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.ToolStarted('Write'))
+            listener.onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent('Write')))
         }
 
         then:
@@ -135,7 +135,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
         when:
         def events = capture {
             listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent("opus\nINFO forged"), UntrustedText.agent("s\u001B[2J")))
-            listener.onProgress(new AgentProgressEvent.ToolStarted("Bash\nWARN forged"))
+            listener.onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent("Bash\nWARN forged")))
         }
 
         then:

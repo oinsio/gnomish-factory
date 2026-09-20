@@ -26,7 +26,13 @@ import org.slf4j.LoggerFactory
  */
 final class ParkKillPoints {
 
-    /** The operator-facing report the park is written with, fresh or re-driven. */
+    /**
+     * The operator-facing head the park is handed, fresh or re-driven — a head, not a finished
+     * report, since {@link GuardedPark} owns the delivery-note append. It is also the text the park
+     * is written with: the {@code Delivered} verdict the pickup below hands in contributes an empty
+     * note, so the re-drive and the plain tracker call write the same bytes — which is exactly what
+     * the settled fingerprint compares.
+     */
     static final String REPORT = 'parked for a human'
 
     /** The position the denial-bearing world's environment answers, and the park therefore commits. */
@@ -113,7 +119,7 @@ final class ParkKillPoints {
                 world.ref,
                 world.instanceId,
                 ParkReason.ESCALATION,
-                { String note -> REPORT },
+                REPORT,
                 VirtualTimeRetries.terminalWrite(),
                 new ParkTransition.Recovered(
                         new ParkDeliveryVerdict.Delivered(), {

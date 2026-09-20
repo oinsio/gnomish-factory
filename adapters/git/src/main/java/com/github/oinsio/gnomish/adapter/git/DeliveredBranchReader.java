@@ -35,6 +35,13 @@ import java.nio.file.Path;
  * tip until the finish write confirms — is task 6.5's durability concern, noted on {@code
  * com.github.oinsio.gnomish.app.TakeReconcile}.
  *
+ * <p>Both revision-scoped reads below pass {@link GitReadGate#answered}, so this reader can tell
+ * "the delivered commit does not carry the files" from "the question was not answered": an
+ * interrupted or timed-out {@code git show} surfaces as unavailability instead of as a missing
+ * state file. What it still cannot tell apart is a cleanup commit's parent from any other parent —
+ * it reads the tip's parent unconditionally, so a branch that gained commits after cleanup is read
+ * at the wrong revision rather than refused (the durability concern noted above).
+ *
  * <p>Implements FR10 of add-claim-heartbeat.
  */
 public final class DeliveredBranchReader {
@@ -60,6 +67,12 @@ public final class DeliveredBranchReader {
      * @param taskId the tracker's original taskId
      * @return the recovered delivered context and final state
      * @throws GitTaskRepositoryException if no branch exists anywhere for {@code taskId}
+     * @throws BranchLocationUnavailableException if origin could not be asked whether the branch
+     *     exists — unavailability is never reported as absence (FR6 of
+     *     harden-task-branch-contract)
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if a {@code git
+     *     show} of the delivered commit did not run to its own exit, so its capture is not a fact
+     *     about that revision
      * @throws BranchStateFileMissingException if the parent commit does not carry the state files
      */
     public DeliveredBranchState read(Path cloneDir, String taskId) {
@@ -76,7 +89,7 @@ public final class DeliveredBranchReader {
                 switch (location) {
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
-                    case BranchLocation.Unavailable(String reason) ->
+                    case BranchLocation.Unavailable(UntrustedText reason) ->
                         throw new BranchLocationUnavailableException(taskId, reason);
                     case BranchLocation.NotFound ignored ->
                         throw new GitTaskRepositoryException(
@@ -89,7 +102,10 @@ public final class DeliveredBranchReader {
     }
 
     private UntrustedText show(Path cloneDir, String ref, String filePath) {
-        GitCommandResult result = runner.run(cloneDir, "show", ref + ":" + filePath);
+        // GitReadGate.answered: an interrupted or timed-out `git show` would otherwise read as
+        // "the delivered commit carries no state files", turning unavailability into a missing-file
+        // verdict the reconcile cannot tell from a genuinely stateless commit.
+        GitCommandResult result = GitReadGate.answered(ref, "show", runner.run(cloneDir, "show", ref + ":" + filePath));
         if (result.exitCode() != 0) {
             throw new BranchStateFileMissingException(ref, filePath, result.stderr());
         }

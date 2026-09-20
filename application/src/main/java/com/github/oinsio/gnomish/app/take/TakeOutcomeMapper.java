@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.EscalationResumeDialog;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.status.ReportPlane;
 
 /**
  * Maps an engine {@link TaskOutcome} to the {@link TakeResult} that decides which
@@ -26,8 +27,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
  * with a comment pointing at task 5.3, rather than silently producing a wrong
  * {@link TakeResult}.
  *
- * <p>{@code report}/{@code summary} text here is a placeholder pure mapping, not the
- * report a real take run posts to the tracker. On the take runner's main path ({@code
+ * <p>The {@code Completed}/{@code Paused} {@code summary}/{@code report} text here is a
+ * placeholder pure mapping, not the report a real take run posts to the tracker. On the take runner's main path ({@code
  * com.github.oinsio.gnomish.app.TakeEngineExecution#run}), every fresh outcome is
  * rendered and written for real by a dedicated exit: {@code Completed} by {@code
  * com.github.oinsio.gnomish.app.TakeFinishReport} (task 5.11), {@code Escalated} by
@@ -37,7 +38,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
  * therefore unreachable from that production path; they are kept as a small, directly
  * unit-testable pure finish/park/reason decision. The {@code Escalated} reason split IS
  * still used in production: {@code com.github.oinsio.gnomish.app.TakeEscalationExit}
- * reuses it verbatim to pick the {@link ParkReason} before rendering its real report.
+ * calls {@link #parkReason} directly to pick the {@link ParkReason} before rendering its
+ * real report.
  *
  * <p>Implements FR18, D2, D3 of add-tracker-port.
  */
@@ -76,28 +78,48 @@ public final class TakeOutcomeMapper {
     }
 
     /**
-     * Maps an {@code Escalated} outcome's {@link EscalationReport} kind to a park
-     * reason (design D3): {@code AttemptsExhausted}/{@code DecisionNeeded} need a
-     * human decision → {@link ParkReason#ESCALATION}; {@code CannotVerify}/{@code
-     * CannotExecute}/{@code PipelineMismatch} need a fix followed by a bare retry →
-     * {@link ParkReason#INFRA}. Exhaustive switch, no {@code default} arm.
+     * Maps an {@link EscalationReport} kind to the park reason it implies (design D3):
+     * {@code AttemptsExhausted}/{@code DecisionNeeded} need a human decision →
+     * {@link ParkReason#ESCALATION}; {@code CannotVerify}/{@code CannotExecute}/{@code
+     * PipelineMismatch} need a fix followed by a bare retry → {@link ParkReason#INFRA}.
+     * Exhaustive switch, no {@code default} arm.
+     *
+     * <p>The single owner of that split: {@code
+     * com.github.oinsio.gnomish.app.TakeEscalationExit} calls it directly to pick the reason
+     * before rendering its real report, rather than mapping a whole {@link TakeResult} and
+     * discarding everything but the reason — which would render the escalation twice.
+     *
+     * <p>Implements FR18, D3 of add-tracker-port.
+     *
+     * @param report the escalation reason to classify; never null
+     * @return the park reason that escalation kind implies; never null
+     */
+    public static ParkReason parkReason(EscalationReport report) {
+        return switch (report) {
+            case EscalationReport.AttemptsExhausted ignored -> ParkReason.ESCALATION;
+            case EscalationReport.DecisionNeeded ignored -> ParkReason.ESCALATION;
+            case EscalationReport.CannotVerify ignored -> ParkReason.INFRA;
+            case EscalationReport.CannotExecute ignored -> ParkReason.INFRA;
+            case EscalationReport.PipelineMismatch ignored -> ParkReason.INFRA;
+        };
+    }
+
+    /**
+     * Maps an {@code Escalated} outcome to the {@link TakeResult.AwaitingHuman} it implies:
+     * the reason from {@link #parkReason}, the report from the escalation renderer.
      *
      * <p>Implements FR18, D3 of add-tracker-port.
      */
     private static TakeResult mapEscalated(TaskOutcome.Escalated escalated) {
-        var reason =
-                switch (escalated.report()) {
-                    case EscalationReport.AttemptsExhausted ignored -> ParkReason.ESCALATION;
-                    case EscalationReport.DecisionNeeded ignored -> ParkReason.ESCALATION;
-                    case EscalationReport.CannotVerify ignored -> ParkReason.INFRA;
-                    case EscalationReport.CannotExecute ignored -> ParkReason.INFRA;
-                    case EscalationReport.PipelineMismatch ignored -> ParkReason.INFRA;
-                };
         // FR7, design D8 of harden-untrusted-text-sinks: the report text is the one escalation
         // render there is, never the record's own toString — that would publish
-        // `CannotVerify[check=..., details=...]` with the check's raw output inside it, past the
-        // fence renderEscalation puts around exactly that field.
+        // `CannotVerify[check=..., details=...]`, the record's shape rather than a report, with
+        // every captured field rendered for the log plane (a carrier's toString is forLog(),
+        // FR2 of type-untrusted-text) instead of fenced and labeled for the comment plane, which
+        // is what renderEscalation gives exactly those fields.
         return new TakeResult.AwaitingHuman(
-                escalated.finalState(), reason, EscalationResumeDialog.renderEscalation(escalated.report()));
+                escalated.finalState(),
+                parkReason(escalated.report()),
+                EscalationResumeDialog.renderEscalation(escalated.report(), ReportPlane.COMMENT));
     }
 }

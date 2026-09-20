@@ -68,7 +68,7 @@ public final class HarvestedBoundaryCheck {
      */
     public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key) {
         GitCommandResult diff =
-                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", ".gnomish-task/");
+                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", GnomishTaskPaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
         // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
         // round aborts as infrastructure rather than blaming the gnome for what git never said.
@@ -92,8 +92,11 @@ public final class HarvestedBoundaryCheck {
                 .toList();
         if (!touched.isEmpty()) {
             UntrustedText paths = UntrustedText.subprocess(String.join(", ", touched));
+            // Factory prose quoting a capture that left its own carrier through the log exit, so
+            // the sentence is the factory's (design D3 of type-untrusted-text) and the violation
+            // type receives it whole rather than as a rendered String.
             throw new RoundBoundaryViolationException(
-                    taskId, ".gnomish-task/ was modified by the gnome: " + paths.forLog());
+                    taskId, UntrustedText.factory(".gnomish-task/ was modified by the gnome: " + paths.forLog()));
         }
     }
 
@@ -105,8 +108,8 @@ public final class HarvestedBoundaryCheck {
      * all-whitespace) line through this filter; it exists purely as defense in depth against a
      * hypothetical blank line in subprocess output. Keeping unreachable lines has zero
      * externally observable difference, so no unit test can kill the mutant (the same
-     * equivalent-mutant category as {@code TakeBatchExitCode.isNewSmallestNonZero}, see the
-     * pitest block in build.gradle).
+     * equivalent-mutant category as {@code TakeBatchExitCode.isNewSmallestNonZero}, whose own
+     * comment beside the marker carries the same trace).
      */
     @DoNotMutate
     private static boolean isNonEmpty(String line) {
@@ -119,6 +122,6 @@ public final class HarvestedBoundaryCheck {
      * attempt in the name make stale files self-excluding.
      */
     public static String decisionPath(AttemptKey key) {
-        return ".gnomish-task/decisions/" + key.stage() + "-a" + key.attempt() + ".json";
+        return GnomishTaskPaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + ".json";
     }
 }

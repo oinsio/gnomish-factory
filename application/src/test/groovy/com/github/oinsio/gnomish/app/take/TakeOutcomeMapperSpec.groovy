@@ -2,18 +2,22 @@ package com.github.oinsio.gnomish.app.take
 
 import com.github.oinsio.gnomish.app.EscalationResumeDialog
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.status.ReportPlane
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
  * TakeOutcomeMapper: maps an engine TaskOutcome to the TakeResult that decides
  * which tracker-port call the take runner makes next (design D3). Covers the
- * three mapper-accepted TaskOutcome variants and, for Escalated, all five
- * EscalationReport kinds and their exact ESCALATION/INFRA split.
+ * three mapper-accepted TaskOutcome variants, the refusal of the fourth (Aborted,
+ * owned by the abort path), and, for Escalated, all five EscalationReport kinds
+ * and their exact ESCALATION/INFRA split — asserted both through map and on the
+ * public parkReason split that TakeEscalationExit calls directly.
  *
  * Implements FR18, D2, D3 of add-tracker-port.
  */
@@ -66,6 +70,9 @@ class TakeOutcomeMapperSpec extends Specification {
         awaiting.reason() == expectedReason
         !awaiting.report().isBlank()
 
+        and: 'the same split is what the public parkReason answers on its own'
+        TakeOutcomeMapper.parkReason(report) == expectedReason
+
         where:
         report || expectedReason
         new EscalationReport.AttemptsExhausted(3) || ParkReason.ESCALATION
@@ -76,6 +83,24 @@ class TakeOutcomeMapperSpec extends Specification {
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('')) || ParkReason.INFRA
         new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), []) || ParkReason.INFRA
         new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) || ParkReason.INFRA
+    }
+
+    // FR18, D3: Aborted is refused outright rather than mapped — the abort path owns recordAbort
+    // and the K-abort fuse, so a silent wrong TakeResult here would burn or skip that bookkeeping.
+    def "an Aborted outcome is refused, never mapped to a TakeResult"() {
+        given: 'an Aborted outcome for a persist failure'
+        def outcome = new TaskOutcome.Aborted(
+                STATE, new AttemptKey('T-1', 'implement', 0), UntrustedText.subprocess('disk full'))
+
+        when: 'it is mapped'
+        TakeOutcomeMapper.map(outcome)
+
+        then: 'the mapper refuses, naming the path that owns the abort instead'
+        def refusal = thrown(UnsupportedOperationException)
+        refusal.message.contains('Aborted')
+
+        and: 'the refusal carries no captured failure detail into its message'
+        !refusal.message.contains('disk full')
     }
 
     // FR7, design D8 of harden-untrusted-text-sinks: the park report is the escalation render, not
@@ -94,7 +119,7 @@ class TakeOutcomeMapperSpec extends Specification {
         !awaiting.report().startsWith('Escalated: ')
 
         and: 'it is the renderer\'s own text, word for word'
-        awaiting.report() == EscalationResumeDialog.renderEscalation(report)
+        awaiting.report() == EscalationResumeDialog.renderEscalation(report, ReportPlane.COMMENT)
 
         where:
         kind | report

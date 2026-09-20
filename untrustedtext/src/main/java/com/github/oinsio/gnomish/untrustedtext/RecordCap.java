@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.untrustedtext;
 
 /**
- * The sink's bound on one whole rendered record, as distinct from {@link TextSafety#capTail},
- * which is the call site's bound on one excerpt. The two keep opposite ends for opposite reasons:
- * an excerpt of command output carries its error at the tail, while a log record carries its
- * timestamp, level, logger and operator-event code at the <b>head</b> — a record that lost those
- * is not findable at all.
+ * The sink's bound on one rendered record component — a formatted message, an MDC value, a whole
+ * rendered throwable — as distinct from {@link TextSafety#capTail}, which is the call site's bound
+ * on one excerpt. The two keep opposite ends for opposite reasons:
+ * an excerpt of command output carries its error at the tail, while a rendered record component
+ * carries its operator-event code — and, for a throwable, the top-level message and throw site —
+ * at the <b>head</b>, and a record that lost those is not findable at all.
  *
  * <p>Over-cap text is cut to the head and a visible marker naming the drop is appended, within the
  * same bound, so the result is never longer than the cap and a second pass finds nothing to do.
@@ -14,17 +15,18 @@ package com.github.oinsio.gnomish.untrustedtext;
  * {@link LineFlattening} and {@link ConsoleNotation} are their own classes: the facade states what
  * the module offers, each class beside it owns one mechanism.
  *
- * <p>Implements FR2 of harden-untrusted-text-sinks.
+ * <p>Implements FR1, FR2 of harden-untrusted-text-sinks.
  */
 final class RecordCap {
 
     /**
-     * Max characters one whole rendered record may occupy: 16 KB (design D2 of
+     * Max characters one rendered record component may occupy: 16 KB (design D2 of
      * harden-untrusted-text-sinks). Derivation — the log plane's widest output is one
      * {@link TextSafety#DEFAULT_CAP_CHARS}-character cap of six-character escapes, about 12 KB, so
-     * a choke-point-prepared message can never reach this bound however many arguments a line
-     * carries; and it is two orders of magnitude above the longest legitimate record the factory
-     * emits (the per-task summary), while staying inside the async appender's queue budget.
+     * one choke-point-prepared excerpt can never reach this bound on its own (a message folding
+     * several of them together can, and is cut here as any other flood is); and it is two orders
+     * of magnitude above the longest legitimate line the factory emits (the per-task summary, of
+     * the order of 200 characters), so nothing an operator reads by choice is ever cut.
      */
     static final int CAP_CHARS = 16_384;
 
@@ -41,7 +43,7 @@ final class RecordCap {
     /**
      * Bounds {@code text} to {@link #CAP_CHARS}, keeping the head and marking the drop.
      *
-     * @param text the rendered record to bound; never null
+     * @param text the rendered record component to bound; never null
      * @return {@code text} unchanged when within the cap, else its marked head; never null
      */
     static String render(String text) {

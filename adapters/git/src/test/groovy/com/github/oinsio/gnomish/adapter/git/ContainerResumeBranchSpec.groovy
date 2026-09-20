@@ -20,7 +20,7 @@ import spock.lang.TempDir
  * false. Runs on real local repositories — no git mocking, no checkout of the
  * task branch.
  */
-class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixture {
+class ContainerResumeBranchSpec extends Specification implements PlumbingCommitFixture {
 
     static final String TASK = 'RES-1'
     static final String BRANCH = TaskIdSanitizer.branchName(TASK)
@@ -35,18 +35,10 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
 
     def setup() {
         clone = initWorkingRepo(tempDir, 'clone')
-        new File(clone.toFile(), 'a.txt').text = 'seed'
-        commitAll(clone)
-        base = gitOutput(clone, 'rev-parse', 'HEAD')
+        commit(clone, 'a.txt', 'seed')
+        base = currentHead(clone)
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(clone, 'origin', origin.toString())
-    }
-
-    /** A plumbing child of {@code parent} on the (never checked-out) task branch history. */
-    private String plumbCommit(String parent, String message) {
-        def tree = gitOutput(clone, 'rev-parse', 'HEAD^{tree}')
-        gitOutput(clone, '-c', 'user.email=g@b.c', '-c', 'user.name=g',
-                'commit-tree', tree, '-p', parent, '-m', message)
     }
 
     private void setLocalBranch(String sha) {
@@ -86,24 +78,25 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
 
         when:
         def located = resume().ensureLocalBranch(clone, TASK)
-        def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         located
         localTip() == base
 
         and: 'FR5 of harden-logging-observability: adopting another instance\'s work is an anchor'
-        def anchors = events.findAll { it.level == Level.INFO }
+        def anchors = logs.list.findAll { it.level == Level.INFO }
         anchors.size() == 1
         anchors[0].formattedMessage.contains(TASK)
         anchors[0].formattedMessage.contains('adopting work pushed by another instance')
+
+        cleanup:
+        logs.detach()
     }
 
     def "FR6: a local branch behind origin is fast-forwarded to the origin tip"() {
         given: 'local sits at the base while origin advanced one commit'
         setLocalBranch(base)
-        def ahead = plumbCommit(base, 'origin work')
+        def ahead = plumbCommit(clone, base, 'origin work')
         setOriginBranch(ahead)
 
         expect: 'resume keeps the branch and its ref now carries the origin tip'
@@ -114,7 +107,7 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
     def "FR6: a local branch ahead of origin keeps its own tip untouched"() {
         given: 'origin sits at the base while local advanced one commit'
         setOriginBranch(base)
-        def ahead = plumbCommit(base, 'local work')
+        def ahead = plumbCommit(clone, base, 'local work')
         setLocalBranch(ahead)
 
         expect: 'ahead is kept — no fast-forward, no exception'
@@ -127,8 +120,8 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
     // replaces — throw and let a human reconcile — left a claimed boxed task frozen.
     def "FR8: diverged local and origin tips discard the local line and continue from origin"() {
         given: 'local and origin each carry their own child of the base'
-        def localSide = plumbCommit(base, 'local line')
-        def originSide = plumbCommit(base, 'origin line')
+        def localSide = plumbCommit(clone, base, 'local line')
+        def originSide = plumbCommit(clone, base, 'origin line')
         setLocalBranch(localSide)
         setOriginBranch(originSide)
 
@@ -145,8 +138,8 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
     // (gnomish run --resume, which carries no tracker) stops and reports instead.
     def "FR8: diverged tips with no tenure on the task stop the resume and keep the local line"() {
         given:
-        def localSide = plumbCommit(base, 'local line')
-        def originSide = plumbCommit(base, 'origin line')
+        def localSide = plumbCommit(clone, base, 'local line')
+        def originSide = plumbCommit(clone, base, 'origin line')
         setLocalBranch(localSide)
         setOriginBranch(originSide)
 

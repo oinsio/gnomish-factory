@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check.http
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import spock.lang.Specification
 
 /**
@@ -23,6 +24,10 @@ class HttpExternalCheckClientCannotVerifySpec extends Specification implements H
         status instanceof PollStatus.CannotVerify
         status.reason().contains(URL)
         status.details().contains('connect timed out')
+
+        and: 'the endpoint is the manifest\'s, not the tracker — reason and details agree on it'
+        status.reason().provenance() == Provenance.MANIFEST
+        status.details().provenance() == Provenance.MANIFEST
     }
 
     // FR10: the same classification for an interrupted wait, with the interrupt flag preserved.
@@ -49,6 +54,10 @@ class HttpExternalCheckClientCannotVerifySpec extends Specification implements H
         status instanceof PollStatus.CannotVerify
         status.reason().contains('169.254.169.254')
         status.details().forLog() == 'address class'
+
+        and: 'the reason quotes the manifest target raw, while the label is the guard\'s own word'
+        status.reason().provenance() == Provenance.MANIFEST
+        status.details().provenance() == Provenance.FACTORY
     }
 
     // FR11, NFR-S1: an unresolvable credential is fail-closed — no request is sent, and the reason
