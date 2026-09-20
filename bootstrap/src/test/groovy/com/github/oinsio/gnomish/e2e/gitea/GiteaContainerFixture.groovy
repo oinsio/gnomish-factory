@@ -39,6 +39,18 @@ import org.testcontainers.containers.wait.strategy.Wait
  * than the host-mapped port. The plain no-arg constructor is unchanged — no network, Actions off —
  * so the existing plain-Gitea E2E specs keep their exact prior behavior.
  *
+ * <p><b>Declared volumes, deliberately not overridden.</b> The {@code gitea/gitea} image declares
+ * {@code VOLUME /data}, and this fixture mounts nothing there, so each run leaves Docker to create
+ * an anonymous volume — exactly the object {@code DeclaredVolumeOverrides} (module
+ * {@code :sandbox:docker}, package-private, so no resolvable link from here) prevents for
+ * factory containers. It is the recorded exemption from that mechanism, not an oversight: the anonymous
+ * volume cannot outlive its container, because Testcontainers' reaper removes the container with
+ * {@code docker rm -f -v}, and the mechanism exists for objects that survive their container.
+ * {@code /data} additionally holds Gitea's SQLite database and the pushed repositories, so a
+ * memory-backed {@code withTmpFs} override would move them into host memory for the whole spec
+ * class. Should this container ever be started outside Testcontainers, or kept alive past the
+ * JVM, the exemption no longer holds and {@code /data} needs the override.
+ *
  * <p>Implements FR11 of add-git-workflow (G2 infra); the {@code actionsEnabled} path implements M1
  * of add-external-check-github-actions.
  */

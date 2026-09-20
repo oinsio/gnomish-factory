@@ -31,6 +31,18 @@ import java.util.Set;
  * compile. Nothing here names a path of any particular image — the set is read
  * from the image at creation time (G2).
  *
+ * <p><b>The one path that does not come through here</b>, recorded as the single-owner
+ * exemption this mechanism is allowed ({@code implementation.md}, old-way sweep): the Testcontainers
+ * E2E fixtures that start third-party images the factory does not run in production —
+ * {@code GiteaContainerFixture} ({@code gitea/gitea}, which declares {@code /data}) and
+ * {@code GiteaActionsRunnerFixture} ({@code gitea/act_runner}, which declares nothing). They
+ * are test infrastructure, not factory containers, so the {@code execution-environment}
+ * requirement does not reach them; and the anonymous volume they cause cannot outlive its
+ * container, because Testcontainers' reaper removes the container with {@code docker rm -f -v}.
+ * The mechanism exists for objects that survive their container, which these do not. A fixture
+ * that ever stops being reaped — a container started outside Testcontainers, or one kept alive
+ * past the JVM — leaves this exemption and needs the override, via {@code withTmpFs}.
+ *
  * <p>Implements FR1, FR2, FR3, NFR-R1, NFR-R2 of fix-image-declared-volumes.
  *
  * @param paths the declared paths to override, in the order the runtime reported
