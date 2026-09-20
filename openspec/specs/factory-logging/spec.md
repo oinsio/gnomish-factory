@@ -186,41 +186,51 @@ declared allowance covers.
 
 ### Requirement: Untrusted text enters logs only sanitized
 Text from outside the factory's trust boundary — agent/LLM output, subprocess
-stderr, tracker-sourced strings, in-container command output — SHALL enter log
-lines only through a sanitizing choke point that strips control and ANSI
-sequences, flattens newlines so one event renders as one log line, and caps
-length. The choke point and the plugin-boundary findings sanitizer — a
-distinct control at a distinct trust boundary, which deliberately preserves
-line structure — SHALL share one character-class table and one set of
-primitives owned by the untrusted-text leaf; each is a facade over that owner,
-and a single-table spec SHALL assert that both facades and the owner compute
-the same function over a common adversarial corpus. The findings sanitizer
-SHALL NOT prepare log-line text outside the findings funnel: a log line
-carrying untrusted text uses the logging choke point even where the same raw
-value also flows into findings — the judge-verdict extraction warning
-included. The mechanical gate that enforces the choke point SHALL catch an
-untrusted value that reaches a log call through a local variable, and a
-findings-sanitizer call inside a log argument outside the findings funnel
-SHALL fail it. No secret values appear in any log line.
+stderr, tracker-sourced strings, in-container command output, manifest
+strings, task-branch document values — SHALL be carried by the untrusted-text
+type from the point of capture and SHALL enter log lines only through its log
+exit, which strips control and ANSI sequences, flattens newlines so one event
+renders as one log line, and caps length. The log exit and the plugin-boundary
+findings sanitizer — a distinct control at a distinct trust boundary, which
+deliberately preserves line structure — SHALL share one character-class table
+and one set of primitives owned by the untrusted-text leaf; each is a facade
+over that owner, and a single-table spec SHALL assert that both facades and
+the owner compute the same function over a common adversarial corpus. The
+findings sanitizer SHALL NOT prepare log-line text outside the findings
+funnel: a log line carrying untrusted text uses the log exit even where the
+same raw value also flows into findings — the judge-verdict extraction
+warning included. The mechanical gate that enforces the rule SHALL be
+type-level: a capture accessor returning a plain string, a raw read outside an
+annotated exit, a read for parsing outside an annotated parser, and a carrier
+passed to a log call without an exit each fail the build. The accessor-name
+scan that preceded it is retargeted rather than retired: names no longer guard
+sinks — the type does — and the scan instead guards the capture point, failing
+the build where production code outside the declared mint owners reads a
+subprocess stream, an HTTP response body, or a document file into a plain
+`String`. The scan asserts it reached every file it claims to cover, and its
+allowlist names each mint owner with the family it mints. No secret
+values appear in any log line.
 
-The choke point is the first of two layers, not the only one. Every log
-appender the factory configures SHALL additionally neutralize the *rendered*
-record at the sink, independently of what the emitting call site did: the
-formatted message has control, ANSI, C1 and bidirectional-override sequences
-made inert, embedded line breaks rendered as the same visible marker the choke
-point produces, and its length bounded by a per-record cap with a visible
-truncation marker. The sink layer SHALL be idempotent over choke-point output:
-a message the choke point already prepared renders byte-identically with and
-without the sink layer. The sink layer SHALL never fail a record: a value it
-cannot neutralize degrades to a bounded, control-free placeholder naming the
-failure. The end-to-end property — no escape, no forged record, no unbounded
-record, whatever the call site assembled — SHALL be asserted on the real
-appenders over an adversarial corpus, for the message path, the exception
-path and the MDC path.
+The log exit is the second of three layers. The first is capture: the seven
+capture families mint the carrier where the text enters the process. The
+third is the sink: every log appender the factory configures SHALL
+additionally neutralize the *rendered* record, independently of what the
+emitting call site did — the formatted message has control, ANSI, C1 and
+bidirectional-override sequences made inert, embedded line breaks rendered as
+the same visible marker the log exit produces, and its length bounded by a
+per-record cap with a visible truncation marker. The sink layer SHALL be
+idempotent over log-exit output: a message the exit already prepared renders
+byte-identically with and without the sink layer. The sink layer SHALL never
+fail a record: a value it cannot neutralize degrades to a bounded,
+control-free placeholder naming the failure. The end-to-end property — no
+escape, no forged record, no unbounded record, whatever the call site
+assembled — SHALL be asserted on the real appenders over an adversarial
+corpus, for the message path, the exception path and the MDC path.
 <!-- implements FR6, NFR-S1 of harden-logging-observability -->
 <!-- implements FR16 of add-subprocess-access-log -->
 <!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
 <!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
+<!-- implements FR4, FR7, FR10, FR11, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is
@@ -235,26 +245,32 @@ path and the MDC path.
 
 #### Scenario: The judge-verdict warning is flattened by the choke point
 - **WHEN** judge-verdict extraction warns with a raw multi-line model message
-- **THEN** the log gains exactly one line, sanitized by the logging choke
-  point, while the findings path keeps its own funnel semantics unchanged
+- **THEN** the log gains exactly one line, sanitized by the log exit, while
+  the findings path keeps its own funnel semantics unchanged
 
 #### Scenario: The local-string bypass fails the gate
-- **WHEN** a production log call carries untrusted text held in a local
-  variable and prepared by the findings sanitizer outside the findings funnel
-- **THEN** the untrusted-log-text gate fails the build naming the offending
-  site
+- **WHEN** a production log call carries a carrier held in a local variable
+  and passed without an exit, or prepared by the findings sanitizer outside
+  the findings funnel
+- **THEN** the type gate fails the build naming the offending site
+
+#### Scenario: A capture source that never mints fails the build
+- **WHEN** production code outside the declared mint owners reads a subprocess
+  stream, an HTTP response body, or a document file into a plain `String`
+- **THEN** the capture-point scan fails the build naming the file, because no
+  type rule can see text that was never carried
 
 #### Scenario: A laundered string is neutralized at the sink
 - **WHEN** a production log call carries a string that was assembled from
   untrusted text three calls earlier — an operator report, a `reason` field,
-  an exception message read back through `getMessage()` — and no choke-point
-  call sits at the log site
+  an exception message read back through `getMessage()` — and no exit call
+  sits at the log site
 - **THEN** the appender still writes exactly one record, with every control,
   ANSI, C1 and bidi sequence rendered inertly and the record bounded by the
   per-record cap
 
 #### Scenario: Choke-point output passes the sink unchanged
-- **WHEN** a log call's argument was prepared by the choke point
+- **WHEN** a log call's argument was prepared by the log exit
 - **THEN** the written record is byte-identical to the record the same call
   produced before the sink layer existed — the visible newline marker is not
   escaped a second time and no second cap is applied
@@ -276,10 +292,16 @@ path and the MDC path.
   bare line break inside a record, and no record longer than the cap
 
 #### Scenario: One table serves both facades
-- **WHEN** the adversarial corpus is passed through the log-line sanitizer's
-  strip, the findings sanitizer's strip, and the untrusted-text leaf's strip
+- **WHEN** the adversarial corpus is passed through the log exit's strip, the
+  findings sanitizer's strip, and the untrusted-text leaf's strip
 - **THEN** the three outputs are identical for every corpus entry, and neither
   facade holds a character-class literal of its own
+
+#### Scenario: An exception built from subprocess output is inert by type
+- **WHEN** a git persistence failure is thrown with the command's captured
+  standard error and logged as the trailing argument
+- **THEN** the exception's message is the carrier's log exit and no
+  per-site sanitizing call exists at the throw site
 
 ### Requirement: Exceptions keep their stack traces
 Every log call site that reports an exception SHALL pass the throwable as the
