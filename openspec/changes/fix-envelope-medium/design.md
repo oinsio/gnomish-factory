@@ -23,8 +23,10 @@ See proposal.md — Why. What shapes the approach:
   | `StateFileWrite.currentCursor` | worktree `state.json` | the denial cursor carried into a regenerated `state.json` |
 
   Every other `Files.` read in those trees is not an envelope read (`TaskWorktreeManager`
-  tests the worktree directory; `DirectoryWorkspace`, `WorktreeJanitor`, `AdHocTaskSynthesizer`
-  read operator inputs and workspace roots).
+  and `DirectoryWorkspace` test a directory with `Files.isDirectory`; `WorktreeJanitor` lists
+  and walks workspace roots; `AdHocTaskSynthesizer` reads an operator's task file). Note that
+  the first two use only `Files.isDirectory`, so a scan that omits that call would never reach
+  them — which is why D6 includes it.
 - **The worktree is reused as-is between pickups.** `TaskWorktreeManager.ensureWorktree`
   returns a registered worktree without touching it; `ReplicaPairReconciler` resyncs the
   working tree only when the local ref moves (BEHIND / DIVERGED) — on EQUAL it returns before
@@ -63,7 +65,13 @@ See proposal.md — Why. What shapes the approach:
   prose fit under `DEFAULT_CAP_CHARS = 2 000`, whose `capTail` keeps the tail; that arithmetic
   holds in input characters only. The sink's per-record cap (`SafeMessageConverter`) is also
   tail-keeping.
-- **`whitelist`** appears in eleven code and test files (constant `HttpCheckVariables.WHITELIST`,
+- **The envelope's file names also appear as bare literals in five more production classes**
+  of `adapters/git` that do not go through `GnomishTaskPaths`: `state/TaskJsonMapper` and
+  `state/StateJsonMapper` (the file-name label handed to `StateFileVersionGate.readGated`),
+  `state/PinnedRefGate` (the same label), and `HarvestedBoundaryCheck` / `RoundBoundaryCheck`
+  (a message that opens with `".gnomish-task/ was modified…"`). The literal scan of D8 rejects
+  all five, so they are consumers of the owner, not prose exemptions.
+- **`whitelist`** appears in eighteen code and test files (constant `HttpCheckVariables.WHITELIST`,
   the `whitelisted` parameter of `HttpCheckVariableException`, javadoc in the published
   `CheckRunContext` and `CheckClientFactory`, comments in `StalenessMemory`, `NonAtomicWrite`,
   `RunCheckRunContext`, `ProviderDispatchingExternalCheckClient`, the `HttpCheck*` specs) against
@@ -106,14 +114,22 @@ maps `Optional.empty()` of `readTaskRecord` to the delivered route and `readFina
 empty `readRecordedState` to the first-stage state (the pre-contract tip); the
 `catch (UncheckedIOException) … getCause() instanceof NoSuchFileException` arms are deleted.
 `TakeFreshClaim`, `TakeResumeBootstrap`, `GitResumeRunner`, `GitModeRunner`,
-`GitResumeContinuation` call `orElseThrow` with the existing
-`BranchStateFileMissingException(revision, path, reason)`, since on those paths the envelope
-was committed moments earlier and its absence is a fault. *Rationale:* the delivered/pre-contract
+`GitResumeContinuation` call `orElseThrow` with the application's existing
+`InternalErrorException` (message: the task id, the file, and that it is absent at `HEAD` of a
+worktree the same run committed it to), since on those paths the envelope was committed moments
+earlier and its absence is an invariant violation, exactly the class of impossible state
+`GitResumeContinuation` already reports with that exception. `BranchStateFileMissingException`
+is *not* the type here: it lives in `adapters/git`, and `application` has no compile edge to
+that module (only `testImplementation`); it stays the adapter-internal failure of the ref-based
+readers and of `DeliveredBranchReader` (D5). *Rationale:* the delivered/pre-contract
 distinction is a routing decision; it belongs in a value the compiler sees, not in the cause
 chain of an I/O exception. *Alternative rejected:* keep the exception protocol and throw
 `UncheckedIOException(NoSuchFileException)` from the tip reader to preserve the call sites —
 fakes a filesystem failure for a git answer and keeps the cause-inspection code the change
-exists to remove.
+exists to remove. *Alternative rejected:* a new port-level exception in `app.port.git` for
+"envelope absent where it was committed" — a type whose only throw sites are five
+`orElseThrow` lambdas for a state that cannot occur; the application already has one exception
+for impossible states.
 
 **D3 — One host predicate for "the tip carries the state directory", shared by cleanup and
 salvage restore.** `GitShowTip` gains `carries(String path)` — `git cat-file -e
@@ -135,11 +151,13 @@ still carries the directory:
 |------------------|-------------------------------------------------------|-------------------|
 | directory present, tracked | removes from index and working tree | lands the removal |
 | removal already staged (killed after `rm`, before commit) | no-op, exit 0 | lands the staged removal; INFO line (NFR-O1) |
-| index updated, files still on disk (killed inside `rm` after its index write) | no-op on the index | lands the removal; the leftover files are untracked and go with `git worktree remove --force` |
+| files gone from disk, index still tracks them (killed inside `rm` after it unlinked the files but before it wrote the index — `git rm` removes the working-tree files first and writes the index last) | removes the index entries; the missing files are not an error | lands the removal |
 
-`--ignore-unmatch` is what turns the second and third rows from a `pathspec did not match`
-failure (exit 128) into a no-op, and the guard on the tip is what keeps the fourth state — tip
-already clean — a no-op in both media. The INFO line for the staged-removal row is emitted when
+`--ignore-unmatch` is what turns the second row from a `pathspec did not match` failure (exit
+128) into a no-op; the third row matches the index and needs no tolerance. A kill inside `rm`
+also leaves `index.lock` behind, which is NG2 — every later git command refuses loudly until it
+is removed, so that state never reaches the commit silently. The guard on the tip is what keeps
+the fourth state — tip already clean — a no-op in both media. The INFO line for the staged-removal row is emitted when
 `git rm` reports nothing to remove while the tip carried the directory: that combination is
 reachable only through a predecessor's kill. *Rationale:* this is the four-cell matrix the
 crash-consistency rule asks for (directory present/absent × commit landed/not), written down and
@@ -161,14 +179,19 @@ from the classifier's.
 
 **D6 — Enforcement: an allowlisted whole-tree scan in `:bootstrap`.** `EnvelopeMediumBoundarySpec`
 scans `adapters/git/src/main` and `application/src/main/java/com/github/oinsio/gnomish/app`
-for the filesystem read calls `Files.readString`, `Files.exists`, `Files.notExists`,
-`Files.isRegularFile`, `Files.readAllBytes`, `Files.newBufferedReader`, `Files.lines`,
-`Files.list`, `Files.walk`, allowlists each file that legitimately reads a non-envelope path
-with its reason (`TaskWorktreeManager` — worktree directory registration; `DirectoryWorkspace`,
-`WorktreeJanitor` — workspace roots; `AdHocTaskSynthesizer` — an operator's task file), asserts
-the scan reached every allowlisted file, and names the owner (`GitTaskStore` over `GitShowTip`)
-in its failure message. The `dashboard` and `serveobservability` packages are outside the scanned
-trees on purpose: they read their own ledger and snapshot files, never an envelope.
+for the ten filesystem read calls `Files.readString`, `Files.exists`, `Files.notExists`,
+`Files.isRegularFile`, `Files.isDirectory`, `Files.readAllBytes`, `Files.newBufferedReader`,
+`Files.lines`, `Files.list`, `Files.walk` — `isDirectory` included because it is the one call
+that could test `worktree/.gnomish-task` without tripping an `exists` ban — over sources with
+comments stripped (`RepoSourceTree`'s existing helper, what the compiler sees), allowlists each
+file that legitimately reads a non-envelope path with its reason (`TaskWorktreeManager` —
+`isDirectory` on the worktree path before registration; `DirectoryWorkspace` — `isDirectory` on
+the workspace root; `WorktreeJanitor` — `list`/`walk` over workspace roots;
+`AdHocTaskSynthesizer` — `readString` of an operator's task file), asserts the scan reached
+every allowlisted file, and names the owner (`GitTaskStore` over `GitShowTip`) in its failure
+message. The `dashboard` and `serveobservability` packages (siblings of `app` under
+`application/src/main/java/com/github/oinsio/gnomish/`) are outside the scanned trees on
+purpose: they read their own ledger and snapshot files, never an envelope.
 *Rationale:* `implementation.md` item 4 — the parameter type cannot enforce this (the reads
 take a `Path` a caller can always resolve a file under), so the gate is the scan, in the module
 that sees every layer. *Alternative rejected:* a `WorktreeTip` token type that only the owner
@@ -190,8 +213,15 @@ declares `DIR_NAME`, `DIR`, `TASK_JSON_PATH`, `STATE_JSON_PATH`, `DECISIONS_DIR`
 file names; `BranchShapeClassifier.TASK_FILE` / `STATE_FILE` become references to it (kept as
 public constants for their existing readers), `GnomishTaskPaths` is deleted and its 33 uses in
 `adapters/git` and `FactoryOwnedPaths`'s two derivations re-point to the domain owner, and
-`ContainerTipReader`'s two literals do the same. The FR8 scan (D6) additionally rejects the three
-literals in any production source outside `EnvelopePaths.java`. *Rationale:* a third module
+`ContainerTipReader`'s two literals do the same, as do the five bare-literal sites in
+`adapters/git` that never went through `GnomishTaskPaths` (`state/TaskJsonMapper`,
+`state/StateJsonMapper`, `state/PinnedRefGate` — the version-gate label becomes
+`EnvelopePaths.TASK_FILE` / `STATE_FILE`; `HarvestedBoundaryCheck`, `RoundBoundaryCheck` — the
+message opens with `EnvelopePaths.DIR + " was modified…"`). The FR8 scan (D6) additionally
+rejects the three literals in any production source outside `EnvelopePaths.java`; it runs over
+comment-stripped sources, so the `{@code "task.json"}` mentions in javadoc
+(`UnsupportedStateFileVersionException`, `BranchShape`, `StateFileVersionGate`,
+`RoundBoundaryViolationException`) are not hits. *Rationale:* a third module
 already types the names by hand, so this was never a two-ended pair to declare — it is an owner
 that sits one module too high for two of its consumers; `:domain` is the lowest module every
 consumer already depends on, and the domain already owns the shape vocabulary the names serve.
@@ -250,10 +280,9 @@ third, hand-typed spelling — also consumes.
 |-------|--------------|-----------|-----------------|-------------|
 | `GitTaskStore` over `GitShowTip(worktree, HEAD)` | `Optional<TaskRecord>`, `Optional<TaskState>` | `TakeResumeBootstrap`, `TakeFreshClaim`, `HostResumeMechanics.readFinalState`, `GitResumeRunner.continueFrom`, `GitModeRunner`, `GitResumeContinuation` | `Files.readString(worktree/.gnomish-task/…)` in `GitTaskStore.read`; the `NoSuchFileException` arms in `HostResumeMechanics` | `EnvelopeMediumBoundarySpec` (D6); the `Optional` return type removes the exception protocol |
 | `GitShowTip.readAtTip` at `HEAD` | `Optional<UntrustedText>` (`BRANCH_DOCUMENT`) | `TerminalWriteMarker.clearPending`, `GitTaskRepository.readCurrentDto`, `StateFileWrite.currentCursor` | the three `Files.readString` calls | `EnvelopeMediumBoundarySpec` |
-| `GitShowTip.carries(path)` at `HEAD` | `boolean` (see note) | `CleanupCommit.commit`, `WorktreeSalvage.restoreFactoryFiles` | `Files.exists(worktree/.gnomish-task)`; the inline `cat-file -e` in salvage | `EnvelopeMediumBoundarySpec` bans the `Files.exists` form; a grep gate in task 6.2 asserts `cat-file` appears in `adapters/git/src/main` only inside `GitShowTip` |
-| `GitShowTip.cleanupCommit()` | `Optional<String>` commit id | `DeliveredBranchReader.resolveDeliveredRef`, `cleanupCommitInHistory` (wrapper) | the `tip + "^"` literal in `DeliveredBranchReader` | the literal is deleted; `DeliveredBranchReaderSpec` reads a branch with commits after cleanup |
-
-| `domain.branch.EnvelopePaths` | `String` constants (see note) | every class in `adapters/git` that named `GnomishTaskPaths` (33 uses), `FactoryOwnedPaths`, `ContainerTipReader`, `BranchShapeClassifier` | the literals `".gnomish-task"`, `"task.json"`, `"state.json"` in `GnomishTaskPaths`, `ContainerTipReader`, `BranchShapeClassifier`; `GnomishTaskPaths.java` deleted | `EnvelopeMediumBoundarySpec` rejects the three literals outside `EnvelopePaths.java` (D6, D8) |
+| `GitShowTip.carries(path)` at `HEAD` | `boolean` (see note) | `CleanupCommit.commit`, `WorktreeSalvage.restoreFactoryFiles` | `Files.exists(worktree/.gnomish-task)`; the inline `cat-file -e HEAD:` in salvage | `EnvelopeMediumBoundarySpec` bans the `Files.exists`/`isDirectory` form; the sweep of task 7.2 asserts the argv `"cat-file", "-e", "HEAD:` appears in `adapters/git/src/main` only inside `GitShowTip`. Exemptions, each a different predicate: `TaskBranchCreator` (`cat-file -e <base>^{commit}`, a commit-existence probe on the clone), `EnvironmentSalvage` (the same `HEAD:` test inside the in-container shell script — the container end of the salvage pair, not a host read), `FactoryCloneHardening` (javadoc) |
+| `GitShowTip.cleanupCommit()` | `Optional<String>` commit id | `DeliveredBranchReader.resolveDeliveredRef`, `cleanupCommitInHistory` (wrapper) | the `tip + "^"` literal in `DeliveredBranchReader` | the literal is deleted; `DeliveredBranchReaderSpec` reads a branch with commits after cleanup. Exemption: `HarvestedStateCommitCheck.resolveRef(tip + "^")` is a different question (the parent of a harvested attempt commit, never a cleanup commit) and stays |
+| `domain.branch.EnvelopePaths` | `String` constants (see note) | every class in `adapters/git` that named `GnomishTaskPaths` (33 uses), `FactoryOwnedPaths`, `ContainerTipReader`, `BranchShapeClassifier`, and the five bare-literal sites `state/TaskJsonMapper`, `state/StateJsonMapper`, `state/PinnedRefGate`, `HarvestedBoundaryCheck`, `RoundBoundaryCheck` | the literals `".gnomish-task"`, `"task.json"`, `"state.json"` in `GnomishTaskPaths`, `ContainerTipReader`, `BranchShapeClassifier` and the five sites; `GnomishTaskPaths.java` deleted | `EnvelopeMediumBoundarySpec` rejects the three literals outside `EnvelopePaths.java`, over comment-stripped sources (D6, D8) |
 | `UntrustedText.excerpt(cap)` | `String` of at most `cap` characters | `GitCommandResult.failureDetail`, `cannotVerifyDetail`, every other `excerpt` caller (unchanged call sites) | the input-only bound inside `excerpt` | `UntrustedTextSpec` asserts `excerpt(cap).length() <= cap` over a `U+2028` corpus; the `STDERR_CAP_CHARS` javadoc states the output bound |
 
 Note on the `boolean` and the `String` constants: a consumer could obtain either elsewhere,
@@ -262,8 +291,18 @@ grep, the literal scan), not the type.
 
 Identity claims and their specs: "the host resume reads the same envelope the classifier
 classified" is asserted end to end by the new `FinishKillPoints` row (D7) on a real worktree
-over a bare origin; "the delivered state is the `Completed` commit's" by the
-`DeliveredBranchReaderSpec` scenario over a branch with post-cleanup commits (D5).
+over a bare origin — that row is the *only* real-medium reproduction of the pickup side of the
+report, because no spec drives `HostResumeMechanics` over a real `GitTaskStore`: the
+application-layer routing specs (`TakeResumeRoutingSpec`, `TakeResumeShapeTailSpec`) stub
+`TaskStoreGit` and can only pin the routing on the typed result, and the read itself is
+reproduced at the adapter seam (`GitTaskStoreSpec`, task 1.4); "the delivered
+state is the `Completed` commit's" by the `DeliveredBranchReaderSpec` scenario over a branch
+with post-cleanup commits (D5). NFR-P1 is pinned on the same media: `GitTaskStoreSpec` counts
+the git invocations of one read through a recording git stand-in binary (the
+`BaseRefreshCloneSafetySpec` precedent — `new GitProcessRunner(recordingGit(log))` logs every
+argv the runner spawns and delegates to the real git; `GitProcessRunner` is final, so the
+binary, not the class, is the seam), and the D7 row counts the envelope reads of one pickup
+the same way (M9).
 
 ## Risks / Trade-offs
 
@@ -281,8 +320,11 @@ over a bare origin; "the delivered state is the `Completed` commit's" by the
 - [The scan's allowlist is a list of paths that can rot] → the spec asserts it reached every
   allowlisted file, the precedent's shape; a moved file fails loudly.
 - [Callers that `orElseThrow` on a read that used to throw `UncheckedIOException` change their
-  failure type] → `BranchStateFileMissingException` is already what the ref-based readers throw
-  for the same situation; the exception-mapping specs of the take command are updated in task 3.3.
+  failure type] → `InternalErrorException` is what the application already throws for an
+  impossible recorded state (`GitResumeContinuation`); the exception-mapping specs of the take
+  command are updated in task 3.3.
+- [`introduce-take-order` rewrites the same application call sites] → this change is sequenced
+  first (proposal header); that change rebases its call-site table on the `Optional` protocol.
 - [The `index.lock` window (NG2) still exists] → recorded, unchanged; it fails loudly with git's
   own message on the next command rather than silently.
 - [Moving 33 references from `GnomishTaskPaths` to a domain type is a wide mechanical diff in
@@ -305,8 +347,9 @@ converges on the first pickup by the new one (that is D4's second row). Rollback
 version reads the worktree again and reproduces the report's behavior on such worktrees — the
 branch stays consistent either way, since nothing this change writes is new.
 
-Sequencing: after `type-untrusted-text` is committed and archived — its uncommitted working tree
-rewrites the same adapter files.
+Sequencing: after `type-untrusted-text` (committed as #58 and archived on 2026-09-21 — it
+rewrote the same adapter files, and this change builds on that state) and before
+`introduce-take-order` (it rewrites the same application call sites; proposal header).
 
 ## Open Questions
 

@@ -4,6 +4,12 @@
 `CleanupCommit`, `GitShowTip`, `WorktreeSalvage`, `DeliveredBranchReader`, `GitTaskStore`,
 `StateFileWrite`, `TerminalWriteMarker`; this change lands on top of that work, never beside it).
 
+**Sequenced before:** `introduce-take-order` (it changes the signatures of `HostResumeMechanics`,
+`TakeResumeBootstrap`, `TakeFreshClaim` and `TakeLoadedBranchRoutes` — the same call sites task
+group 3 rewrites here; this change is the smaller of the two and is already ordered after
+`type-untrusted-text`, so it lands first and `introduce-take-order` rebases its call-site list on
+the `Optional` protocol).
+
 ## Why
 
 In host mode the factory answers questions about its own envelope — the `.gnomish-task/`
@@ -40,8 +46,8 @@ no shared classpath; (b) `GitCommandResult`'s stderr excerpt bounds the *input* 
 flattening, not its rendered output, so a stderr of 1 400 line-separator characters renders as
 8 400 and the log's tail-keeping cap then drops the caller's prose and the `exited N` head the
 bound was sized to keep — the ASCII fixtures never see it; (c) the glossary bans the word
-`whitelist` and it survives as a constant name, a parameter name and published javadoc in eleven
-files.
+`whitelist` and it survives as a constant name, a parameter name and published javadoc in
+eighteen code and test files.
 
 ## What Changes
 
@@ -111,6 +117,11 @@ files.
   record exceeds the cap. Only the caller-bounded excerpt changes.
 - **NG7** — Any semantic change to the http-check variable set or its validation: the rename is
   a rename.
+- **NG8** — Editing artifacts this change does not own: the stable `factory-egress-allowlist`
+  spec (a requirement heading spells `whitelist`) and the two active-change artifacts of
+  `add-subprocess-access-log` that use the word. A stable spec changes only through a delta of
+  its own capability; another active change's artifacts change only through that change. Both
+  are recorded as follow-ups, not done here.
 
 ## Users & Scenarios
 
@@ -136,7 +147,10 @@ files.
   `readTaskRecord` read `state.json` / `task.json` at `HEAD` of the worktree's repository — the
   checked-out branch tip — through the existing tip-read seam, never through the working-tree
   file. Absence is returned as a typed empty result; only an invocation that did not run to its
-  own exit throws (the existing `BranchTipUnavailableException`).
+  own exit throws (the existing `BranchTipUnavailableException`). A call site for which absence
+  is impossible by construction (the same run committed the envelope moments earlier) reports it
+  through an application-layer exception, never through an adapter type the application cannot
+  compile against.
 - **FR2 — Lifecycle rewrites read what they replace from the tip.** The three
   read-modify-write sites (`TerminalWriteMarker.clearPending`, `GitTaskRepository.readCurrentDto`,
   `StateFileWrite.currentCursor`) take their input from the tip, so a stale or half-written
@@ -185,8 +199,10 @@ files.
 - **NFR-R2 (reliability)** — A tip read that cannot be answered (timeout, interruption) is
   reported as unavailability, never as absence; no envelope read may classify a live branch as
   delivered because git did not finish.
-- **NFR-P1 (performance)** — Each envelope read costs one bounded `git show`; the paths that read
-  it do so a handful of times per take, so the added cost is below one second per task.
+- **NFR-P1 (performance)** — Each envelope read costs exactly one bounded git subprocess (`git
+  show`, or `git cat-file -e` for the directory predicate) and no filesystem read; a recovery
+  pickup of a `CompletedUncleaned` tip issues at most ten such reads. A spec over a counting
+  runner pins both numbers (M9).
 - **NFR-O1 (observability)** — A cleanup that lands a removal a predecessor already staged says
   so at INFO with the task id, so an operator reading the log can tell a converged crash from a
   first run.
@@ -209,10 +225,14 @@ files.
 
 - **M1** — The finish kill-point matrix has one more host row; every row, including the new
   one, asserts convergence and a no-op second pass, and the whole matrix is green.
-- **M2** — `grep -rn "Files\.\(readString\|exists\|notExists\|isRegularFile\|readAllBytes\|newBufferedReader\|lines\)" adapters/git/src/main application/src/main/java/com/github/oinsio/gnomish/app`
-  hits only files on the gate's allowlist.
-- **M3** — The `manual-sync-pairs.md` registry rows for the cleanup pair and the cursor pair
-  state a tip-only invariant; no row describes two media for one read.
+- **M2** — `grep -rn "Files\.\(readString\|exists\|notExists\|isRegularFile\|isDirectory\|readAllBytes\|newBufferedReader\|lines\|list\|walk\)" adapters/git/src/main application/src/main/java/com/github/oinsio/gnomish/app`
+  hits only files on the gate's allowlist, and every allowlisted file is among the hits.
+- **M3** — The `Kept in sync with` markers on both ends of the three read pairs
+  (`CleanupCommit` ↔ `GitObjectsTerminalCommits.cleanUp`, `TerminalWriteMarker.clearPending` ↔
+  `GitObjectsTerminalCommits.clearPending`, `StateFileWrite.currentCursor` ↔
+  `TaskLifecycleCommitWriter.tipStateCursor`) state a tip-only invariant; the phrase "the media
+  differ" no longer appears in `adapters/git/src/main`. (The pairs are marker-declared, not
+  registry rows — the registry gains no row for them.)
 - **M4** — A spec that stages the removal by hand and then calls `finishCleanup` on the same
   worktree ends with a tip carrying no `.gnomish-task/` — the reproduction of the 2026-09-20
   report, red before this change and green after.
@@ -223,7 +243,14 @@ files.
 - **M7** — A spec logging a `GitCommandResult.failureDetail("fetch")` whose stderr is 1 400
   `U+2028` characters finds `the fetch exited 128` in the rendered record.
 - **M8** — `grep -rin whitelist --include='*.java' --include='*.groovy' --include='*.md' .`
-  outside `openspec/changes/archive/` returns only the glossary's own *Never:* line.
+  outside `openspec/` returns only the glossary's own *Never:* line. The stable
+  `factory-egress-allowlist` spec still carries the word in a requirement heading; renaming it
+  is a delta of that capability, owned by the next change that touches it, not a direct edit of
+  `openspec/specs/` from here (see NG8).
+- **M9** — A spec over a counting git runner asserts that `readTaskRecord`, `readRecordedState`
+  and the directory predicate each issue exactly one git invocation and no filesystem read, and
+  that the `CompletedUncleaned` pickup of the kill-point row issues at most ten envelope reads
+  (NFR-P1).
 
 ## Open Questions
 
@@ -257,10 +284,15 @@ files.
 ## Impact
 
 - `adapters/git`: `GitTaskStore`, `GitShowTip`, `CleanupCommit`, `WorktreeSalvage`,
-  `TerminalWriteMarker`, `GitTaskRepository`, `StateFileWrite`, `DeliveredBranchReader`.
+  `TerminalWriteMarker`, `GitTaskRepository`, `StateFileWrite`, `DeliveredBranchReader`; the
+  five classes that spell an envelope file name as a literal today (`state/TaskJsonMapper`,
+  `state/StateJsonMapper`, `state/PinnedRefGate`, `HarvestedBoundaryCheck`, `RoundBoundaryCheck`)
+  re-point to the owner.
 - `application`: the `TaskStoreGit` port's read signatures (typed absence),
   `HostResumeMechanics`, `TakeResumeBootstrap`, `TakeFreshClaim`, `GitResumeRunner`,
-  `GitModeRunner`, `GitResumeContinuation` (call sites of the changed signatures).
+  `GitModeRunner`, `GitResumeContinuation` (call sites of the changed signatures; the
+  impossible-absence arm throws the application's own `InternalErrorException`, since
+  `application` has no compile edge to `adapters/git`).
 - `bootstrap`: one new architecture spec; `FinishKillPoints` gains a host step;
   `ContainerTipReader` takes the envelope paths from the owner.
 - `domain`: the new envelope-paths owner; `BranchShapeClassifier` consumes it.
@@ -270,6 +302,6 @@ files.
   only — no signature change, no version bump): the rename.
 - Docs: `docs/adr/0003-crash-consistency.md` (per-medium table: where host reads resolve),
   `.claude/rules/crash-consistency.md` (checklist item), `.claude/rules/manual-sync-pairs.md`
-  (registry rows), `docs/glossary.md` (the **envelope** term, used throughout the code and
-  undefined until now).
+  (one sentence on the dissolved file-name pair; no registry row changes), `docs/glossary.md`
+  (the **envelope** term, used throughout the code and undefined until now).
 - No new dependencies; no change to the container medium or to the published plugin contract.
