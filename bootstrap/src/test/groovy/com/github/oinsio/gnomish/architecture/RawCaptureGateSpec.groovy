@@ -136,14 +136,14 @@ class RawCaptureGateSpec extends Specification {
     // D12: an allowlisted mint owner reads raw and is allowed to — the exemption must work, or a
     //      green gate would mean "the allowlist is ignored" as easily as "the tree is clean".
     def "an allowlisted mint owner captures and is permitted"() {
-        given: 'the branch-document mint owner, which reads the state file and mints at the read'
-        def owner = 'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/GitTaskStore.java'
+        given: 'the tracker mint owner, which reads an operator-supplied task file and mints at the read'
+        def owner = 'application/src/main/java/com/github/oinsio/gnomish/app/AdHocTaskSynthesizer.java'
 
         expect: 'it really captures'
         capturesRaw(RepoSourceTree.code(RepoSourceTree.repoRoot().resolve(owner).toFile()))
 
         and: 'and the allowlist names it with its family'
-        RawCaptureOwners.CAPTURE_OWNERS[owner].startsWith('BRANCH_DOCUMENT')
+        RawCaptureOwners.CAPTURE_OWNERS[owner].startsWith('TRACKER')
     }
 
     // D12: the reached-every-file half. Removing an owner's capture while its entry stays is the

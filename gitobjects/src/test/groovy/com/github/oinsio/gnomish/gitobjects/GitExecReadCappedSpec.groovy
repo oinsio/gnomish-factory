@@ -59,7 +59,7 @@ class GitExecReadCappedSpec extends Specification implements GitObjectsFixture, 
         exec.run(args, null, [:], 1)
 
         then: 'the read stops immediately rather than looping — the same interruption check that keeps a boundary-mutated remaining-bytes loop from busy-spinning forever'
-        thrown(GitObjectsException)
+        thrown(GitObjectsInterruptedException)
 
         cleanup:
         Thread.interrupted() // clear the flag so it does not leak into later tests

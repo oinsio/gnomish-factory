@@ -16,6 +16,10 @@ import spock.lang.Specification
  * worktree's current commit, probing a remote's default branch, an HTTP method constant) — none of
  * those are the base-default decision this change moved into {@code BaseRefResolver}. What must
  * stay clean is the two specific files that used to make that decision by hand.
+ *
+ * <p>Over a clean path the scan finds nothing, so a broken detector would look exactly like a
+ * clean tree. The seeded scenario below is what tells the two apart, the same shape {@link
+ * ConsoleOwnerGateSpec} and {@link EnvelopeMediumDetectorSpec} use.
  */
 class BaseHeadDefaultBoundarySpec extends Specification {
 
@@ -63,8 +67,40 @@ class BaseHeadDefaultBoundarySpec extends Specification {
         sources.size() == BASE_DEFAULT_WIRING.size()
 
         and: 'no file on the path spells the literal in code'
-        sources.findAll { RepoSourceTree.code(it).contains('"HEAD"') }
+        offenders(sources).isEmpty()
+    }
+
+    // The detector is the gate — over a clean path it never fires, so nothing here proves it
+    //     would. A seeded default must be found, and a javadoc that still names the old one must
+    //     not be: a gate that flagged the javadoc would be deleted rather than obeyed.
+    def "the detector finds a seeded default and leaves a commented one alone: #shape"() {
+        expect:
+        spellsHeadDefault(source) == detected
+
+        where:
+        shape | source || detected
+        'a bare default' | 'var base = requested == null ? "HEAD" : requested;' || true
+        'a default in a call' | 'return creator.create(taskId, "HEAD");' || true
+        'a javadoc mention' | ' * was {@code null -> "HEAD"} before FR4.' || false
+        'a trailing comment' | 'var base = resolver.resolve(mode); // not "HEAD"' || false
+        'the resolved ref name' | 'var base = resolver.resolve(mode).ref();' || false
+    }
+
+    /** The files on the path that spell the default in code, as the gate reports them. */
+    private static List<String> offenders(List<File> sources) {
+        sources.findAll { spellsHeadDefault(RepoSourceTree.code(it)) }
         .collect { RepoSourceTree.relative(it) }
-        .isEmpty()
+        .sort()
+    }
+
+    /**
+     * Whether this source spells the hand-rolled default. Comments are already stripped by {@link
+     * RepoSourceTree#code} for a whole file; the seeded scenario above strips its own line, so the
+     * same judgement runs on both.
+     */
+    private static boolean spellsHeadDefault(String source) {
+        source.readLines().any {
+            RepoSourceTree.codeOnly(it).contains('"HEAD"')
+        }
     }
 }

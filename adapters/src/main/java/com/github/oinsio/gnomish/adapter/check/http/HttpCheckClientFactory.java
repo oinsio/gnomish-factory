@@ -55,7 +55,7 @@ public final class HttpCheckClientFactory implements CheckClientFactory {
 
     /**
      * The run-aware form the composition root calls: same guarded exchange, plus the run's
-     * whitelisted variables an http check may address its own result with (NFR-S2).
+     * allowlisted variables an http check may address its own result with (NFR-S2).
      */
     @Override
     public ExternalCheckClient create(

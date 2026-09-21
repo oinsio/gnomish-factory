@@ -41,6 +41,11 @@ class GitShowTipTerminationSpec extends Specification implements StallingReadGit
         new RefTipSource(new GitProcessRunner(stallingGit(tempDir).toString()), tempDir, 'gnomish/PROJ-1')
     }
 
+    /** The seam itself, for the two answers {@link RefTipSource} does not expose. */
+    private GitShowTip tip() {
+        new GitShowTip(new GitProcessRunner(stallingGit(tempDir).toString()), tempDir, 'gnomish/PROJ-1')
+    }
+
     def "FR6: an interrupted file read is unavailability, never an absent file"() {
         when:
         def thrown = interruptDuring {
@@ -64,6 +69,27 @@ class GitShowTipTerminationSpec extends Specification implements StallingReadGit
     def "FR1: an interrupted history search is unavailability, never an undelivered branch"() {
         when:
         def thrown = interruptDuring { source().cleanupCommitInHistory() }
+
+        then:
+        thrown instanceof BranchTipUnavailableException
+    }
+
+    // NFR-R2, FR4 of fix-envelope-medium: the tree-entry predicate answers a cut-off `cat-file`
+    //     with unavailability, never with false — a false here tells the cleanup guard the envelope
+    //     is already gone and the salvage restore that there is nothing to restore.
+    def "NFR-R2: an interrupted tree-entry test is unavailability, never an absent path"() {
+        when:
+        def thrown = interruptDuring { tip().carries('.gnomish-task') }
+
+        then:
+        thrown instanceof BranchTipUnavailableException
+    }
+
+    // NFR-R2, FR6 of fix-envelope-medium: locating the cleanup commit is the same history search,
+    //     so a cut-off walk is unavailability rather than "this branch was never cleaned up".
+    def "NFR-R2: an interrupted cleanup-commit lookup is unavailability, never an empty result"() {
+        when:
+        def thrown = interruptDuring { tip().cleanupCommit() }
 
         then:
         thrown instanceof BranchTipUnavailableException

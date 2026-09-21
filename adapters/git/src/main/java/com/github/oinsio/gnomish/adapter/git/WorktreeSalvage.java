@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -35,8 +37,9 @@ import org.slf4j.LoggerFactory;
  * EnvironmentSalvage} applies.
  *
  * <p>Kept in sync with {@link EnvironmentSalvage}: both must produce a salvage commit carrying the
- * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that
- * tolerates a tip with no state directory — FAIL the salvage when that restore fails, rather
+ * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that tests
+ * the tip for the state directory and tolerates its absence — FAIL the salvage when that restore
+ * fails, rather
  * than letting the working copy's factory files ride into the commit. Their degrade paths are
  * symmetric too: a discard that cannot reach or reset its working copy leaves the leftovers in
  * place, and both ends say so at WARN (FR5 of harden-logging-observability).
@@ -62,6 +65,11 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
      * never recorded in {@code state.json}. A no-op when {@link #hasLeftovers()} is false.
      *
      * @throws GitSalvageFailedException if staging or committing the leftovers fails
+     * @throws BranchTipUnavailableException if the tip read that guards the factory-file restore
+     *     did not run to its own exit — deliberately not folded into {@link
+     *     GitSalvageFailedException}: a read that established nothing is a different verdict from
+     *     a step that failed, and answering {@code false} instead would let the dirty working
+     *     copy's factory files ride into the salvage commit (NFR-R2 of fix-envelope-medium)
      */
     @Override
     public void salvage(String taskId) {
@@ -102,11 +110,10 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
      * to prevent, so it is reported rather than absorbed.
      *
      * @throws GitSalvageFailedException if either restore command fails
+     * @throws BranchTipUnavailableException if the guard's tip read did not run to its own exit
      */
     private void restoreFactoryFiles(String taskId) {
-        if (runner.run(worktreeRoot, "cat-file", "-e", "HEAD:" + FactoryOwnedPaths.STATE_DIR)
-                        .exitCode()
-                != 0) {
+        if (!new GitShowTip(runner, worktreeRoot, GitObjects.HEAD).carries(FactoryOwnedPaths.STATE_DIR)) {
             return;
         }
         GitCommandResult checkout = runner.run(worktreeRoot, args("checkout", "HEAD", "--"));

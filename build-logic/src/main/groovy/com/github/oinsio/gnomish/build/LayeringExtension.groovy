@@ -4,8 +4,8 @@ import org.gradle.api.provider.SetProperty
 
 /**
  * Declares, per module, the complete set of sibling projects its production classpaths may reach
- * (FR2, UX2 of split-into-modules). Everything else is forbidden, transitively — this is a
- * whitelist, so a new edge cannot appear by being inherited through an {@code api} dependency.
+ * (FR2, UX2 of split-into-modules). Everything else is forbidden, transitively — this is an
+ * allowlist, so a new edge cannot appear by being inherited through an {@code api} dependency.
  *
  * <p>Read by the {@code layering-conventions} plugin's {@code verifyModuleLayering} task. The whole
  * layering direction is therefore stated once per module, next to that module's dependencies, and

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
@@ -20,34 +21,29 @@ import java.nio.file.Path;
  * (FR15 of add-git-workflow) — so a delivered branch whose tracker finish never landed carries no
  * live state at its tip, only in history (M4 of add-git-workflow). This reader reads the delivered
  * {@link com.github.oinsio.gnomish.domain.engine.TaskContext} and final {@link TaskState} from the
- * cleanup commit's parent (the {@code Completed} commit), so the reconcile can post the deferred
- * finish faithfully from the branch's own recorded outcome rather than fabricating one.
+ * {@code Completed} commit, so the reconcile can post the deferred finish faithfully from the
+ * branch's own recorded outcome rather than fabricating one.
  *
  * <p>Branch lookup is delegated verbatim to {@link TaskBranchLocator} (local -> remote-tracking ->
  * narrow fetch -> not found), exactly as {@link BranchStateReader} does for the tip; the only
- * difference is the {@code ^} suffix that selects the parent of the located tip — the delivered
- * commit — since the tip itself is the cleanup commit that no longer carries the files.
+ * difference is which revision of the located branch the files are read at.
  *
- * <p>Reading exactly the tip's parent is the minimal recovery that makes reconcile pass today: on
- * a delivered-but-unfinished branch the cleanup commit is always the tip (the finish is a
- * tracker-only write that adds no branch commit), so its parent is the {@code Completed} commit.
- * Hardening this against a branch that gained commits after cleanup — or retaining the state at the
- * tip until the finish write confirms — is task 6.5's durability concern, noted on {@code
- * com.github.oinsio.gnomish.app.TakeReconcile}.
+ * <p>Which revision that is, is resolved rather than assumed (FR6, design D5 of
+ * fix-envelope-medium): the tip when the tip still carries the envelope, and otherwise the parent
+ * of the cleanup commit {@link GitShowTip#cleanupCommit()} locates in the tip's history. See
+ * {@link #deliveredRevision}.
  *
- * <p>Both revision-scoped reads below pass {@link GitReadGate#answered}, so this reader can tell
+ * <p>Every revision-scoped read below passes {@link GitReadGate#answered}, so this reader can tell
  * "the delivered commit does not carry the files" from "the question was not answered": an
  * interrupted or timed-out {@code git show} surfaces as unavailability instead of as a missing
- * state file. What it still cannot tell apart is a cleanup commit's parent from any other parent —
- * it reads the tip's parent unconditionally, so a branch that gained commits after cleanup is read
- * at the wrong revision rather than refused (the durability concern noted above).
+ * state file.
  *
- * <p>Implements FR10 of add-claim-heartbeat.
+ * <p>Implements FR10 of add-claim-heartbeat; FR6 of fix-envelope-medium.
  */
 public final class DeliveredBranchReader {
 
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final String TASK_JSON_PATH = EnvelopePaths.TASK_JSON_PATH;
+    private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
@@ -59,7 +55,7 @@ public final class DeliveredBranchReader {
 
     /**
      * Reads the delivered {@code task.json}/{@code state.json} of the task branch for {@code taskId}
-     * from the commit preceding its {@code Completed} cleanup commit.
+     * from the {@code Completed} commit its history records.
      *
      * <p>Implements FR10 of add-claim-heartbeat.
      *
@@ -73,7 +69,8 @@ public final class DeliveredBranchReader {
      * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if a {@code git
      *     show} of the delivered commit did not run to its own exit, so its capture is not a fact
      *     about that revision
-     * @throws BranchStateFileMissingException if the parent commit does not carry the state files
+     * @throws BranchStateFileMissingException if no delivered commit can be located, or the
+     *     located one does not carry the state files
      */
     public DeliveredBranchState read(Path cloneDir, String taskId) {
         String delivered = resolveDeliveredRef(cloneDir, taskId);
@@ -98,7 +95,33 @@ public final class DeliveredBranchReader {
                                 "locating delivered branch",
                                 UntrustedText.factory("no branch found to reconcile a deferred finish from"));
                 };
-        return tip + "^";
+        return deliveredRevision(cloneDir, tip);
+    }
+
+    /**
+     * The revision whose tree carries the delivered envelope (design D5 of fix-envelope-medium):
+     * the tip itself when it still carries {@code task.json} — a {@code CompletedUncleaned} branch,
+     * whose {@code Completed} envelope has not been removed yet — and otherwise the parent of the
+     * cleanup commit located in the tip's history, which is the {@code Completed} commit by
+     * construction. That is the same commit the branch classifier calls a delivery, so the reader
+     * and the classifier cannot disagree about which one it is; reading {@code tip^} by assumption
+     * did, on every branch that gained a commit after cleanup.
+     *
+     * @throws BranchStateFileMissingException when neither holds — a tip with no envelope and no
+     *     cleanup commit in its history was never delivered, so there is no state to recover
+     */
+    private String deliveredRevision(Path cloneDir, String tip) {
+        GitShowTip tipReader = new GitShowTip(runner, cloneDir, tip);
+        if (tipReader.readAtTip(TASK_JSON_PATH).isPresent()) {
+            return tip;
+        }
+        return tipReader
+                .cleanupCommit()
+                .map(cleanup -> cleanup + "^")
+                .orElseThrow(() -> new BranchStateFileMissingException(
+                        tip,
+                        TASK_JSON_PATH,
+                        UntrustedText.factory("the tip carries no envelope and its history holds no cleanup commit")));
     }
 
     private UntrustedText show(Path cloneDir, String ref, String filePath) {

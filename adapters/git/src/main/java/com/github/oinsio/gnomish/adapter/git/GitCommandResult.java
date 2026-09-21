@@ -46,8 +46,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr, Termination termination) {
 
     /**
-     * How many characters of git's stderr one detail below quotes. Deliberately well under
-     * {@link TextSafety#DEFAULT_CAP_CHARS}, and that is the whole point: every caller quotes these
+     * How many characters of git's stderr one detail below quotes — characters of the
+     * <em>rendered</em> excerpt, since {@link UntrustedText#excerpt(int)} bounds what leaves it
+     * (FR10 of fix-envelope-medium). Deliberately well under {@link TextSafety#DEFAULT_CAP_CHARS},
+     * and that is the whole point: every caller quotes these
      * sentences inside prose of its own — {@link CommitBaseFetch} and {@link RefreshedTip} add the
      * refusal's explanation, {@link TaskBranchLocator} names what origin said, {@link
      * GitPersistFailedException} names the round it failed to persist — and the log exit's cap
@@ -56,6 +58,11 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
      * exited 128" opening, leaving a record that is git's words and nothing naming what failed.
      * The headroom between this bound and the log cap is what that prose, and the truncation
      * marker the cap writes, fit into.
+     *
+     * <p>Because the bound is on the rendered text, that headroom holds for <b>any</b> stderr
+     * content. It did not while the bound counted input characters: a capture of nothing but
+     * {@code U+2028} renders six characters per one, so 1 400 characters of it left the excerpt
+     * as 8 400 and took the whole log cap, head first.
      */
     private static final int STDERR_CAP_CHARS = 1_400;
 

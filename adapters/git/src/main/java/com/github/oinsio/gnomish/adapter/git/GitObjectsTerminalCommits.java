@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.gitobjects.CommitRequest;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
@@ -54,10 +55,11 @@ final class GitObjectsTerminalCommits {
      * Rewrites the tip's {@code task.json} with the pending marker cleared, preserving every other
      * field verbatim by re-reading the raw DTO rather than rebuilding a domain outcome.
      *
-     * <p>Kept in sync with {@link TerminalWriteMarker#clearPending}: both media must clear exactly
-     * the {@code trackerWritePending} field and preserve every other envelope field verbatim by
-     * rewriting the raw DTO, so a park reconciled in one mode reads as settled in the other — and
-     * both must label the write {@link TaskLifecycleEvent#RESUMED} for the reason below.
+     * <p>Kept in sync with {@link TerminalWriteMarker#clearPending}: both read the DTO they
+     * rewrite from the tip, clear exactly the {@code trackerWritePending} field and preserve every
+     * other envelope field verbatim, so a park reconciled in one mode reads as settled in the
+     * other — and both must label the write {@link TaskLifecycleEvent#RESUMED} for the reason
+     * below.
      *
      * <p>Why {@code RESUMED}: this commit records no lifecycle event at all. Its message is the
      * fixed {@link ServiceCommitMessages#trackerWriteConfirmed()}, never {@code
@@ -78,7 +80,7 @@ final class GitObjectsTerminalCommits {
      */
     static void clearPending(GitObjects gitObjects, TaskLifecycleCommitWriter writer, String taskId, String ref) {
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
-        if (!gitObjects.exists(tip, GnomishTaskPaths.TASK_JSON_PATH)) {
+        if (!gitObjects.exists(tip, EnvelopePaths.TASK_JSON_PATH)) {
             log.debug("pending-marker clear for task {} is a no-op: the tip carries no envelope", taskId);
             return;
         }
@@ -99,11 +101,11 @@ final class GitObjectsTerminalCommits {
      * Removes {@code .gnomish-task/} from the tip in one commit, leaving every prior commit
      * reachable as the audit trail.
      *
-     * <p>Kept in sync with {@link CleanupCommit#commit}: both media test the same thing before
-     * doing anything — whether the tip (there, the worktree) still carries {@code .gnomish-task/},
-     * the directory this step removes — so an already-cleaned branch is the same no-op in either
-     * mode; and both log the FR2 anchor line ({@code task lifecycle commit written for task {}:
-     * event={}}) after the cleanup commit succeeds, via {@link TaskLifecycleCommitWriter#build}
+     * <p>Kept in sync with {@link CleanupCommit#commit}: both media test the tip for {@code
+     * .gnomish-task/}, the directory this step removes, rather than any single file inside it —
+     * so an already-cleaned branch is the same no-op in either mode; and both log the FR2 anchor
+     * line ({@code task lifecycle commit written for task {}: event={}}) after the cleanup commit
+     * succeeds, via {@link TaskLifecycleCommitWriter#build}
      * here and directly there (harden-logging-observability).
      *
      * @param gitObjects the bare-object facade the tip is read and written through
@@ -115,7 +117,7 @@ final class GitObjectsTerminalCommits {
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.COMPLETED);
         // The directory, not task.json: this step removes the directory, so the directory is what
         // "already cleaned" means — and it is the test the host twin CleanupCommit runs.
-        if (!gitObjects.exists(tip, GnomishTaskPaths.DIR_NAME)) {
+        if (!gitObjects.exists(tip, EnvelopePaths.DIR_NAME)) {
             log.debug("cleanup commit for task {} is a no-op: the tip carries no envelope", taskId);
             return;
         }
@@ -125,7 +127,7 @@ final class GitObjectsTerminalCommits {
                         ref,
                         Optional.of(tip),
                         tip,
-                        List.of(new TreeEdit.DeletePath(GnomishTaskPaths.DIR_NAME)),
+                        List.of(new TreeEdit.DeletePath(EnvelopePaths.DIR_NAME)),
                         writer.metadata(taskId, ServiceCommitMessages.cleanup())),
                 TaskLifecycleEvent.COMPLETED);
     }

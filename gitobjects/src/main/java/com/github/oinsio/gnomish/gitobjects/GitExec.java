@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  * operator's environment.
  *
  * <p>The I/O policy — the stdout cap, the stdin feed, the hermetic environment, and the loud
- * {@link GitObjectsException} an interruption raises — is this class's own and unchanged; its
+ * {@link GitObjectsInterruptedException} an interruption raises — is this class's own and unchanged; its
  * stream mechanics (the pump threads and the capped read) live in {@link GitExecStreams}, split
  * out along the file-size rule only. What is
  * no longer its own is the wait and the kill: those run on the dependency-free {@link
@@ -164,6 +164,6 @@ record GitExec(Path gitDir, String gitBinary) {
     }
 
     private static GitObjectsException interrupted(InterruptedException cause) {
-        return new GitObjectsException("interrupted waiting for git", cause);
+        return new GitObjectsInterruptedException("interrupted waiting for git", cause);
     }
 }

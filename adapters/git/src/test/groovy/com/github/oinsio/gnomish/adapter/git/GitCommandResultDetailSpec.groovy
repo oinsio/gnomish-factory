@@ -103,6 +103,25 @@ class GitCommandResultDetailSpec extends Specification {
         rendered.contains('xxxx')
     }
 
+    // M7 of fix-envelope-medium (FR10): the headroom STDERR_CAP_CHARS reserves under the log cap
+    //     was reserved against the *input* to the flattening. A stderr of nothing but line
+    //     separators renders six characters per one, fills the log cap by itself, and the exit's
+    //     tail-keeping cut then drops exactly the head this constant exists to protect.
+    def "M7: a stderr that expands when rendered still leaves the detail's opening in the record"() {
+        given: 'a capture of nothing but line separators, at the detail\'s own bound'
+        def separators = Character.toString(0x2028) * 1_400
+
+        when:
+        def rendered = GitCommandResult.of(128, '', separators).failureDetail('fetch').forLog()
+
+        then: 'the sentence still names what failed, and git\'s words are still quoted'
+        rendered.contains('the fetch exited 128')
+        rendered.contains('\\u2028')
+
+        and: 'the detail alone still fits inside the log cap, so a caller may quote it in prose'
+        GitCommandResult.of(128, '', separators).failureDetail('fetch').length() <TextSafety.DEFAULT_CAP_CHARS
+    }
+
     def "FR6: the same headroom holds for the cannot-verify detail"() {
         given:
         def detail = GitCommandResult.of(128, '', LONG_STDERR).cannotVerifyDetail()

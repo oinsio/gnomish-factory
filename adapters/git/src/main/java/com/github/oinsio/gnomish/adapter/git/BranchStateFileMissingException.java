@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
@@ -41,7 +42,7 @@ public final class BranchStateFileMissingException extends RuntimeException {
      * @param ref the revision the file was read from — a fully-qualified ref, or a revision
      *     expression such as {@code <ref>^} that selects one commit on it
      * @param filePath the path within the branch that could not be read, e.g. {@link
-     *     GnomishTaskPaths#TASK_JSON_PATH}
+     *     EnvelopePaths#TASK_JSON_PATH}
      * @param gitError the underlying {@code git show} stderr; it arrives as a carrier and leaves
      *     it here through the log exit {@link UntrustedText#forLog()}, because this message is
      *     rendered into a log record and the log-call gate cannot see inside an exception's text

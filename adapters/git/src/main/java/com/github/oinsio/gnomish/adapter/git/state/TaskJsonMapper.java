@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.baseref.BaseRule;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -59,8 +60,8 @@ public final class TaskJsonMapper {
      *     well-formed ref name
      */
     public static TaskJsonDto readDto(UntrustedText json) {
-        TaskJsonDto dto =
-                StateFileVersionGate.readGated(TaskStateJson.mapper(), "task.json", json.raw(), 1, TaskJsonDto.class);
+        TaskJsonDto dto = StateFileVersionGate.readGated(
+                TaskStateJson.mapper(), EnvelopePaths.TASK_FILE, json.raw(), 1, TaskJsonDto.class);
         PinnedRefGate.check(dto.baseRef());
         return dto;
     }

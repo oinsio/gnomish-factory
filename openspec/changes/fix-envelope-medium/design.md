@@ -14,13 +14,13 @@ See proposal.md — Why. What shapes the approach:
 - **The host-mode reads that bypass it**, all found on 2026-09-20 by grepping `Files.` in
   `adapters/git/src/main` and the application `app` package:
 
-  | Site | Reads | Decides |
-  |------|-------|---------|
-  | `GitTaskStore.readTaskRecord` / `readRecordedState` | worktree `task.json` / `state.json` | resume route (`HostResumeMechanics.loadBranch` returns `null` on `NoSuchFileException` → delivered path), final state, fresh-claim bootstrap, completion outcome |
-  | `CleanupCommit.commit` | `Files.exists(worktree/.gnomish-task)` | whether cleanup is owed |
-  | `TerminalWriteMarker.clearPending` | worktree `task.json` | the DTO the confirm commit rewrites |
-  | `GitTaskRepository.readCurrentDto` | worktree `task.json` | the DTO an outcome / decision / resume commit rewrites |
-  | `StateFileWrite.currentCursor` | worktree `state.json` | the denial cursor carried into a regenerated `state.json` |
+  | Site                                                | Reads                                  | Decides                                                                                                                                                          |
+  |-----------------------------------------------------|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | `GitTaskStore.readTaskRecord` / `readRecordedState` | worktree `task.json` / `state.json`    | resume route (`HostResumeMechanics.loadBranch` returns `null` on `NoSuchFileException` → delivered path), final state, fresh-claim bootstrap, completion outcome |
+  | `CleanupCommit.commit`                              | `Files.exists(worktree/.gnomish-task)` | whether cleanup is owed                                                                                                                                          |
+  | `TerminalWriteMarker.clearPending`                  | worktree `task.json`                   | the DTO the confirm commit rewrites                                                                                                                              |
+  | `GitTaskRepository.readCurrentDto`                  | worktree `task.json`                   | the DTO an outcome / decision / resume commit rewrites                                                                                                           |
+  | `StateFileWrite.currentCursor`                      | worktree `state.json`                  | the denial cursor carried into a regenerated `state.json`                                                                                                        |
 
   Every other `Files.` read in those trees is not an envelope read (`TaskWorktreeManager`
   and `DirectoryWorkspace` test a directory with `Files.isDirectory`; `WorktreeJanitor` lists
@@ -113,12 +113,16 @@ wired only in the container support and the law source; giving the host adapter 
 maps `Optional.empty()` of `readTaskRecord` to the delivered route and `readFinalState` maps an
 empty `readRecordedState` to the first-stage state (the pre-contract tip); the
 `catch (UncheckedIOException) … getCause() instanceof NoSuchFileException` arms are deleted.
-`TakeFreshClaim`, `TakeResumeBootstrap`, `GitResumeRunner`, `GitModeRunner`,
-`GitResumeContinuation` call `orElseThrow` with the application's existing
-`InternalErrorException` (message: the task id, the file, and that it is absent at `HEAD` of a
-worktree the same run committed it to), since on those paths the envelope was committed moments
-earlier and its absence is an invariant violation, exactly the class of impossible state
-`GitResumeContinuation` already reports with that exception. `BranchStateFileMissingException`
+`TakeResumeBootstrap` is the one reader `loadBranch` reaches the tip through, so it must *not*
+unwrap: `bootstrap` returns `Optional<ResumeBootstrap>`, empty when the tip carries no task
+envelope, and `TakeResumeRunner.bootstrap` hands that on as `@Nullable` — that is the value
+`loadBranch` routes on. Only the entry points that have no delivered route unwrap:
+`TakeFreshClaim`, `GitResumeRunner.bootstrap` (the manual `run --resume` caller of the same
+`TakeResumeBootstrap`), `GitModeRunner`, `GitResumeContinuation` call `orElseThrow` with the
+application's existing `InternalErrorException` (message: the task id, the file, and that it is
+absent at `HEAD` of a worktree the same run committed it to), since on those paths the envelope
+was committed moments earlier and its absence is an invariant violation, exactly the class of
+impossible state `GitResumeContinuation` already reports with that exception. `BranchStateFileMissingException`
 is *not* the type here: it lives in `adapters/git`, and `application` has no compile edge to
 that module (only `testImplementation`); it stays the adapter-internal failure of the ref-based
 readers and of `DeliveredBranchReader` (D5). *Rationale:* the delivered/pre-contract
@@ -147,11 +151,11 @@ the seam that already owns tip reads. *Alternative rejected:* a new `WorktreeTip
 guard on the tip, the destructive step can meet a worktree in any of these states while the tip
 still carries the directory:
 
-| Worktree / index | What `git rm -r --ignore-unmatch .gnomish-task` does | Then `git commit` |
-|------------------|-------------------------------------------------------|-------------------|
-| directory present, tracked | removes from index and working tree | lands the removal |
-| removal already staged (killed after `rm`, before commit) | no-op, exit 0 | lands the staged removal; INFO line (NFR-O1) |
-| files gone from disk, index still tracks them (killed inside `rm` after it unlinked the files but before it wrote the index — `git rm` removes the working-tree files first and writes the index last) | removes the index entries; the missing files are not an error | lands the removal |
+| Worktree / index                                                                                                                                                                                       | What `git rm -r --ignore-unmatch .gnomish-task` does          | Then `git commit`                            |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|----------------------------------------------|
+| directory present, tracked                                                                                                                                                                             | removes from index and working tree                           | lands the removal                            |
+| removal already staged (killed after `rm`, before commit)                                                                                                                                              | no-op, exit 0                                                 | lands the staged removal; INFO line (NFR-O1) |
+| files gone from disk, index still tracks them (killed inside `rm` after it unlinked the files but before it wrote the index — `git rm` removes the working-tree files first and writes the index last) | removes the index entries; the missing files are not an error | lands the removal                            |
 
 `--ignore-unmatch` is what turns the second row from a `pathspec did not match` failure (exit
 128) into a no-op; the third row matches the index and needs no tolerance. A kill inside `rm`
@@ -201,8 +205,11 @@ it; the scan is what bans the old way.
 **D7 — The kill-point row.** `FinishKillPoints` gains a fourth step for the host medium only:
 "the staged removal" (`git rm -r .gnomish-task` run in the world's worktree without a commit).
 The frozen shape stays `CompletedUncleaned`; the pickup runs the ordinary recovery
-(`FinishEffect` with the store's `finishCleanup`) on the *same* worktree and converges to
-`Delivered`; the second pass is a no-op. The container world has no such step, so the row is
+(`FinishEffect` with the recovery owner's `finishCleanup` — the store's cleanup commit *and*
+the worktree disposal behind it, as `HostResumeMechanics.finishCleanup` sequences them) on the
+*same* worktree and converges to `Delivered`; the second pass is a no-op. The worktree-disposal
+invariant is asserted per window, on the windows whose pickup drives the finish: the window
+after the cleanup commit is already settled, so its pickup returns before any disposal. The container world has no such step, so the row is
 declared per medium. *Rationale:* the matrix's contract is "kill after each durable step"; the
 index write is durable, and the reproduction of the report is exactly this row. *Alternative
 rejected:* a standalone adapter spec only — it proves the guard, not the convergence through the
@@ -232,8 +239,18 @@ public owner in `application`'s port package — `:domain` cannot depend on it, 
 would keep its own copy.
 
 **D9 — `excerpt(cap)` bounds its rendered output.** `UntrustedText.excerpt` becomes
-`capTail(flatten(capTail(strip(raw), cap)), cap)` — the inner cap keeps the flattening cost
-bounded as today, the outer one makes `cap` a statement about what leaves. Only the
+`flatten(capTail(flatten(capTail(strip(raw), cap)), cap - TRUNCATION_MARKER_RESERVE))` — the
+inner cap keeps the flattening cost bounded as today, the outer one makes `cap` a statement
+about what leaves. Two details, found while implementing (2026-09-21) and revised here rather
+than left to the code: the outer cap runs under `cap - TRUNCATION_MARKER_RESERVE`, because
+`capTail` *prepends* its marker and would otherwise return `cap` characters plus the marker —
+`RecordCap`'s existing "marker inside the bound" shape, applied to the tail end; and the
+flattening runs once more afterwards, because that marker is written with a newline in it and
+the outer cap runs after the flattening that would have neutralized it. On already-flattened
+text the second `flatten` is the identity, so it costs nothing and touches only the marker.
+Together they also give `excerpt` a floor, `MIN_EXCERPT_CAP_CHARS = 2 * TRUNCATION_MARKER_RESERVE`
+(128): under it the bound could not be honoured at all, and the shortest bound any call site
+asks for is the decision-file preview's 500. Only the
 caller-bounded exit changes: `forLog()` at `DEFAULT_CAP_CHARS` stays input-bounded (NG6), because
 the record bound is the sink's guarantee and the sink already renders idempotently over exit
 output. The `STDERR_CAP_CHARS` javadoc is rewritten to say the bound is in output characters and
@@ -258,12 +275,12 @@ silently. *Alternative rejected:* a separate change — the user chose to fold i
 
 This change touches four declared pairs and adds no new parallel implementation:
 
-| Pair | Decision | What the invariant becomes |
-|------|----------|----------------------------|
-| `CleanupCommit` ↔ `GitObjectsTerminalCommits.cleanUp` | declared pair kept (different media: subprocess vs bare objects) | both test the **tip** for `.gnomish-task/` and both are a no-op on a clean tip; the host end additionally converges the staged-removal states of its own two-command sequence, which the single-commit container end cannot freeze |
-| `TerminalWriteMarker.clearPending` ↔ `GitObjectsTerminalCommits.clearPending` | declared pair kept | both read the DTO they rewrite **from the tip** and clear exactly `trackerWritePending` |
-| `StateFileWrite.currentCursor` ↔ `TaskLifecycleCommitWriter.tipStateCursor` | declared pair kept | both read the cursor from the **tip's** `state.json` and degrade to no cursor; the registry row's "the media differ" clause is rewritten — the media are now the same commit, read by subprocess vs objects |
-| `WorktreeSalvage` ↔ `EnvironmentSalvage` | declared pair kept | unchanged invariant; the host end's tip test moves to the shared predicate (D3), which the marker text names |
+| Pair                                                                          | Decision                                                         | What the invariant becomes                                                                                                                                                                                                         |
+|-------------------------------------------------------------------------------|------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CleanupCommit` ↔ `GitObjectsTerminalCommits.cleanUp`                         | declared pair kept (different media: subprocess vs bare objects) | both test the **tip** for `.gnomish-task/` and both are a no-op on a clean tip; the host end additionally converges the staged-removal states of its own two-command sequence, which the single-commit container end cannot freeze |
+| `TerminalWriteMarker.clearPending` ↔ `GitObjectsTerminalCommits.clearPending` | declared pair kept                                               | both read the DTO they rewrite **from the tip** and clear exactly `trackerWritePending`                                                                                                                                            |
+| `StateFileWrite.currentCursor` ↔ `TaskLifecycleCommitWriter.tipStateCursor`   | declared pair kept                                               | both read the cursor from the **tip's** `state.json` and degrade to no cursor; the registry row's "the media differ" clause is rewritten — the media are now the same commit, read by subprocess vs objects                        |
+| `WorktreeSalvage` ↔ `EnvironmentSalvage`                                      | declared pair kept                                               | unchanged invariant; the host end's tip test moves to the shared predicate (D3), which the marker text names                                                                                                                       |
 
 The "does the tip carry the state directory" predicate had three implementations before this
 change (cleanup on disk, salvage restore by `cat-file`, container by `GitObjects.exists`); D3
@@ -276,14 +293,14 @@ third, hand-typed spelling — also consumes.
 
 ### Single-owner mechanisms
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|-------|--------------|-----------|-----------------|-------------|
-| `GitTaskStore` over `GitShowTip(worktree, HEAD)` | `Optional<TaskRecord>`, `Optional<TaskState>` | `TakeResumeBootstrap`, `TakeFreshClaim`, `HostResumeMechanics.readFinalState`, `GitResumeRunner.continueFrom`, `GitModeRunner`, `GitResumeContinuation` | `Files.readString(worktree/.gnomish-task/…)` in `GitTaskStore.read`; the `NoSuchFileException` arms in `HostResumeMechanics` | `EnvelopeMediumBoundarySpec` (D6); the `Optional` return type removes the exception protocol |
-| `GitShowTip.readAtTip` at `HEAD` | `Optional<UntrustedText>` (`BRANCH_DOCUMENT`) | `TerminalWriteMarker.clearPending`, `GitTaskRepository.readCurrentDto`, `StateFileWrite.currentCursor` | the three `Files.readString` calls | `EnvelopeMediumBoundarySpec` |
-| `GitShowTip.carries(path)` at `HEAD` | `boolean` (see note) | `CleanupCommit.commit`, `WorktreeSalvage.restoreFactoryFiles` | `Files.exists(worktree/.gnomish-task)`; the inline `cat-file -e HEAD:` in salvage | `EnvelopeMediumBoundarySpec` bans the `Files.exists`/`isDirectory` form; the sweep of task 7.2 asserts the argv `"cat-file", "-e", "HEAD:` appears in `adapters/git/src/main` only inside `GitShowTip`. Exemptions, each a different predicate: `TaskBranchCreator` (`cat-file -e <base>^{commit}`, a commit-existence probe on the clone), `EnvironmentSalvage` (the same `HEAD:` test inside the in-container shell script — the container end of the salvage pair, not a host read), `FactoryCloneHardening` (javadoc) |
-| `GitShowTip.cleanupCommit()` | `Optional<String>` commit id | `DeliveredBranchReader.resolveDeliveredRef`, `cleanupCommitInHistory` (wrapper) | the `tip + "^"` literal in `DeliveredBranchReader` | the literal is deleted; `DeliveredBranchReaderSpec` reads a branch with commits after cleanup. Exemption: `HarvestedStateCommitCheck.resolveRef(tip + "^")` is a different question (the parent of a harvested attempt commit, never a cleanup commit) and stays |
-| `domain.branch.EnvelopePaths` | `String` constants (see note) | every class in `adapters/git` that named `GnomishTaskPaths` (33 uses), `FactoryOwnedPaths`, `ContainerTipReader`, `BranchShapeClassifier`, and the five bare-literal sites `state/TaskJsonMapper`, `state/StateJsonMapper`, `state/PinnedRefGate`, `HarvestedBoundaryCheck`, `RoundBoundaryCheck` | the literals `".gnomish-task"`, `"task.json"`, `"state.json"` in `GnomishTaskPaths`, `ContainerTipReader`, `BranchShapeClassifier` and the five sites; `GnomishTaskPaths.java` deleted | `EnvelopeMediumBoundarySpec` rejects the three literals outside `EnvelopePaths.java`, over comment-stripped sources (D6, D8) |
-| `UntrustedText.excerpt(cap)` | `String` of at most `cap` characters | `GitCommandResult.failureDetail`, `cannotVerifyDetail`, every other `excerpt` caller (unchanged call sites) | the input-only bound inside `excerpt` | `UntrustedTextSpec` asserts `excerpt(cap).length() <= cap` over a `U+2028` corpus; the `STDERR_CAP_CHARS` javadoc states the output bound |
+| Owner                                            | Value (type)                                  | Consumers                                                                                                                                                                                                                                                                                         | Old way removed                                                                                                                                                                        | Enforced by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+|--------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `GitTaskStore` over `GitShowTip(worktree, HEAD)` | `Optional<TaskRecord>`, `Optional<TaskState>` | `TakeResumeBootstrap` (passes the `Optional` through to `HostResumeMechanics.loadBranch`), `TakeFreshClaim`, `HostResumeMechanics.readFinalState`, `GitResumeRunner.bootstrap` / `continueFrom`, `GitModeRunner`, `GitResumeContinuation`                                                         | `Files.readString(worktree/.gnomish-task/…)` in `GitTaskStore.read`; the `NoSuchFileException` arms in `HostResumeMechanics`                                                           | `EnvelopeMediumBoundarySpec` (D6); the `Optional` return type removes the exception protocol                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `GitShowTip.readAtTip` at `HEAD`                 | `Optional<UntrustedText>` (`BRANCH_DOCUMENT`) | `TerminalWriteMarker.clearPending`, `GitTaskRepository.readCurrentDto`, `StateFileWrite.currentCursor`                                                                                                                                                                                            | the three `Files.readString` calls                                                                                                                                                     | `EnvelopeMediumBoundarySpec`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `GitShowTip.carries(path)` at `HEAD`             | `boolean` (see note)                          | `CleanupCommit.commit`, `WorktreeSalvage.restoreFactoryFiles`                                                                                                                                                                                                                                     | `Files.exists(worktree/.gnomish-task)`; the inline `cat-file -e HEAD:` in salvage                                                                                                      | `EnvelopeMediumBoundarySpec` bans the `Files.exists`/`isDirectory` form; the sweep of task 7.2 asserts the argv `"cat-file", "-e", "HEAD:` appears in `adapters/git/src/main` only inside `GitShowTip`. Exemptions, each a different predicate: `TaskBranchCreator` (`cat-file -e <base>^{commit}`, a commit-existence probe on the clone), `EnvironmentSalvage` (the same `HEAD:` test inside the in-container shell script — the container end of the salvage pair, not a host read), `FactoryCloneHardening` (javadoc) |
+| `GitShowTip.cleanupCommit()`                     | `Optional<String>` commit id                  | `DeliveredBranchReader.resolveDeliveredRef`, `cleanupCommitInHistory` (wrapper)                                                                                                                                                                                                                   | the `tip + "^"` literal in `DeliveredBranchReader`                                                                                                                                     | the literal is deleted; `DeliveredBranchReaderSpec` reads a branch with commits after cleanup. Exemption: `HarvestedStateCommitCheck.resolveRef(tip + "^")` is a different question (the parent of a harvested attempt commit, never a cleanup commit) and stays                                                                                                                                                                                                                                                          |
+| `domain.branch.EnvelopePaths`                    | `String` constants (see note)                 | every class in `adapters/git` that named `GnomishTaskPaths` (33 uses), `FactoryOwnedPaths`, `ContainerTipReader`, `BranchShapeClassifier`, and the five bare-literal sites `state/TaskJsonMapper`, `state/StateJsonMapper`, `state/PinnedRefGate`, `HarvestedBoundaryCheck`, `RoundBoundaryCheck` | the literals `".gnomish-task"`, `"task.json"`, `"state.json"` in `GnomishTaskPaths`, `ContainerTipReader`, `BranchShapeClassifier` and the five sites; `GnomishTaskPaths.java` deleted | `EnvelopeMediumBoundarySpec` rejects the three literals outside `EnvelopePaths.java`, over comment-stripped sources (D6, D8)                                                                                                                                                                                                                                                                                                                                                                                              |
+| `UntrustedText.excerpt(cap)`                     | `String` of at most `cap` characters          | `GitCommandResult.failureDetail`, `cannotVerifyDetail`, every other `excerpt` caller (unchanged call sites)                                                                                                                                                                                       | the input-only bound inside `excerpt`                                                                                                                                                  | `UntrustedTextSpec` asserts `excerpt(cap).length() <= cap` over a `U+2028` corpus; the `STDERR_CAP_CHARS` javadoc states the output bound                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Note on the `boolean` and the `String` constants: a consumer could obtain either elsewhere,
 which is why those rows' enforcement is the ban on the old forms (the scan and the `cat-file`

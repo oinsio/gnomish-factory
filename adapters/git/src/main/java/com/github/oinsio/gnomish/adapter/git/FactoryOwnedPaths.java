@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import java.util.List;
 
 /**
@@ -17,11 +18,12 @@ import java.util.List;
  * consume this same list. Two mode-local lists would drift, and a path missed by one mode silently
  * trusts that mode's dirty worktree — the divergence this change exists to close.
  *
- * <p>The directory's name is not spelled here: both constants derive from {@link GnomishTaskPaths},
- * which owns the spelling. What this class owns is the ownership split alone — which paths under the
- * directory the factory restores, and which one the gnome may write. Nothing mechanical keeps that
- * name single-owned: a new class can still retype the literal, so until a {@code :bootstrap} scan
- * gate exists, it is a review obligation rather than an enforced one.
+ * <p>The directory's name is not spelled here: both constants derive from {@link EnvelopePaths} in
+ * {@code :domain}, which owns the spelling for every module (design D8 of fix-envelope-medium).
+ * What this class owns is the ownership split alone — which paths under the directory the factory
+ * restores, and which one the gnome may write. The name's single ownership is mechanical rather
+ * than a review obligation: {@code EnvelopeMediumBoundarySpec} in {@code :bootstrap} fails the
+ * build on a production source that retypes the literal.
  *
  * <p>Implements FR5 of harden-task-branch-contract.
  */
@@ -29,15 +31,15 @@ final class FactoryOwnedPaths {
 
     /**
      * The state directory at the working-copy root, without a trailing separator — the shape a git
-     * pathspec takes. Spelled once by {@link GnomishTaskPaths#DIR_NAME}.
+     * pathspec takes. Spelled once by {@link EnvelopePaths#DIR_NAME}.
      */
-    static final String STATE_DIR = GnomishTaskPaths.DIR_NAME;
+    static final String STATE_DIR = EnvelopePaths.DIR_NAME;
 
     /**
      * The one gnome-writable path beneath it, per the decision-file protocol — again without a
      * trailing separator, the shape a pathspec exclusion takes.
      */
-    static final String GNOME_WRITABLE = GnomishTaskPaths.DECISIONS_DIR;
+    static final String GNOME_WRITABLE = EnvelopePaths.DECISIONS_DIR;
 
     private FactoryOwnedPaths() {}
 

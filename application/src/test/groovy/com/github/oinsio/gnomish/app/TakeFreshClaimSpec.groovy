@@ -72,7 +72,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
@@ -106,7 +106,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
         def executor = new ScriptedExecutor([completedRound()])
         def definition = completingPipeline()
@@ -157,7 +157,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
 
         and:
@@ -180,6 +180,36 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             it.taskId() == 'PROJ-9'
         }, LAW_COMMIT, new BasePin('release/1.2', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT), _)
         1 * tracker.finish(REF, _)
+    }
+
+    // FR1, design D2 of fix-envelope-medium: this run committed the envelope moments earlier, in
+    //     createTask, so an empty read at the new branch's HEAD is an invariant violation rather
+    //     than the delivered route the tracker-driven resume has. It is reported as the
+    //     application's own impossible-state error, naming the task and the worktree.
+    def "FR1: the fresh claim reports an impossible state when the tip it just wrote carries no envelope"() {
+        given:
+        def tracker = Mock(Tracker)
+        def store = Stub(TaskStoreGit) {
+            taskRepository(_, _) >> Mock(TaskLifecycleStore)
+            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            readTaskRecord(_) >> Optional.empty()
+        }
+        tracker.fetchTask(_) >> heldByUs()
+        def git = new TaskGit(
+                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+
+        when:
+        TakeFreshClaim.claim(
+                assemblyRunning(new ScriptedExecutor([completedRound()])), git, worktreesRoot,
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
+                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
+                DEFAULT_TRUSTED_BASE)
+
+        then:
+        def ex = thrown(InternalErrorException)
+        ex.message.contains('PROJ-1')
+        ex.message.contains('absent at HEAD')
+        ex.message.contains(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1').toString())
     }
 
     // FR13 of add-base-ref-resolution: once the base is resolved and refreshed, the task tier is

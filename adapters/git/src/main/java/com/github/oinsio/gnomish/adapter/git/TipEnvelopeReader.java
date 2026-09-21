@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 
@@ -17,8 +18,8 @@ import java.util.Optional;
  */
 final class TipEnvelopeReader {
 
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final String TASK_JSON_PATH = EnvelopePaths.TASK_JSON_PATH;
+    private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     private final BranchTipFactsReader facts = new BranchTipFactsReader();
     private final BranchShapeClassifier classifier = new BranchShapeClassifier();

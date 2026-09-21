@@ -158,7 +158,7 @@ public final class StalenessMemory {
      * The shapes this memory times: the ones whose recovery the reaper owns, plus a held {@code
      * Claimed} tenure — owned by its holder for as long as it beats, and timed here precisely to
      * find out that it stopped. Asked of {@link TrackerShape#recoveryOwner()} rather than listed as
-     * a whitelist of {@code instanceof} tests: the owner mapping is an exhaustive switch over the
+     * an allowlist of {@code instanceof} tests: the owner mapping is an exhaustive switch over the
      * sealed set, so a new shape has to name its owner there, and naming {@code REAPER} makes it
      * timed here with no second place to remember. A shape no owner repairs — {@code Foreign} — is
      * deliberately NOT timed: latching it would enter it into {@link #staleRefs()}, which the

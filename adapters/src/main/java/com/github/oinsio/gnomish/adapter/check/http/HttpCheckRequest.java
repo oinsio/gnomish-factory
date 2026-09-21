@@ -20,12 +20,12 @@ final class HttpCheckRequest {
     private HttpCheckRequest() {}
 
     /**
-     * Builds the request for one check, substituting the run's whitelisted variables into the url and
+     * Builds the request for one check, substituting the run's allowlisted variables into the url and
      * the declared headers (NFR-S2) before anything is composed from them.
      *
      * @param params the check's parsed selectors; never null
      * @param secrets the seam the named credential resolves through; never null
-     * @param variables the run's whitelisted values; never null
+     * @param variables the run's allowlisted values; never null
      * @return the composed request, credential header included when one is declared
      * @throws HttpCheckCredentialException if a declared credential is missing or blank — fail
      *     closed, naming the secret, before any socket is opened

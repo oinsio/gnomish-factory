@@ -9,7 +9,7 @@ import spock.lang.Specification
 /**
  * FR10, FR11, NFR-S1, NFR-S2 of add-plugin-architecture: how the request is composed. The method
  * and headers travel from the manifest verbatim, authorization is a credential resolved by name at
- * request time, and the whitelisted run variables are interpolated so a check addresses exactly
+ * request time, and the allowlisted run variables are interpolated so a check addresses exactly
  * this run's result. The fail-closed halves of these rules live in
  * {@link HttpExternalCheckClientCannotVerifySpec}.
  */
@@ -56,9 +56,9 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         exchange.lastRequest.headers().firstValue('X-Api-Key').get() == 'raw-value'
     }
 
-    // NFR-S2: the whitelisted run variables reach the composed request, so a check addresses exactly
+    // NFR-S2: the allowlisted run variables reach the composed request, so a check addresses exactly
     // this run's result.
-    def "whitelisted run variables are interpolated into the url and headers"() {
+    def "allowlisted run variables are interpolated into the url and headers"() {
         given:
         def runContext = { name ->
             Optional.ofNullable(['task.id': 'PROJ-42', 'task.branch': 'gnomish/PROJ-42',

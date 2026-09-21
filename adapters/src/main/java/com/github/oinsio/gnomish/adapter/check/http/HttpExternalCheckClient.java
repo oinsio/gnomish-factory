@@ -59,7 +59,7 @@ import org.slf4j.LoggerFactory;
  *
  * @param exchange the single network seam; the egress guard sits here (NFR-S2)
  * @param secrets the seam a check's named credential resolves through at request time (FR11)
- * @param runContext the run's whitelisted interpolation values (NFR-S2); {@link
+ * @param runContext the run's allowlisted interpolation values (NFR-S2); {@link
  *     CheckRunContext#none()} outside a run, which makes any interpolating check fail closed
  */
 public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets, CheckRunContext runContext)

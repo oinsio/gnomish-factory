@@ -101,22 +101,12 @@ class RawCaptureOwners {
             'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpExternalCheckClient matches it against the manifest\'s patterns and excerpts it through the carrier',
         ],
         // --- document file reads ---
-        [
-            'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/GitTaskStore.java',
-            'BRANCH_DOCUMENT: mints at the read',
-        ],
-        [
-            'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/GitTaskRepository.java',
-            'BRANCH_DOCUMENT: mints at the read',
-        ],
-        [
-            'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/TerminalWriteMarker.java',
-            'BRANCH_DOCUMENT: mints at the read',
-        ],
-        [
-            'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/StateFileWrite.java',
-            'BRANCH_DOCUMENT: mints at the read',
-        ],
+        // The four host-side envelope readers that used to sit here — GitTaskStore,
+        // GitTaskRepository, TerminalWriteMarker, StateFileWrite — left this map with
+        // fix-envelope-medium: every one of them now reads at the worktree's HEAD through
+        // GitShowTip, which captures a subprocess stream rather than a file and mints the
+        // BRANCH_DOCUMENT there. Their entries are removed rather than kept, because the
+        // reached-every-file assertion is what makes this allowlist a gate.
         [
             'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java',
             'AGENT: reads the agent\'s decision file and hands it to DecisionFileReader, which is the mint',

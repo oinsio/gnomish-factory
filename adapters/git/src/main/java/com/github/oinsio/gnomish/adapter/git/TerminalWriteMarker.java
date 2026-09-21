@@ -1,14 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -32,13 +30,13 @@ import java.nio.file.Path;
  *       previous complete envelope or the new one and never a truncated {@code task.json}; the
  *       frozen state is "marker still set", in the worktree and at the tip alike.
  *   <li><b>Between the rename and the commit.</b> The worktree file is cleared while the tip still
- *       carries the marker, so here the two media disagree and which one the next pickup reads
- *       depends on whose worktree it is: any instance that materializes the worktree afresh reads
- *       the tip's "marker still set", while the killed instance's own leftover worktree is reused
- *       as-is ({@link TaskWorktreeManager#ensureWorktree}) and reads the cleared file. Both
- *       readings are safe, because step (1) had already confirmed before this rewrite began —
- *       "cleared" is simply the truth arriving early, and the ordinary resume it falls through to
- *       repeats no tracker write.
+ *       carries the marker. The frozen state every pickup reads is the tip's "marker still set",
+ *       whether the worktree is materialized afresh or the killed instance's own leftover one is
+ *       reused as-is ({@link TaskWorktreeManager#ensureWorktree}): since FR2 of
+ *       fix-envelope-medium every reader resolves at {@code HEAD}, so the cleared file on disk is
+ *       staging for a commit that never came and decides nothing. The park is re-driven, and
+ *       because the reconcile probes the tracker first, the write step (1) had already confirmed
+ *       gains no duplicate.
  * </ul>
  *
  * <p>The shape either window freezes at the tip belongs to the {@code task-branch-contract}
@@ -49,10 +47,10 @@ import java.nio.file.Path;
  * again once the write confirms. Re-running it on an already-cleared envelope writes the same
  * bytes, so recovery is idempotent and convergent.
  *
- * <p>Kept in sync with {@link GitObjectsTerminalCommits#clearPending}: both media must clear
- * exactly the {@code trackerWritePending} field and preserve every other envelope field verbatim
- * by rewriting the raw DTO, so a park reconciled in one mode reads as settled in the other — and
- * both must label the write {@link TaskLifecycleEvent#RESUMED}. That label records nothing: the
+ * <p>Kept in sync with {@link GitObjectsTerminalCommits#clearPending}: both read the DTO they
+ * rewrite from the tip, clear exactly the {@code trackerWritePending} field and preserve every
+ * other envelope field verbatim, so a park reconciled in one mode reads as settled in the other —
+ * and both must label the write {@link TaskLifecycleEvent#RESUMED}. That label records nothing: the
  * confirm commit's message is the fixed {@link ServiceCommitMessages#trackerWriteConfirmed()} and
  * no reader parses it, so the event reaches only the failure exception and the FR2 anchor line.
  * The twin's javadoc carries the full reasoning for why the confirm commit owns no event constant
@@ -65,27 +63,29 @@ final class TerminalWriteMarker {
     private TerminalWriteMarker() {}
 
     /**
-     * Reads {@code task.json} in {@code worktree}, rewrites it with the pending
-     * marker cleared, and leaves every other field unchanged. Does not commit —
-     * the caller commits the cleared file.
+     * Reads {@code task.json} at {@code worktree}'s {@code HEAD}, rewrites the worktree's copy with
+     * the pending marker cleared, and leaves every other field unchanged. Does not commit — the
+     * caller commits the cleared file.
      *
-     * @param worktree the task worktree holding {@code .gnomish-task/task.json}
+     * <p>The read goes through {@link RequiredTaskJson} and the write lands on disk (FR2, design
+     * D1 of fix-envelope-medium): the working copy is this transition's staging area, never its
+     * source, so a worktree left dirty by a killed predecessor cannot be what the receipt carries
+     * forward.
+     *
+     * @param runner the git subprocess runner the tip read goes through
+     * @param worktree the task worktree whose {@code HEAD} carries {@code .gnomish-task/task.json}
      * @param taskId the task whose pending marker is cleared; for error reporting
      * @throws GitTaskRepositoryException if the envelope cannot be read, parsed, or rewritten — a
-     *     worktree carrying no {@code task.json} included. This medium deliberately has no
+     *     tip carrying no {@code task.json} included, reported with git's own reason for the
+     *     failed read ({@link RequiredTaskJson}). This medium deliberately has no
      *     "already cleared" no-op to match its twin's: a receipt runs only on a park, whose
      *     envelope is still present (only a completion's cleanup removes one), so a missing file
      *     is a fault and is reported rather than skipped
      */
-    static void clearPending(Path worktree, String taskId) {
-        Path taskJson = worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH);
-        UntrustedText json;
-        try {
-            json = UntrustedText.branchDocument(Files.readString(taskJson));
-        } catch (IOException e) {
-            throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.RESUMED, "reading task.json", e);
-        }
-        TaskJsonDto cleared = TaskJsonMapper.readDto(json).withTrackerWritePending(null);
+    static void clearPending(GitProcessRunner runner, Path worktree, String taskId) {
+        Path taskJson = worktree.resolve(EnvelopePaths.TASK_JSON_PATH);
+        TaskJsonDto cleared = RequiredTaskJson.atTipOf(runner, worktree, taskId, TaskLifecycleEvent.RESUMED)
+                .withTrackerWritePending(null);
         try {
             AtomicFileWriter.write(taskJson, TaskStateJson.mapper().writeValueAsString(cleared));
         } catch (IOException e) {

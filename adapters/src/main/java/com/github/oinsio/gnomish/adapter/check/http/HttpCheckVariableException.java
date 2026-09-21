@@ -5,8 +5,8 @@ import java.io.Serial;
 /**
  * Raised when an http check's request cannot be composed because a {@code ${...}} reference in it has
  * no value (NFR-S2 of add-plugin-architecture): either the variable is outside the engine-defined
- * whitelist — which the load seam normally catches, so reaching here means a check bypassed it — or
- * it is whitelisted but this run cannot supply it (a manual run over a plain directory has no attempt
+ * allowlist — which the load seam normally catches, so reaching here means a check bypassed it — or
+ * it is allowlisted but this run cannot supply it (a manual run over a plain directory has no attempt
  * commit). The message names the reference, never a resolved value — the only text it carries is the
  * name the manifest itself wrote inside {@code ${...}}.
  *
@@ -22,9 +22,9 @@ final class HttpCheckVariableException extends HttpCheckRequestException {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    HttpCheckVariableException(String name, boolean whitelisted) {
+    HttpCheckVariableException(String name, boolean allowlisted) {
         super(
-                whitelisted
+                allowlisted
                         ? "http check interpolates '${%s}', which this run cannot supply".formatted(name)
                         : "http check interpolates '${%s}', which is not an interpolatable variable".formatted(name));
     }

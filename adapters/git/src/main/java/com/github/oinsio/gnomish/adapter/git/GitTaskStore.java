@@ -7,27 +7,35 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
+import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * The git-subprocess implementation of {@link TaskStoreGit} (FR12b, design D12 of
  * split-into-modules): hands out the per-run {@link TaskLifecycleStore} / {@link AttemptPersistence}
  * bound to one clone or worktree, walks a task's usage history, and reads the two branch documents
- * ({@code task.json}, {@code state.json}) back out of a worktree.
+ * ({@code task.json}, {@code state.json}) back out of a worktree's branch tip.
  *
  * <p>The handed-out collaborators and the history walk delegate to this package's existing classes
  * over one shared {@link GitProcessRunner}, which is what makes every collaborator a run hands out
  * coherent — the same runner, hence the same per-clone mutation lock (design D8 of
- * add-git-workflow). The two document reads need no subprocess: they read the worktree's files
- * directly, minting each as a branch document at the read.
+ * add-git-workflow).
  *
- * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules.
+ * <p>The two document reads go through {@link GitShowTip} at the worktree's {@code HEAD} (design
+ * D1 of fix-envelope-medium) — the same seam the ref-based readers and the branch classifier
+ * already read through, so host mode answers what the branch records rather than what the working
+ * copy happens to hold. A worktree is reused as-is between pickups, so its disk may carry a
+ * killed predecessor's staged removal or half-written envelope; the tip cannot. Reading the tip
+ * also inherits the seam's invocation gate: a read cut off before git's own exit throws {@link
+ * com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException} instead of answering
+ * "absent" (NFR-R2).
+ *
+ * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules; FR1, NFR-R2
+ * of fix-envelope-medium.
  */
 public final class GitTaskStore implements TaskStoreGit {
 
@@ -64,23 +72,27 @@ public final class GitTaskStore implements TaskStoreGit {
     }
 
     @Override
-    public TaskState readRecordedState(Path worktree) {
-        Path stateJson = worktree.resolve(GnomishTaskPaths.STATE_JSON_PATH);
-        return StateJsonMapper.fromDto(StateJsonMapper.readDto(read(stateJson, "state.json")));
+    public Optional<TaskState> readRecordedState(Path worktree) {
+        return tipOf(worktree)
+                .readAtTip(EnvelopePaths.STATE_JSON_PATH)
+                .map(StateJsonMapper::readDto)
+                .map(StateJsonMapper::fromDto);
     }
 
     @Override
-    public TaskRecord readTaskRecord(Path worktree) {
-        Path taskJson = worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH);
-        return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(read(taskJson, "task.json")));
+    public Optional<TaskRecord> readTaskRecord(Path worktree) {
+        return tipOf(worktree)
+                .readAtTip(EnvelopePaths.TASK_JSON_PATH)
+                .map(TaskJsonMapper::readDto)
+                .map(TaskJsonMapper::fromDto);
     }
 
-    private static UntrustedText read(Path file, String label) {
-        try {
-            return UntrustedText.branchDocument(Files.readString(file));
-        } catch (IOException e) {
-            throw new UncheckedIOException("failed to read " + label + " at " + file, e);
-        }
+    /**
+     * The envelope reader for one worktree: {@code HEAD} of a task worktree is the checked-out task
+     * branch, so this is the very tip the branch classifier read.
+     */
+    private GitShowTip tipOf(Path worktree) {
+        return new GitShowTip(runner, worktree, GitObjects.HEAD);
     }
 
     @Override

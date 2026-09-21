@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -9,7 +10,8 @@ import java.nio.file.Path;
 /**
  * Resume bootstrap (FR8, design D9) and outcome-driven continuation (task 4.7): the {@code
  * --resume} counterpart of {@link GitModeRunner}'s fresh-run wiring. {@link #bootstrap} locates
- * the task branch, materializes the worktree, and loads/version-gates {@code task.json}; {@link
+ * the task branch, materializes the worktree, and loads/version-gates the {@code task.json} the
+ * worktree's {@code HEAD} carries; {@link
  * #run} then switches on the recorded {@code outcome} (FR8), delegated to {@link
  * GitResumeContinuation}: {@code escalated} → the same decision dialog the in-process path uses;
  * {@code paused} → the same checkpoint confirmation; {@code null} (process died mid-visit) →
@@ -21,7 +23,8 @@ import java.nio.file.Path;
  * parallel implementation, so prompts and EOF handling match a live run's.
  *
  * <p>{@link #bootstrap} also reconciles local/origin divergence (FR9, NFR-R3, design D9) once,
- * right after the worktree is materialized and before {@code task.json} is read back — equal or
+ * right after the worktree is materialized and before {@code task.json} is read back from its
+ * tip — equal or
  * ahead leave the worktree untouched; behind fast-forwards it and discards uncommitted leftovers;
  * and true divergence discards the local line and continues from origin, automatically and with no
  * operator flag (FR8 of harden-task-branch-contract) — all four through the one replica-pair
@@ -127,7 +130,14 @@ final class GitResumeRunner {
      *     the pair and fails closed (FR9; FR8 of harden-task-branch-contract)
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
-        return resumeBootstrap.bootstrap(cloneDir, taskId);
+        // A manual `run --resume` of a branch whose tip carries no task envelope is the impossible
+        // state, not a route: the delivered shape is routed on the empty Optional by the
+        // tracker-driven mechanics (design D2 of fix-envelope-medium), which this entry point has
+        // no counterpart for.
+        return resumeBootstrap
+                .bootstrap(cloneDir, taskId)
+                .orElseThrow(
+                        () -> AbsentEnvelope.task(taskId, TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId)));
     }
 
     /**
@@ -143,7 +153,9 @@ final class GitResumeRunner {
             RunArguments.InteractiveMode interactiveMode,
             boolean discardWork) {
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        TaskState finalState = git.store().readRecordedState(bootstrap.worktreePath());
+        TaskState finalState = git.store()
+                .readRecordedState(bootstrap.worktreePath())
+                .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), bootstrap.worktreePath()));
 
         RecordedOutcome outcome = bootstrap.outcome();
         var continuation = new GitResumeContinuation(assembly, git, taskRepository, cloneDir, bootstrap);

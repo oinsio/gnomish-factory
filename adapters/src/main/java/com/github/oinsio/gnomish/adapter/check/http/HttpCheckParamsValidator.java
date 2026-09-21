@@ -110,7 +110,7 @@ public final class HttpCheckParamsValidator implements CheckParamsValidator {
 
     /**
      * Grades every {@code ${...}} reference in the target and the headers against the fixed,
-     * engine-defined whitelist (NFR-S2, design D5). This is where a manifest is stopped from
+     * engine-defined allowlist (NFR-S2, design D5). This is where a manifest is stopped from
      * smuggling arbitrary values — a secret, a tracker field, anything attacker-controlled — into a
      * URL or a header: the reference never becomes a runtime lookup, it becomes a load error naming
      * the check and the disallowed variable.
@@ -126,15 +126,15 @@ public final class HttpCheckParamsValidator implements CheckParamsValidator {
                         file, where + "." + HttpCheckParams.HEADERS_KEY + "." + key, String.valueOf(value), errors));
     }
 
-    /** One located error per non-whitelisted variable the text references. */
+    /** One located error per non-allowlisted variable the text references. */
     private static void report(String file, String located, String text, List<ConfigError> errors) {
         for (String name : HttpCheckVariables.referencesIn(text)) {
-            if (!HttpCheckVariables.WHITELIST.contains(name)) {
+            if (!HttpCheckVariables.ALLOWLIST.contains(name)) {
                 errors.add(new ConfigError(
                         file,
                         located,
                         "interpolates '${%s}', which is not an interpolatable variable; allowed: %s"
-                                .formatted(name, new TreeSet<>(HttpCheckVariables.WHITELIST))));
+                                .formatted(name, new TreeSet<>(HttpCheckVariables.ALLOWLIST))));
             }
         }
     }

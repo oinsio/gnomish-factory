@@ -82,7 +82,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> Stub(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()

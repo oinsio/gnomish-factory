@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
@@ -56,7 +57,8 @@ public final class StateJsonMapper {
      *     missing or is not {@code 1}
      */
     public static StateJsonDto readDto(UntrustedText json) {
-        return StateFileVersionGate.readGated(TaskStateJson.mapper(), "state.json", json.raw(), 1, StateJsonDto.class);
+        return StateFileVersionGate.readGated(
+                TaskStateJson.mapper(), EnvelopePaths.STATE_FILE, json.raw(), 1, StateJsonDto.class);
     }
 
     /**

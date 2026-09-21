@@ -62,7 +62,7 @@ public interface CheckClientFactory {
 
     /**
      * The run-aware form of {@link #create}, called by the composition root: identical except that
-     * the provider is also handed the run's whitelisted variables (NFR-S2, design D5), which a
+     * the provider is also handed the run's allowlisted variables (NFR-S2, design D5), which a
      * provider composing a request from manifest text may substitute into it.
      *
      * <p>The default ignores {@code runContext} and delegates, so a provider whose target is fully
@@ -72,7 +72,7 @@ public interface CheckClientFactory {
      *
      * @param secrets the seam through which this provider resolves its named credentials; never null
      * @param subsection this provider's validated operator subsection; never null
-     * @param runContext the run's whitelisted variables; never null, possibly supplying none
+     * @param runContext the run's allowlisted variables; never null, possibly supplying none
      * @return a live, ready-to-poll client; never null
      */
     default ExternalCheckClient create(

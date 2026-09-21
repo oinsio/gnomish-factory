@@ -1,28 +1,13 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
-import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.adapter.git.state.*
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.app.port.tracker.fake.TrackerFixtureText
 import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.AttemptRecord
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
-import com.github.oinsio.gnomish.domain.engine.Position
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.TaskOutcome
-import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -31,7 +16,6 @@ import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR1 of add-git-workflow: {@code TaskRepository}'s git realization — create branch + first
  * task.json commit, append decision (resetting outcome), record outcome/escalation, per the
@@ -402,6 +386,68 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         events[0].formattedMessage.contains('cleanup commit for task PROJ-1 is a no-op')
     }
 
+    // FR3 of fix-envelope-medium: the cleanup guard asks the tip, not the worktree, so the step
+    // converges from every state its own two-command sequence can freeze. A predecessor killed
+    // between `git rm -r` and the commit leaves the removal staged in the worktree over a tip that
+    // still carries the envelope; the next pickup on that same worktree must land the removal
+    // rather than mistake a dirty worktree for a cleaned branch.
+    def "FR3: finishCleanup converges a removal a killed predecessor already staged"() {
+        given: 'a completed task whose tip still carries the envelope'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        def worktree = worktreeFor('PROJ-1')
+
+        and: 'a predecessor staged the removal and died before committing it'
+        runner.run(worktree, 'rm', '-r', '.gnomish-task')
+        assert runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() != ''
+        def logs = LogCaptureSupport.attach(CleanupCommit, Level.INFO)
+
+        when:
+        repository.finishCleanup('PROJ-1')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the staged removal landed: the tip no longer carries the envelope'
+        runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() == ''
+
+        and: 'NFR-O1: one INFO line tells the operator a converged crash apart from a first run'
+        events.any {
+            it.level == Level.INFO &&
+            it.formattedMessage == 'cleanup commit for task PROJ-1 lands a removal a predecessor already staged'
+        }
+
+        and: 'the cleanup commit is the tip'
+        commitMessageAt(worktree, 0) == ServiceCommitMessages.cleanup()
+
+        when: 'the recovery runs a second time'
+        def cleanedTip = runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim()
+        repository.finishCleanup('PROJ-1')
+
+        then: 'it is a no-op — the tip id does not move'
+        runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim() == cleanedTip
+    }
+
+    // NFR-O1 of fix-envelope-medium: the converged-crash line is what tells an operator a recovery
+    // apart from a first run, so an ordinary cleanup — the removal landing from a live worktree —
+    // must stay silent. A line on every cleanup would say "a predecessor died here" every time.
+    def "NFR-O1: an ordinary cleanup does not claim a predecessor staged its removal"() {
+        given: 'a completed task whose worktree still holds the envelope'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        def logs = LogCaptureSupport.attach(CleanupCommit, Level.INFO)
+
+        when:
+        repository.finishCleanup('PROJ-1')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the removal landed, and only the lifecycle anchor was said about it'
+        runner.run(worktreeFor('PROJ-1'), 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() == ''
+        events.every {
+            !it.formattedMessage.contains('a predecessor already staged')
+        }
+    }
+
     def "FR15/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, full history preserved"() {
         given: 'a task with at least one round commit before completion, to prove earlier history stays reachable'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -555,6 +601,113 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         StateJsonMapper.readDto(
                 runner.run(worktreeFor('PROJ-1'), 'show', 'HEAD:.gnomish-task/state.json').stdout())
                 .egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z')
+    }
+
+    // FR2 of fix-envelope-medium: the three read-modify-write sites take their input from the
+    //     branch tip, so a worktree file a killed predecessor left dirty — a staged half-write, an
+    //     edit whose commit never came — can never be carried forward into a lifecycle commit. Each
+    //     scenario below drives one site over a worktree whose file disagrees with the tip.
+    def "FR2: the decision rewrite carries the tip's DTO forward, never the worktree's"() {
+        given: 'a branch whose tip carries a container-mode position in task.json'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        stampCursors('PROJ-1',
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'),
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z'))
+
+        and: 'an uncommitted worktree edit naming another position'
+        smudgeTaskJson('PROJ-1', new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'))
+
+        when:
+        repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
+                TaskState.atStageStart('implement'))
+
+        then: 'the decision commit carries what the branch recorded; the disk edit decided nothing'
+        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+    }
+
+    def "FR2: the terminal-write receipt clears the tip's DTO, never the worktree's"() {
+        given: 'a park whose tip carries a container-mode position beside the pending marker'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        stampCursors('PROJ-1',
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'),
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+
+        and: 'an uncommitted worktree edit naming another position'
+        smudgeTaskJson('PROJ-1', new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'))
+
+        when:
+        repository.confirmTerminalWrite('PROJ-1')
+
+        then: 'the receipt commit preserves every field of the tip, and clears only the marker'
+        def committed = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        committed.egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+        !TaskJsonMapper.fromDto(committed).trackerWritePending()
+    }
+
+    def "FR2: the cursor carry-forward reads the tip's state.json, never the worktree's"() {
+        given: 'a branch whose tip carries a container-mode position in state.json'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        stampCursors('PROJ-1',
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'),
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z'))
+
+        and: 'an uncommitted worktree edit naming another position'
+        Path stateJson = worktreeFor('PROJ-1').resolve('.gnomish-task').resolve('state.json')
+        def onDisk = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
+        Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
+                        onDisk.version(), onDisk.position(), onDisk.attemptsUsed(), onDisk.attempts(), onDisk.totals(),
+                        new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'))))
+
+        when: 'a lifecycle rewrite regenerates state.json'
+        repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
+                TaskState.atStageStart('implement'))
+
+        then: 'the regenerated file carries the position the branch recorded'
+        StateJsonMapper.readDto(
+                runner.run(worktreeFor('PROJ-1'), 'show', 'HEAD:.gnomish-task/state.json').stdout())
+                .egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z')
+    }
+
+    // FR2 of fix-envelope-medium: every transition that rewrites the envelope runs on a branch that
+    //     carries one, so a tip without it is a fault — reported exactly as the worktree read's I/O
+    //     failure was, never absorbed into a rewrite over a fabricated DTO. A cleaned tip is the one
+    //     state that reaches these calls with no envelope, and it is reachable only by a caller
+    //     driving a lifecycle write after the completion cleanup.
+    def "FR2: #transition fails loudly when the tip carries no task envelope"() {
+        given: 'a branch whose cleanup commit took the envelope off the tip'
+        repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.finishCleanup('PROJ-1')
+        assert runner.run(worktreeFor('PROJ-1'), 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().forParsing().trim() == ''
+
+        when:
+        rewrite.call(repository)
+
+        then:
+        def e = thrown(GitTaskRepositoryException)
+        e.message.contains('task.json')
+
+        where:
+        transition | rewrite
+        'the decision rewrite' | { GitTaskRepository it ->
+            it.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
+            TaskState.atStageStart('implement'))
+        }
+        'the outcome rewrite' | { GitTaskRepository it ->
+            it.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        }
+        'the write receipt' | { GitTaskRepository it ->
+            it.confirmTerminalWrite('PROJ-1')
+        }
+    }
+
+    /** Rewrites the worktree's {@code task.json} with another position, leaving it uncommitted. */
+    private void smudgeTaskJson(String taskId, EgressCursorDto cursor) {
+        Path taskJson = worktreeFor(taskId).resolve('.gnomish-task').resolve('task.json')
+        def onDisk = TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson)))
+        Files.writeString(taskJson, TaskStateJson.mapper().writeValueAsString(onDisk.withEgressCursor(cursor)))
     }
 
     /**

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
@@ -30,7 +31,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
-import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -67,9 +67,10 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
 
     /**
      * How the state.json read behaves — a closure rather than a value, so a scenario can make the
-     * read THROW (the pre-contract tip of FR3) without re-stubbing a port setup() already stubbed.
+     * read answer EMPTY (the pre-contract tip of FR3) without re-stubbing a port setup() already
+     * stubbed.
      */
-    Closure<TaskState> stateRead = { recordedState }
+    Closure<Optional<TaskState>> stateRead = { Optional.of(recordedState) }
 
     Tracker tracker = Mock(Tracker)
     TaskLifecycleStore lifecycleStore = Mock(TaskLifecycleStore)
@@ -126,9 +127,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "reconciles a delivered-but-unfinished branch without running the engine"() {
         given:
         def executor = new ScriptedExecutor([completedRound()])
-        store.readTaskRecord(_) >> {
-            throw new UncheckedIOException(new NoSuchFileException('task.json'))
-        }
+        // FR5 of fix-envelope-medium: the cleanup commit took the whole envelope off the tip, so
+        // the read answers empty. That empty IS the route — no cause chain is inspected.
+        store.readTaskRecord(_) >> Optional.empty()
         tracker.fetchTask(_) >> heldByUs()
         branches.readDelivered(_, _) >> new DeliveredBranchState(
                 new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskState.atStageStart('build'))
@@ -151,10 +152,8 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "resumes a pre-contract tip at the first stage instead of failing"() {
         given: 'a branch whose task.json reads back but whose state.json is absent'
         def executor = new ScriptedExecutor([completedRound()])
-        store.readTaskRecord(_) >> recordWith(null, null, false)
-        stateRead = {
-            throw new UncheckedIOException(new NoSuchFileException('state.json'))
-        }
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        stateRead = { Optional.empty() }
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -166,20 +165,21 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         result instanceof TakeResult.Delivered
     }
 
-    // FR10: only the "cleanup already ran" shape is reconciled. Any other I/O fault reading the
-    // branch is a genuine failure and must surface, not be mistaken for a delivered branch.
-    def "lets an unrelated I/O fault reading the branch propagate"() {
+    // FR10, NFR-R2 of fix-envelope-medium: only "the tip carries no envelope" is reconciled as a
+    // delivery. A read that never ran to its own exit established nothing about the tip, so it
+    // surfaces as unavailability and must propagate — reading it as a delivery would let a network
+    // or shutdown hiccup finish a task the engine never ran.
+    def "lets a tip read that did not run to its exit propagate"() {
         given:
         store.readTaskRecord(_) >> {
-            throw new UncheckedIOException(new IOException('disk on fire'))
+            throw new BranchTipUnavailableException('refs/heads/gnomish/PROJ-1', 'show', 'TIMEOUT')
         }
 
         when:
         resume(resumeChain())
 
         then:
-        def ex = thrown(UncheckedIOException)
-        ex.cause.message == 'disk on fire'
+        thrown(BranchTipUnavailableException)
     }
 
     // FR10, D10, NFR-C1: a park whose durable "tracker-write pending" marker is STILL SET means the
@@ -188,7 +188,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "reconciles an orphaned park without running the engine"() {
         given:
         def executor = new ScriptedExecutor([completedRound()])
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Paused('build'), null, true)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, true))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -205,7 +205,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // this is an ordinary resume, not a reconcile. Same recorded outcome, opposite route.
     def "resumes normally when the park's marker was already cleared"() {
         given:
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Paused('build'), null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -226,7 +226,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def resolved = []
         baseRefGit = recordingResumingBaseRefGit(resolved)
-        store.readTaskRecord(_) >> recordPinnedTo('release/1.18')
+        store.readTaskRecord(_) >> Optional.of(recordPinnedTo('release/1.18'))
         tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
 
         when:
@@ -252,7 +252,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             UntrustedText.agent('postgres'),
             UntrustedText.agent('sqlite')
         ])
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -272,7 +272,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // re-run — only the acknowledge is re-driven, into the same upserted marker.
     def "FR12: an answered branch whose acknowledge never landed re-drives just the acknowledge"() {
         given:
-        store.readTaskRecord(_) >> recordWithDecision('use postgres')
+        store.readTaskRecord(_) >> Optional.of(recordWithDecision('use postgres'))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -292,7 +292,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // FR12: the same branch whose acknowledge did land pays one read and writes nothing.
     def "FR12: an answered branch whose acknowledge already landed re-posts nothing"() {
         given:
-        store.readTaskRecord(_) >> recordWithDecision('use postgres')
+        store.readTaskRecord(_) >> Optional.of(recordWithDecision('use postgres'))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -313,7 +313,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             UntrustedText.agent('postgres'),
             UntrustedText.agent('sqlite')
         ])
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -338,7 +338,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "resumes an AttemptsExhausted escalation on the return alone, appending no decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -361,7 +361,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             ensureWorktree(_, _, _, _) >> worktree
             salvage(worktree) >> salvager
         }
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
@@ -388,7 +388,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def executor = new ScriptedExecutor([completedRound()])
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, true)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -409,7 +409,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
             UntrustedText.agent('postgres')
         ])
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         recordedState = finalState
         tracker.fetchTask(_) >> heldByUs()
 
@@ -437,7 +437,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def lostFlag = new ClaimLossFlag()
         lostFlag.claimLost(REF, 'taken over')
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
         git(), worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], lostFlag)
@@ -455,7 +455,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // it is cleared on confirmation whichever path wrote it.
     def "clears the pending marker when the engine's own run parks"() {
         given:
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(
                 assemblyRunning(new ScriptedExecutor([

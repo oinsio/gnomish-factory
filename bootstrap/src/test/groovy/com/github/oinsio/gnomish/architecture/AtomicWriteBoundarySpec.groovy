@@ -62,7 +62,7 @@ class AtomicWriteBoundarySpec extends Specification {
         rule.check(productionClasses)
     }
 
-    // The rule that closes the gap the one above cannot: a whitelist of named writers proves those
+    // The rule that closes the gap the one above cannot: an allowlist of named writers proves those
     // six are wired correctly and says nothing about the seventh. A writer added tomorrow that
     // calls Files.writeString directly appears in no list, names no StandardCopyOption, and would
     // pass both rules above while leaving readers of its file exposed to a partial write. Stated

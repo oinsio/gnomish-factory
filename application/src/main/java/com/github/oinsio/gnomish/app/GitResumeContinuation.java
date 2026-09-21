@@ -195,7 +195,9 @@ final class GitResumeContinuation {
             throw aborted;
         }
 
-        TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store().readRecordedState(worktree));
+        TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store()
+                .readRecordedState(worktree)
+                .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), worktree)));
         GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, bootstrap.taskId(), completed);
     }
 

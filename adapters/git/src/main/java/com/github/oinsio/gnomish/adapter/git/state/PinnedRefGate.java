@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
 import com.github.oinsio.gnomish.baseref.RefNameSyntax;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.logtext.LogText;
 import org.jspecify.annotations.Nullable;
 
@@ -34,7 +35,7 @@ final class PinnedRefGate {
         String violation = RefNameSyntax.refNameViolation(baseRef).orElse(null);
         if (violation != null) {
             throw new MalformedStateFileException(
-                    "task.json",
+                    EnvelopePaths.TASK_FILE,
                     "baseRef '" + LogText.forLog(baseRef) + "' is not a well-formed ref name: " + violation);
         }
     }
