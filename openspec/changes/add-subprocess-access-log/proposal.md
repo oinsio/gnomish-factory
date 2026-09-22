@@ -69,9 +69,15 @@ naturally joins.
 
 - `module-layering`: the `:logtext` consumer grant is widened to access-log
   emission, and the `:gitobjects` extraction contract is pinned against the
-  new hook (no new dependency edge). The same two requirements are MODIFIED
-  by the active `add-base-ref-resolution`, sequenced after this change; its
-  delta is layered on this one's text, so this change syncs first.
+  new hook (no new dependency edge). The same two requirements were MODIFIED
+  by `add-base-ref-resolution` (archived 2026-09-13), whose delta was layered
+  on this one's text and carried it into the stable spec; the active
+  `own-git-transfer-argv` is sequenced after this change for `module-layering`
+  and writes its delta over that stable text. This change's own
+  `module-layering` delta therefore predates `split-logtext-leaves` and the
+  stable text: before it is synced or archived it must be re-layered on the
+  stable spec as it then stands, so that neither the leaf split nor the
+  `:gittransfer` sentences are lost to a replace-only sync.
 - `execution-environment`: secret-free container exec argv, probes through
   the decorated seam, honest and gate-enforced sole-seam wording.
 - `subprocess-supervision`: bounded file-channel/probe/in-box-git waits,

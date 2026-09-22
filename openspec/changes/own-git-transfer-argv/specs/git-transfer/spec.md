@@ -29,6 +29,11 @@ transfer source SHALL mean adding a kind, never a flag list at a call site.
 - **THEN** it supplies the source's transport and protocol name, and the common set, validation,
   isolation, and the build gate apply to it without change
 
+#### Scenario: The seed clone's branch stays a positional parameter
+- **WHEN** the seed helper's script is rendered from the owner's clone value
+- **THEN** the script is one constant string in which the branch position is the shell word
+  `"$1"`, and no task branch name appears in the `sh -c` literal
+
 ### Requirement: Common deny-by-default side-effect set
 Every transfer SHALL: follow no tags beyond the named refspec; write no `FETCH_HEAD`; recurse
 into no submodule, by flag and by configuration, so that a populated submodule in the operator's
@@ -60,8 +65,9 @@ fetch full history, never shallow.
 ### Requirement: Closed per-source protocol allowlist
 Every transfer SHALL run under a protocol allowlist the owner sets per source, which denies every
 protocol not listed: `https`, `ssh`, and `file` for `origin`; exactly `ext` for a container;
-exactly `file` for a seed path. Every transfer SHALL also declare that git's own initiated
-operations are not user-initiated, so a user-policy protocol is never available to them.
+exactly `file` for a seed path. The allowlist SHALL be the whole protocol policy: no transfer
+carries a `protocol.*.allow` key or a `GIT_PROTOCOL_FROM_USER` value, because under the
+allowlist every protocol is either always or never allowed and both would be inert.
 <!-- implements FR4, NFR-S1 of own-git-transfer-argv -->
 
 #### Scenario: A harvest cannot reach the network
@@ -94,7 +100,8 @@ task-level park. The report SHALL name the message id and the object, as untrust
 
 #### Scenario: Validation cost is local
 - **WHEN** a transfer is validated
-- **THEN** no additional network round trip is made and the transfer stays full-depth
+- **THEN** the source served exactly one upload-pack session for it, and the receiving
+  repository has no shallow boundary
 
 ### Requirement: Per-source configuration isolation
 A container or seed transfer SHALL read no global or system git configuration and no XDG
@@ -162,7 +169,7 @@ pointing into the fetched history, a pre-existing tag of the same name at anothe
 initialized submodule whose remote has advanced, and a global configuration enabling recursion
 and prune — that the set of refs changed by the transfer is exactly the named destination, and
 that `FETCH_HEAD` is untouched.
-<!-- implements FR12, M2 of own-git-transfer-argv -->
+<!-- implements FR12, UX1, M2 of own-git-transfer-argv -->
 
 #### Scenario: Ref diff equals the named destination
 - **WHEN** a transfer for any source kind runs against the adversarial fixture
