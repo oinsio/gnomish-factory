@@ -3,8 +3,9 @@ package com.github.oinsio.gnomish.app.port.git;
 /**
  * Salvage of an interrupted round's uncommitted leftovers, mode-agnostic (FR6
  * of add-sandbox-core, FR10 of add-git-workflow): the host realization commits
- * them in the task worktree ({@link WorktreeSalvage}), the sandboxed one
- * commits inside the environment and harvests ({@link EnvironmentSalvage}).
+ * them in the task worktree ({@link WorktreeSalvager}), the sandboxed one
+ * commits inside the environment and harvests ({@code EnvironmentSalvage} in
+ * {@code adapters/git}, which this module cannot link to directly).
  * Resume and the tracker-take revocation path depend on this seam only, so the
  * same salvage → push protocol serves both modes without forking the callers.
  *
@@ -22,6 +23,12 @@ public interface TaskSalvage {
      * salvage.
      *
      * @param taskId the task being salvaged, for error context
+     * @throws GitSalvageFailedException if staging, committing or making the leftovers durable
+     *     fails
+     * @throws BranchTipUnavailableException if a tip read this salvage depends on did not run to
+     *     its own exit, so it established nothing about what the branch carries — the host
+     *     realization guards its factory-file restore with such a read, and refuses rather than
+     *     letting the working copy stand in for the tip
      */
     void salvage(String taskId);
 }

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.domain.branch.BranchTipFacts;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus;
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -31,8 +32,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BranchTipFactsReader {
 
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final String TASK_JSON_PATH = EnvelopePaths.TASK_JSON_PATH;
+    private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     /**
      * Reads every fact the classification needs from one tip.

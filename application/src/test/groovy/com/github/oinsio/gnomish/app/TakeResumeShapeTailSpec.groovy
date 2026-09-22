@@ -14,7 +14,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
-import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -51,7 +50,9 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     AttemptPersistence journal = new InMemoryAttemptPersistence()
 
     /** What the worktree's state.json read answers; reassigned by the scenario that deletes it. */
-    Closure<TaskState> recordedState = { TaskState.atStageStart('build') }
+    Closure<Optional<TaskState>> recordedState = {
+        Optional.of(TaskState.atStageStart('build'))
+    }
 
     BaseRefGit baseRefGit = resumingBaseRefGit()
 
@@ -65,7 +66,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
         store.readRecordedState(_) >> { recordedState() }
-        store.readTaskRecord(_) >> { record }
+        store.readTaskRecord(_) >> { Optional.ofNullable(record) }
         tracker.fetchTask(_) >> heldByUs()
     }
 
@@ -128,6 +129,36 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         executor.requests.isEmpty()
     }
 
+    // FR1, FR5 of fix-envelope-medium: the tip carries task.json, so readTaskRecord answers a
+    // PRESENT record and the loaded-branch table takes the uncleaned finish. The delivered
+    // reconcile is what an EMPTY answer means, and the two routes are one branch apart in
+    // TakeLoadedBranchRoutes — since the port stopped reporting absence as an I/O failure, the
+    // typed value is the only thing that tells them apart, so the wrong route would silently
+    // re-read branch history instead of the tip the caller just classified.
+    def "FR1, FR5: a present Completed record routes to finishUncleaned, never to deliverCompleted"() {
+        given: 'a tip recording Completed, with a recorded state past the first stage'
+        record = recordWith(new RecordedOutcome.Completed())
+        recordedState = {
+            Optional.of(TaskState.atStageStart('deploy'))
+        }
+        and: 'the delivered route, if taken, says so loudly instead of answering a dummy state'
+        branches.readDelivered(_, _) >> {
+            throw new AssertionError(
+            'deliverCompleted was taken: a present Completed record must route to finishUncleaned' as Object)
+        }
+
+        when:
+        def result = resume(new BranchShape.CompletedUncleaned())
+
+        then: 'the uncleaned finish ran — the deferred write and its destructive tail'
+        1 * tracker.finish(REF, _)
+        1 * lifecycleStore.finishCleanup('PROJ-1')
+
+        and: 'the report carries the state the tip recorded, not a fabricated or re-read one'
+        result instanceof TakeResult.Delivered
+        ((TakeResult.Delivered) result).finalState() == TaskState.atStageStart('deploy')
+    }
+
     // FR9, FR15: the cleanup commit deletes .gnomish-task/ from the worktree, so the final state
     // must be read BEFORE it — a read after the delete finds nothing and falls back to the
     // pre-contract fabrication, handing disposal a first-stage state for a delivered task.
@@ -136,11 +167,12 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         record = recordWith(new RecordedOutcome.Completed())
         def cleaned = false
         lifecycleStore.finishCleanup('PROJ-1') >> { cleaned = true }
+        // FR5 of fix-envelope-medium: after the cleanup commit the tip carries no envelope, so the
+        // read answers empty — the typed absence HostResumeMechanics turns into the first-stage
+        // fabrication. Reading the state before the cleanup is what keeps that fabrication away
+        // from a delivered task's disposal.
         recordedState = {
-            if (cleaned) {
-                throw new UncheckedIOException(new NoSuchFileException(worktree.resolve('.gnomish-task').toString()))
-            }
-            TaskState.atStageStart('deploy')
+            cleaned ? Optional.<TaskState> empty() : Optional.of(TaskState.atStageStart('deploy'))
         }
 
         when:

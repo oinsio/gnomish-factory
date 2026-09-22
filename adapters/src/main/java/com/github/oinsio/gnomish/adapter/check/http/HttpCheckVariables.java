@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * The fixed, engine-defined set of values an http check may interpolate into its request, and the
  * substitution itself (NFR-S2, design D5 of add-plugin-architecture).
  *
- * <p>The whitelist is closed and small on purpose: it holds exactly what a check needs to address
+ * <p>The allowlist is closed and small on purpose: it holds exactly what a check needs to address
  * <em>this</em> run's result — the task, its branch, the attempt commit under verification, the
  * stage asking — and nothing that could carry a secret or attacker-supplied text into a URL. Neither
  * the manifest nor operator config can widen it; a reference to anything else is a located
@@ -34,7 +34,7 @@ final class HttpCheckVariables {
     static final String ATTEMPT_COMMIT = "attempt.commit";
 
     /** Every variable a manifest may write; nothing else is substitutable. */
-    static final Set<String> WHITELIST =
+    static final Set<String> ALLOWLIST =
             Set.of(CheckRunContext.TASK_ID, CheckRunContext.TASK_BRANCH, ATTEMPT_COMMIT, CheckRunContext.STAGE_NAME);
 
     private static final Pattern REFERENCE = Pattern.compile("\\$\\{([^}]*)}");
@@ -48,13 +48,13 @@ final class HttpCheckVariables {
     /**
      * The values this poll can supply.
      *
-     * @param runContext the run's whitelisted variables; never null
+     * @param runContext the run's allowlisted variables; never null
      * @param attemptCommit the current round's attempt commit, or null when the workspace carries
      *     none (a manual run over a plain directory)
      */
     static HttpCheckVariables of(CheckRunContext runContext, @Nullable String attemptCommit) {
         Map<String, String> values = new LinkedHashMap<>();
-        for (String name : WHITELIST) {
+        for (String name : ALLOWLIST) {
             runContext.value(name).ifPresent(value -> values.put(name, value));
         }
         if (attemptCommit != null) {
@@ -96,7 +96,7 @@ final class HttpCheckVariables {
      *
      * @param text the manifest-declared url or header value; never null
      * @return the text with every reference replaced by this run's value
-     * @throws HttpCheckVariableException if a referenced variable is outside the whitelist or this
+     * @throws HttpCheckVariableException if a referenced variable is outside the allowlist or this
      *     run cannot supply it — fail closed, naming the variable
      */
     String resolve(String text) {
@@ -112,7 +112,7 @@ final class HttpCheckVariables {
     private String valueOf(String name) {
         String value = values.get(name);
         if (value == null) {
-            throw new HttpCheckVariableException(name, WHITELIST.contains(name));
+            throw new HttpCheckVariableException(name, ALLOWLIST.contains(name));
         }
         return value;
     }
