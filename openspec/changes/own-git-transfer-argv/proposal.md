@@ -60,6 +60,11 @@ to six.
   of the common set. (FR5)
 - **MODIFIED** `module-layering`: a JDK-only `:gittransfer` leaf joins the
   module tree; `adapters:git` and `sandbox:docker` depend on it. (FR2)
+- The test build runs every git subprocess — fixtures, specs, PIT minions,
+  the packaged jar — under one committed adversarial global git
+  configuration, so a transfer's isolation is proven against a hostile
+  operator setup in every spec, not only in the ones that ask. (FR12,
+  NFR-S2)
 - **ADDED** `docs/adr/0008-git-transfer-policy.md`; ADR 0006 keeps the
   refspec-per-kind decision and cites 0008 for the flag set. Three rows join
   `docs/sandbox-threat-registry.md`; "transfer" and "transfer source" join

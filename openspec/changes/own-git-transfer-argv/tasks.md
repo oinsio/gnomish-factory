@@ -10,6 +10,35 @@ commit boundary). Every group's report ends with the
 old-way sweep of `implementation.md`: the grep run, the hits, and what
 happened to each.
 
+## 0. Test medium
+
+- [ ] 0.1 Add `test-fixtures/src/main/resources/adversarial-gitconfig` holding only
+      the `gnomish-probe` alias. In `test-conventions` set `environment
+      'GIT_CONFIG_GLOBAL'` on `tasks.withType(Test)`, in `pitest-conventions`
+      the same on the `pitest` task (`PitestTask` extends `JavaExec`; minions
+      inherit it), both reading one constant path. Verify: full `./gradlew
+      check --configuration-cache` green; `git config --global --list` run
+      through `GitProcessRunner` from any spec shows the alias alone; the
+      report states whether Gradle treated the variable as a task input and
+      whether the configuration cache was reused (design D11).
+- [ ] 0.2 `AdversarialGitConfig` in `:test-fixtures` (path constant, one
+      documented line per key, `assertInEffect(runner)` running the probe),
+      and `AdversarialGitConfigSpec` in `:bootstrap`: the probe answers, the
+      keys listed by `git config --global --list` through the runner equal
+      the file and show nothing of the developer's `~/.gitconfig`, and a
+      seeded runner with the variable pointed elsewhere fails
+      `assertInEffect`. Add the paragraph to `.claude/rules/testing.md` under
+      "Git fixtures are adversarial by default": the whole test build runs
+      under the committed hostile global configuration, and a spec that
+      proves isolation calls `assertInEffect` first. Verify: spec green;
+      `checkTestTimeInjection` unaffected (D11).
+- [ ] 0.3 Add the hostile keys of D11 to the file (`submodule.recurse`,
+      `fetch.prune`, the sentinel `insteadOf` writing `.gnomish-ext-ran`, the
+      `credential.helper` writing `.gnomish-credential-get` on `get` only).
+      Verify: full `./gradlew check` green again, Docker-gated suites
+      included once locally; every spec that reds is fixed as a spec finding
+      and listed in the report (D11, NFR-S2).
+
 ## 1. The leaf and its values
 
 - [ ] 1.1 Create the `:gittransfer` module: `settings.gradle` include with the
@@ -121,30 +150,28 @@ happened to each.
       green; the outage gate's `RemoteOutageSignalingBaseRefGitSpec` sees no
       `Unavailable` from it (FR5, NFR-R1).
 - [ ] 3.3 Identity spec on real git, `GitTransferIdentitySpec` feature
-      "origin": adversarial fixture per FR12, built on the shared
-      `BareGitRepoFixture` (`:test-fixtures`) rather than a parallel fixture —
-      `addOrigin` already leaves the clone one commit behind origin with a
-      same-name tag on the stale commit (`divergeFromOrigin`). Add to the
-      fixture, as named opt-in methods beside `addConvergedOrigin` (not as a
-      widening of the default posture: `divergeFromOrigin` promises origin's
-      tree stays byte-for-byte what the spec seeded, and a submodule changes
-      the tree), a tag inside the fetched history at origin, an initialized
-      submodule whose own remote has advanced, and a temporary global config
-      file setting `submodule.recurse=true` and `fetch.prune=true`. The
-      global file must reach the child git: `GitProcessRunner` inherits the
-      JVM environment, so the spec sets `GIT_CONFIG_GLOBAL` at the Gradle
-      `test` task (and under `pitest { jvmArgs }` per `testing.md`) or
-      records why a `HOME` override is the right medium — decide in the task,
-      not by assuming. Assert the `for-each-ref` diff of the clone is exactly
-      the named tracking ref, the submodule's refs are unchanged, and
+      "origin": `AdversarialGitConfig.assertInEffect(runner)` first — the
+      recursion and prune keys come from the build-wide file (design D11,
+      task 0.3), the spec plants no configuration of its own. Adversarial
+      fixture per FR12, built on the shared `BareGitRepoFixture`
+      (`:test-fixtures`) rather than a parallel fixture — `addOrigin` already
+      leaves the clone one commit behind origin with a same-name tag on the
+      stale commit (`divergeFromOrigin`). Add to the fixture, as named opt-in
+      methods beside `addConvergedOrigin` (not as a widening of the default
+      posture: `divergeFromOrigin` promises origin's tree stays byte-for-byte
+      what the spec seeded, and a submodule changes the tree), a tag inside
+      the fetched history at origin and an initialized submodule whose own
+      remote has advanced. Assert the `for-each-ref` diff of the clone is
+      exactly the named tracking ref, the submodule's refs are unchanged, and
       `FETCH_HEAD` is absent. Verify: the feature is red against the
       pre-change argv (run once with the D2 flags removed to prove it bites)
       and green after (FR12, UX1, M2).
-- [ ] 3.4 Real-git feature "origin cannot use ext": a global config
-      `url."ext::…".insteadOf` rewriting the origin URL; assert git refuses
-      with its protocol-not-allowed message and no process named in the
-      rewrite runs (a marker file the rewritten command would create is
-      absent). Verify: green (FR4, NFR-S2).
+- [ ] 3.4 Real-git feature "origin cannot use ext": `assertInEffect` first;
+      the clone's origin URL is the sentinel `https://gnomish-rewrite.invalid/`
+      that the build-wide file rewrites to an `ext::` command (D11, task
+      0.3); assert git refuses with its protocol-not-allowed message and
+      `.gnomish-ext-ran` is absent from the clone's working directory, so the
+      rewritten command never ran. Verify: green (FR4, NFR-S2).
 
 ## 4. Harvest
 
@@ -170,13 +197,14 @@ happened to each.
       a same-name tag; assert the ref diff is exactly the task branch,
       `FETCH_HEAD` absent, and — with a `.gitmodules` symlink planted in the
       box branch — the fetch is refused with a parsed `FetchRefusal` and the branch
-      ref is unchanged. Two more assertions on the same run: a global config
-      file naming `credential.helper` as a marker-writing script is in place
-      and the marker is absent after the fetch (the owner points the global
-      config at nowhere for this source; askpass is already emptied by
-      `GitProcessRunner` for every invocation and is asserted in 2.1); and
-      the `ext::` script counts its invocations — exactly one upload-pack
-      session ran, and the clone has no `.git/shallow`. Verify: red with the
+      ref is unchanged. `assertInEffect` first, then two more assertions on
+      the same run: `.gnomish-credential-get` is absent from the clone's
+      working directory after the fetch — the build-wide file names a
+      marker-writing `credential.helper` (D11) and the owner points the
+      global config at nowhere for this source; askpass is already emptied by
+      `GitProcessRunner` for every invocation and is asserted in 2.1; and the
+      `ext::` script counts its invocations — exactly one upload-pack session
+      ran, and the clone has no `.git/shallow`. Verify: red with the
       pre-change argv, green after (FR12, NFR-S1, NFR-S3, NFR-P1, UX1, M2).
 - [ ] 4.4 Docker-gated: `ContainerGitMechanicsSpec` gains one feature
       asserting a tag created in a real box does not appear in the factory
@@ -204,11 +232,12 @@ happened to each.
       real git into a temp destination; assert the destination holds exactly
       `refs/heads/<branch>` and `refs/remotes/origin/<branch>`, no tag, and
       that a planted bad object on the branch is refused (proving the
-      transport path, not local mode); and, with a global config file naming
-      `credential.helper` as a marker-writing script, that the marker is
-      absent after the clone (the owner's `GIT_CONFIG_GLOBAL` names the
-      throwaway `safe.directory` file, so the operator's file is never read).
-      Verify: red before (tags copied), green after (FR7, FR12, NFR-S3, M2).
+      transport path, not local mode); and, after `assertInEffect`, that
+      `.gnomish-credential-get` is absent from the destination (the
+      build-wide file names a marker-writing `credential.helper`, D11, and
+      the owner's `GIT_CONFIG_GLOBAL` names the throwaway `safe.directory`
+      file, so the operator's file is never read). Verify: red before (tags
+      copied), green after (FR7, FR12, NFR-S3, M2).
 - [ ] 5.3 Docker-gated: the seed feature of
       `ContainerTaskExecutionEnvironmentContractSpec` asserts no tag in the
       box after materialize and that the helper image's `git --version` is at

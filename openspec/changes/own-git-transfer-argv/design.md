@@ -241,6 +241,36 @@ poisoning through harvest; ref planting into the operator clone; operator ref di
 the box) mapped to this change. *Rationale:* FR11, `crash-consistency.md`'s referencing
 rule — policy lives in `docs/adr/`, a design archives.
 
+**D11 — The test medium for the operator's git configuration is the build, not a seam in
+the runner.** Every `Test` task and every `pitest` task sets `GIT_CONFIG_GLOBAL` to one
+committed file, `test-fixtures/src/main/resources/adversarial-gitconfig`, so the whole test
+JVM, the git subprocesses every fixture runs, the packaged jar `E2eProcessHarness` spawns
+(it inherits the environment), and PIT's minions all run under an operator configuration
+that tries to widen a transfer: `submodule.recurse=true`, `fetch.prune=true`, a
+`url.<ext-command>.insteadOf` keyed on the sentinel `https://gnomish-rewrite.invalid/`
+whose command writes `.gnomish-ext-ran` into git's working directory, a `credential.helper`
+shell function that writes `.gnomish-credential-get` into git's working directory on the
+`get` action only (git also calls helpers with `store` after a successful URL-token
+authentication, which the Gitea lane performs, so a helper marking every action would mark
+itself there), and an alias `gnomish-probe` printing a fixed line. `AdversarialGitConfig`
+in `:test-fixtures` owns the file's path and the meaning of its keys and offers
+`assertInEffect(runner)`, which runs the probe through the runner and fails when the file is
+not in force, so a run outside Gradle cannot pass an isolation assertion vacuously; the
+identity specs of this change call it first. *Rationale:* FR12, NFR-S2, and `testing.md`
+"Git fixtures are adversarial by default": the JVM cannot set its own environment (the
+conclusion `EnvFileSecretsProvider` and `AgentAiSeam` already record), `PitestTask` extends
+`JavaExec` so minions inherit the task's environment, and one file makes the property hold
+for every spec in the build rather than for the four that ask. A side effect is hermeticity:
+the developer's `~/.gitconfig` no longer reaches any test, on a laptop or in CI. Markers land
+in git's working directory and the rewrite is keyed on a sentinel, so the file is static and
+no build task generates it. *Alternative rejected:* an environment overlay injected into
+`GitProcessRunner`, applied between the inherited environment and the owner's entries —
+precise and PIT-neutral, but it proves isolation only where a spec opts in, adds a
+constructor surface the production root never uses, and leaves every fixture git call under
+whatever the developer's global file says. *Alternative rejected:* generating the file at
+build time with absolute marker paths — unnecessary once markers are relative to the
+working directory, and it would make the file an execution-time artifact two tasks depend on.
+
 ### Sync surfaces
 
 The change touches the `GitAttemptPersistence ↔ EnvironmentAttemptPersistence` pair not at
@@ -249,7 +279,12 @@ flag sets — by extracting the shared abstraction (D1), per the rule-of-three p
 seed script's `env` line and the owner's environment map are not a pair: the script renders
 the map (D6). It also **declines to create** a new undeclared set: the fsck stderr grammar
 (D4) is read by one parser, `FetchRefusal`, not by each of the four fetch-failure sites that
-consume it. No declared pair is touched.
+consume it. No declared pair is touched. One neighbour is recorded so it does not become an
+undeclared twin: `GitExec` in `:gitobjects` sets `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` to
+`/dev/null` on every call of its own. It performs no transfer and is not a pair with the
+owner — its isolation is total, the owner's is per source (D2) — and the build-wide test
+configuration of D11 reaches it like every other git subprocess; a third git launcher with an
+environment policy of its own would be the point to extract one.
 
 ### Single-owner mechanisms
 
@@ -258,6 +293,7 @@ consume it. No declared pair is touched.
 | `GitTransfer.fetch/clone` (`:gittransfer`) | `GitTransfer` (argv + environment) | `BaseRefresh.fetchBranch`, `TagBaseFetch.fetch`, `CommitBaseFetch.fetch`, `TaskBranchLocator.locate`, `ReplicaPairReconciler` (all `adapters:git`); `ContainerHarvestFetch.fetch` (`adapters:git`); `DockerSeedCloneCommand.seedClone` (`sandbox:docker`) | `NarrowFetch` — deleted (D9); the literal argv in `ContainerHarvestFetch.fetch` — deleted; the `git clone ...` line in `SEED_SCRIPT` — replaced by the rendered value. Sweep pattern: `"fetch"`, `"clone"`, `git clone`, `git fetch` across every `src/main`. Exemptions: none | `GitProcessRunner.run(Path, GitTransfer)` is the only entry that runs a transfer; `run(Path, String...)` throws on a transfer subcommand (D5); `GitTransferBoundarySpec` scan with reach assertion (D7) |
 | `FetchRefusal.parse` (`adapters:git`) | `Optional<FetchRefusal>` (message id + object, `UntrustedText`) | `ContainerHarvestFetch.classify`, `RefreshedTip.undelivered`, `CommitBaseFetch.unresolved`, `TaskBranchLocator.classifyFailedFetch` — each asks the parser before its own decision | none existed: no site reads fsck output today; the old way that must not appear is a per-site `stderr.contains("fsck")`. Sweep pattern: `fsck`, `error: object` across `adapters/git/src/main`. Exemptions: none | `@UntrustedParser` on `FetchRefusal` alone, pinned by `UntrustedTextGateSpec.PARSER_CONVERSIONS`; a second class reading `forParsing()` for the same grammar fails that gate's warrant check; `FetchRefusalSpec` on recorded git 2.55 stderr |
 | `GitVersionCheck` (`adapters:git`) | `GitVersion` (parsed, compared; value type in `:gittransfer`) | `ManualRunRunner.run`, ahead of `SubcommandDispatch.dispatchNonRun` — the single funnel of `run`, `take`, `serve` | none existed | startup ordering spec: no transfer before the floor check (`GitVersionFloorSpec` on `AppAssemblyFixture`, the shared app-layer assembly fixture); `UntrustedTextGateSpec` pins the parser's warrant |
+| `AdversarialGitConfig` (`:test-fixtures`, D11) | the committed global-config file's path and the meaning of its keys | `test-conventions` (`tasks.withType(Test)`) and `pitest-conventions` (`pitest`) read the one path; `GitTransferIdentitySpec` and the "origin cannot use ext" feature call `assertInEffect` | none existed: no spec plants a global git configuration today. The old way that must not appear is a per-spec temporary global file or a `HOME` override. Sweep pattern: `GIT_CONFIG_GLOBAL`, `XDG_CONFIG_HOME`, `'HOME'` across every `src/test` and `test-fixtures/src/main`. Exemptions: the two credential-scrub specs that use `HOME` as a stand-in credential name, and `ContainerTaskExecutionEnvironmentUnitSpec`, which asserts the seed script's own export | `AdversarialGitConfigSpec` in `:bootstrap`: the probe answers through the runner, `git config --global --list` equals the file and shows nothing of the developer's `~/.gitconfig`, and `assertInEffect` fails when the variable is unset |
 
 Identity claims and their specs: "the refs changed by a transfer are exactly the named
 destination" — `GitTransferIdentitySpec` (one feature per source kind, real git, adversarial
@@ -266,6 +302,11 @@ asserts the rendered `env` line equals the `SeedPath` value's map.
 
 ## Risks / Trade-offs
 
+- [One environment variable changes git's behaviour in every module's specs at once (D11)]
+  → task 0.1 lands the file with the probe alias alone and runs the full `check` before any
+  hostile key is added (0.3); a spec that reds under `fetch.prune` or `submodule.recurse` is
+  a finding about that spec's assumptions, fixed as such, never a reason to drop the key.
+  Gradle may or may not treat the variable as a task input; 0.1 records which.
 - [A real repository's history fails fsck beyond the three ignores] → the task parks with the
   message id in the report (UX3), the operator sees which object; the list grows only by a
   change (Q1). Not silently ignoring is the point.
