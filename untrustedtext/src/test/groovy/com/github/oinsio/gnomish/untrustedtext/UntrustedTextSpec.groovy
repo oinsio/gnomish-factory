@@ -15,6 +15,18 @@ class UntrustedTextSpec extends Specification {
 
     private static final String TEXT = 'fatal: not a git repository'
 
+    /**
+     * {@code U+2028} and {@code U+2029} as numeric constants: both are invisible in a source file,
+     * and a backslash-u escape is expanded by the lexer before parsing, which would put a real line
+     * break in this file.
+     */
+    private static final String LINE_SEPARATOR = Character.toString(0x2028)
+
+    private static final String PARAGRAPH_SEPARATOR = Character.toString(0x2029)
+
+    /** The bound the excerpt scenario below asks for, and the bound GitCommandResult quotes under. */
+    private static final int CAP = 1_400
+
     def "each capture family has its own mint, and the provenance travels with the text — #family"() {
         expect:
         carrier.raw() == TEXT
@@ -120,23 +132,83 @@ class UntrustedTextSpec extends Specification {
 
     def "an excerpt is the log exit under a caller's own bound"() {
         given: 'more text than the excerpt asks for'
-        def carrier = UntrustedText.subprocess('x' * 500 + 'THE-ERROR')
+        def carrier = UntrustedText.subprocess('x' * 5_000 + 'THE-ERROR')
 
         when:
-        def excerpt = carrier.excerpt(20)
+        def excerpt = carrier.excerpt(200)
 
         then: 'the tail survives — that is where the error is — and the volume is bounded'
         excerpt.endsWith('THE-ERROR')
-        excerpt == TextSafety.forLog(carrier.raw(), 20)
+        excerpt.length() <= 200
         carrier.forLog().length() > excerpt.length()
+
+        and: 'text already inside the bound is the log exit under that bound, untouched'
+        UntrustedText.subprocess(TEXT).excerpt(200) == TextSafety.forLog(TEXT, 200)
     }
 
-    def "an excerpt refuses a non-positive bound"() {
+    // FR10 of fix-envelope-medium (design D9): the caller's bound is a statement about what
+    //     leaves the exit, not about what enters the flattening. A capture of nothing but line
+    //     separators renders six characters per one, so an input-only bound handed the caller an
+    //     excerpt six times the size it asked for — and every prose bound built on top of it,
+    //     GitCommandResult.STDERR_CAP_CHARS first among them, lost its headroom with it.
+    def "FR10: an excerpt never exceeds its bound after rendering — #label"() {
+        given: 'the rendered text the exit would produce with no outer bound'
+        def flattened = TextSafety.flatten(TextSafety.strip(raw))
+
         when:
-        UntrustedText.subprocess(TEXT).excerpt(0)
+        def excerpt = UntrustedText.subprocess(raw).excerpt(CAP)
+
+        then: 'the bound holds on what leaves, not on what entered'
+        excerpt.length() <= CAP
+
+        and: 'one event is still one line — the outer cut is flattened like the rest'
+        !excerpt.contains('\n')
+        !excerpt.contains('\r')
+
+        and: 'the tail, where the error is, survives'
+        excerpt.endsWith(flattened[-50..-1])
+
+        and: 'a cut names itself, and text within the bound is left whole'
+        (flattened.length() > CAP) == excerpt.contains('[truncated')
+
+        where:
+        label | raw
+        '1 400 line separators' | LINE_SEPARATOR * 1_400
+        '1 400 paragraph separators' | PARAGRAPH_SEPARATOR * 1_400
+        'mixed separators and prose' | ('fatal: bad object' + LINE_SEPARATOR + '\n\t') * 60
+        'plain ASCII within the bound' | 'x' * 900 + 'THE-ERROR'
+    }
+
+    // FR10, design D9: the floor itself is a bound the excerpt honours, marker included — the
+    //     smallest cap a caller may ask for is one the method can still keep its promise under.
+    def "an excerpt honours the smallest bound it accepts"() {
+        given:
+        def carrier = UntrustedText.subprocess('x' * 5_000 + 'THE-ERROR')
+
+        when:
+        def excerpt = carrier.excerpt(UntrustedText.MIN_EXCERPT_CAP_CHARS)
+
+        then:
+        excerpt.length() <= UntrustedText.MIN_EXCERPT_CAP_CHARS
+        excerpt.endsWith('THE-ERROR')
+        excerpt.contains('[truncated')
+    }
+
+    // FR10, design D9: the bound is on what leaves, so it must be wide enough for the truncation
+    //     marker that names the cut — below that the method could not keep its own promise.
+    def "an excerpt refuses a bound its own truncation marker would not fit — #cap"() {
+        when:
+        UntrustedText.subprocess(TEXT).excerpt(cap)
 
         then:
         thrown(IllegalArgumentException)
+
+        where:
+        cap << [
+            0,
+            -1,
+            UntrustedText.MIN_EXCERPT_CAP_CHARS - 1
+        ]
     }
 
     def "FR10: the parsing exit hands back the captured bytes — #label"() {

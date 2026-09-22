@@ -9,7 +9,7 @@ import spock.lang.Specification
 
 /**
  * NFR-S2, D5 of add-plugin-architecture: the run's answer to the engine-defined interpolation
- * whitelist. The task id is the tracker's own, the branch is derived by the same sanitizer every
+ * allowlist. The task id is the tracker's own, the branch is derived by the same sanitizer every
  * other component derives it with, and the stage name is read live — one client serves a whole run,
  * so a captured name would address the stage the run started at.
  */
@@ -56,8 +56,8 @@ class RunCheckRunContextSpec extends Specification {
         RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
     }
 
-    // The whitelist is closed: a name outside it is not a lookup this context can answer.
-    def "supplies nothing for a name outside the whitelist"() {
+    // The allowlist is closed: a name outside it is not a lookup this context can answer.
+    def "supplies nothing for a name outside the allowlist"() {
         expect:
         RunCheckRunContext.of(TASK, holderAt('implement')).value('env.SONAR_TOKEN').isEmpty()
     }

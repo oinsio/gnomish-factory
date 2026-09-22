@@ -63,6 +63,15 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     /** Assignable, since setup() stubs the port once: the abort scenario swaps in a breaking one. */
     InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()
 
+    /**
+     * What each state.json read at the tip answers, in call order — a closure rather than a value,
+     * so the impossible-state scenarios can empty one read without re-stubbing a port setup()
+     * already stubbed (FR1 of fix-envelope-medium).
+     */
+    Closure<Optional<TaskState>> stateRead = {
+        Optional.of(TaskState.atStageStart('build'))
+    }
+
     def setup() {
         cloneDir = tempDir.resolve('my-project')
         worktreesRoot = tempDir.resolve('worktrees')
@@ -74,8 +83,8 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> salvager
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
-        store.readRecordedState(_) >> TaskState.atStageStart('build')
-        store.readTaskRecord(_) >> { record }
+        store.readRecordedState(_) >> { stateRead.call() }
+        store.readTaskRecord(_) >> { Optional.ofNullable(record) }
     }
 
     ScriptedConsoleIO console = new ScriptedConsoleIO([''])
@@ -301,6 +310,44 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         and: 'nothing was run or written'
         executor.requests.isEmpty()
         0 * lifecycleStore.recordOutcome(_, _)
+    }
+
+    // FR1, design D2 of fix-envelope-medium: on the manual-run paths the envelope was committed by
+    //     this very run, so an empty read at HEAD is an invariant violation, not a route. There is
+    //     no delivered arm here — that one belongs to the tracker-driven mechanics — so each site
+    //     reports the application's own impossible-state exception, naming the task and the
+    //     worktree whose HEAD should have carried the file.
+    def "FR1: #site reports an impossible state when the tip carries no envelope"() {
+        given:
+        absent.call(this)
+
+        when:
+        resume()
+
+        then:
+        def ex = thrown(InternalErrorException)
+        ex.message.contains('PROJ-1')
+        ex.message.contains('absent at HEAD')
+        ex.message.contains(worktree.toString())
+
+        where:
+        site | absent
+        'the resume bootstrap' | { GitResumeRoutingSpec it ->
+            it.record = null
+        }
+        'the final-state readback' | { GitResumeRoutingSpec it ->
+            it.stateRead = {
+                Optional.empty()
+            }
+        }
+        'the terminal-boundary read'| { GitResumeRoutingSpec it ->
+            // The continuation reads the state again once the engine reaches PipelineEnd, so only
+            // that second read is emptied — the first one must answer, or the run never gets there.
+            int reads = 0
+            it.stateRead = {
+                reads++ == 0 ? Optional.of(TaskState.atStageStart('build')) : Optional.empty()
+            }
+        }
     }
 
     // FR8: a resumed run that ABORTS is still a terminal boundary — the outcome is recorded and the

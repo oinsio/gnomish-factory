@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
@@ -68,7 +69,7 @@ import java.util.List;
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
-    private static final String STATE_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final String STATE_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     // Paths and the commit message travel as positional args ($1-$3), never string-interpolated
     // into the script, so neither can carry a shell metacharacter that alters the command —
@@ -126,7 +127,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
         byte[] stateBytes = documents.state(taskId, key, state);
         byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);
-        String tracePath = GnomishTaskPaths.DIR + TraceLineWriter.relativePath(key);
+        String tracePath = EnvelopePaths.DIR + TraceLineWriter.relativePath(key);
         environment.putFile(STATE_PATH, stateBytes);
         environment.putFile(tracePath, traceBytes);
 

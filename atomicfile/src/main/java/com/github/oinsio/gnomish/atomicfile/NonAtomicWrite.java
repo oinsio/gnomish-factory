@@ -12,8 +12,8 @@ import java.lang.annotation.Target;
  *
  * <p>The atomic-write boundary gate is a negative rule: no production class may reach a {@code
  * java.nio.file.Files} write method unless it lives in this package or carries this marker. A
- * negative rule is what catches the writer nobody thought to add to a list — the failure mode a
- * whitelist of named writers cannot have, because a new writer is exactly the thing missing from
+ * negative rule is what catches the writer nobody thought to add to a list — the failure mode an
+ * allowlist of named writers cannot have, because a new writer is exactly the thing missing from
  * it.
  *
  * <p>The escape is deliberately self-declaring rather than a central allowlist, the same shape

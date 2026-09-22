@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish
 
 import ch.qos.logback.classic.Logger
-import ch.qos.logback.core.Appender
 import ch.qos.logback.core.FileAppender
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
 import java.nio.file.Files
@@ -49,10 +48,10 @@ class OperatorLogIsolationSpec extends Specification {
         LoggerFactory.getLogger(OperatorLogIsolationSpec).info(marker)
 
         then: 'the test configuration caught it'
-        Files.readString(testLogFile()).contains(marker)
+        carriesLine(testLogFile(), marker)
 
         and: 'and the operator\'s own log never saw it'
-        operatorLogLines().every { !it.contains(marker) }
+        !carriesLine(operatorLog(), marker)
     }
 
     // M4: no appender of the booted context points anywhere inside the operator's home factory dir
@@ -80,15 +79,32 @@ class OperatorLogIsolationSpec extends Specification {
 
     private static List<FileAppender<?>> fileAppenders() {
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)
-        List<Appender<?>> attached = []
-        root.iteratorForAppenders().forEachRemaining { attached << it }
+        def attached = []
+        root.iteratorForAppenders().forEachRemaining { attached.add(it) }
         return attached.findAll {
             it instanceof FileAppender
         } as List<FileAppender<?>>
     }
 
-    private static List<String> operatorLogLines() {
-        Path log = OPERATOR_LOG_DIR.resolve('gnomish.log')
-        return Files.isRegularFile(log) ? Files.readAllLines(log) : []
+    private static Path operatorLog() {
+        return OPERATOR_LOG_DIR.resolve('gnomish.log')
+    }
+
+    /**
+     * Whether any line of this log carries the marker — streamed, never held whole. Both logs this
+     * spec reads are append-only and unbounded: the build directory's file grows across every
+     * local run until someone cleans it, and the operator's own log is the production file. Read
+     * as one string, either can outgrow the heap, and the spec then fails with an {@code
+     * OutOfMemoryError} that says nothing about log isolation (observed at 624 MB after four
+     * consecutive local runs). A missing file is an empty log, which is the answer both
+     * assertions want: nothing was written there.
+     */
+    private static boolean carriesLine(Path log, String marker) {
+        if (!Files.isRegularFile(log)) {
+            return false
+        }
+        Files.lines(log).withCloseable { lines ->
+            lines.anyMatch { String line -> line.contains(marker) }
+        }
     }
 }

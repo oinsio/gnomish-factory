@@ -48,6 +48,10 @@ change's `design.md` or spec:
 10. **Kill-point specs exist.** The transition joins the kill-point matrix:
     kill after each durable step, run the pickup, assert the shape and the
     convergence, and assert the second recovery pass is a no-op.
+11. **Readers name their medium.** Every decision on a recovery path reads the
+    durable medium (tip, tracker); a local working copy is a write staging
+    area, and a read of a factory-owned file from it is a defect the
+    `EnvelopeMediumBoundarySpec` gate rejects.
 
 ## Referencing
 

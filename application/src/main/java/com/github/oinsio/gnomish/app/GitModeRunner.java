@@ -161,7 +161,8 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
         // A normal return means the pipeline reached Position.PipelineEnd (Completed): the
         // engine's last persist() call already committed that terminal state.json durably, so
         // it is read back here rather than threaded through RunnerOutcomeLoop's void return.
-        TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store().readRecordedState(worktree));
+        TaskOutcome.Completed completed = new TaskOutcome.Completed(
+                git.store().readRecordedState(worktree).orElseThrow(() -> AbsentEnvelope.state(taskId, worktree)));
         GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, completed);
     }
 

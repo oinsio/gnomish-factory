@@ -77,11 +77,24 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         ]
     }
 
+    /**
+     * The same three access paths as {@link #allSources}, as the {@link GitShowTip} readers that own
+     * the two host-medium answers the seam interface does not expose: the tree-entry predicate
+     * (design D3, FR4 of fix-envelope-medium) and the located cleanup commit (design D5, FR6).
+     */
+    private List<GitShowTip> allTips(String taskId = 'PROJ-1') {
+        allRevisions(taskId).collect {
+            new GitShowTip(runner, it[0] as Path, it[1] as String)
+        }
+    }
+
     // FR1: a file present at the tip reads back identically through all three media.
     def "every medium reads a file the tip carries"() {
         expect:
         allSources().every {
-            it.readAtTip('.gnomish-task/task.json').orElse('').contains('PROJ-1')
+            it.readAtTip('.gnomish-task/task.json').map { text ->
+                text.contains('PROJ-1')
+            }.orElse(false)
         }
     }
 
@@ -123,7 +136,9 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
     def "every medium reads the initial state.json the STARTED commit carries"() {
         expect:
         allSources().every {
-            it.readAtTip('.gnomish-task/state.json').orElse('').contains('implement')
+            it.readAtTip('.gnomish-task/state.json').map { text ->
+                text.contains('implement')
+            }.orElse(false)
         }
     }
 
@@ -137,7 +152,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         def read = new RefTipSource(runner, worktree(), 'HEAD').readAtTip('.gnomish-task/task.json')
 
         then:
-        read.orElse('').contains('PROJ-1')
+        read.map { it.contains('PROJ-1') }.orElse(false)
     }
 
     // FR13: the tenure's epoch rides every commit as a trailer, whichever revision a reader
@@ -178,8 +193,8 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
 
     // FR1: after the cleanup commit each medium finds it — including after further commits land on
     // top, which is why the search walks history instead of looking at tip^.
-    def "every medium finds the cleanup commit in history, even under later commits"() {
-        given: 'a completed task whose branch gained a human commit after cleanup'
+    /** Completes PROJ-1, cleans its branch up, then lands a human commit on top of the cleanup. */
+    private void deliverWithCommitAfterCleanup() {
         def persistence = new GitAttemptPersistence(runner, worktree(), 'PROJ-1', ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0),
                 [
@@ -190,8 +205,70 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         repository.finishCleanup('PROJ-1')
         Files.writeString(worktree().resolve('note.txt'), 'after cleanup')
         commitAll(worktree(), 'a human commit after cleanup')
+    }
+
+    def "every medium finds the cleanup commit in history, even under later commits"() {
+        given: 'a completed task whose branch gained a human commit after cleanup'
+        deliverWithCommitAfterCleanup()
 
         expect:
         allSources().every { it.cleanupCommitInHistory() }
+    }
+
+    // FR4 of fix-envelope-medium: the tree-entry predicate is the one owner of "the tip carries
+    //     this path" — it answers for the state directory and for a file inside it, on every medium.
+    def "FR4: every medium reports the paths the tip carries"() {
+        expect:
+        allTips().every {
+            it.carries('.gnomish-task') && it.carries('.gnomish-task/task.json')
+        }
+    }
+
+    // FR4 of fix-envelope-medium: a path the tip does not carry is a plain false, not a failure —
+    //     the cleanup and salvage guards decide what that absence means.
+    def "FR4: every medium reports a path the tip does not carry as absent"() {
+        expect:
+        allTips().every {
+            !it.carries('.gnomish-task/decisions/implement-a0.json')
+        }
+    }
+
+    // FR4 of fix-envelope-medium: the predicate reads the tip, not the working copy — a directory
+    //     lying on disk under a tip that never committed it must not read as carried.
+    def "FR4: the worktree medium's predicate reads the tip, not the dirty working copy"() {
+        given: 'an untracked factory-shaped directory beside the tip'
+        Files.createDirectories(worktree().resolve('.gnomish-scratch'))
+        Files.writeString(worktree().resolve('.gnomish-scratch').resolve('note.txt'), 'uncommitted')
+
+        expect:
+        !new GitShowTip(runner, worktree(), 'HEAD').carries('.gnomish-scratch')
+    }
+
+    // FR6 of fix-envelope-medium: a live branch has no cleanup commit to locate.
+    def "FR6: no medium locates a cleanup commit before cleanup"() {
+        expect:
+        allTips().every { it.cleanupCommit().isEmpty() }
+    }
+
+    // FR6 of fix-envelope-medium: the delivered envelope stands at the parent of the located
+    //     cleanup commit. On this branch the tip carries no envelope and `tip^` is the cleanup
+    //     commit itself, which carries none either — so the reader that assumed `tip^` read the
+    //     wrong commit, and only the located id points at the `Completed` envelope.
+    def "FR6: every medium locates the cleanup commit, whose parent carries the envelope"() {
+        given: 'a completed task whose branch gained a human commit after cleanup'
+        deliverWithCommitAfterCleanup()
+
+        expect:
+        allRevisions().every { pair ->
+            def repo = pair[0] as Path
+            def revision = pair[1] as String
+            def located = new GitShowTip(runner, repo, revision).cleanupCommit()
+            located.isPresent()
+                    && runner.run(repo, 'log', '-1', '--format=%B', located.get())
+                    .stdout().contains(ServiceCommitMessages.cleanup())
+                    && new GitShowTip(runner, repo, located.get() + '^').carries('.gnomish-task/task.json')
+                    && !new GitShowTip(runner, repo, revision).carries('.gnomish-task/task.json')
+                    && !new GitShowTip(runner, repo, revision + '^').carries('.gnomish-task/task.json')
+        }
     }
 }

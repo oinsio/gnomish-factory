@@ -209,7 +209,13 @@ the build where production code outside the declared mint owners reads a
 subprocess stream, an HTTP response body, or a document file into a plain
 `String`. The scan asserts it reached every file it claims to cover, and its
 allowlist names each mint owner with the family it mints. No secret
-values appear in any log line.
+values appear in any log line. A caller-bounded excerpt of the carrier —
+the log exit taken under a bound smaller than the record cap, so that prose
+around it fits under that cap — SHALL bound its *rendered* output: the
+characters that leave the exit after line separators are flattened to their
+visible escapes, never only the characters that enter the flattening, so the
+headroom the caller reserved holds for any content, including text made of
+characters that render longer than they are.
 
 The log exit is the second of three layers. The first is capture: the seven
 capture families mint the carrier where the text enters the process. The
@@ -231,6 +237,7 @@ corpus, for the message path, the exception path and the MDC path.
 <!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
 <!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
 <!-- implements FR4, FR7, FR10, FR11, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
+<!-- implements FR10, NFR-S1, UX3 of fix-envelope-medium -->
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is
@@ -302,6 +309,15 @@ corpus, for the message path, the exception path and the MDC path.
   standard error and logged as the trailing argument
 - **THEN** the exception's message is the carrier's log exit and no
   per-site sanitizing call exists at the throw site
+
+#### Scenario: A caller-bounded excerpt keeps the caller's words under the record cap
+- **WHEN** a git invocation fails with a standard error of 1 400 line-separator
+  characters (`U+2028`), each of which renders as a six-character visible
+  escape, and the failure detail quotes it under the caller's bound
+- **THEN** the excerpt that leaves the exit is no longer than the caller's
+  bound, so the rendered record still begins with the caller's prose and the
+  `exited <code>` opening rather than losing them to the record cap's
+  tail-keeping truncation
 
 ### Requirement: Exceptions keep their stack traces
 Every log call site that reports an exception SHALL pass the throwable as the

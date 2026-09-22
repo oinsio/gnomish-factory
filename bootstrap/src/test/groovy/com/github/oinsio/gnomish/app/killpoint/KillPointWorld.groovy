@@ -53,6 +53,19 @@ class KillPointWorld implements BareGitRepoFixture {
      */
     Path worktree
 
+    /**
+     * The argv log of this medium's own git stand-in, or {@code null} for a medium whose runner is
+     * not recorded. Only a row making a cost claim reads it (NFR-P1 of fix-envelope-medium); the
+     * rest ignore it.
+     */
+    Path gitLog
+
+    /**
+     * The runner {@link #store} writes through — shared so a row's own git calls land in the same
+     * log the store's do, and a cost claim covers the whole pickup rather than the store's half.
+     */
+    GitProcessRunner runner = new GitProcessRunner()
+
     String taskId
 
     TaskRef ref
@@ -91,6 +104,23 @@ class KillPointWorld implements BareGitRepoFixture {
      */
     EgressCursorDto tipCursor() {
         tipTask()?.egressCursor()
+    }
+
+    /** Every invocation {@link #gitLog} recorded, argv per line, in call order. */
+    List<String> gitArgv() {
+        gitLog?.toFile()?.exists() ? gitLog.toFile().readLines() : []
+    }
+
+    /**
+     * The envelope reads among {@code argv}: the {@code show} and {@code cat-file -e} invocations
+     * addressed at {@code HEAD:} — the worktree's own tip, which is the medium the host readers
+     * moved to. Reads at the branch ref (what the classifier spends) are deliberately outside it:
+     * this is the budget of one pickup's worktree reads (NFR-P1 of fix-envelope-medium).
+     */
+    static List<String> envelopeReads(List<String> argv) {
+        argv.findAll {
+            it.contains('HEAD:') && (it.startsWith('show ') || it.startsWith('cat-file '))
+        }
     }
 
     /**

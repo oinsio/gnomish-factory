@@ -442,7 +442,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
         def recoveringBaseRefGit = Stub(BaseRefGit) {
@@ -555,7 +555,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> freshRecord()
+            readTaskRecord(_) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
         def beat = new RecordingBeat()
@@ -596,8 +596,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> freshRecord()
-            readRecordedState(_) >> TaskState.atStageStart('build')
+            readTaskRecord(_) >> Optional.of(freshRecord())
+            readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
         }
         // FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.

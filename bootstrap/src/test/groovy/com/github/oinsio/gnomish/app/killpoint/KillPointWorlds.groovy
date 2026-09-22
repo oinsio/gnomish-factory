@@ -43,13 +43,25 @@ trait KillPointWorlds implements BareGitRepoFixture {
 
     static final String TASK_ID = 'PROJ-1'
 
-    /** The host medium: a real working clone, worktrees, {@link GitTaskRepository}. */
+    /**
+     * The host medium: a real working clone, worktrees, {@link GitTaskRepository}.
+     *
+     * <p>Its runner is the recording git stand-in, so a row can assert what a pickup SPENDS on
+     * reads of the worktree's own {@code HEAD} — the medium the host readers moved to — and not
+     * only what it leaves behind (NFR-P1 of fix-envelope-medium). The container medium reads
+     * through bare objects in-process and has no such cost to bound.
+     */
     KillPointWorld hostWorld(Path root) {
         Path clone = initGnomishClone(root, 'my-project')
         Path worktreesRoot = root.resolve('worktrees-root')
         def epochs = new ClaimEpochBook()
-        def store = new GitTaskRepository(new GitProcessRunner(), clone, worktreesRoot, epochs)
-        seed(clone, store, epochs, 'HEAD', worktreesRoot.resolve('my-project').resolve(TASK_ID))
+        Path gitLog = root.resolve('git-invocations.log')
+        def runner = new GitProcessRunner(recordingGit(gitLog).toString())
+        def store = new GitTaskRepository(runner, clone, worktreesRoot, epochs)
+        def world = seed(clone, store, epochs, 'HEAD', worktreesRoot.resolve('my-project').resolve(TASK_ID))
+        world.gitLog = gitLog
+        world.runner = runner
+        world
     }
 
     /** The container medium: a real bare repo written through {@link GitObjectsTaskRepository}. */

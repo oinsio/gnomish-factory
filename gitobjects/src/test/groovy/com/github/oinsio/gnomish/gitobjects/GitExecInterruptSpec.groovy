@@ -7,7 +7,9 @@ import spock.lang.Specification
  * FR25 of add-sandbox-core, FR13 of bound-subprocess-commands: {@link GitExec}'s interruption
  * contract, which the migration onto the shared supervisor leaves unchanged — the interrupt flag is
  * restored for callers up the stack, the child process is not left orphaned, and the failure
- * surfaces as a {@link GitObjectsException} carrying its cause rather than as an exit code.
+ * surfaces as a {@link GitObjectsInterruptedException} carrying its cause rather than as an exit
+ * code — by its own type, so a caller that degrades on an unreadable document cannot fold "git was
+ * never allowed to answer" into that answer.
  *
  * <p>The mechanics under the contract — the two-phase tree kill and the reap — belong to
  * {@code ProcessSupervisorInterruptSpec} now; what is verified here is only this library's
@@ -28,8 +30,8 @@ class GitExecInterruptSpec extends Specification {
         when:
         GitExec.await(process, done, done)
 
-        then: 'the interruption surfaces loudly, carrying its cause'
-        def e = thrown(GitObjectsException)
+        then: 'the interruption surfaces loudly, by its own type and carrying its cause'
+        def e = thrown(GitObjectsInterruptedException)
         e.cause instanceof InterruptedException
 
         and: 'the interrupt flag was restored for callers up the stack (read-and-clear here)'
@@ -59,8 +61,8 @@ class GitExecInterruptSpec extends Specification {
         when:
         GitExec.await(process, pump, pump)
 
-        then: 'the interruption surfaces loudly, carrying its cause'
-        def e = thrown(GitObjectsException)
+        then: 'the interruption surfaces loudly, by its own type and carrying its cause'
+        def e = thrown(GitObjectsInterruptedException)
         e.cause instanceof InterruptedException
 
         and: 'the interrupt flag was restored for callers up the stack (read-and-clear here)'

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -67,7 +68,7 @@ final class HarvestedStateCommitCheck {
         // Resolved once for both read-backs rather than per blob. It cannot be empty here:
         // verifyParent has already resolved tip^, which no unresolvable tip has.
         ObjectId tipCommit = gitObjects.resolveRef(tip).orElseThrow();
-        readBack(taskId, tipCommit, GnomishTaskPaths.STATE_JSON_PATH, stateBytes);
+        readBack(taskId, tipCommit, EnvelopePaths.STATE_JSON_PATH, stateBytes);
         readBack(taskId, tipCommit, tracePath, traceBytes);
     }
 

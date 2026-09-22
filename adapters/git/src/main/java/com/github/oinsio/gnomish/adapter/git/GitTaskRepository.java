@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -19,7 +20,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -110,7 +110,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
         Path worktree = ensureWorktree(taskId);
         TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null, false, pin);
-        StateFileWrite.write(worktree, taskId, initialState, TaskLifecycleEvent.STARTED);
+        StateFileWrite.write(runner, worktree, taskId, initialState, TaskLifecycleEvent.STARTED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.STARTED);
     }
 
@@ -139,7 +139,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                 .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
-        StateFileWrite.write(worktree, taskId, resetState, TaskLifecycleEvent.RESUMED);
+        StateFileWrite.write(runner, worktree, taskId, resetState, TaskLifecycleEvent.RESUMED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.RESUMED);
     }
 
@@ -201,7 +201,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void confirmTerminalWrite(String taskId) {
         Path worktree = ensureWorktree(taskId);
-        TerminalWriteMarker.clearPending(worktree, taskId);
+        TerminalWriteMarker.clearPending(runner, worktree, taskId);
         commitWith(taskId, worktree, ServiceCommitMessages.trackerWriteConfirmed(), TaskLifecycleEvent.RESUMED);
     }
 
@@ -211,27 +211,26 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     /**
-     * The worktree's current {@code task.json} as its raw wire DTO — read this way rather than as a
+     * The branch's current {@code task.json} as its raw wire DTO — read this way rather than as a
      * domain record so a rewrite can carry forward the fields the domain does not model, the denial
      * cursor among them (design D8 of fix-denial-attribution-durability). Host mode has no egress
      * guard and so never writes a cursor of its own, but a branch that ran in container mode before
      * this resume carries one, and a host-side lifecycle rewrite must not be what erases it.
+     *
+     * <p>The read goes through {@link RequiredTaskJson}, which owns it for both host-side
+     * rewrites: it resolves at the worktree's {@code HEAD} rather than its working copy, and
+     * reports git's own reason for a failed read instead of calling every non-zero exit an
+     * absence. Absence at the tip fails exactly as the worktree read's I/O failure did — every
+     * transition that rewrites the envelope runs on a branch that carries one.
      */
     private TaskJsonDto readCurrentDto(String taskId, Path worktree, TaskLifecycleEvent event) {
-        Path taskJson = worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH);
-        UntrustedText json;
-        try {
-            json = UntrustedText.branchDocument(Files.readString(taskJson));
-        } catch (IOException e) {
-            throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
-        }
-        return TaskJsonMapper.readDto(json);
+        return RequiredTaskJson.atTipOf(runner, worktree, taskId, event);
     }
 
     private void writeAndCommit(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
         try {
             String json = TaskStateJson.mapper().writeValueAsString(dto);
-            AtomicFileWriter.write(worktree.resolve(GnomishTaskPaths.TASK_JSON_PATH), json);
+            AtomicFileWriter.write(worktree.resolve(EnvelopePaths.TASK_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing task.json", e);
         }

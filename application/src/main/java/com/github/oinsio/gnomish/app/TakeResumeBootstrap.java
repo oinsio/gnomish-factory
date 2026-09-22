@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.Optional;
 import org.slf4j.MDC;
 
 /**
@@ -15,7 +16,8 @@ import org.slf4j.MDC;
  * divergence-reconcile sequence. Both resume entry points delegate here rather than reimplementing
  * it — {@link TakeResumeRunner#bootstrap} for tracker-driven {@code take --resume} and {@link
  * GitResumeRunner#bootstrap} for manual-run {@code run --resume} — so the two flows cannot drift
- * apart in what a resumed worktree is brought to before {@code task.json} is read.
+ * apart in what a resumed worktree is brought to before {@code task.json} is read at its
+ * {@code HEAD}.
  *
  * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must harden the clone,
  * reconcile the remote on resume-start, and build the same resume bundle shape (context,
@@ -34,13 +36,16 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
 
     /**
      * Locates the task branch for {@code taskId} in {@code cloneDir}, materializes its worktree,
-     * reconciles local/origin divergence, and loads its {@code task.json}.
+     * reconciles local/origin divergence, and loads the {@code task.json} its {@code HEAD}
+     * carries.
      *
      * <p>Implements FR9 of add-tracker-port.
      *
      * @param cloneDir the project clone; never mutated
      * @param taskId the tracker's original taskId, as supplied to {@code take --resume}
-     * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
+     * @return the bootstrap bundle: located branch, materialized worktree, loaded task record —
+     *     or empty when the branch tip carries no task envelope, which is the delivered shape a
+     *     cleanup commit leaves behind (design D1, D2 of fix-envelope-medium)
      * @throws UsageException if no branch for {@code taskId} is found
      * @throws BranchLocationUnavailableException if origin could not be asked whether the branch
      *     exists — a network failure is not a missing branch, so it is reported apart from the
@@ -50,7 +55,7 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
      *     claim protocol's arbitration, so the claimless {@code run --resume} caller stops and
      *     reports instead (FR8 of harden-task-branch-contract)
      */
-    ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
+    Optional<ResumeBootstrap> bootstrap(Path cloneDir, String taskId) {
         // Runner-start hygiene for both resume flows: neutralize hooks on the clone before the
         // worktree materializes, so the shared .git/config carries core.hooksPath from the start
         // (FR17, design D11) — the config-write twin of the fresh path's pruneWorktrees hardening.
@@ -74,7 +79,10 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
         git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
-        TaskRecord content = git.store().readTaskRecord(worktree);
+        return git.store().readTaskRecord(worktree).map(content -> bundle(taskId, worktree, branchName, content));
+    }
+
+    private ResumeBootstrap bundle(String taskId, Path worktree, String branchName, TaskRecord content) {
         MDC.put(taskIdMdcKey, content.context().taskId());
         return new ResumeBootstrap(
                 taskId,

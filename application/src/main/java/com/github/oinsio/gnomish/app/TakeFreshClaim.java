@@ -149,7 +149,8 @@ final class TakeFreshClaim {
                 synthesized.initialState());
 
         Path worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
-        TaskRecord content = git.store().readTaskRecord(worktree);
+        TaskRecord content =
+                git.store().readTaskRecord(worktree).orElseThrow(() -> AbsentEnvelope.task(taskId, worktree));
         String branchName = TaskIdSanitizer.branchName(taskId);
         var bootstrap = new ResumeBootstrap(
                 taskId,

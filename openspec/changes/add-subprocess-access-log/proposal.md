@@ -333,6 +333,9 @@ only budgets this change touches); no separate cost requirement.
 - **Sequencing**: after `harden-logging-observability` (this change's emitter
   home is that change's `:logtext` module and its Logback hardening is the
   config this change extends). References that change; duplicates nothing
-  from it.
+  from it. `fix-envelope-medium` is sequenced after this change and layers
+  its `factory-logging` delta ("Untrusted text enters logs only sanitized")
+  on this delta's text, per `delta-specs.md`; if the order is inverted at
+  sync time, that delta's preamble says what must survive a hand merge.
 - **Not touched**: `:subprocess` (neutrality contract), `CaptureRunner`,
   `:domain`, tracker adapters, the ledger/snapshot plane.

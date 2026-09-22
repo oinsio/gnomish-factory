@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -115,17 +116,60 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         thrown(GitTaskRepositoryException)
     }
 
-    // FR10: the branch exists but its pre-cleanup commit does not carry the state files (a
-    // non-Completed branch has no cleanup commit, so the parent is an unrelated commit) — surfaced
-    // as BranchStateFileMissingException, distinct from "branch not found".
-    def "throws BranchStateFileMissingException when the parent commit lacks the state files"() {
-        given: 'a fresh task branch with a single commit — its parent is the base, carrying no .gnomish-task/'
-        repository.createTask(context('PROJ-2'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+    // FR10, FR6 of fix-envelope-medium: the branch exists but nothing on it was ever delivered —
+    // its tip carries no envelope and its history holds no cleanup commit, so there is no Completed
+    // commit to locate. Surfaced as BranchStateFileMissingException, distinct from "branch not
+    // found" and from a delivered branch whose files a later commit removed.
+    def "throws BranchStateFileMissingException when no delivered commit can be located"() {
+        given: 'a task branch that never carried an envelope and never saw a cleanup commit'
+        assert runner.run(cloneDir, 'branch', 'gnomish/PROJ-2', 'HEAD').exitCode() == 0
 
         when:
         reader.read(cloneDir, 'PROJ-2')
 
         then:
         thrown(BranchStateFileMissingException)
+    }
+
+    // FR6 of fix-envelope-medium: a delivered branch that gained commits after its cleanup commit
+    // still reports the state it delivered — the reader locates the cleanup commit in history and
+    // reads its parent, rather than assuming the tip's parent is the Completed commit.
+    def "reads the delivered state from the Completed commit when the branch gained commits after cleanup"() {
+        given: 'a delivered branch whose cleanup commit is no longer the tip'
+        repository.createTask(context('PROJ-3'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def finalState = TaskState.atStageStart('implement')
+        persistOneRound('PROJ-3', finalState)
+        repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState))
+        repository.finishCleanup('PROJ-3')
+        commit(worktreesRoot.resolve('clone').resolve('PROJ-3'), 'later.txt', 'work landed after the cleanup')
+
+        when:
+        def delivered = reader.read(cloneDir, 'PROJ-3')
+
+        then: 'the delivered identity and final state come from the located Completed commit'
+        delivered.context().taskId() == 'PROJ-3'
+        delivered.finalState() == finalState
+    }
+
+    // FR6 of fix-envelope-medium: on a CompletedUncleaned tip the Completed envelope is still at
+    // the tip, so that is where the delivered state is read — never at a parent, which carries the
+    // state of the round before the outcome commit.
+    def "reads at the tip when the tip still carries the envelope"() {
+        given: 'a Completed tip whose cleanup commit never landed, carrying a state its parent lacks'
+        repository.createTask(context('PROJ-4'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        persistOneRound('PROJ-4', TaskState.atStageStart('implement'))
+        def deliveredState = TaskState.atStageStart('review')
+        // The lifecycle commit stages the whole worktree, so this write lands in the Completed
+        // commit itself — the same way the STARTED commit carries StateFileWrite's initial state.
+        StateFileWrite.write(runner, worktreesRoot.resolve('clone').resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
+        repository.recordOutcome('PROJ-4', new TaskOutcome.Completed(deliveredState))
+        assert runner.run(cloneDir, 'show', 'gnomish/PROJ-4:.gnomish-task/task.json').exitCode() == 0
+
+        when:
+        def delivered = reader.read(cloneDir, 'PROJ-4')
+
+        then: 'the delivered state is the one recorded at the tip, not the previous round\'s at tip^'
+        delivered.context().taskId() == 'PROJ-4'
+        delivered.finalState() == deliveredState
     }
 }

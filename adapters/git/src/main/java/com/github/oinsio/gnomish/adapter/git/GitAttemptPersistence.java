@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
@@ -113,7 +114,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         AttemptKey key = trace.key();
-        Path gnomishTaskRoot = worktreeRoot.resolve(GnomishTaskPaths.DIR_NAME);
+        Path gnomishTaskRoot = worktreeRoot.resolve(EnvelopePaths.DIR_NAME);
 
         roundBoundaryCheck.verify(taskId, key, previousTip);
         String tipBeforeThisRound = previousTip;
@@ -143,7 +144,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     private void writeStateJson(String taskId, AttemptKey key, TaskState state) {
         try {
             String json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state));
-            AtomicFileWriter.write(worktreeRoot.resolve(GnomishTaskPaths.STATE_JSON_PATH), json);
+            AtomicFileWriter.write(worktreeRoot.resolve(EnvelopePaths.STATE_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "writing state.json", e);
         }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
@@ -68,7 +69,7 @@ public final class HarvestedBoundaryCheck {
      */
     public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key) {
         GitCommandResult diff =
-                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", GnomishTaskPaths.DIR);
+                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", EnvelopePaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
         // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
         // round aborts as infrastructure rather than blaming the gnome for what git never said.
@@ -96,7 +97,7 @@ public final class HarvestedBoundaryCheck {
             // the sentence is the factory's (design D3 of type-untrusted-text) and the violation
             // type receives it whole rather than as a rendered String.
             throw new RoundBoundaryViolationException(
-                    taskId, UntrustedText.factory(".gnomish-task/ was modified by the gnome: " + paths.forLog()));
+                    taskId, UntrustedText.factory(EnvelopePaths.DIR + " was modified by the gnome: " + paths.forLog()));
         }
     }
 
@@ -122,6 +123,6 @@ public final class HarvestedBoundaryCheck {
      * attempt in the name make stale files self-excluding.
      */
     public static String decisionPath(AttemptKey key) {
-        return GnomishTaskPaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + ".json";
+        return EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + ".json";
     }
 }

@@ -1,15 +1,17 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -44,16 +46,16 @@ import org.slf4j.LoggerFactory;
  *       committing the orphan.
  * </ul>
  *
- * <p>Either way the orphan does not reach a commit by itself: the only reader of the worktree's
- * state file before the next commit is the resume path ({@code TaskStoreGit#readRecordedState}) and
- * the cursor carry-forward below, and salvage restores factory-owned paths from the tip rather than
- * from a dirty worktree (FR5).
+ * <p>Either way the orphan does not reach a commit by itself, and since FR2 of fix-envelope-medium
+ * it is read by nobody: the resume path ({@code TaskStoreGit#readRecordedState}) and the cursor
+ * carry-forward below both resolve at the tip, and salvage restores factory-owned paths from the
+ * tip rather than from a dirty worktree (FR5).
  *
  * <p>Split out of {@link GitTaskRepository}, which keeps {@code task.json}: the two envelopes have
  * different writers and different rules, and this one also owns the denial-cursor carry-forward
  * below, so the split moves a responsibility rather than only line count.
  *
- * <p>Implements FR3, FR4, FR5 of harden-task-branch-contract.
+ * <p>Implements FR3, FR4, FR5 of harden-task-branch-contract; FR2 of fix-envelope-medium.
  */
 final class StateFileWrite {
 
@@ -64,17 +66,20 @@ final class StateFileWrite {
     /**
      * Writes {@code state} as {@code .gnomish-task/state.json} in {@code worktree}.
      *
+     * @param runner the git subprocess runner the cursor's tip read goes through
      * @param worktree the task worktree holding the state directory
      * @param taskId the task whose state is written; for error reporting
      * @param state the state to record
      * @param event the lifecycle event this write belongs to; for error reporting
      */
-    static void write(Path worktree, String taskId, TaskState state, TaskLifecycleEvent event) {
-        Path target = worktree.resolve(GnomishTaskPaths.STATE_JSON_PATH);
+    static void write(
+            GitProcessRunner runner, Path worktree, String taskId, TaskState state, TaskLifecycleEvent event) {
+        Path target = worktree.resolve(EnvelopePaths.STATE_JSON_PATH);
         try {
             AtomicFileWriter.write(
                     target,
-                    TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state, currentCursor(target))));
+                    TaskStateJson.mapper()
+                            .writeValueAsString(StateJsonMapper.toDto(state, currentCursor(runner, worktree))));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing state.json", e);
         }
@@ -87,24 +92,45 @@ final class StateFileWrite {
      * committed. Host mode never writes a cursor itself — it has no egress guard — but a branch
      * that ran in container mode before this resume carries one.
      *
-     * <p>Best-effort: an absent or unparseable file yields none and the write proceeds cursorless,
-     * costing the next run a full re-read of the guard's log tail rather than a denial.
+     * <p>Best-effort for the two answers a finished read can give: an absent or unparseable file
+     * yields none and the write proceeds cursorless, costing the next run a full re-read of the
+     * guard's log tail rather than a denial. A read that never ran to its own exit gives neither
+     * answer — it establishes nothing — so {@link BranchTipUnavailableException} passes through
+     * rather than being read as "the tip carries no cursor" (NFR-R2 of fix-envelope-medium).
+     * Degrading there would regenerate the file without the position a container-mode run
+     * committed, and the lifecycle commit that follows would make that erasure durable; the
+     * refusal instead aborts a transition that is restartable, since the write has not happened.
      *
-     * <p>Kept in sync with {@link TaskLifecycleCommitWriter#tipStateCursor}: both media must carry
-     * the cursor the medium already holds into the regenerated {@code state.json}, and both must
-     * degrade to no cursor — never to a failure — when that position cannot be read. The two read
-     * different media (this one the host worktree's file, that one a blob at a branch tip), so no
-     * shared implementation is available to enforce it.
+     * <p>The position is read at the worktree's {@code HEAD}, not from its working copy (FR2,
+     * design D1 of fix-envelope-medium): the file on disk is the staging area for the very write
+     * below, so a stale or half-written one there must not be what a lifecycle commit carries
+     * forward.
+     *
+     * <p>Kept in sync with {@link TaskLifecycleCommitWriter#tipStateCursor}: both media read the
+     * cursor from the tip's {@code state.json} and carry it into the regenerated file, and both
+     * degrade to no cursor — never to a failure — when the committed document answers that there is
+     * none to carry, and both refuse — never degrade — when the read never ran to its own exit.
+     * The two name that outcome by different types, because the media classify it at different
+     * seams: {@link BranchTipUnavailableException} from the subprocess gate here, {@code
+     * GitObjectsInterruptedException} from the bare-object reader there — which has no deadline, so
+     * an interrupt is the only way it arises. The two reach the same commit by different mechanisms (this one a {@code git show}
+     * subprocess, that one a blob through the bare-object reader), so no shared implementation is
+     * available to enforce it.
      */
-    private static @Nullable EgressCursorDto currentCursor(Path stateJson) {
+    private static @Nullable EgressCursorDto currentCursor(GitProcessRunner runner, Path worktree) {
         try {
-            return StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
-                    .egressCursor();
-        } catch (IOException | RuntimeException e) {
+            return new GitShowTip(runner, worktree, GitObjects.HEAD)
+                    .readAtTip(EnvelopePaths.STATE_JSON_PATH)
+                    .map(StateJsonMapper::readDto)
+                    .map(StateJsonDto::egressCursor)
+                    .orElse(null);
+        } catch (BranchTipUnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             log.debug(
-                    "no recorded denial cursor to carry forward from {}: absent or unreadable;"
+                    "no recorded denial cursor to carry forward from HEAD of {}: absent or unreadable;"
                             + " the next run reads its denial source from the start",
-                    stateJson,
+                    worktree,
                     e);
             return null;
         }

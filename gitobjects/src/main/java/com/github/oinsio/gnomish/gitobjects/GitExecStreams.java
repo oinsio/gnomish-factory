@@ -73,7 +73,8 @@ final class GitExecStreams {
             while (hasRemainingCapacity(remaining)
                     && (read = in.read(chunk, 0, (int) Math.min(chunk.length, remaining))) != -1) {
                 if (Thread.currentThread().isInterrupted()) {
-                    throw new GitObjectsException("interrupted while reading git output", new InterruptedException());
+                    throw new GitObjectsInterruptedException(
+                            "interrupted while reading git output", new InterruptedException());
                 }
                 buffer.write(chunk, 0, read);
                 remaining -= read;

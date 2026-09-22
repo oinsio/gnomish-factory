@@ -41,6 +41,15 @@ public final class UntrustedText {
      */
     public static final int MIN_CAP_CHARS = 1_024;
 
+    /**
+     * The smallest bound {@link #excerpt(int)} accepts: twice the room its truncation marker
+     * reserves inside the bound, so an excerpt that was cut still says more than its own marker
+     * does. Below it the output bound could not be honoured at all — the marker alone would not
+     * fit — and no call site wants an excerpt that small (the shortest in the factory is a
+     * decision-file preview at 500).
+     */
+    public static final int MIN_EXCERPT_CAP_CHARS = 2 * TextSafety.TRUNCATION_MARKER_RESERVE;
+
     private final String raw;
 
     private final Provenance provenance;
@@ -224,14 +233,36 @@ public final class UntrustedText {
 
     /**
      * The log exit under a caller's own bound, for a site whose useful excerpt is shorter (a
-     * decision-file preview) or longer (a captured build log) than the default.
+     * decision-file preview) or longer (a captured build log) than the default. Unlike
+     * {@link #forLog()}, the bound is on what <b>leaves</b>: the result is never longer than
+     * {@code cap} characters, whatever the captured text renders into (FR10, design D9 of
+     * fix-envelope-medium).
      *
-     * @param cap the maximum characters kept before flattening; positive
-     * @return the log-safe rendering; never null, never containing a line break
-     * @throws IllegalArgumentException if {@code cap} is not positive
+     * <p>That is why the caller's bound and the default one differ. {@link TextSafety#forLog}
+     * caps the <em>input</em> to the flattening, so a text of nothing but {@code U+2028} leaves
+     * as six characters per one — bounded, but six times the number asked for. At
+     * {@link TextSafety#DEFAULT_CAP_CHARS} that is the sink's problem and the sink's guarantee
+     * (it caps the rendered record, keeping the head). Here it is the caller's: every caller of
+     * this method quotes the result inside prose of its own and sized its bound so that prose
+     * fits under the record cap, and an excerpt six times its bound eats exactly that headroom.
+     * So a second tail cap runs after the flattening, under a bound reduced by
+     * {@link TextSafety#TRUNCATION_MARKER_RESERVE} so its own marker fits inside {@code cap},
+     * and the flattening runs once more — on already-flattened text it is the identity, and it
+     * neutralizes the newline that marker is written with, keeping one event on one line. A cut
+     * that lands inside a rendered escape leaves inert ASCII the marker has already named.
+     *
+     * @param cap the maximum characters of the rendered result; at least
+     *     {@link #MIN_EXCERPT_CAP_CHARS}
+     * @return the log-safe rendering, of at most {@code cap} characters; never null, never
+     *     containing a line break
+     * @throws IllegalArgumentException if {@code cap} is below {@link #MIN_EXCERPT_CAP_CHARS}
      */
     public String excerpt(int cap) {
-        return TextSafety.forLog(raw, cap);
+        if (cap < MIN_EXCERPT_CAP_CHARS) {
+            throw new IllegalArgumentException("cap must be at least " + MIN_EXCERPT_CAP_CHARS + ", was " + cap);
+        }
+        return TextSafety.flatten(
+                TextSafety.capTail(TextSafety.forLog(raw, cap), cap - TextSafety.TRUNCATION_MARKER_RESERVE));
     }
 
     /**

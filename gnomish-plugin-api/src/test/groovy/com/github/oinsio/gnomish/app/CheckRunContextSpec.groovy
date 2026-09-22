@@ -4,12 +4,12 @@ import spock.lang.Specification
 
 /**
  * NFR-S2, design D5 of add-plugin-architecture: the engine's side of the fixed interpolation
- * whitelist. A provider asks for a name and either gets the run's value or nothing — it can neither
+ * allowlist. A provider asks for a name and either gets the run's value or nothing — it can neither
  * enumerate more names into existence nor be handed a value the engine did not decide to expose.
  */
 class CheckRunContextSpec extends Specification {
 
-    def "the whitelisted names are stable"() {
+    def "the allowlisted names are stable"() {
         expect:
         CheckRunContext.TASK_ID == 'task.id'
         CheckRunContext.TASK_BRANCH == 'task.branch'

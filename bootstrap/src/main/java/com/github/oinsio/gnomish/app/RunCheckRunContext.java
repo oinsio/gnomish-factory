@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.status.StatusSnapshotHolder;
 import java.util.Optional;
 
 /**
- * The run's answer to {@link CheckRunContext}: the three whitelisted values a check provider may
+ * The run's answer to {@link CheckRunContext}: the three allowlisted values a check provider may
  * substitute into a request it composes (NFR-S2, design D5 of add-plugin-architecture).
  *
  * <p>The task id is the tracker's own, and the branch is derived from it by the same {@link
@@ -40,7 +40,7 @@ final class RunCheckRunContext implements CheckRunContext {
      *
      * @param context the task's identity; never null
      * @param holder the live status holder the current stage is read from; never null
-     * @return the run's whitelisted values; never null
+     * @return the run's allowlisted values; never null
      */
     static CheckRunContext of(TaskContext context, StatusSnapshotHolder holder) {
         return new RunCheckRunContext(context.taskId(), holder);
@@ -57,8 +57,8 @@ final class RunCheckRunContext implements CheckRunContext {
     }
 
     private Optional<String> stageName() {
-        return holder.state().position() instanceof Position.AtStage atStage
-                ? Optional.of(atStage.name())
+        return holder.state().position() instanceof Position.AtStage(String name)
+                ? Optional.of(name)
                 : Optional.empty();
     }
 }

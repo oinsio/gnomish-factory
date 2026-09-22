@@ -4,16 +4,16 @@ import java.util.Optional;
 
 /**
  * The run-scoped values a check provider may substitute into a request it composes — the engine's
- * side of the fixed interpolation whitelist (NFR-S2, design D5 of add-plugin-architecture).
+ * side of the fixed interpolation allowlist (NFR-S2, design D5 of add-plugin-architecture).
  *
- * <p>It is a lookup by name, not a record of fields, for one reason: the whitelist is
+ * <p>It is a lookup by name, not a record of fields, for one reason: the allowlist is
  * <em>engine-defined</em> and closed. A provider asks for a name and either gets the run's value or
  * nothing; it can neither enumerate more names into existence nor be handed a value the engine did
  * not decide to expose. What a manifest may write is graded against the same closed set at the load
  * seam, so a request can only ever carry values from this contract.
  *
  * <p>The names are dotted and stable: {@value #TASK_ID}, {@value #TASK_BRANCH}, {@value
- * #STAGE_NAME}. The fourth whitelisted variable — the attempt commit — is deliberately absent: it
+ * #STAGE_NAME}. The fourth allowlisted variable — the attempt commit — is deliberately absent: it
  * changes with every round and already travels to check clients on the workspace, which is the value
  * the engine hands the client at poll time rather than at wiring time.
  *
@@ -36,7 +36,7 @@ public interface CheckRunContext {
     String STAGE_NAME = "stage.name";
 
     /**
-     * The run's value for one whitelisted variable.
+     * The run's value for one allowlisted variable.
      *
      * @param name one of {@link #TASK_ID}, {@link #TASK_BRANCH}, {@link #STAGE_NAME}
      * @return the value, or empty when this run cannot supply it; never null
@@ -51,6 +51,6 @@ public interface CheckRunContext {
      * @return a context whose every lookup is empty; never null
      */
     static CheckRunContext none() {
-        return name -> Optional.empty();
+        return _ -> Optional.empty();
     }
 }

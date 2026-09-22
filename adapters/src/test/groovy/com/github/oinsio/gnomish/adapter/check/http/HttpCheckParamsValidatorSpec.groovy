@@ -13,7 +13,7 @@ class HttpCheckParamsValidatorSpec extends Specification implements HttpCheckFix
     private static final String FILE = 'stages/verify/stage.yaml'
     private static final String WHERE = 'verify[0].params'
 
-    private List<String> problems(Map<String, Object> params) {
+    private static List<String> problems(Map<String, Object> params) {
         new HttpCheckParamsValidator().validate(FILE, WHERE, params).collect {
             "${it.where()}: ${it.message()}" as String
         }
@@ -136,26 +136,26 @@ class HttpCheckParamsValidatorSpec extends Specification implements HttpCheckFix
         }
     }
 
-    // NFR-S2, D5: interpolation is restricted to the fixed engine-defined whitelist — a manifest
+    // NFR-S2, D5: interpolation is restricted to the fixed engine-defined allowlist — a manifest
     //     cannot smuggle a secret or attacker-controlled value into a URL or a header.
-    def "a non-whitelisted interpolation is a located error naming the variable"() {
+    def "a non-allowlisted interpolation is a located error naming the variable"() {
         expect:
         problems([url: 'https://ci.example.invalid/${env.SONAR_TOKEN}']) == [
-            'verify[0].params.url: interpolates \'${env.SONAR_TOKEN}\', which is not an interpolatable'
-            + ' variable; allowed: [attempt.commit, stage.name, task.branch, task.id]'
+            'verify[0].params.url: interpolates \'${env.SONAR_TOKEN}\', which is not an interpolatable' +
+            ' variable; allowed: [attempt.commit, stage.name, task.branch, task.id]'
         ]
     }
 
-    def "a non-whitelisted interpolation in a header is located at that header"() {
+    def "a non-allowlisted interpolation in a header is located at that header"() {
         expect:
         problems([url: URL, headers: ['X-Leak': '${secrets.token}']]).any {
             it.startsWith('verify[0].params.headers.X-Leak') && it.contains('secrets.token')
         }
     }
 
-    // NFR-S2: the four whitelisted variables pass — including through the url's syntax check, which
+    // NFR-S2: the four allowlisted variables pass — including through the url's syntax check, which
     //     grades the shape the request will take rather than the one the manifest wrote.
-    def "the whitelisted variables are accepted in the url and in headers"() {
+    def "the allowlisted variables are accepted in the url and in headers"() {
         expect:
         problems([url: 'https://ci.example.invalid/${task.branch}/${attempt.commit}?s=${stage.name}&t=${task.id}',
             headers: ['X-Stage': '${stage.name}']]).isEmpty()

@@ -122,6 +122,9 @@ class UntrustedTextGateSpec extends Specification {
         'rev-parse --absolute-git-dir output into the clone\'s git directory Path',
         'com.github.oinsio.gnomish.adapter.git.GitProcessRunner':
         'rev-parse --git-common-dir output into the Path the mutation lock keys on',
+        'com.github.oinsio.gnomish.adapter.git.GitShowTip':
+        'a rev-list answer into the cleanup commit\'s id; the file content it reads at a revision is' +
+        ' the document itself and stays a carrier',
         'com.github.oinsio.gnomish.adapter.git.HarvestedBoundaryCheck':
         'a name-only diff into the list of state-directory paths the gnome touched',
         'com.github.oinsio.gnomish.adapter.git.LocalBranchTip':

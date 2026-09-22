@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.app.CheckRunContext
 import spock.lang.Specification
 
 /**
- * NFR-S2, D5 of add-plugin-architecture: the fixed, engine-defined whitelist of values an http check
+ * NFR-S2, D5 of add-plugin-architecture: the fixed, engine-defined allowlist of values an http check
  * may interpolate, and the substitution itself. Four variables, closed: enough to address this run's
  * result, and nothing that could carry a secret or attacker-supplied text into a URL.
  */
@@ -20,9 +20,9 @@ class HttpCheckVariablesSpec extends Specification {
         'stage.name': 'implement'
     ]
 
-    def "the whitelist is exactly the four engine-defined variables"() {
+    def "the allowlist is exactly the four engine-defined variables"() {
         expect:
-        HttpCheckVariables.WHITELIST == [
+        HttpCheckVariables.ALLOWLIST == [
             'task.id',
             'task.branch',
             'attempt.commit',
@@ -31,7 +31,7 @@ class HttpCheckVariablesSpec extends Specification {
     }
 
     // NFR-S2: the run's own values reach the request — a branch-scoped result is addressable.
-    def "every whitelisted reference resolves to this run's value"() {
+    def "every allowlisted reference resolves to this run's value"() {
         given:
         def variables = HttpCheckVariables.of(contextOf(RUN), 'c0ffee')
 
@@ -48,7 +48,7 @@ class HttpCheckVariablesSpec extends Specification {
     }
 
     // NFR-S2: fail closed — a URL missing its value addresses the wrong result.
-    def "a whitelisted variable this run cannot supply fails the substitution, naming it"() {
+    def "an allowlisted variable this run cannot supply fails the substitution, naming it"() {
         when:
         HttpCheckVariables.of(contextOf(RUN), null).resolve('https://s.example.com/${attempt.commit}')
 
@@ -58,7 +58,7 @@ class HttpCheckVariablesSpec extends Specification {
         e.reason().contains('cannot supply')
     }
 
-    def "a non-whitelisted variable fails the substitution as uninterpolatable"() {
+    def "a non-allowlisted variable fails the substitution as uninterpolatable"() {
         when:
         HttpCheckVariables.of(contextOf(RUN), 'c0ffee').resolve('https://s.example.com/${env.SONAR_TOKEN}')
 

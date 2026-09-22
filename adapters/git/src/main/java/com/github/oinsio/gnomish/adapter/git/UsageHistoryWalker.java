@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -58,7 +59,7 @@ public final class UsageHistoryWalker {
 
     private static final Logger log = LoggerFactory.getLogger(UsageHistoryWalker.class);
 
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;

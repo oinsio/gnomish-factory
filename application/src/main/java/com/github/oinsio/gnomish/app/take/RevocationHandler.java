@@ -28,7 +28,8 @@ import java.nio.file.Path;
  * way. None of {@code park}, {@code recordAbort}, or {@code finish} are ever called here: this is
  * not an abort, an escalation, or a delivery.
  *
- * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.TakeContainerEngineExecution}: both
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.app.TakeContainerEngineExecution} (package-
+ * private, not linkable from this package): both
  * must end a revoked claim with the same stop note and the same two tracker writes — the "Work
  * stopped:" heading over the revocation reason taken through the comment plane's fenced shape,
  * then {@code postNote} followed by {@code release}, and never {@code park}, {@code recordAbort}
@@ -67,6 +68,9 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
      * @throws com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException if the salvage
      *     commit itself fails — a genuine local-durability problem, propagated rather than
      *     swallowed
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if a tip read
+     *     the salvage depends on did not run to its own exit, so it established nothing — also
+     *     propagated, for the same reason
      */
     public TakeResult.Revoked handle(
             TaskRef ref, String taskId, TaskState finalState, Path worktreeRoot, String branch, String reason) {

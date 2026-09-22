@@ -49,15 +49,19 @@ class ClaimlessGitBoundarySpec extends Specification {
     ]
 
     /**
-     * The plain-{@code run} wiring and the claimless fixtures: the only production assemblies
-     * that never claim. {@code TaskSeedFixture} and {@code SeededCloneFixture} build single git
-     * components directly ({@code GitTaskRepository}, {@code GitAttemptPersistence}) with {@code
+     * The claimless fixtures: the only production sources that still choose a tenureless git
+     * layer. {@code TaskSeedFixture} and {@code SeededCloneFixture} build single git components
+     * directly ({@code GitTaskRepository}, {@code GitAttemptPersistence}) with {@code
      * ClaimEpochSource.NONE} for adapters/git and application usage/status specs — outside the
      * owned test trees, single components, never claims — never a {@code TaskGit} bundle.
+     *
+     * <p>The plain-{@code run} wiring left this list when it stopped choosing: {@code
+     * ContainerRunSupportFactory} and {@code ManualRunRunner} each take a {@code ClaimEpochSource}
+     * parameter now, so the caller supplies the tenure and the type carries the constraint the
+     * exemption used to. Their rows were kept by a reach check that asked only whether the path
+     * still existed, which is the staleness this gate's own javadoc promises to catch.
      */
     private static final List<String> CLAIMLESS_PRODUCTION = [
-        'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ContainerRunSupportFactory.java',
-        'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ManualRunRunner.java',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeededCloneFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/TaskSeedFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/TaskGitFixture.groovy',
@@ -80,7 +84,9 @@ class ClaimlessGitBoundarySpec extends Specification {
      * <ul>
      *   <li><b>The read-only commands.</b> {@code status} and {@code usage} read a branch and write
      *       nothing; their specs seed one through a claimless writer on purpose, which is the
-     *       distinction {@code TaskGitFixture.realClaimless()} exists to make.
+     *       distinction {@code TaskGitFixture.realClaimless()} exists to make. Only the specs that
+     *       spell the token themselves are listed: {@code UsageCommandSpec} asks the fixture for
+     *       the claimless variant by name and never names the source, so it needs no exemption.
      *   <li><b>Unit specs of the lease components.</b> {@code ClaimEpochBookSpec}, {@code
      *       ZombieFenceSpec} and {@code RevocationHandlerSpec} construct a source or a book as
      *       their SUBJECT, not as part of an assembly.
@@ -115,31 +121,25 @@ class ClaimlessGitBoundarySpec extends Specification {
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusCommandSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusInterruptedHonestySpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusUsageReadOnlySpec.groovy',
-        'application/src/test/groovy/com/github/oinsio/gnomish/app/UsageCommandSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/ZombieFenceSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/lease/ClaimEpochBookSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/take/RevocationHandlerSpec.groovy',
     ]
 
     /**
-     * This gate's own source: it necessarily spells both tokens, as the strings it scans for. Every
-     * whole-tree scan has to exempt itself; naming the file rather than filtering by package keeps
-     * the exemption as narrow as the rest of the allowlists.
+     * This gate's own sources: the rule, the spec that seeds it, and this file necessarily spell
+     * every token, as the strings they scan for. Every whole-tree scan has to exempt itself;
+     * naming the files rather than filtering by package keeps the exemption as narrow as the rest
+     * of the allowlists.
      */
-    private static final String THIS_GATE =
-    'bootstrap/src/test/groovy/com/github/oinsio/gnomish/architecture/ClaimlessGitBoundarySpec.groovy'
+    private static final List<String> THIS_GATE = [
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/architecture/ClaimlessGitBoundarySpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/architecture/ClaimlessGitDetectorSpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/architecture/ClaimlessGitRule.groovy',
+    ]
 
-    private static final String CLAIMLESS_SOURCE = 'ClaimEpochSource.NONE'
-    private static final String FRESH_BOOK = 'new ClaimEpochBook()'
-    /**
-     * Building a bundle through the fixture — the construction that already carries a book of its
-     * own, so a {@code new ClaimEpochBook()} beside it in the same file is a SECOND record.
-     *
-     * <p>A hand-built {@code new TaskGit(...)} is deliberately not listed: once the book is one of
-     * the record's components (task 5.1), such a call has to be handed one, and a port-fake spec
-     * spells it inline — that mint IS the bundle's record, not a rival to it.
-     */
-    private static final String BUNDLE_CONSTRUCTION = 'TaskGitFixture.real('
+    private static final String CLAIMLESS_SOURCE = ClaimlessGitRule.CLAIMLESS_SOURCE
+    private static final String FRESH_BOOK = ClaimlessGitRule.FRESH_BOOK
 
     // FR5, M3: a claimless git layer outside the claimless commands is an assembly that claims and
     //     stamps nothing — the shape every end-to-end fixture had, and the reason the read-side
@@ -151,10 +151,10 @@ class ClaimlessGitBoundarySpec extends Specification {
         }
 
         and: 'the files each rule allows, and the files that break them'
-        def reachedClaimless = allowlistedAmong(sources, CLAIMLESS_PRODUCTION)
-        def reachedOwners = allowlistedAmong(sources, BOOK_OWNERS)
-        def claimlessOffenders = offenders(sources, CLAIMLESS_SOURCE, CLAIMLESS_PRODUCTION)
-        def bookOffenders = offenders(sources, FRESH_BOOK, BOOK_OWNERS)
+        def reachedClaimless = ClaimlessGitRule.allowlistedSpelling(sources, CLAIMLESS_PRODUCTION, CLAIMLESS_SOURCE)
+        def reachedOwners = ClaimlessGitRule.allowlistedSpelling(sources, BOOK_OWNERS, FRESH_BOOK)
+        def claimlessOffenders = ClaimlessGitRule.offenders(sources, CLAIMLESS_SOURCE, CLAIMLESS_PRODUCTION)
+        def bookOffenders = ClaimlessGitRule.offenders(sources, FRESH_BOOK, BOOK_OWNERS)
 
         expect: 'the scan really reached every allowlisted file'
         reachedClaimless == CLAIMLESS_PRODUCTION.toSet()
@@ -175,8 +175,8 @@ class ClaimlessGitBoundarySpec extends Specification {
         def sources = ownedTestSources()
 
         and: 'the files the rule allows, and the files that break it'
-        def reachedClaimless = allowlistedAmong(sources, CLAIMLESS_SPECS)
-        def claimlessOffenders = offenders(sources, CLAIMLESS_SOURCE, CLAIMLESS_SPECS)
+        def reachedClaimless = ClaimlessGitRule.allowlistedSpelling(sources, CLAIMLESS_SPECS, CLAIMLESS_SOURCE)
+        def claimlessOffenders = ClaimlessGitRule.offenders(sources, CLAIMLESS_SOURCE, CLAIMLESS_SPECS)
 
         expect: 'the scan really reached every allowlisted file'
         reachedClaimless == CLAIMLESS_SPECS.toSet()
@@ -202,32 +202,17 @@ class ClaimlessGitBoundarySpec extends Specification {
     /** Every test source rule 2 governs, minus this gate's own file. */
     private static List<File> ownedTestSources() {
         RepoSourceTree.testSources { path ->
-            OWNED_TEST_TREES.any { path.startsWith(it) } && path != THIS_GATE
+            OWNED_TEST_TREES.any {
+                path.startsWith(it)
+            } && !THIS_GATE.contains(path)
         }
-    }
-
-    /** The allowlisted paths the scan actually reached, so a moved or renamed exemption fails loudly. */
-    private static Set<String> allowlistedAmong(List<File> sources, List<String> allowlist) {
-        sources.collect {
-            RepoSourceTree.relative(it)
-        }.findAll {
-            allowlist.contains(it)
-        }.toSet()
-    }
-
-    /** Every non-allowlisted file whose code spells {@code token} — the gate's failure message. */
-    private static List<String> offenders(List<File> sources, String token, List<String> allowlist) {
-        sources.findAll { RepoSourceTree.code(it).contains(token) }
-        .collect { RepoSourceTree.relative(it) }
-        .findAll { !allowlist.contains(it) }
-        .sort()
     }
 
     /** Every file that builds a bundle through the fixture AND mints a second tenure record beside it. */
     private static List<String> twoBookFiles(List<File> sources) {
         sources.findAll { file ->
-            def code = RepoSourceTree.code(file)
-            code.contains(FRESH_BOOK) && code.contains(BUNDLE_CONSTRUCTION)
+            ClaimlessGitRule.spells(file, FRESH_BOOK) &&
+            ClaimlessGitRule.spells(file, ClaimlessGitRule.BUNDLE_CONSTRUCTION)
         }
         .collect { RepoSourceTree.relative(it) }
         .sort()

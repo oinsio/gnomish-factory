@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Resume wiring for {@code take} over the existing git-protocol machinery (design D3, FR9,
@@ -89,11 +90,13 @@ final class TakeResumeRunner {
      *
      * @param cloneDir the project clone; never mutated
      * @param taskId the tracker's original taskId, as supplied to {@code take --resume}
-     * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
+     * @return the bootstrap bundle, or {@code null} when the branch tip carries no task envelope —
+     *     the delivered shape, which {@link HostResumeMechanics#loadBranch} routes on (design D1,
+     *     D2 of fix-envelope-medium)
      * @throws UsageException if no branch for {@code taskId} is found
      */
-    public ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
-        return resumeBootstrap.bootstrap(cloneDir, taskId);
+    public @Nullable ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
+        return resumeBootstrap.bootstrap(cloneDir, taskId).orElse(null);
     }
 
     /**

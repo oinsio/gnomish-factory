@@ -9,14 +9,13 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import java.io.UncheckedIOException;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Host-mode {@link ResumeMechanics}: a materialized worktree under {@code worktreesRoot}, its
- * {@code state.json} read from that worktree, and salvage through the worktree salvager — the
+ * {@code state.json} read at that worktree's {@code HEAD} (design D1 of fix-envelope-medium), and
+ * salvage through the worktree salvager — the
  * mechanics {@link TakeResumeRunner} already implements, adapted to the shared seam (design D8 of
  * add-serve-sandbox-lifecycle).
  *
@@ -34,35 +33,25 @@ record HostResumeMechanics(
 
     @Override
     public @Nullable ResumeBootstrap loadBranch(Path cloneDir, String taskId) {
-        try {
-            return resumeRunner.bootstrap(cloneDir, taskId);
-        } catch (UncheckedIOException e) {
-            // The branch's own cleanup commit (GitTaskRepository#recordOutcome on Completed, FR15)
-            // removed .gnomish-task/ from the tip entirely — task.json AND state.json, in the same
-            // commit — so the worktree read finds nothing. That is the delivered-but-unfinished
-            // shape, not a fault; any other I/O fault stays a fault and propagates.
-            if (e.getCause() instanceof NoSuchFileException) {
-                return null;
-            }
-            throw e;
-        }
+        // An empty read is the delivered-but-unfinished shape, not a fault: the branch's own
+        // cleanup commit (GitTaskRepository#recordOutcome on Completed, FR15) removed
+        // .gnomish-task/ from the tip entirely — the task record AND the state, in the same commit
+        // — so the tip carries no task envelope. Absence travels as a value now, so no cause chain
+        // has to be inspected to tell it apart from a fault (design D2 of fix-envelope-medium).
+        return resumeRunner.bootstrap(cloneDir, taskId);
     }
 
     @Override
     public TaskState readFinalState(ResumeBootstrap branch) {
-        try {
-            return git.store().readRecordedState(branch.worktreePath());
-        } catch (UncheckedIOException e) {
-            // A pre-contract tip (FR3, design D2 of harden-task-branch-contract): task.json is
-            // present — loadBranch above read it — but state.json is not, because the branch was
-            // created before the STARTED commit carried the initial state. That is a legal shape,
-            // not a fault: the task resumes its first stage from scratch, exactly as a branch
-            // created today would. The container twin is ContainerTipReader#readStateOrInitial.
-            if (e.getCause() instanceof NoSuchFileException) {
-                return TaskState.atStageStart(definition.stages().getFirst().name());
-            }
-            throw e;
-        }
+        // A pre-contract tip (FR3, design D2 of harden-task-branch-contract): the task record is
+        // present — loadBranch above read it — but the state is not, because the branch was
+        // created before the STARTED commit carried the initial state. That is a legal shape, not
+        // a fault: the task resumes its first stage from scratch, exactly as a branch created
+        // today would. The container twin is ContainerTipReader#readStateOrInitial.
+        return git.store()
+                .readRecordedState(branch.worktreePath())
+                .orElseGet(() ->
+                        TaskState.atStageStart(definition.stages().getFirst().name()));
     }
 
     @Override
@@ -73,8 +62,9 @@ record HostResumeMechanics(
     @Override
     public void finishCleanup(Path cloneDir, ResumeBootstrap branch) {
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        // Read before the cleanup commit: it deletes .gnomish-task/ from the worktree, and a read
-        // made after it finds nothing — which the pre-contract fallback in readFinalState would
+        // Read before the cleanup commit: it removes .gnomish-task/ from the tip, and a read made
+        // after it — the reads resolve at HEAD — finds nothing, which the pre-contract fallback
+        // in readFinalState would
         // dress up as a fabricated first-stage state for a task that is already delivered.
         var outcome = new TaskOutcome.Completed(readFinalState(branch));
         taskRepository.finishCleanup(branch.taskId());

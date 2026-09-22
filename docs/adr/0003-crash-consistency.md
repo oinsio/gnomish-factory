@@ -135,6 +135,14 @@ tip and never salvages them from a dirty worktree — which is also what shields
 readers from a partial in-box write. Gnome-owned work files stay salvageable.
 Both salvage paths consume one shared factory-owned-paths policy.
 
+**Reads resolve at the tip in every medium.** Every host-side read of an
+envelope file (`task.json`, `state.json`, the presence of `.gnomish-task/`
+itself) resolves at the worktree's `HEAD` through the shared tip reader, exactly
+as the container medium reads it from bare objects: the working tree is the
+staging area for the next write, never a read medium — a killed predecessor can
+leave it emptied or half-staged while the tip still carries the envelope
+(provenance: `fix-envelope-medium`).
+
 Two **accepted non-mechanisms**, recorded so they are not re-proposed as
 oversights:
 

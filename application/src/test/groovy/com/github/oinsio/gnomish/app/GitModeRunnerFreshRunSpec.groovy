@@ -59,7 +59,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1'))
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
-        store.readRecordedState(_) >> TaskState.atStageStart('build')
+        store.readRecordedState(_) >> { stateRead.call() }
     }
 
     private static TaskContext context(String taskId = 'PROJ-1') {
@@ -70,6 +70,14 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
 
     /** Assignable, since setup() stubs the port once: the abort scenario swaps in a breaking one. */
     InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()
+
+    /**
+     * What the terminal state.json read at the tip answers — assignable for the same reason, so the
+     * impossible-state scenario can empty it (FR1 of fix-envelope-medium).
+     */
+    Closure<Optional<TaskState>> stateRead = {
+        Optional.of(TaskState.atStageStart('build'))
+    }
 
     private GitModeRunner runner() {
         new GitModeRunner(
@@ -169,6 +177,26 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     // FR6, FR8: an ABORTED run is still a terminal boundary — the outcome is recorded and the
     // worktree disposed of by the same pair as a completed one (which keeps it, for forensics)
     // — and only then is the abort re-thrown, so the exit code still reflects the failure.
+    // FR1, design D2 of fix-envelope-medium: the engine's last persist committed this terminal
+    //     state moments earlier, so an empty read at the worktree's HEAD is an invariant violation,
+    //     not a shape to route on — reported as the application's own impossible-state error rather
+    //     than recorded as a completion with a fabricated state.
+    def "FR1: the terminal readback reports an impossible state when the tip carries no envelope"() {
+        given:
+        stateRead = { Optional.empty() }
+
+        when:
+        runCapturingStdout()
+
+        then:
+        def ex = thrown(InternalErrorException)
+        ex.message.contains('PROJ-1')
+        ex.message.contains('absent at HEAD')
+
+        and: 'nothing was recorded from a state the branch never carried'
+        0 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+    }
+
     def "records and disposes on an aborted run before rethrowing"() {
         given: 'persistence that breaks on its first write, which is what aborts the engine'
         persistence = new InMemoryAttemptPersistence(failOnCall: 1)

@@ -61,7 +61,7 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
      * @param registry the discovered check providers keyed by discriminator; never null
      * @param configured the {@code factory.check} subsections keyed by provider; never null
      * @param secrets the seam each provider resolves its own credentials through; never null
-     * @param runContext the run's whitelisted interpolation values, handed to each provider at
+     * @param runContext the run's allowlisted interpolation values, handed to each provider at
      *     construction (NFR-S2, design D5); never null
      */
     public ProviderDispatchingExternalCheckClient(

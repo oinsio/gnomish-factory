@@ -33,11 +33,18 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BranchShapeClassifier {
 
-    /** The task envelope's path-tail, as a diagnosis names it. */
-    public static final String TASK_FILE = "task.json";
+    /**
+     * The task envelope's path-tail, as a diagnosis names it. An alias of {@link
+     * EnvelopePaths#TASK_FILE}, which owns the spelling for every module (design D8 of
+     * fix-envelope-medium); kept here for its existing readers.
+     */
+    public static final String TASK_FILE = EnvelopePaths.TASK_FILE;
 
-    /** The state envelope's path-tail, as a diagnosis names it. */
-    public static final String STATE_FILE = "state.json";
+    /**
+     * The state envelope's path-tail, as a diagnosis names it. An alias of {@link
+     * EnvelopePaths#STATE_FILE}, on the same terms as {@link #TASK_FILE}.
+     */
+    public static final String STATE_FILE = EnvelopePaths.STATE_FILE;
 
     /**
      * Classifies one branch tip.

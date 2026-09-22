@@ -91,6 +91,12 @@ The vocabulary of recovery from a crash inside a multi-step transition. The
 principle and the mechanisms live in `docs/adr/0003-crash-consistency.md`; the
 checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 
+- **Envelope** — the factory-owned files under `.gnomish-task/` at a branch tip
+  that record a task's identity (`task.json`) and pipeline position
+  (`state.json`); read from the tip in every medium, written to a working copy
+  only as the staging step of the next commit. *Never:* "state directory" for
+  the concept (that names the path), "worktree state" (a working copy holds no
+  envelope, only a staged copy of one).
 - **Branch shape** — the classification of a task branch tip: its file set and
   envelope versions mapped to exactly one name from a closed set. Classified
   by content alone — the tip's claim epoch is provenance, not an input. Total by construction — every combination classifies, `Unknown`

@@ -9,11 +9,13 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.CommitMetadata;
 import com.github.oinsio.gnomish.gitobjects.CommitRequest;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
+import com.github.oinsio.gnomish.gitobjects.GitObjectsInterruptedException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
 import com.github.oinsio.gnomish.gitobjects.TreeEdit;
@@ -69,7 +71,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     TaskJsonDto readCurrentDto(String taskId, ObjectId tip, TaskLifecycleEvent event) {
         byte[] bytes;
         try {
-            bytes = gitObjects.readBlob(tip, GnomishTaskPaths.TASK_JSON_PATH, TASK_JSON_SIZE_CAP);
+            bytes = gitObjects.readBlob(tip, EnvelopePaths.TASK_JSON_PATH, TASK_JSON_SIZE_CAP);
         } catch (RuntimeException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
@@ -79,7 +81,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
         try {
             byte[] bytes = TaskStateJson.mapper().writeValueAsString(dto).getBytes(StandardCharsets.UTF_8);
-            return List.of(new TreeEdit.PutFile(GnomishTaskPaths.TASK_JSON_PATH, bytes));
+            return List.of(new TreeEdit.PutFile(EnvelopePaths.TASK_JSON_PATH, bytes));
         } catch (JsonProcessingException e) {
             throw new GitTaskRepositoryException(taskId, event, "serializing task.json", e);
         }
@@ -109,7 +111,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
                     .writeValueAsString(StateJsonMapper.toDto(state, egressCursor))
                     .getBytes(StandardCharsets.UTF_8);
             List<TreeEdit> edits = new ArrayList<>(putTaskJson(taskId, dto, event));
-            edits.add(new TreeEdit.PutFile(GnomishTaskPaths.STATE_JSON_PATH, stateJson));
+            edits.add(new TreeEdit.PutFile(EnvelopePaths.STATE_JSON_PATH, stateJson));
             return List.copyOf(edits);
         } catch (JsonProcessingException e) {
             throw new GitTaskRepositoryException(taskId, event, "serializing state.json", e);
@@ -120,15 +122,27 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      * The denial cursor the tip's {@code state.json} carries, for a lifecycle rewrite to carry
      * forward (FR5 of fix-denial-attribution-durability).
      *
-     * <p>Best-effort: a tip with no state file, no cursor in it, or a state file this factory
-     * cannot parse yields none, and the rewrite proceeds cursorless — losing the position costs the
-     * next run a full re-read of the guard's log tail, never a denial, so it must not fail a
-     * transition that is otherwise sound.
+     * <p>Best-effort for the answers a finished read can give: a tip with no state file, no cursor
+     * in it, or a state file this factory cannot parse yields none, and the rewrite proceeds
+     * cursorless — losing the position costs the next run a full re-read of the guard's log tail,
+     * never a denial, so it must not fail a transition that is otherwise sound.
      *
-     * <p>Kept in sync with {@link StateFileWrite} (its {@code currentCursor}): both must carry the
-     * cursor their medium already holds into the regenerated {@code state.json}, and both must
-     * degrade to no cursor — never to a failure — when it cannot be read. The media differ, so
-     * nothing shared can enforce it.
+     * <p>An interrupted read gives no answer at all, so {@link GitObjectsInterruptedException}
+     * passes through instead (NFR-R2 of fix-envelope-medium): degrading there would rewrite the
+     * file without the position the last attempt committed, and the lifecycle commit that follows
+     * would make that erasure durable — while the refusal aborts a transition that is restartable,
+     * since no commit has been built.
+     *
+     * <p>Kept in sync with {@link StateFileWrite} (its {@code currentCursor}): both read the
+     * cursor from the tip's {@code state.json} and carry it into the regenerated file, and both
+     * degrade to no cursor — never to a failure — when the committed document answers that there
+     * is none to carry, and both refuse — never degrade — when the read never ran to its own exit.
+     * The two name that outcome by different types, because the media classify it at different
+     * seams: a {@link GitObjectsInterruptedException} from the bare-object reader here, a {@code
+     * BranchTipUnavailableException} from the subprocess gate there. This medium has no deadline,
+     * so an interrupt is the only way it arises. The two reach the same commit by different
+     * mechanisms (this one a blob through the bare-object reader, that one a {@code git show}
+     * subprocess), so no shared implementation is available to enforce it.
      *
      * @param taskId the task being rewritten; for the trace of a degraded read
      * @param tip the commit the rewrite builds on
@@ -137,9 +151,11 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     @Nullable
     EgressCursorDto tipStateCursor(String taskId, ObjectId tip) {
         try {
-            byte[] bytes = gitObjects.readBlob(tip, GnomishTaskPaths.STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
+            byte[] bytes = gitObjects.readBlob(tip, EnvelopePaths.STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
             return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)))
                     .egressCursor();
+        } catch (GitObjectsInterruptedException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.debug(
                     "no committed denial cursor to carry forward for task {}: the tip's state.json is absent or"

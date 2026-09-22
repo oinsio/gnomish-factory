@@ -2,18 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.OriginContact
-import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
-import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
-import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
-import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
@@ -30,7 +19,6 @@ import java.nio.file.Path
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR3, FR4, FR5, M2 of fix-lifecycle-push over the host resume chain: where a resumed run touches
  * the remote, and what the human is told when it could not. Resume start reconciles origin up to the
@@ -78,7 +66,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-        store.readRecordedState(_) >> TaskState.atStageStart('build')
+        store.readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
         tracker.fetchTask(_) >> heldByUs()
     }
 
@@ -113,7 +101,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     // but never got pushed.
     def "reconciles the remote at resume start"() {
         given:
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
 
         when:
@@ -128,7 +116,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     // refs read. {@code TakeFenceScopeSpec} owns that scope rule for every non-park outcome.
     def "a delivered run runs no delivery fence"() {
         given:
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
 
         when:
         def result = resume(chain(new ScriptedExecutor([completedRound()])))
@@ -143,7 +131,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     // asserted directly: the fence's invocation precedes the tracker write's.
     def "the delivery fence runs before the park's tracker write"() {
         given:
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
 
         when:
         resume(parkingChain())
@@ -164,7 +152,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     // the report the human reads carries the one-line replication note.
     def "an exhausted fence parks anyway, with the origin-behind note in the report"() {
         given:
-        store.readTaskRecord(_) >> recordWith(null, null, false)
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Undelivered(BEHIND_NOTE)
 
         when:
@@ -184,7 +172,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     def "a deferred park's re-post carries the fence's origin-behind note"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, true)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
         def executor = new ScriptedExecutor([completedRound()])
 
         when:
@@ -206,7 +194,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     def "a deferred park whose fence reports delivered carries no note"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> recordWith(new RecordedOutcome.Escalated(report), report, true)
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
 
         when:
         resume(chain(new ScriptedExecutor([completedRound()])))
