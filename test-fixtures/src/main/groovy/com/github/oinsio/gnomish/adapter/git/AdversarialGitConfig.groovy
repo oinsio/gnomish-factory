@@ -32,10 +32,15 @@ import java.nio.file.Path
  *       {@code store} after a successful URL-token authentication, which the Gitea lane performs,
  *       so a helper marking every action would mark that lane itself. A container or seed
  *       transfer that consults the operator's helpers leaks a credential path into the box.
+ *   <li>{@code user.name}, {@code user.email} — not adversarial: the ambient identity a real
+ *       deployment has and the production adapters commit with ({@link #IDENTITY_NAME},
+ *       {@link #IDENTITY_EMAIL}). Without it every such commit fails with "Author identity
+ *       unknown" wherever git cannot guess one from the account and host — a CI runner — while
+ *       passing on a workstation that can, so the file supplies it on every machine alike.
  * </ul>
  *
- * <p>Every other key of an operator's real {@code ~/.gitconfig} — identity, aliases, colours —
- * is absent, so a spec that commits supplies its identity itself, as CI always required.
+ * <p>Every other key of an operator's real {@code ~/.gitconfig} — aliases, colours, includes —
+ * is absent, and the developer's own identity is replaced by the one above.
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.build.AdversarialGitConfig} in
  * {@code build-logic}: both name the same variable ({@link #VARIABLE}) and the same committed
@@ -69,6 +74,11 @@ final class AdversarialGitConfig {
     /** Left in git's working directory when the credential helper was asked to {@code get}. */
     static final String CREDENTIAL_GET_MARKER = '.gnomish-credential-get'
 
+    /** The committer identity the file supplies in place of the operator's own. */
+    static final String IDENTITY_NAME = 'gnomish-factory test'
+
+    static final String IDENTITY_EMAIL = 'test@gnomish-factory.invalid'
+
     /** Every key the file defines, as {@code git config --list} spells them. */
     static final Set<String> KEYS = [
         'alias.' + PROBE_ALIAS,
@@ -76,6 +86,8 @@ final class AdversarialGitConfig {
         'fetch.prune',
         "url.ext::touch ${EXT_RAN_MARKER} .insteadof".toString(),
         'credential.helper',
+        'user.name',
+        'user.email',
     ] as Set
 
     private AdversarialGitConfig() {

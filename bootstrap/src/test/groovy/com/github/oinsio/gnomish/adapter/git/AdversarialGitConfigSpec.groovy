@@ -51,8 +51,27 @@ class AdversarialGitConfigSpec extends Specification {
         and: 'every key it lists is one the fixture documents — none of an operator\'s own'
         global.keySet() == AdversarialGitConfig.KEYS
         !global.keySet().any {
-            it.startsWith('user.') || it.startsWith('core.') || it.startsWith('includeif.')
+            it.startsWith('core.') || it.startsWith('includeif.')
         }
+
+        and: 'the identity is the fixture\'s, not the developer\'s'
+        global['user.name'] == AdversarialGitConfig.IDENTITY_NAME
+        global['user.email'] == AdversarialGitConfig.IDENTITY_EMAIL
+    }
+
+    def "NFR-S2: a production-style commit succeeds with no identity git could guess"() {
+        given: 'a repository, and git forbidden to guess an identity from the account and host'
+        runner.run(tempDir, 'init', '-q').exitCode() == 0
+        tempDir.resolve('f').toFile().text = 'x'
+        runner.run(tempDir, 'add', 'f').exitCode() == 0
+
+        when: 'git commits without -c user.*, as the production adapters do'
+        def result = runner.run(tempDir, '-c', 'user.useConfigOnly=true', 'commit', '-q', '-m', 'm')
+
+        then: 'the fixture identity carries it, as it does on a CI runner'
+        result.exitCode() == 0
+        runner.run(tempDir, 'log', '-1', '--format=%an <%ae>').stdout().forParsing().trim() ==
+                "${AdversarialGitConfig.IDENTITY_NAME} <${AdversarialGitConfig.IDENTITY_EMAIL}>".toString()
     }
 
     def "FR12: a runner whose git points the variable elsewhere fails assertInEffect"() {

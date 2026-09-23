@@ -345,9 +345,9 @@ isolation, so a run outside the build fails rather than passing vacuously.
   helper for `origin`, is refused by the allowlist with git's own message.
 - An operator on a git below 2.45.1 is refused at startup with a
   precondition report instead of running with a silently weaker seed clone.
-- Every developer's `~/.gitconfig` is out of the test build; a spec that
-  commits supplies its own identity and a fixture fetch spells its source in
-  full.
+- Every developer's `~/.gitconfig` is out of the test build; the committed
+  file supplies a fixture committer identity in its place (git cannot guess one
+  on a CI runner), and a fixture fetch spells its source in full.
 
 ## See also
 

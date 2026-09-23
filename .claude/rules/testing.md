@@ -168,7 +168,8 @@ that quarantined every legitimate reclaim in production was invisible (`fix-clai
   override): `AdversarialGitConfig` in `:test-fixtures` owns the file's meaning, and a spec that
   proves isolation from the operator's configuration calls `assertInEffect(runner)` first, so a
   run outside Gradle — where the file is not in force — fails instead of passing vacuously. A
-  side effect is hermeticity: the developer's `~/.gitconfig` reaches no test, so a spec that
-  commits supplies its own identity (`-c user.name=… -c user.email=…`), and a fixture fetch
+  side effect is hermeticity: the developer's `~/.gitconfig` reaches no test, so the file itself
+  supplies the committer identity the production adapters commit with (without it every such
+  commit fails on a CI runner, where git cannot guess one, while passing on a workstation), and a fixture fetch
   spells its source in full (`refs/heads/<branch>:refs/remotes/origin/<branch>`): under
   `fetch.prune=true` git deletes the destination of a short-name source instead of writing it

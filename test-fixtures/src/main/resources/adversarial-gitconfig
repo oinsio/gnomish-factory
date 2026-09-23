@@ -31,3 +31,10 @@
 	# every action would mark that lane itself): a transfer that consults the operator's
 	# helpers leaves `.gnomish-credential-get` in git's working directory.
 	helper = "!f() { case $1 in get) touch .gnomish-credential-get ;; esac; }; f"
+
+[user]
+	# Not adversarial: a real deployment has an ambient identity and the production adapters
+	# commit with it. Without one every such commit fails wherever git cannot guess an identity
+	# from the account and host (a CI runner), while passing on a workstation that can.
+	name = gnomish-factory test
+	email = test@gnomish-factory.invalid
