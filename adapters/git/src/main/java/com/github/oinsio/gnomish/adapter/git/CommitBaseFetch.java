@@ -102,11 +102,8 @@ final class CommitBaseFetch {
         // what origin served, so origin answered and the object is the finding.
         Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
         if (refusal.isPresent()) {
-            return new BaseRefreshOutcome.Refused(UntrustedText.factory("The base commit " + sha
-                    + " was served by origin, but the fetch was refused by object validation: "
-                    + refusal.get().refusedObjectClause().forLog()
-                    + ". The history behind this commit holds an object git "
-                    + "will not accept; inspect it on origin (git fsck) or name a base that does not reach it."));
+            return new BaseRefreshOutcome.Refused(refusal.get()
+                    .report("The base commit " + sha + " was served by origin", FetchRefusal.Remedy.NAME_ANOTHER_BASE));
         }
         if (fetch.termination() != Termination.EXITED || !probe.answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail("commit fetch of " + sha));

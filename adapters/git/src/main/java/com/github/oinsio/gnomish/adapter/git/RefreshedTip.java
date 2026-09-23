@@ -83,11 +83,10 @@ final class RefreshedTip {
         // learning whether origin answers — it did.
         Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
         if (refusal.isPresent()) {
-            return new BaseRefreshOutcome.Refused(UntrustedText.factory("The base " + label(kind) + " '" + name
-                    + "' was found on origin, but the fetch was refused by object validation: "
-                    + refusal.get().refusedObjectClause().forLog()
-                    + ". The history behind this base holds an object git will "
-                    + "not accept; inspect it on origin (git fsck) or name a base that does not reach it."));
+            return new BaseRefreshOutcome.Refused(refusal.get()
+                    .report(
+                            "The base " + label(kind) + " '" + name + "' was found on origin",
+                            FetchRefusal.Remedy.NAME_ANOTHER_BASE));
         }
         if (fetch.termination() != Termination.EXITED || !new OriginProbe(runner).answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail(label(kind) + " fetch of " + name));

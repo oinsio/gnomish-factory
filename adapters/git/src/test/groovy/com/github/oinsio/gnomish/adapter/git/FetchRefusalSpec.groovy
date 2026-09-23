@@ -82,6 +82,26 @@ fatal: fetch-pack: invalid index-pack output
         'the summary alone' | 'fatal: fsck error in packed object\n' | "git reported 'fsck error in packed object' and named no object"
     }
 
+    // FR5: the operator's report around the clause is one sentence too — the three sites that
+    //     park on a refusal name only what was fetched and what the operator may do instead.
+    def "FR5: the operator report is worded once — #remedy"() {
+        given:
+        def refusal = FetchRefusal.parse(UntrustedText.subprocess(FETCH_REFUSAL)).get()
+
+        when:
+        def report = refusal.report('The task branch gnomish/PROJ-1 was found on origin', remedy)
+
+        then:
+        report.forLog() == "The task branch gnomish/PROJ-1 was found on origin, but the fetch was refused by " +
+                "object validation: object ${OBJECT} failed validation check missingEmail. The fetched history " +
+                "holds an object git will not accept; inspect it on origin (git fsck) ${words}."
+
+        where:
+        remedy | words
+        FetchRefusal.Remedy.NAME_ANOTHER_BASE | 'or name a base that does not reach it'
+        FetchRefusal.Remedy.BEFORE_RETURNING_THE_TASK | 'before returning the task to work'
+    }
+
     def "NFR-O2: both fields stay carriers of the subprocess family"() {
         when:
         def refusal = FetchRefusal.parse(UntrustedText.subprocess(FETCH_REFUSAL)).get()

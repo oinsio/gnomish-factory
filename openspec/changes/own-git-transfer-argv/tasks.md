@@ -586,7 +586,8 @@ happened to each.
 - [x] 7.2 Amend `docs/adr/0006-base-refresh-fetch.md`: "Flags on every
       refresh" becomes a pointer to ADR 0008; remove the sentence claiming
       `NarrowFetch` serves every factory fetch; add 0008 to "See also".
-      Verify: `grep -n NarrowFetch docs/` returns nothing (FR11).
+      Verify: `grep -n NarrowFetch docs/adr/0006-*` returns nothing; ADR 0008
+      keeps the name as provenance (FR11).
 - [x] 7.3 Three rows in `docs/sandbox-threat-registry.md` (object poisoning
       of the operator clone through harvest; ref planting into the operator
       clone from the box; operator ref and tag disclosure into the box), each

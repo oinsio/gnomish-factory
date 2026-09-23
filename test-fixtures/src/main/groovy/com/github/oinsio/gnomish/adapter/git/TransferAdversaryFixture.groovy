@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.TransferSource.SeedPath
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -77,8 +78,17 @@ trait TransferAdversaryFixture implements BareGitRepoFixture {
      * helper's script does with its first positional parameter, done factory-side so the identity
      * feature for the seed kind runs the owner's exact argv and environment through the runner
      * (FR7, FR12 of own-git-transfer-argv). Nothing else about the value changes.
+     *
+     * <p>That includes the global file, {@link SeedPath#SAFE_DIRECTORY_CONFIG}: a fixed path the
+     * helper writes inside its own container, but on the host a shared {@code /tmp} path nothing
+     * in the build writes. Git reads an absent global file as empty, so the host run is hermetic
+     * only while the file is absent — a leftover there would reach the seed clone and change what
+     * the identity feature measures. Swapping in {@code /dev/null} would run an environment the
+     * owner never builds, so the absence is asserted instead.
      */
     static GitTransfer seedTransfer(Path source, Path destination, String branch) {
+        assert !Files.exists(Path.of(SeedPath.SAFE_DIRECTORY_CONFIG)):
+        "${SeedPath.SAFE_DIRECTORY_CONFIG} exists on the host and would be read as the seed clone's global configuration; remove it"
         GitTransfer owner = GitTransfer.clone(new SeedPath(source, destination))
         new GitTransfer(owner.argv().collect {
             it == GitTransfer.BRANCH_PARAMETER ? branch : it

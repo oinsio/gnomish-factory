@@ -135,11 +135,10 @@ public final class TaskBranchLocator {
         // and the refusal is the finding — a task-level park, never the unavailable arm (FR5).
         Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
         if (refusal.isPresent()) {
-            return new BranchLocation.Refused(UntrustedText.factory("The task branch " + branchName
-                    + " was found on origin, but the fetch was refused by object validation: "
-                    + refusal.get().refusedObjectClause().forLog()
-                    + ". The branch's history holds an object git will not "
-                    + "accept; inspect it on origin (git fsck) before returning the task to work."));
+            return new BranchLocation.Refused(refusal.get()
+                    .report(
+                            "The task branch " + branchName + " was found on origin",
+                            FetchRefusal.Remedy.BEFORE_RETURNING_THE_TASK));
         }
         return switch (remoteTip.confirmBranch(cloneDir, branchName)) {
             case Carriage.ABSENT -> {

@@ -58,6 +58,37 @@ record FetchRefusal(UntrustedText messageId, UntrustedText object) {
     }
 
     /**
+     * What the operator may do besides repairing the history on origin — the one part of the
+     * report that differs by what was fetched: a base can be renamed, a task branch cannot.
+     */
+    enum Remedy {
+        NAME_ANOTHER_BASE("or name a base that does not reach it"),
+        BEFORE_RETURNING_THE_TASK("before returning the task to work");
+
+        private final String words;
+
+        Remedy(String words) {
+            this.words = words;
+        }
+    }
+
+    /**
+     * The operator report of a task-level park on this refusal, worded once for the sites that
+     * park on it (FR5): what was fetched, the {@link #refusedObjectClause}, and what to do.
+     *
+     * @param fetched the factory's own clause naming what was fetched and that origin had it,
+     *     e.g. "The base commit {@code <sha>} was served by origin"; never null
+     * @param remedy what the operator may do besides inspecting origin; never null
+     * @return the report, factory prose
+     */
+    UntrustedText report(String fetched, Remedy remedy) {
+        return UntrustedText.factory(fetched + ", but the fetch was refused by object validation: "
+                + refusedObjectClause().forLog()
+                + ". The fetched history holds an object git will not accept; inspect it on origin (git fsck) "
+                + remedy.words + ".");
+    }
+
+    /**
      * Reads a failed transfer's stderr for a validation refusal.
      *
      * @param stderr the transfer's captured stderr; never null
