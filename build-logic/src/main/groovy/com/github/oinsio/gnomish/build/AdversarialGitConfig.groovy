@@ -17,10 +17,13 @@ import org.gradle.process.ProcessForkOptions
  * fixture's: the file is handed to git through {@code GIT_CONFIG_GLOBAL}, the variable git reads
  * in place of {@code $HOME/.gitconfig} and {@code $XDG_CONFIG_HOME/git/config}.
  *
- * <p>The counterpart on the test classpath is {@code AdversarialGitConfig} in
- * {@code :test-fixtures}, which owns the meaning of the keys and offers {@code assertInEffect};
- * its spec asserts that what git lists as the global configuration equals this file, so the
- * path here and the resource there cannot silently name different files.
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.git.AdversarialGitConfig} in
+ * {@code :test-fixtures}: both name the same variable ({@code VARIABLE}) and the same committed
+ * file ({@code RELATIVE_PATH}). The two share no classpath — the build cannot load a test
+ * fixture — so the constants are spelled twice; the fixture owns the meaning of the keys and
+ * offers {@code assertInEffect}, and its spec asserts that what git lists as the global
+ * configuration equals the resource, so a divergence here fails that spec rather than passing
+ * silently. Listed in {@code .claude/rules/manual-sync-pairs.md} under "no shared classpath".
  *
  * <p>Gradle does not treat a forked JVM's environment as a task input, so the file is declared
  * as one explicitly (by content, not by path, so the declaration costs no cache hit on another

@@ -36,6 +36,13 @@ import java.nio.file.Path
  *
  * <p>Every other key of an operator's real {@code ~/.gitconfig} — identity, aliases, colours —
  * is absent, so a spec that commits supplies its identity itself, as CI always required.
+ *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.build.AdversarialGitConfig} in
+ * {@code build-logic}: both name the same variable ({@link #VARIABLE}) and the same committed
+ * file ({@link #RELATIVE_PATH}). The build end sets them on every forked test JVM; this end
+ * reads them back. No classpath joins the two, so {@code AdversarialGitConfigSpec} is what pins
+ * the identity: the file git lists as global must equal the resource this class reads. Listed
+ * in {@code .claude/rules/manual-sync-pairs.md} under "no shared classpath".
  */
 final class AdversarialGitConfig {
 
