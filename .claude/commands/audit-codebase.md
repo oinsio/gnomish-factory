@@ -1,5 +1,5 @@
 ---
-description: Read-only periodic audit of the whole codebase — duplication, dead code, antipatterns, concurrency, crash-consistency, security, logging, test quality, docs drift; changes nothing
+description: Read-only periodic audit of the whole codebase — duplication, dead code, antipatterns, concurrency, crash-consistency, security, logging, test quality, docs drift; changes nothing in the project, saves the report to temporary-docs/
 argument-hint: "[dimensions] (comma-separated, default all)"
 ---
 
@@ -8,26 +8,28 @@ argument-hint: "[dimensions] (comma-separated, default all)"
 Whole-project counterpart of `/audit-implementation`. That command gates one change before
 archiving; this one sweeps the entire production codebase for defects that accumulate *across*
 changes and that no diff-scoped check can see. Run it periodically — every few archived
-changes, or before a release. **Strictly read-only**: no file edits, no git state changes.
-The only artifact is the report in the reply; the human decides whether to save it (e.g. to
-`temporary-docs/`) and what to act on.
+changes, or before a release. **Strictly read-only** with respect to the project: no edits
+to code, specs or OpenSpec artifacts, no git state changes. The command produces two
+artifacts and nothing else: the report in the reply, and the same report saved as one
+Markdown file under `temporary-docs/` (final step) — the file is what the next audit reads
+for its deltas; the human decides what to act on.
 
 ## Input
 
 - `$1` — optional comma-separated dimension list from the table below; default: all.
   Example: `/audit-codebase duplication,concurrency`.
 
-| Dimension           | What it sweeps                                            |
-|---------------------|-----------------------------------------------------------|
-| `duplication`       | copy-paste, logic scatter, undeclared sync pairs          |
-| `dead-code`         | unreferenced production code, test-only surface           |
-| `antipatterns`      | god classes, layering, primitive obsession, exceptions    |
-| `concurrency`       | shared state, happens-before, interrupts, vthread pinning |
-| `crash-consistency` | implementation vs the `crash-consistency.md` checklist    |
-| `security`          | injection, secrets, sandbox boundaries                    |
+| Dimension           | What it sweeps                                              |
+|---------------------|-------------------------------------------------------------|
+| `duplication`       | copy-paste, logic scatter, undeclared sync pairs            |
+| `dead-code`         | unreferenced production code, test-only surface             |
+| `antipatterns`      | god classes, layering, primitive obsession, exceptions      |
+| `concurrency`       | shared state, happens-before, interrupts, vthread pinning   |
+| `crash-consistency` | implementation vs the `crash-consistency.md` checklist      |
+| `security`          | injection, secrets, sandbox boundaries                      |
 | `logging`           | level misuse, silent degradation, noise, MDC, log injection |
-| `test-quality`      | PIT exemption validity, traceability coverage             |
-| `docs-drift`        | glossary/ADR/guides vs actual code and CLI                |
+| `test-quality`      | PIT exemption validity, traceability coverage               |
+| `docs-drift`        | glossary/ADR/guides vs actual code and CLI                  |
 
 ## Method
 
@@ -137,4 +139,28 @@ Do not concatenate the subagent reports. Merge and rank:
 Every finding carries `file:line` and an actionable recommendation. When uncertain, downgrade
 severity rather than guess. Findings in uncommitted/untracked code are labeled "in-flight —
 verify against the active change's tasks" and never counted as defects. End with a reminder
-that nothing was modified and the human decides what to apply.
+that nothing in the project was modified and the human decides what to apply.
+
+## Persist the report
+
+After the report is written to the reply, save it **whole** — verbatim, same language as the
+reply, no translation, no rewording — to one new file:
+
+```
+temporary-docs/audit-codebase-<YYYY-MM-DD>.md
+```
+
+The whole report, not only its tail, because the "Deltas vs previous audit" step of the next
+run reads this file to tell fixed from still-open from new; a file holding only
+recommendations could not answer that. The file is written in the language the conversation
+is held in: `temporary-docs/` is the one place in the repository where documentation may be
+in the human's language rather than English (`process-invariants.md`, "Documentation
+language"). When that language is not English, add its ISO 639-1 code before the extension
+(`.ru.md`, the convention the directory already follows); an English report keeps plain
+`.md`. Start the file with the report's own level-1 heading. If the file already exists (a
+second audit on the same day), overwrite it — the newer audit supersedes the older one.
+Nothing else is written. In the reply, name the file's path in one line after the report.
+
+`openspec/**` artifacts must not reference this file (`process-invariants.md`, "No references
+to temporary files"); a finding worth keeping becomes a change or a `docs/` entry by the
+human's hand, not a link.

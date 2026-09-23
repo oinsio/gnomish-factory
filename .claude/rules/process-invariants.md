@@ -73,6 +73,12 @@ Keep the recommended message short: a Conventional Commits subject line (≤ ~72
 
 All project documentation, specs, rules, code comments, and commit messages are written in English.
 
+One exception: `temporary-docs/` is scratch space, not part of the durable record (see "No
+references to temporary files" below), so a note there may be written in the language the
+human converses in. A non-English file adds its ISO 639-1 code before the extension
+(`explore-notes-base-ref.ru.md`); an English one keeps plain `.md`. Anything promoted from
+there into `docs/` or `openspec/` is translated to English on the way.
+
 ## No jargon; domain terminology is welcome
 
 Documentation and discussions use plain, precise language — no slang, no
