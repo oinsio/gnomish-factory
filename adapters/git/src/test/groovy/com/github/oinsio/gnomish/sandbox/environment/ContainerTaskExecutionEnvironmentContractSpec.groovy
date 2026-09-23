@@ -5,7 +5,9 @@ import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
+import com.github.oinsio.gnomish.gittransfer.GitVersion
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
@@ -51,6 +53,8 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
         new File(source.toFile(), 'seed.txt').text = 'seed'
         commitAll(source)
         gitOutput(source, 'branch', BRANCH)
+        // A tag on the task branch's tip: the seed feature asserts it never reaches the box.
+        gitOutput(source, 'tag', 'factory-tag', BRANCH)
         def key = 'sbx-contract-' + System.nanoTime()
         def harvester = new ContainerHarvestFetch(new GitProcessRunner(), source)
         def env = new ContainerTaskExecutionEnvironment(
@@ -63,5 +67,39 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
     @Override
     protected String portName() {
         'TaskExecutionEnvironment (container)'
+    }
+
+    // FR7, FR10 of own-git-transfer-argv: the seed clone runs as the owner's value inside the
+    //     helper image, so the operator's tags stay out of the box; and the image's git meets the
+    //     floor the seed clone's local-clone protections depend on (an image requirement, asserted
+    //     once here rather than at startup, where only the factory host's git is checked).
+    def "seed: the box holds no tag after materialize, and the helper image's git is at or above the floor"() {
+        given: 'a materialized environment whose factory clone carries a tag on the task branch'
+        def e = materialized()
+
+        when: 'the box lists its tags'
+        def tags = e.exec(ExecCommand.of([
+            'git',
+            '-C',
+            ContainerTaskExecutionEnvironment.WORKING_COPY,
+            'tag'
+        ]))
+        def listed = readFully(tags.output())
+
+        then: 'none: the seed clone followed no tag'
+        tags.waitForExit() == 0
+        listed.trim().isEmpty()
+
+        when: 'the box reports its git version'
+        def version = e.exec(ExecCommand.of([
+            'git',
+            '--version'
+        ]))
+        def line = readFully(version.output())
+
+        then: 'it parses, and it is not below the floor'
+        version.waitForExit() == 0
+        GitVersion.parse(line).present
+        !GitVersion.parse(line).get().isBelow(GitVersion.FLOOR)
     }
 }

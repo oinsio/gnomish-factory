@@ -76,6 +76,20 @@ include 'untrustedtext'
 include 'operatorevent'
 include 'logtext'
 include 'gitobjects'
+// The git-transfer leaf (FR1, FR2, design D1 of own-git-transfer-argv): the one owner of
+// the argv and the environment of every factory git transfer — the closed set of transfer
+// source kinds (origin, a task container over `ext::`, a local seed path), the common
+// deny-by-default side-effect set, the per-source protocol allowlist and configuration
+// isolation, and the git version floor. Values in (a source and a refspec), values out (an
+// argument list and an environment map): nothing in the leaf launches a process or touches
+// the filesystem. A leaf because its two consumers sit on opposite sides of the layering —
+// `:adapters:git` runs the argv through the git runner, `:sandbox:docker` renders the seed
+// clone into its helper script — and share no other edge, so only a module both can reach
+// serves both from one owner. Dependency-free for `:baseref`'s security reason: an empty
+// allowlist is what constructively guarantees the transfer policy can know nothing of
+// trackers, containers, or configuration formats, and any edge added here would be pushed
+// into both consumers (NFR-S1, NFR-S2).
+include 'gittransfer'
 // The base-resolution leaf (FR10, design D2 of add-base-ref-resolution): the pure
 // policy that decides which ref a new task branch starts from — the allowed-base
 // pattern grammar, the per-task designator's validation against it, the source

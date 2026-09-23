@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import java.util.Map;
+import java.util.Optional;
+import java.util.SequencedMap;
 
 /**
  * Which git subcommands reach a remote, and what a network invocation carries so that git's own
@@ -21,7 +23,12 @@ import java.util.Map;
  * is written (NFR-S1), and an operator who already set {@code GIT_SSH_COMMAND} — a wrapper, a jump
  * host — keeps theirs.
  *
- * <p>Implements FR1, FR4, NFR-S1 of bound-subprocess-commands.
+ * <p>It is also where the runner's two transfer questions are answered (FR8, design D5 of
+ * own-git-transfer-argv): whether an argv is a transfer — which the untyped entry then refuses,
+ * since only the owner's value may carry one — and how a value's environment entries are applied
+ * to the child.
+ *
+ * <p>Implements FR1, FR4, NFR-S1 of bound-subprocess-commands; FR8 of own-git-transfer-argv.
  */
 final class GitNetworkCommands {
 
@@ -61,6 +68,41 @@ final class GitNetworkCommands {
             case "remote" -> args.length > subcommand + 1 && args[subcommand + 1].equals("update");
             default -> false;
         };
+    }
+
+    /**
+     * Classifies {@code args} as a transfer: {@code fetch}, {@code clone}, {@code pull}, {@code
+     * submodule update}, {@code remote update} — the subcommands that move objects and refs into a
+     * repository, which only the owner ({@code GitTransfer}) may build. The runner's untyped entry
+     * refuses these before any process launches; {@code pull} has no owner form and is refused on
+     * every path (FR8, design D5 of own-git-transfer-argv). Leading {@code -c} pairs are skipped
+     * first, as for every classification here.
+     */
+    static boolean isTransfer(String... args) {
+        int subcommand = subcommandIndex(args);
+        if (subcommand >= args.length) {
+            return false;
+        }
+        return switch (args[subcommand]) {
+            case "fetch", "clone", "pull" -> true;
+            case "submodule", "remote" -> args.length > subcommand + 1 && args[subcommand + 1].equals("update");
+            default -> false;
+        };
+    }
+
+    /**
+     * Applies a transfer value's environment entries to a child process's environment: a present
+     * value is set, an empty one removed — so an inherited {@code GIT_CONFIG_COUNT} or object
+     * directory cannot reach the transfer, and the source's allowlist and configuration scope do
+     * (FR6, NFR-S2 of own-git-transfer-argv).
+     *
+     * @param environment the child process's environment, modified in place
+     * @param entries the value's entries, in emission order
+     */
+    static void applyTransferEnvironment(
+            Map<String, String> environment, SequencedMap<String, Optional<String>> entries) {
+        entries.forEach(
+                (name, value) -> value.ifPresentOrElse(v -> environment.put(name, v), () -> environment.remove(name)));
     }
 
     /**

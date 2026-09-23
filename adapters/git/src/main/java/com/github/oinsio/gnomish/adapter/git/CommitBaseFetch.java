@@ -3,6 +3,9 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.OriginContact;
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
@@ -24,7 +27,7 @@ import java.util.regex.Pattern;
  * from an outage by the same rule the rest of the refresh uses — the object is read back, and a
  * remote that answered but declined leaves the invocation exited rather than killed.
  *
- * <p>Implements FR6, FR8, FR9 of add-base-ref-resolution.
+ * <p>Implements FR6, FR8, FR9 of add-base-ref-resolution; FR5 of own-git-transfer-argv.
  */
 final class CommitBaseFetch {
 
@@ -78,7 +81,7 @@ final class CommitBaseFetch {
         if (sha.length() != SHA1_LENGTH && sha.length() != SHA256_LENGTH) {
             return Optional.empty();
         }
-        GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, sha);
+        GitCommandResult fetch = runner.run(cloneDir, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(sha)));
         // Past the fetch, so this return is reached only by way of a round trip (design D2).
         // Implements FR1 of signal-outage-gate-on-origin-contact.
         return Optional.of(commit(cloneDir, sha)
@@ -95,6 +98,16 @@ final class CommitBaseFetch {
      * reading it out of git's (localized, unstable) wording.
      */
     private BaseRefreshOutcome unresolved(Path cloneDir, String sha, GitCommandResult fetch) {
+        // Asked first, before the probe (design D4 of own-git-transfer-argv): validation refused
+        // what origin served, so origin answered and the object is the finding.
+        Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
+        if (refusal.isPresent()) {
+            return new BaseRefreshOutcome.Refused(UntrustedText.factory("The base commit " + sha
+                    + " was served by origin, but the fetch was refused by object validation: "
+                    + refusal.get().refusedObjectClause().forLog()
+                    + ". The history behind this commit holds an object git "
+                    + "will not accept; inspect it on origin (git fsck) or name a base that does not reach it."));
+        }
         if (fetch.termination() != Termination.EXITED || !probe.answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail("commit fetch of " + sha));
         }

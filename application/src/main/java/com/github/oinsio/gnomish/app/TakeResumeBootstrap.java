@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
@@ -50,6 +51,9 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
      * @throws BranchLocationUnavailableException if origin could not be asked whether the branch
      *     exists — a network failure is not a missing branch, so it is reported apart from the
      *     usage error (FR6 of harden-task-branch-contract)
+     * @throws BranchLocationRefusedException if origin served the branch and git's object
+     *     validation refused it — a fact about the branch's history, reported apart from both
+     *     (FR5 of own-git-transfer-argv)
      * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if local and origin
      *     have truly diverged while no claim is held on the task: the automatic discard is the
      *     claim protocol's arbitration, so the claimless {@code run --resume} caller stops and
@@ -66,6 +70,9 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         // network is what failed.
         if (location instanceof BranchLocation.Unavailable(UntrustedText reason)) {
             throw new BranchLocationUnavailableException(taskId, reason);
+        }
+        if (location instanceof BranchLocation.Refused(UntrustedText report)) {
+            throw new BranchLocationRefusedException(taskId, report);
         }
         if (location instanceof BranchLocation.NotFound) {
             throw UsageException.branchNotFound(taskId);

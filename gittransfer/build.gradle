@@ -1,0 +1,38 @@
+// Build script for the `:gittransfer` module (FR1, FR2, design D1 of own-git-transfer-argv):
+// the factory's one git-transfer owner — the sealed set of transfer source kinds, the common
+// deny-by-default side-effect set, the per-source protocol allowlist and configuration
+// isolation, and the git version floor. A source and a refspec in, an argument list and an
+// environment map out. Nothing here launches a process or touches the filesystem.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson,
+// no logging API. Like `:untrustedtext`, whose template this file follows, the emptiness is
+// a *security* property rather than a tidiness one (NFR-S1, NFR-S2): an allowlist with
+// nothing in it is what constructively guarantees the transfer policy can know nothing of
+// trackers, containers, remotes or configuration formats, so the only thing a caller can
+// vary is the source kind and the refspec. It is also load-bearing for the layering:
+// `:adapters:git` and `:sandbox:docker` reach this leaf from opposite sides of the module
+// tree and share no other edge, so any dependency added here would be pushed into both.
+// There is no production-scope declaration below because there is nothing to declare, and
+// the layering gate proves it stays that way.
+//
+// What stays outside: running the argv (`GitProcessRunner` in `:adapters:git`), rendering
+// it into the seed helper's script (`DockerSeedCloneCommand` in `:sandbox:docker`), and
+// classifying a refused transfer (`FetchRefusal` in `:adapters:git`) are the callers'.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT
+// mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Git transfer owner: source kinds, common side-effect set, protocol allowlist, configuration isolation, version floor.'
+
+// `:gittransfer` reaches no other project at all — the same gate `:untrustedtext`,
+// `:subprocess` and `:atomicfile` carry, here for the reason stated above: the empty
+// allowlist is the constructive half of NFR-S1/NFR-S2.
+layering {
+    allowedProjects = []
+}

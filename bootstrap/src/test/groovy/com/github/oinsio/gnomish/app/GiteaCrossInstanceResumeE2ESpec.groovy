@@ -88,7 +88,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */
     private Path freshClone(String name) {
         Path dir = tempDir.resolve(name)
-        assert gitExitCode(tempDir, 'clone', originUrl, dir.toString()) == 0
+        seedClone(tempDir, originUrl, dir)
         dir
     }
 

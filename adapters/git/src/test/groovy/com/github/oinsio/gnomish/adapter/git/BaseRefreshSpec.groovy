@@ -492,8 +492,21 @@ exec git "\$@"
         fetchArgv.contains('--no-tags')
         fetchArgv.contains('--no-write-fetch-head')
         fetchArgv.contains('--refmap=')
+        fetchArgv.contains('fetch.prune=false')
         fetchArgv.contains(refspec)
         !fetchArgv.contains('--depth')
+
+        and: 'no submodule recursion, by flag and by configuration (FR3 of own-git-transfer-argv)'
+        fetchArgv.contains('--no-recurse-submodules')
+        fetchArgv.contains('-c fetch.recurseSubmodules=no')
+        fetchArgv.contains('-c submodule.recurse=false')
+
+        and: 'every received object is validated, with the three legacy ids ignored (FR5)'
+        fetchArgv.contains('-c fetch.fsckObjects=true')
+        fetchArgv.contains('-c transfer.fsckObjects=true')
+        fetchArgv.contains('-c fetch.fsck.badTimezone=ignore')
+        fetchArgv.contains('-c fetch.fsck.missingSpaceBeforeDate=ignore')
+        fetchArgv.contains('-c fetch.fsck.zeroPaddedFilemode=ignore')
 
         and: 'only a branch is forced — a tag is fetched under git\'s own create-or-refuse rule'
         fetchArgv.contains('+' + refspec) == forced

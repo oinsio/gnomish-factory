@@ -68,12 +68,14 @@ holds for `SeedPath` without it; and `--refmap=`, on `Origin` alone. Per source:
 
 | Source | Subcommand | `GIT_ALLOW_PROTOCOL` | Config isolation | Extra |
 |---|---|---|---|---|
-| `Origin` | `fetch origin <refspec>` | `https:ssh:file` | keep global; keys above re-asserted by `-c` | `--refmap=` |
+| `Origin` | `fetch origin <refspec>` | `https:http:ssh:file` | keep global; keys above re-asserted by `-c` | `--refmap=` |
 | `Container` | `fetch <ext-url> <refspec>` | `ext` | `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `XDG_CONFIG_HOME` → `/dev/null` | none: `GIT_ALLOW_PROTOCOL=ext` is what enables `ext` (a listed protocol is `always`), so the `-c protocol.ext.allow=user` that `ContainerHarvestFetch` carries today is dropped, not moved |
 | `SeedPath` | `clone --no-local --no-hardlinks --single-branch --branch <b> <path> <dest>` | `file` | `GIT_CONFIG_SYSTEM`, `XDG_CONFIG_HOME` → `/dev/null`; `GIT_CONFIG_GLOBAL` → the helper's throwaway `safe.directory` file | neither fetch-only flag: no `--refmap=` (a clone has no configured remote yet), no `--no-write-fetch-head` (clone does not accept it) |
 
 *Rationale:* FR3–FR7. `file` on `Origin` is what the test fixtures' bare-path origins use;
-`git://` is deliberately absent (proposal Q2). `--refmap=` is meaningless for a URL source and
+`http` is what the Gitea E2E lane and an operator's internal server use, and it authenticates
+through the same ambient credentials as `https` (proposal Q3, decided 2026-09-22 after group 4
+exposed the refusal in the take's base refresh); `git://` is deliberately absent (proposal Q2). `--refmap=` is meaningless for a URL source and
 git rejects it on `clone`, so it is per-source rather than common; `--no-write-fetch-head` is
 fetch-only for the same parser reason, which is why the common set is two halves and the
 leaf's `clone` builder never emits either.
@@ -81,7 +83,7 @@ leaf's `clone` builder never emits either.
 is `never`, each listed protocol is `always`, overriding any existing configuration", and
 git 2.55.0 confirms it — with `GIT_ALLOW_PROTOCOL=ext` the `ext` helper runs whether or not
 `-c protocol.ext.allow=user` and `GIT_PROTOCOL_FROM_USER=0` are present, while an
-`ext::` URL substituted by `url.<base>.insteadOf` under `https:ssh:file` is refused. So
+`ext::` URL substituted by `url.<base>.insteadOf` under `https:http:ssh:file` is refused. So
 neither the `-c protocol.ext.allow=user` nor `GIT_PROTOCOL_FROM_USER=0` is emitted: under
 the allowlist no protocol is at the `user` level, so both would be inert, and an inert
 setting in a single-owner value is a false claim. Git-initiated transfers (submodule
@@ -127,9 +129,17 @@ object it refused, or empty"). Every one of the four sites asks `FetchRefusal.pa
 before its existing daemon / non-fast-forward / probe / carriage decision, and maps a
 present value in its own vocabulary: `ContainerHarvestFetch` to the boundary-violation
 exception the rewrite refusal already uses; `RefreshedTip` and `CommitBaseFetch` to
-`BaseRefreshOutcome.Refused`; `TaskBranchLocator` to its task-level arm (task 3.2 names
-which — `BranchLocation` has no `Refused` arm today). `ContainerHarvestFetch` keeps its own
-parser warrant for the two reads it still owns. *Rationale:* FR5, NFR-R1 — a refused object
+`BaseRefreshOutcome.Refused`; `TaskBranchLocator` to `BranchLocation.Refused(UntrustedText
+report)`, the arm task 3.2 added to the port. That arm's consumers (decided 2026-09-22, task
+3.2): the take's `classifyShape` maps it to the `BranchShape.Corrupt` quarantine shape, so the
+claimed take parks the task for a human on the first classification through the existing
+`TakeQuarantinePark` — no attempt spent, no new park path — with the report as the shape's
+diagnosis; every other reader of a located branch (`status`, `usage`, the delivered-branch
+reader, the container resume branch, the manual resume bootstrap) throws
+`BranchLocationRefusedException`, the deterministic sibling of
+`BranchLocationUnavailableException`, so no consumer can route the refusal to a fresh claim or
+to absence. `ContainerHarvestFetch` keeps its own parser warrant for the two reads it still
+owns. *Rationale:* FR5, NFR-R1 — a refused object
 is the repository's or the box's, never the daemon's, so it must not reach the outage
 accounting of ADR 0005; and a single parser is what keeps the four consumers from drifting
 on git's wording. *Alternative rejected:* validating `Container` only. Gnome branches live

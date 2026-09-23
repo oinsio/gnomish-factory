@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
@@ -10,6 +11,9 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.Optional;
+import java.util.SequencedMap;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +44,13 @@ import org.slf4j.LoggerFactory;
  * commands and in-worktree working-tree operations (e.g. {@code reset}, {@code clean}, {@code
  * branch}, {@code rev-parse}, {@code worktree list}) run unlocked, in parallel.
  *
+ * <p>A transfer — a fetch or a clone — enters only as the owner's {@link GitTransfer} value, through
+ * {@link #run(Path, GitTransfer)}: the value's environment entries are applied to the child (an
+ * allowlist set, an inherited per-process configuration removed) and its argv runs through the same
+ * path as every other command. The untyped {@link #run(Path, String...)} refuses a transfer
+ * subcommand before any process launches, so a hand-built fetch cannot bypass the owner (FR8,
+ * design D5 of own-git-transfer-argv).
+ *
  * <p>Commands that reach a remote (see {@link GitNetworkCommands}) are the ones this runner bounds:
  * they carry git's own stall detection and, as a backstop for a process that is wedged rather than
  * merely slow, a hard deadline enforced by the shared subprocess supervisor — output drained
@@ -64,7 +75,8 @@ import org.slf4j.LoggerFactory;
  * about what the command was for.
  *
  * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
- * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text.
+ * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text; FR6, FR8 of
+ * own-git-transfer-argv.
  */
 @UntrustedParser
 public final class GitProcessRunner {
@@ -135,18 +147,45 @@ public final class GitProcessRunner {
      * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
      *     at all (missing from {@code PATH}, not executable, ...)
+     * @throws UnownedTransferException if {@code args} names a transfer subcommand, which only the
+     *     owner's value may carry (see {@link #run(Path, GitTransfer)})
      */
     GitCommandResult run(Path cwd, String... args) {
+        if (GitNetworkCommands.isTransfer(args)) {
+            throw new UnownedTransferException(GitNetworkCommands.subcommand(args));
+        }
+        return runClassified(cwd, args, Collections.emptySortedMap());
+    }
+
+    /**
+     * Runs the owner's transfer value: its environment entries applied to the child — a present
+     * value set, an empty one removed, on top of what every command gets — and its argv executed
+     * under the same rules as {@link #run(Path, String...)}: a fetch serializes per clone, both
+     * kinds are network commands and so bounded and stall-detected, stderr scrubbed (FR6, FR8 of
+     * own-git-transfer-argv).
+     *
+     * @param cwd the working directory for the git process: the clone for a fetch, the parent of
+     *     the destination for a clone
+     * @param transfer the owner's value
+     * @return the captured exit code, separate stdout/stderr, and the named termination
+     * @throws GitBinaryNotFoundException if the configured git executable could not be launched
+     */
+    GitCommandResult run(Path cwd, GitTransfer transfer) {
+        return runClassified(cwd, transfer.argv().toArray(String[]::new), transfer.environment());
+    }
+
+    private GitCommandResult runClassified(
+            Path cwd, String[] args, SequencedMap<String, Optional<String>> transferEnvironment) {
         if (!cwd.toFile().isDirectory()) {
             return GitCommandResult.of(128, "", "fatal: cwd does not exist: " + cwd);
         }
 
         if (!isRepoLevelMutating(args)) {
-            return execute(cwd, args);
+            return execute(cwd, args, transferEnvironment);
         }
 
         Path cloneKey = resolveCloneKey(cwd);
-        return MUTATION_LOCK.runLocked(cloneKey, () -> execute(cwd, args));
+        return MUTATION_LOCK.runLocked(cloneKey, () -> execute(cwd, args, transferEnvironment));
     }
 
     /**
@@ -157,8 +196,9 @@ public final class GitProcessRunner {
      * {@code branch}, {@code reset}, {@code clean}, {@code commit}, which only touch one worktree's
      * own index/working tree or a single, independently-locked ref) is left unlocked. Leading
      * {@code -c key=value} global-option pairs are skipped before classifying, so a fetch that
-     * carries per-invocation config (e.g. the harvest fetch's {@code protocol.ext.allow}) still
-     * serializes like any other fetch — the same skip the network classification uses.
+     * carries per-invocation config (the owner's {@code -c} pairs precede every transfer's
+     * subcommand) still serializes like any other fetch — the same skip the network
+     * classification uses.
      */
     private static boolean isRepoLevelMutating(String... args) {
         int i = GitNetworkCommands.subcommandIndex(args);
@@ -203,6 +243,11 @@ public final class GitProcessRunner {
     }
 
     private GitCommandResult execute(Path cwd, String... args) {
+        return execute(cwd, args, Collections.emptySortedMap());
+    }
+
+    private GitCommandResult execute(
+            Path cwd, String[] args, SequencedMap<String, Optional<String>> transferEnvironment) {
         boolean network = GitNetworkCommands.isNetwork(args);
         ProcessBuilder builder =
                 new ProcessBuilder(commandLine(network ? GitNetworkCommands.withStallDetection(args) : args));
@@ -224,6 +269,9 @@ public final class GitProcessRunner {
         if (network) {
             GitNetworkCommands.applySshStallDetection(builder.environment());
         }
+        // Last, so the owner's entries are what the child sees; none of them names a variable set
+        // above — the owner strips configuration and sets the protocol allowlist, nothing else.
+        GitNetworkCommands.applyTransferEnvironment(builder.environment(), transferEnvironment);
 
         Duration deadline = network ? networkTimeout : null;
         long startedAt = System.nanoTime();

@@ -1,0 +1,25 @@
+import com.github.oinsio.gnomish.build.AdversarialGitConfig
+
+// --- The operator's git configuration under test (own-git-transfer-argv, design D11) ---
+//
+// Every forked test JVM — and so every git subprocess a fixture or spec runs, the packaged jar
+// the E2E harness spawns, and the minions PIT forks — runs under the committed adversarial
+// global git configuration rather than the developer's `~/.gitconfig`. `testing.md` ("Git
+// fixtures are adversarial by default") states the posture; `AdversarialGitConfig` in
+// build-logic names the file once and declares it as each task's input, since a forked JVM's
+// environment is not one on its own. Applied by `test-conventions`, so a module gets it with
+// the rest of its test lifecycle from one plugin id.
+
+tasks.withType(Test).configureEach {
+    AdversarialGitConfig.applyTo(project, it)
+}
+
+// `PitestTask` extends `JavaExec`, and the minions PIT forks inherit that JVM's environment, so
+// one entry on the task reaches every mutation run. Named rather than typed: `tasks.withType
+// (JavaExec)` would also catch an application launch someone adds later, which must run under
+// the operator's real configuration.
+pluginManager.withPlugin('info.solidsoft.pitest') {
+    tasks.named('pitest') {
+        AdversarialGitConfig.applyTo(project, it)
+    }
+}

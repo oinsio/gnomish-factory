@@ -36,8 +36,18 @@ final class TaskGitFixture {
      * for every task, exactly as the plain {@code gnomish run} path does in production.
      */
     static TaskGit real() {
+        real(new GitProcessRunner())
+    }
+
+    /**
+     * The claim-stamping bundle over a caller's runner — a recording or refusing git stand-in —
+     * for a spec that must see, or forbid, what the bundle spends (FR10 of own-git-transfer-argv:
+     * the floor refusal is proven to precede every transfer by handing every git-backed port the
+     * same fake).
+     */
+    static TaskGit real(GitProcessRunner runner) {
         def epochs = new ClaimEpochBook()
-        build(epochs, epochs)
+        build(runner, epochs, epochs)
     }
 
     /**
@@ -48,12 +58,11 @@ final class TaskGitFixture {
      * — where the distinction is the point of the spec; every other spec wants {@link #real()}.
      */
     static TaskGit realClaimless() {
-        build(ClaimEpochSource.NONE, new ClaimEpochBook())
+        build(new GitProcessRunner(), ClaimEpochSource.NONE, new ClaimEpochBook())
     }
 
-    /** The one construction both forms share: {@code stamps} feeds the writers, {@code record} the bundle. */
-    private static TaskGit build(ClaimEpochSource stamps, ClaimEpochBook record) {
-        def runner = new GitProcessRunner()
+    /** The one construction every form shares: {@code stamps} feeds the writers, {@code record} the bundle. */
+    private static TaskGit build(GitProcessRunner runner, ClaimEpochSource stamps, ClaimEpochBook record) {
         // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
         // startup reads origin's default branch through it. Its retry runs on virtual time, so a
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.

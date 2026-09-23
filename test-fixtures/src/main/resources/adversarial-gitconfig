@@ -1,0 +1,33 @@
+# The operator's global git configuration every test JVM, every git subprocess a fixture
+# runs, every PIT minion and the packaged jar run under: `adversarial-gitconfig-conventions`
+# points GIT_CONFIG_GLOBAL at this file on every Test and pitest task (design D11 of
+# own-git-transfer-argv; FR12, NFR-S2). `AdversarialGitConfig` in `:test-fixtures` owns the
+# meaning of every key; a key added here is documented there in the same change.
+#
+# Every key tries to widen a transfer: the factory's own argv must defeat each one, and the
+# identity specs assert that it does. The developer's ~/.gitconfig reaches no test.
+
+[alias]
+	# The probe: `git gnomish-probe` prints this line only when this file is in force.
+	gnomish-probe = "!echo gnomish-adversarial-gitconfig-in-effect"
+
+[submodule]
+	# A fetch would recurse into submodules and contact their remotes.
+	recurse = true
+
+[fetch]
+	# A fetch would delete every remote-tracking ref origin no longer has.
+	prune = true
+
+# A URL rewrite onto the `ext::` helper: a transfer that lets the operator's rewrites apply to
+# the sentinel host runs the command below, which leaves `.gnomish-ext-ran` in git's working
+# directory. Keyed on a sentinel so the file stays static and no real host is ever rewritten.
+[url "ext::touch .gnomish-ext-ran "]
+	insteadOf = https://gnomish-rewrite.invalid/
+
+[credential]
+	# A credential helper marks the `get` action only (git also calls helpers with `store`
+	# after a successful URL-token authentication, which the Gitea lane performs, so marking
+	# every action would mark that lane itself): a transfer that consults the operator's
+	# helpers leaves `.gnomish-credential-get` in git's working directory.
+	helper = "!f() { case $1 in get) touch .gnomish-credential-get ;; esac; }; f"

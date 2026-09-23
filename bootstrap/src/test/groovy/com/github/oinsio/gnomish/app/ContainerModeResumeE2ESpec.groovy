@@ -176,8 +176,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
 
         and: 'the completed branch reached the real remote'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
-        gitExitCode(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") == 0
+        seedClone(tempDir, originUrl, freshClone) == freshClone
+        fetchFromOrigin(freshClone, "refs/heads/${branch}:refs/remotes/origin/${branch}").exitCode() == 0
     }
 
     // FR21/D15: killed between the snapshot and state commits — resume classifies the tip as an

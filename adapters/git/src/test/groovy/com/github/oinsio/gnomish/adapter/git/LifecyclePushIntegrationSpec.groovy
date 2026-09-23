@@ -29,7 +29,7 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
     def setup() {
         origin = initBareRepo(tempDir, 'origin.git')
         cloneDir = tempDir.resolve('clone')
-        git.run(tempDir, 'clone', '-q', origin.toString(), cloneDir.toString())
+        seedClone(tempDir, origin.toString(), cloneDir, '-q')
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
         git.run(cloneDir, 'push', '-q', 'origin', 'HEAD:refs/heads/main')

@@ -4,9 +4,13 @@ import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,11 +27,12 @@ import org.slf4j.LoggerFactory;
  * explicit source:destination refspec naming exactly one branch, never {@code --all} or a
  * wildcard — which both retrieves the one ref needed and leaves a proper {@code
  * refs/remotes/origin/...} tracking ref behind, verified empirically to be readable by both {@code
- * git show} and usable as a {@code git worktree add} start point. It is built by {@link
- * NarrowFetch}, the one construction site of a factory fetch's argv, so "exactly one ref" is
- * enforced by the flags as well as by the refspec: without them git auto-follows tags into the
- * operator's own {@code refs/tags/} and truncates {@code FETCH_HEAD}, two writes this clone was
- * promised it would never see. This satisfies FR8's "never fetching anything else".
+ * git show} and usable as a {@code git worktree add} start point. Its argv is the transfer
+ * owner's ({@code GitTransfer.fetch} in {@code :gittransfer}, ADR 0008), the one construction site
+ * of every factory transfer, so "exactly one ref" is enforced by the flags as well as by the
+ * refspec: without them git auto-follows tags into the operator's own {@code refs/tags/} and
+ * truncates {@code FETCH_HEAD}, two writes this clone was promised it would never see. This
+ * satisfies FR8's "never fetching anything else".
  *
  * <p>A fetch that does not produce the ref is <em>not</em> absence (FR6 of
  * harden-task-branch-contract): it is a question this clone cannot answer, and only {@code origin}
@@ -43,7 +48,12 @@ import org.slf4j.LoggerFactory;
  * git invocation that a shutdown or a deadline silences the same way it silenced the fetch, and a
  * silenced read must not be spent as a second vote for absence.
  *
- * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract.
+ * <p>A fetch git's own object validation refused takes neither arm: it is asked about first,
+ * from the stderr alone, and is {@link BranchLocation.Refused} — a fact about the branch's
+ * history that no retry changes (FR5 of own-git-transfer-argv).
+ *
+ * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract; FR5 of
+ * own-git-transfer-argv.
  */
 public final class TaskBranchLocator {
 
@@ -76,8 +86,8 @@ public final class TaskBranchLocator {
      * @param taskId the tracker's original taskId; sanitized via {@link
      *     TaskIdSanitizer#branchName}
      * @return where the branch was found — local, remote-tracking (already present or
-     *     just-fetched), confirmed missing everywhere, or unestablished because origin could not
-     *     be asked
+     *     just-fetched), confirmed missing everywhere, unestablished because origin could not be
+     *     asked, or refused by object validation
      * @throws InvalidTaskIdException if {@code taskId} cannot be sanitized into a safe branch name
      */
     public BranchLocation locate(Path cloneDir, String taskId) {
@@ -97,7 +107,8 @@ public final class TaskBranchLocator {
             return new BranchLocation.RemoteTracking(trackingRef);
         }
 
-        GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, branchName + ":" + trackingRef);
+        GitCommandResult fetch = runner.run(
+                cloneDir, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(branchName + ":" + trackingRef)));
         // The ref is the authority, not the fetch's exit code: a fetch killed on its deadline or
         // cut short by a shutdown cannot have created the tracking ref, and a fetch that reports
         // success without one has delivered nothing. Reading the ref answers all of those at once.
@@ -119,6 +130,17 @@ public final class TaskBranchLocator {
     }
 
     private BranchLocation classifyFailedFetch(Path cloneDir, String branchName, GitCommandResult fetch) {
+        // Asked first, before origin is asked to confirm the branch (design D4 of
+        // own-git-transfer-argv): validation refused what origin served, so the carriage is known
+        // and the refusal is the finding — a task-level park, never the unavailable arm (FR5).
+        Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
+        if (refusal.isPresent()) {
+            return new BranchLocation.Refused(UntrustedText.factory("The task branch " + branchName
+                    + " was found on origin, but the fetch was refused by object validation: "
+                    + refusal.get().refusedObjectClause().forLog()
+                    + ". The branch's history holds an object git will not "
+                    + "accept; inspect it on origin (git fsck) before returning the task to work."));
+        }
         return switch (remoteTip.confirmBranch(cloneDir, branchName)) {
             case Carriage.ABSENT -> {
                 // The fetch failed and origin confirms the branch does not exist, so absence is
@@ -150,7 +172,7 @@ public final class TaskBranchLocator {
      * in the factory's own family rather than the capture's.
      */
     private static UntrustedText why(GitCommandResult fetch) {
-        return fetch.failureDetail("fetch");
+        return fetch.failureDetail("narrow fetch");
     }
 
     private boolean refExists(Path cloneDir, String ref) {

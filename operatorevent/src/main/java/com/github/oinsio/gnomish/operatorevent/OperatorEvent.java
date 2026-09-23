@@ -210,7 +210,11 @@ public enum OperatorEvent {
     // an abort triggered by an uncaught exception has the exception itself in hand, so it is
     // logged in the throwable slot with its stack and cause chain rather than as a rendered
     // string in the message. Two emitters of one fault are two codes (.claude/rules/logging.md).
-    INFRASTRUCTURE_ABORT_UNCAUGHT("GF148");
+    INFRASTRUCTURE_ABORT_UNCAUGHT("GF148"),
+    // git version floor (own-git-transfer-argv, design D8): the one ERROR of the startup check
+    // that refuses to run below the floor the seed clone's protections need, or on a git that
+    // cannot report its version at all; the command that ends on it prints the same sentence.
+    STARTUP_GIT_VERSION_REFUSED("GF149");
 
     private final String code;
     private final String head;

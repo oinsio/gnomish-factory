@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.GitVersionCheck
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
@@ -140,7 +142,14 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             TaskGit git = TaskGitFixture.real(),
             FactoryProperties factoryProperties = testProperties(),
             BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, [:],
-            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), LiveConsoleIO.onStdout())) {
+            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), LiveConsoleIO.onStdout()),
+            // The tracker registry the dispatch hands `take`/`serve`; empty for the host git-mode
+            // specs, which never reach a tracker.
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry = [:],
+            // FR10 of own-git-transfer-argv: the floor check every command passes through first.
+            // The default reads the developer's real git, as production does; a spec proving the
+            // refusal hands in a check over a fake git (GitVersionFloorSpec).
+            GitVersionCheck gitVersionCheck = new GitVersionCheck(new GitProcessRunner())) {
         new ManualRunRunner(
                 new RunArgumentsParser(),
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
@@ -169,10 +178,11 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource()),
                 Clock.systemUTC(),
-                [:],
+                trackerAdapterRegistry,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null, null, null),
+                gitVersionCheck)
     }
 
     /**

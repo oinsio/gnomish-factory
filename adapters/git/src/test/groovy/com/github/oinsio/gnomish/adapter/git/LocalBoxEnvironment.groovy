@@ -25,7 +25,7 @@ import org.jspecify.annotations.Nullable
  * fast local-bare-repo specs (task 5.5/5.6) with the identical git mechanics
  * the Docker-gated suite proves end-to-end.
  */
-class LocalBoxEnvironment implements TaskExecutionEnvironment {
+class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixture {
 
     private final GitProcessRunner runner = new GitProcessRunner()
     private final Path cloneDir
@@ -46,10 +46,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
     void materialize(String branch, @Nullable String commitPin) {
         this.branch = branch
         workingCopy = boxRoot.resolve('work')
-        def clone = runner.run(
-                boxRoot, 'clone', '--no-hardlinks', '--single-branch', '--branch', branch,
-                cloneDir.toString(), workingCopy.toString())
-        assert clone.exitCode() == 0: clone.stderr()
+        seedClone(boxRoot, cloneDir.toString(), workingCopy, '--no-hardlinks', '--single-branch', '--branch', branch)
         runner.run(workingCopy, 'remote', 'remove', 'origin')
         runner.run(workingCopy, 'config', 'user.name', 'gnome')
         runner.run(workingCopy, 'config', 'user.email', 'gnome@sandbox.local')
@@ -92,8 +89,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
 
     @Override
     void harvest() {
-        def fetch = runner.run(
-                cloneDir, 'fetch', '--no-recurse-submodules', workingCopy.toString(), branch + ':' + branch)
+        def fetch = seedFetch(cloneDir, workingCopy.toString(), branch + ':' + branch, '--no-recurse-submodules')
         if (fetch.exitCode() != 0) {
             if (fetch.stderr().forParsing().contains('non-fast-forward')) {
                 throw new HarvestRefusedException(branch, fetch.stderr())

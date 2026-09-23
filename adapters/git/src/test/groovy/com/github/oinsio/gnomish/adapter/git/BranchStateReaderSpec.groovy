@@ -150,16 +150,16 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     def "FR13: a task branch reachable only via origin (narrow fetch) is read the same way, no local branch created"() {
         given: 'a bare origin carrying the task branch, and a fresh single-branch clone that lacks it'
         def bare = initBareRepo(tempDir, 'origin.git')
-        def seedClone = initWorkingRepo(tempDir, 'seed-clone')
-        new File(seedClone.toFile(), 'a.txt').text = 'first'
-        runner.run(seedClone, 'add', 'a.txt')
-        runner.run(seedClone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(seedClone, 'remote', 'add', 'origin', bare.toString())
-        runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
+        def seedRepo = initWorkingRepo(tempDir, 'seed-clone')
+        new File(seedRepo.toFile(), 'a.txt').text = 'first'
+        runner.run(seedRepo, 'add', 'a.txt')
+        runner.run(seedRepo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
+        runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(
-                new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedClone, 'HEAD'),
+        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(
+                new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
                 .persist('PROJ-6', TaskState.atStageStart('implement'),
@@ -169,9 +169,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedWorktrees.resolve('seed-clone').resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
-        def cloneResult = runner.run(
-                tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), observerClone.toString())
-        assert cloneResult.exitCode() == 0: "clone failed: ${cloneResult.stderr()}"
+        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
 
         when:
         def result = reader.read(observerClone, 'PROJ-6')
@@ -295,16 +293,16 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     def "read-only guarantee (M3): reading a remote-only task branch creates no local branch, no worktree, leaves the clone clean"() {
         given: 'a bare origin carrying the task branch, and an observer clone that never ran createTask itself'
         def bare = initBareRepo(tempDir, 'ro-origin.git')
-        def seedClone = initWorkingRepo(tempDir, 'ro-seed-clone')
-        new File(seedClone.toFile(), 'a.txt').text = 'first'
-        runner.run(seedClone, 'add', 'a.txt')
-        runner.run(seedClone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(seedClone, 'remote', 'add', 'origin', bare.toString())
-        runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
+        def seedRepo = initWorkingRepo(tempDir, 'ro-seed-clone')
+        new File(seedRepo.toFile(), 'a.txt').text = 'first'
+        runner.run(seedRepo, 'add', 'a.txt')
+        runner.run(seedRepo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
+        runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('ro-seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(
-                new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedClone, 'HEAD'),
+        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(
+                new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('ro-seed-clone').resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
                 .persist('PROJ-9', TaskState.atStageStart('implement'),
@@ -314,9 +312,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedWorktrees.resolve('ro-seed-clone').resolve('PROJ-9'), 'push', 'origin', 'gnomish/PROJ-9')
 
         def observerClone = tempDir.resolve('ro-observer-clone')
-        def cloneResult = runner.run(
-                tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), observerClone.toString())
-        assert cloneResult.exitCode() == 0: "clone failed: ${cloneResult.stderr()}"
+        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
         def observerWorktrees = tempDir.resolve('ro-observer-worktrees')
         def readerUnderTest = new BranchStateReader(runner)
 

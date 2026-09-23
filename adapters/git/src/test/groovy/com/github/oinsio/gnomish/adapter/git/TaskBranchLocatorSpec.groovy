@@ -44,11 +44,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
      * a plain {@code git clone} would fetch every branch upfront and defeat these specs' setup.
      */
     private Path cloneOf(Path bare, String name) {
-        def dest = tempDir.resolve(name)
-        def result = runner.run(
-                tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), dest.toString())
-        assert result.exitCode() == 0: "clone failed: ${result.stderr()}"
-        dest
+        seedClone(tempDir, bare.toString(), tempDir.resolve(name), '--branch', 'main', '--single-branch')
     }
 
     def "FR8: branch present locally is found without any fetch, even when origin lacks it entirely"() {
@@ -72,7 +68,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given: 'origin has the branch, and the clone already fetched it once manually'
         def bare = initBareWithBranch(tempDir, 'origin2.git', 'gnomish/PROJ-2', 'f.txt', 'hi')
         def clone = cloneOf(bare, 'clone2')
-        runner.run(clone, 'fetch', 'origin', 'gnomish/PROJ-2:refs/remotes/origin/gnomish/PROJ-2')
+        fetchFromOrigin(clone, 'refs/heads/gnomish/PROJ-2:refs/remotes/origin/gnomish/PROJ-2')
         assert runner.run(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-2').exitCode() == 0
 
         and: 'origin is then broken, so a second fetch would fail'
@@ -111,7 +107,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def bare = initBareWithBranch(tempDir, 'origin4.git', 'gnomish/PROJ-4', 'f.txt', 'wanted')
         def seed = initWorkingRepo(tempDir, 'origin4-seed2')
         addRemote(seed, 'origin', bare.toString())
-        runner.run(seed, 'fetch', 'origin', 'main')
+        fetchFromOrigin(seed, 'refs/heads/main:refs/remotes/origin/main')
         runner.run(seed, 'checkout', '-b', 'gnomish/OTHER', 'origin/main')
         commit(seed, 'other.txt', 'unrelated')
         runner.run(seed, 'push', 'origin', 'gnomish/OTHER')
@@ -127,8 +123,8 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         runner.run(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/OTHER').exitCode() != 0
     }
 
-    // FR8 of add-git-workflow, ADR 0006: the locate fetch is a factory fetch like any other, so it
-    //     is built by NarrowFetch and carries the same protective flags. Without them git
+    // FR8 of add-git-workflow, ADR 0008: the locate fetch is a factory transfer like any other, so
+    //     it is built by the owner (GitTransfer) and carries the same protective flags. Without them git
     //     auto-follows tags into the operator's own refs/tags and truncates FETCH_HEAD — two
     //     writes the factory promised never to make in a clone the operator also uses.
     def "FR8: the locate fetch writes neither an auto-followed tag nor FETCH_HEAD"() {
@@ -243,7 +239,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         reason.contains('origin carries gnomish/PROJ-9')
 
         and: 'the reason names what the fetch itself did, so the abort diagnoses more than "failed"'
-        reason.contains('the fetch exited 128')
+        reason.contains('the narrow fetch exited 128')
         reason.contains('unable to access origin')
     }
 

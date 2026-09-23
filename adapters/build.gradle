@@ -118,6 +118,11 @@ layering {
         ':baseref',
         ':domain',
         ':gitobjects',
+        // The git-transfer owner leaf (design D1 of own-git-transfer-argv): transitive via
+        // `:sandbox:docker`, whose seed helper renders the owner's clone line, and via
+        // `:adapters:git` at runtime. No source in this module names it; the layering gate
+        // walks the transitive graph, so the reach is listed where it arrives.
+        ':gittransfer',
         ':gnomish-plugin-api',
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability): the check runners sanitize their log lines through it.

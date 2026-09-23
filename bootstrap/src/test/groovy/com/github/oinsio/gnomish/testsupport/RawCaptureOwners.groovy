@@ -137,6 +137,10 @@ class RawCaptureOwners {
             'no mint owed: test-time only — drains a fixture git subprocess and answers its stdout to the calling spec, with the same text in the assertion message on a nonzero exit. It is not on any runtime path, and the scan sees it because RepoSourceTree walks every src/main in the build, :test-fixtures included',
         ],
         [
+            'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeedTransferFixture.groovy',
+            'mints subprocess: test-time only — drains a spec\'s own seeding transfer (a clone or a fetch that is test scaffolding, not a factory transfer, run outside the runner because the runner refuses every transfer the owner did not build — FR8 of own-git-transfer-argv) and hands both streams to GitCommandResult.of, the same mint and scrub the runner uses',
+        ],
+        [
             'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/sandbox/environment/GuardImageAvailability.groovy',
             'no mint owed: test-time only — drains a docker prerequisite probe whose bytes are discarded, so a spec skips instead of failing offline',
         ],

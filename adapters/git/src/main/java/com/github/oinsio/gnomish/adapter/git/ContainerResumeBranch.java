@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -84,6 +85,8 @@ public final class ContainerResumeBranch {
             // fork FR6 removes, so the container resume aborts and the claim goes back to the pool.
             case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
+            case BranchLocation.Refused(UntrustedText report) ->
+                throw new BranchLocationRefusedException(taskId, report);
         };
     }
 }

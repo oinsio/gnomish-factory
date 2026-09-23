@@ -4,6 +4,9 @@ import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
@@ -113,9 +116,9 @@ final class ReplicaPairReconciler {
         // The fetch's own outcome is deliberately not read: everything below is decided from refs
         // the clone actually holds, so a fetch killed on its deadline degrades to "no fresher
         // tracking ref", never to a wrong verdict (FR7 of bound-subprocess-commands). Its argv is
-        // NarrowFetch's, the one construction site every factory fetch of origin shares, so this
-        // one cannot auto-follow a tag or truncate FETCH_HEAD either (ADR 0006).
-        NarrowFetch.of(runner, repo, branch + ":" + trackingRef);
+        // the transfer owner's, the one construction site every factory transfer shares, so this
+        // one cannot auto-follow a tag or truncate FETCH_HEAD either (ADR 0008).
+        runner.run(repo, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(branch + ":" + trackingRef)));
 
         String lastLostSwap = null;
         for (int pass = 0; pass < MAX_PASSES; pass++) {

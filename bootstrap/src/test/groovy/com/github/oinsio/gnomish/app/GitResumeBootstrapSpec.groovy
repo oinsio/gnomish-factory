@@ -136,8 +136,8 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
 
         and: 'another instance clones and pushes a further commit for the same task to origin'
         def peerClone = tempDir.resolve('peer-clone')
-        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
-        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-20:refs/remotes/origin/gnomish/PROJ-20')
+        seedClone(tempDir, bare.toString(), peerClone)
+        assert fetchFromOrigin(peerClone, 'refs/heads/gnomish/PROJ-20:refs/remotes/origin/gnomish/PROJ-20').exitCode() == 0
         gitOutput(peerClone, 'checkout', 'gnomish/PROJ-20')
         Files.writeString(peerClone.resolve('peer-work.txt'), 'peer commit')
         commitAll(peerClone, 'peer work')
@@ -199,8 +199,8 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
 
         and: 'a peer instance independently pushes a different commit for the same task'
         def peerClone = tempDir.resolve('peer-clone-22')
-        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
-        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22')
+        seedClone(tempDir, bare.toString(), peerClone)
+        assert fetchFromOrigin(peerClone, 'refs/heads/gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22').exitCode() == 0
         gitOutput(peerClone, 'checkout', 'gnomish/PROJ-22')
         Files.writeString(peerClone.resolve('peer-only.txt'), 'peer work')
         commitAll(peerClone, 'peer work')
@@ -243,8 +243,8 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
 
         and: 'someone else independently pushes a different commit for the same task'
         def peerClone = tempDir.resolve('peer-clone-23')
-        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
-        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-23:refs/remotes/origin/gnomish/PROJ-23')
+        seedClone(tempDir, bare.toString(), peerClone)
+        assert fetchFromOrigin(peerClone, 'refs/heads/gnomish/PROJ-23:refs/remotes/origin/gnomish/PROJ-23').exitCode() == 0
         gitOutput(peerClone, 'checkout', 'gnomish/PROJ-23')
         Files.writeString(peerClone.resolve('peer-only.txt'), 'peer work')
         commitAll(peerClone, 'peer work')

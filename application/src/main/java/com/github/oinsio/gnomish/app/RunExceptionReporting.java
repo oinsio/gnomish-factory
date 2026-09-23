@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
+import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
@@ -50,7 +51,8 @@ final class RunExceptionReporting {
         } catch (UsageException
                 | PipelineLoadFailedException
                 | InternalErrorException
-                | DefaultBranchUnboundException ex) {
+                | DefaultBranchUnboundException
+                | GitVersionRefusedException ex) { // UX2 of own-git-transfer-argv: a precondition, not a crash
             errorConsole.print(ex.getMessage() + ConsoleIO.LINE_END);
             throw ex;
         } catch (InputExhaustedException | ConsoleClosedException ex) {

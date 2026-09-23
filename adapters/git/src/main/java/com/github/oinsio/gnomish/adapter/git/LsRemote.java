@@ -18,10 +18,10 @@ import java.nio.file.Path;
  * <p>Both shapes put {@code --end-of-options} before the remote name. {@code ls-remote} happens to
  * stop parsing options at the first non-option argument today, so a ref pattern beginning with
  * {@code -} is already read as a pattern rather than as a flag — but that is git's current
- * positional behaviour, not a documented guarantee, and the sibling {@link NarrowFetch} shows the
- * other posture is real ({@code fetch} does honour options after the remote). The separator states
- * the boundary instead of inheriting it. Not {@code --}, which git reads as the start of a
- * pathspec.
+ * positional behaviour, not a documented guarantee, and the transfer owner ({@code GitTransfer}
+ * in {@code :gittransfer}) shows the other posture is real ({@code fetch} does honour options
+ * after the remote). The separator states the boundary instead of inheriting it. Not {@code --},
+ * which git reads as the start of a pathspec.
  *
  * <p>Implements FR3 of fix-lifecycle-push; FR5, FR6 of add-base-ref-resolution.
  */

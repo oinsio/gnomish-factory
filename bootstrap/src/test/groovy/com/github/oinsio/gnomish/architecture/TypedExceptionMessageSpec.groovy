@@ -10,9 +10,11 @@ import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
 import com.github.oinsio.gnomish.adapter.git.RoundBoundaryViolationException
 import com.github.oinsio.gnomish.adapter.git.WorktreeCreationFailedException
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
+import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerCommandFailedException
@@ -115,6 +117,15 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.factory(raw) },
                 { UntrustedText carried ->
                     new BranchLocationUnavailableException('GF-1', carried)
+                }
+            ],
+            [
+                // The report is factory prose quoting git's validation words through the log exit
+                // (FR5 of own-git-transfer-argv).
+                'BranchLocationRefusedException',
+                { String raw -> UntrustedText.factory(raw) },
+                { UntrustedText carried ->
+                    new BranchLocationRefusedException('GF-1', carried)
                 }
             ],
             [
@@ -250,6 +261,15 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.subprocess(raw) },
                 { UntrustedText carried ->
                     new RoundBoundaryViolationException('T-1', carried)
+                }
+            ],
+            [
+                // What git --version printed instead of a version line, quoted through the log
+                // exit (FR10, NFR-R2 of own-git-transfer-argv).
+                'GitVersionRefusedException',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new GitVersionRefusedException('2.45.1', carried, 'why')
                 }
             ],
             [

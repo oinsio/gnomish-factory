@@ -145,7 +145,7 @@ to six.
   an options terminator before the source and refspec, and — for a named
   remote — an empty refmap. Full depth on every transfer.
 - FR4: Every transfer SHALL run under a closed protocol allowlist set by the
-  owner per source (`GIT_ALLOW_PROTOCOL`): `https:ssh:file` for `origin`,
+  owner per source (`GIT_ALLOW_PROTOCOL`): `https:http:ssh:file` for `origin`,
   exactly `ext` for a container, exactly `file` for a seed path. The
   allowlist is the whole protocol policy: git treats each listed protocol as
   `always` and every other as `never`, overriding every configuration scope,
@@ -256,3 +256,11 @@ to six.
   list grows only by a change.
 - Q2: Should the `origin` allowlist include `git://` (unauthenticated)?
   Decided for now: no; an operator with such a remote reports it.
+- Q3: Should the `origin` allowlist include plain `http`? Decided 2026-09-22
+  (surfaced by group 4: the Gitea E2E lane's origin is `http`, and the
+  refusal reached the take's base refresh): yes. Git names `http` and
+  `https` as separate protocols, an `http` origin authenticates through the
+  operator's ambient credentials exactly as `https` does, and the allowlist
+  exists to close `ext`, `git://` and remote helpers — not to police the
+  operator's choice of transport security for their own server. Unlike
+  `git://` (Q2), `http` carries authentication.

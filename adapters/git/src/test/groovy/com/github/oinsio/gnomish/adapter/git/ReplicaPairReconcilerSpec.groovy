@@ -50,10 +50,8 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         commit(seed, 'a.txt', 'first')
         runner.run(seed, 'push', 'origin', branchName)
 
-        def clone = tempDir.resolve('clone')
-        def cloneResult = runner.run(tempDir, 'clone', bare.toString(), clone.toString())
-        assert cloneResult.exitCode() == 0: "clone failed: ${cloneResult.stderr()}"
-        runner.run(clone, 'fetch', 'origin', "${branchName}:refs/remotes/origin/${branchName}")
+        def clone = seedClone(tempDir, bare.toString(), tempDir.resolve('clone'))
+        fetchFromOrigin(clone, "refs/heads/${branchName}:refs/remotes/origin/${branchName}")
 
         def worktree = tempDir.resolve('worktree')
         def add = runner.run(clone, 'worktree', 'add', worktree.toString(), branchName)
@@ -90,8 +88,8 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         outcome == DivergenceOutcome.EQUAL
     }
 
-    // ADR 0006: the reconcile fetch is a factory fetch of origin like any other, built by
-    //     NarrowFetch — so it cannot auto-follow a tag into the operator's refs/tags or truncate
+    // ADR 0008: the reconcile fetch is a factory transfer like any other, built by the owner
+    //     (GitTransfer) — so it cannot auto-follow a tag into the operator's refs/tags or truncate
     //     the clone's single FETCH_HEAD file while doing its own narrow job.
     def "the reconcile fetch writes neither an auto-followed tag nor FETCH_HEAD"() {
         given: 'origin carries a tag on the branch this reconcile will fetch'

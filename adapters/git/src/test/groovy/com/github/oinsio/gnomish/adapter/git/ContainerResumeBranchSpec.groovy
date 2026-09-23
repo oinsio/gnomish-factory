@@ -47,7 +47,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
 
     private void setOriginBranch(String sha) {
         gitOutput(clone, 'push', 'origin', sha + ':refs/heads/' + BRANCH)
-        gitOutput(clone, 'fetch', 'origin', BRANCH + ':refs/remotes/origin/' + BRANCH)
+        assert fetchFromOrigin(clone, 'refs/heads/' + BRANCH + ':refs/remotes/origin/' + BRANCH).exitCode() == 0
     }
 
     private String localTip() {

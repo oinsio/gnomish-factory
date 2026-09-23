@@ -26,7 +26,7 @@ import spock.lang.TempDir
  * paths (surviving volume, lost environment), and resume by a second factory
  * instance from the branch alone.
  *
- * <p>Implements FR3, FR5, FR6, M4 of add-sandbox-core.
+ * <p>Implements FR3, FR5, FR6, M4 of add-sandbox-core; FR6 of own-git-transfer-argv.
  */
 @IgnoreIf({
     !GiteaAvailability.dockerAvailable()
@@ -126,6 +126,27 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         gitOutput(source, 'show', BRANCH + ':work.txt') == 'gnome work'
     }
 
+    // FR6 of own-git-transfer-argv: the harvest is the owner's Container transfer, so a tag the gnome
+    //     creates inside the real box — pointing into the very history the harvest delivers — never
+    //     auto-follows into the factory clone, and the harvest leaves no FETCH_HEAD behind.
+    def "FR6: a tag created in the box does not appear in the factory clone after harvest"() {
+        given: 'a gnome commit in the box, tagged there'
+        def source = factoryClone()
+        def e = env(source)
+        e.materialize(BRANCH, null)
+        def inBoxTip = gnomeCommit(e)
+        inBox(e, 'git tag box-made HEAD')
+
+        when:
+        e.harvest()
+
+        then: 'the branch arrived, the tag did not, and FETCH_HEAD was not written'
+        gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == inBoxTip
+        gitExitCode(source, 'rev-parse', '--verify', '--quiet', 'refs/tags/box-made') != 0
+        gitOutput(source, 'tag', '--list') == ''
+        !new File(source.toFile(), '.git/FETCH_HEAD').exists()
+    }
+
     def "FR5: rewritten history inside the box is refused by the harvest itself and the factory ref is unchanged"() {
         given: 'one harvested commit, then an in-box amend of that same tip'
         def source = factoryClone()
@@ -222,7 +243,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         new File(sourceB.toFile(), 'seed.txt').text = 'seed'
         commitAll(sourceB)
         addRemote(sourceB, 'origin', origin.toString())
-        gitOutput(sourceB, 'fetch', 'origin', BRANCH + ':' + BRANCH)
+        assert fetchFromOrigin(sourceB, 'refs/heads/' + BRANCH + ':refs/heads/' + BRANCH).exitCode() == 0
         def eB = env(sourceB)
         eB.materialize(BRANCH, null)
 

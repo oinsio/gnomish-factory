@@ -64,7 +64,7 @@ fetch full history, never shallow.
 
 ### Requirement: Closed per-source protocol allowlist
 Every transfer SHALL run under a protocol allowlist the owner sets per source, which denies every
-protocol not listed: `https`, `ssh`, and `file` for `origin`; exactly `ext` for a container;
+protocol not listed: `https`, `http`, `ssh`, and `file` for `origin`; exactly `ext` for a container;
 exactly `file` for a seed path. The allowlist SHALL be the whole protocol policy: no transfer
 carries a `protocol.*.allow` key or a `GIT_PROTOCOL_FROM_USER` value, because under the
 allowlist every protocol is either always or never allowed and both would be inert.

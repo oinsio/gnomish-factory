@@ -250,9 +250,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         seed.contains('/factory/project-clone:/gnomish/src:ro')
         seed.contains('gnomish-vol-' + KEY + ':/gnomish/work')
 
-        and: 'the seed script clones --no-hardlinks with the branch as a positional parameter, never interpolated'
+        and: 'the seed script clones through the owner\'s value with the branch as a positional parameter, never interpolated'
         def script = seed[seed.indexOf('-c') + 1]
-        script.contains('clone --no-hardlinks --single-branch --branch "$1"')
+        script.contains('clone --no-local --no-hardlinks --single-branch --no-tags --no-recurse-submodules --branch "$1"')
         // FR3: both the worktree and its gitdir are trusted — git resolves a non-bare source to
         // <path>/.git and refuses that exact path as dubious under a real Linux bind mount.
         // Global scope via a throwaway GIT_CONFIG_GLOBAL file: git <= 2.43 (Ubuntu noble)

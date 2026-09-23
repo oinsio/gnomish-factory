@@ -86,7 +86,10 @@ class ModuleBuildFileSpec extends Specification {
      * choice — plus the one internal edge FR7 of split-logtext-leaves grants it, to the
      * untrusted-text leaf its {@code LogText} facade delegates to (module-layering scenario "The
      * logtext leaf carries only the logging API"). The internal half of each invariant is gated by
-     * {@code layering { allowedProjects } }; this map is the external half.
+     * {@code layering { allowedProjects } }; this map is the external half. {@code :gittransfer}
+     * (FR2 of own-git-transfer-argv) declares nothing for the same security reason as the text
+     * leafs, and for a layering one besides: {@code :adapters:git} and {@code :sandbox:docker}
+     * reach it from opposite sides of the module tree, so any edge it acquired would land in both.
      *
      * <p>This map is a named registry: it pins the leafs whose emptiness the layering depends on,
      * whether or not anything reaches them today. {@link DomainLeafPuritySpec} asks the companion
@@ -107,6 +110,7 @@ class ModuleBuildFileSpec extends Specification {
         ] as Set,
         untrustedtext: [] as Set,
         operatorevent: [] as Set,
+        gittransfer: [] as Set,
     ]
 
     /**

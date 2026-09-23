@@ -33,7 +33,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
     def setup() {
         origin = initBareRepo(tempDir, 'origin.git')
         clone = tempDir.resolve('clone')
-        runner.run(tempDir, 'clone', '-q', origin.toString(), clone.toString())
+        seedClone(tempDir, origin.toString(), clone, '-q')
         Files.writeString(clone.resolve('a.txt'), 'base')
         commitAll(clone, 'init')
         gitOutput(clone, 'checkout', '-q', '-b', BRANCH)
@@ -138,7 +138,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
     def "an origin the local tip does not descend from is left alone, with a WARN"() {
         given: 'someone else pushed a divergent branch to origin'
         def other = tempDir.resolve('other')
-        runner.run(tempDir, 'clone', '-q', origin.toString(), other.toString())
+        seedClone(tempDir, origin.toString(), other, '-q')
         gitOutput(other, 'checkout', '-q', '-b', BRANCH)
         Files.writeString(other.resolve('theirs.txt'), 'theirs')
         commitAll(other, 'theirs')

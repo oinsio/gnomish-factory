@@ -85,6 +85,12 @@ dependencies {
     // record and the annotated classes are package-private, so no carrier travels on this
     // module's own surface.
     implementation project(':untrustedtext')
+    // The git-transfer owner leaf (FR2, FR7, design D1/D6 of own-git-transfer-argv):
+    // `DockerSeedCloneCommand` renders the owner's `SeedPath` clone value — argv and
+    // environment — into the seed helper's constant script, so the one flag set the
+    // factory's fetches run under is the one the seed clone runs under. `implementation`:
+    // the value is consumed inside a static initializer and sits on no signature.
+    implementation project(':gittransfer')
 
     // Shared fakes (FR7, design D8), test scope only: RecordingDockerCli /
     // ScriptedSandboxDocker and the TaskExecutionEnvironment port-contract
@@ -111,6 +117,9 @@ layering {
         ':baseref',
         ':domain',
         ':gitobjects',
+        // The git-transfer owner leaf (FR2, design D1 of own-git-transfer-argv): the seed
+        // helper's clone line is the owner's `SeedPath` value, rendered.
+        ':gittransfer',
         ':gnomish-plugin-api',
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability); `DockerCli` names its `ShutdownPhase`.

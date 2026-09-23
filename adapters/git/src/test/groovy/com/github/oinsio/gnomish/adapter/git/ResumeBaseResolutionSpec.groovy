@@ -37,8 +37,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(work, 'origin', origin.toString())
         assert gitExitCode(work, 'push', 'origin', 'main', 'develop') == 0
-        assert gitExitCode(tempDir, 'clone', origin.toString(), 'clone') == 0
-        clone = tempDir.resolve('clone')
+        clone = seedClone(tempDir, origin.toString(), tempDir.resolve('clone'))
     }
 
     private ResumeBaseResolution resolution(GitProcessRunner boundRunner = runner) {

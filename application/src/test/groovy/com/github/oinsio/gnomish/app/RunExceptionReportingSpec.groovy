@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
+import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -81,7 +82,9 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
                 'broken .gnomish/pipeline.yaml'
             ]),
             new InternalErrorException('corrupt branch'),
-            new UnsupportedStateFileVersionException('task.json', 2, 1)
+            new UnsupportedStateFileVersionException('task.json', 2, 1),
+            // UX2 of own-git-transfer-argv: the floor refusal reads like a precondition
+            new GitVersionRefusedException('2.45.1', '2.44.0', 'the seed clone relies on it')
         ]
     }
 

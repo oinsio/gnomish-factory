@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
@@ -88,6 +89,8 @@ public final class DeliveredBranchReader {
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
                     case BranchLocation.Unavailable(UntrustedText reason) ->
                         throw new BranchLocationUnavailableException(taskId, reason);
+                    case BranchLocation.Refused(UntrustedText report) ->
+                        throw new BranchLocationRefusedException(taskId, report);
                     case BranchLocation.NotFound ignored ->
                         throw new GitTaskRepositoryException(
                                 taskId,

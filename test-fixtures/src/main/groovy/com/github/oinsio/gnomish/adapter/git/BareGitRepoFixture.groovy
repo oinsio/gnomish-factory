@@ -16,7 +16,7 @@ import java.nio.file.Path
  * module cannot depend on this adapter-owned trait (design D19 of add-sandbox-core) and instead
  * re-implements the same calls under the same names for its specs.
  */
-trait BareGitRepoFixture {
+trait BareGitRepoFixture implements SeedTransferFixture {
 
     /**
      * Runs {@code git init --bare} in a new subdirectory of {@code parent} named {@code name}
@@ -183,7 +183,7 @@ trait BareGitRepoFixture {
         String branch = currentBranch(repo)
         String origin = gitOutput(repo, 'remote', 'get-url', 'origin')
         Path advance = parent.resolve("origin-advance-${branch.replace('/', '-')}-${System.nanoTime()}")
-        assert runner.run(parent, 'clone', origin, advance.toString()).exitCode() == 0
+        seedClone(parent, origin, advance)
         assert runner.run(advance, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
         'commit', '--allow-empty', '-m', 'origin moves ahead').exitCode() == 0
         def push = runner.run(advance, 'push', 'origin', "HEAD:refs/heads/${branch}")
@@ -389,7 +389,7 @@ trait BareGitRepoFixture {
         ]
         pushArgs.addAll(extraRefs)
         assert gitExitCode(work, pushArgs as String[]) == 0
-        assert gitExitCode(tempDir, 'clone', origin.toString(), 'clone') == 0
+        seedClone(tempDir, origin.toString(), tempDir.resolve('clone'))
         [
             work,
             origin,

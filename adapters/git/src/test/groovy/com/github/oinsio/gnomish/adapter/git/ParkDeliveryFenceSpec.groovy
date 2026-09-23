@@ -32,7 +32,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
     def setup() {
         origin = initBareRepo(tempDir, 'origin.git')
         clone = tempDir.resolve('clone')
-        runner.run(tempDir, 'clone', '-q', origin.toString(), clone.toString())
+        seedClone(tempDir, origin.toString(), clone, '-q')
         Files.writeString(clone.resolve('a.txt'), 'base')
         commitAll(clone, 'init')
         gitOutput(clone, 'checkout', '-q', '-b', BRANCH)

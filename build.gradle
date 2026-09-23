@@ -111,6 +111,22 @@ dependencyAnalysis {
                 severity 'ignore'
             }
         }
+        // `:test-fixtures` exports `:gittransfer` as `api` and DAGP advises
+        // `implementation`, again reading only the Java ABI: the fixture names the
+        // leaf in method bodies alone. The consumers that break are the Groovy
+        // test trees of `:application`, `:bootstrap` and `:sandbox:docker`:
+        // `GitProcessRunner`'s package-private typed entry takes the owner's
+        // value (FR8 of own-git-transfer-argv), groovyc canonicalizes the whole
+        // class when a spec names the runner, and `compileTestGroovy` fails
+        // without the leaf on that classpath. `:adapters:git` itself keeps the
+        // leaf as `implementation`, so the production ABI stays honest; the
+        // shared test classpath is what this module exists to assemble. Same
+        // narrow scope as above.
+        project(':test-fixtures') {
+            onIncorrectConfiguration {
+                severity 'ignore'
+            }
+        }
     }
 }
 

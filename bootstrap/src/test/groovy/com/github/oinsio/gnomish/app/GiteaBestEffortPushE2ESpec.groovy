@@ -101,7 +101,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
 
         and: 'a fresh independent clone from Gitea, fetching just the task branch, already has that round commit'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
+        seedClone(tempDir, originUrl, freshClone) == freshClone
         roundReachedOrigin(freshClone, taskId, roundSha)
 
         and: 'the pushed tree really carries the round content, not just an empty ref'

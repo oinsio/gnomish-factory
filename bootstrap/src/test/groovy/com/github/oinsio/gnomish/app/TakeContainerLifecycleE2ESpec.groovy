@@ -168,8 +168,8 @@ tracker:
         and: 'the branch really ran in the box and reached the real remote via the factory-side push'
         def branch = "gnomish/${REF.id()}"
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
-        gitExitCode(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") == 0
+        seedClone(tempDir, originUrl, freshClone) == freshClone
+        fetchFromOrigin(freshClone, "refs/heads/${branch}:refs/remotes/origin/${branch}").exitCode() == 0
         def tipTree = gitOutput(freshClone, 'ls-tree', '-r', '--name-only', "origin/${branch}")
         tipTree.contains('output.txt')
 

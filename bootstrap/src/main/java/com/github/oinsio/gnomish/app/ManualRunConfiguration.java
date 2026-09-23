@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches;
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore;
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees;
+import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
@@ -96,6 +97,16 @@ public class ManualRunConfiguration {
     @Bean
     public GitProcessRunner gitProcessRunner(FactoryProperties factoryProperties) {
         return new GitProcessRunner(factoryProperties.gitNetworkTimeout());
+    }
+
+    /**
+     * The git version floor (FR10, design D8 of own-git-transfer-argv), checked through the same
+     * runner before any command dispatches — one bean, so the once-per-process record is one
+     * record.
+     */
+    @Bean
+    public GitVersionCheck gitVersionCheck(GitProcessRunner gitProcessRunner) {
+        return new GitVersionCheck(gitProcessRunner);
     }
 
     /**

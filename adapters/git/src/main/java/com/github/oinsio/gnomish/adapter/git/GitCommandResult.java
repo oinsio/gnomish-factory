@@ -98,7 +98,7 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
     /**
      * Why an invocation did not deliver what its caller asked for, phrased for an operator report:
      * the termination first, the exit code and git's own words only when the command actually ran
-     * to its own exit. {@code what} names the invocation in the caller's vocabulary ("fetch",
+     * to its own exit. {@code what} names the invocation in the caller's vocabulary ("narrow fetch",
      * "refs read"), so one sentence shape serves every network call site.
      *
      * <p>Extracted when the base refresh became the third caller of what {@link TaskBranchLocator}

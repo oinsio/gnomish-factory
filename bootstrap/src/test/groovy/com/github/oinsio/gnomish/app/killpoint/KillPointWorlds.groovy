@@ -107,7 +107,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         gitOutput(origin, 'symbolic-ref', 'HEAD', 'refs/heads/base')
 
         Path recovering = root.resolve('recovering-clone')
-        gitOutput(root, 'clone', origin.toString(), recovering.toString())
+        seedClone(root, origin.toString(), recovering)
 
         def runner = new GitProcessRunner()
         new CreationWorld(

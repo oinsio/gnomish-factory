@@ -44,7 +44,7 @@ trait GiteaTaskSeedFixture implements BareGitRepoFixture {
      * remote, not just the local worktree" check shared by these specs.
      */
     boolean roundReachedOrigin(Path freshClone, String taskId, String sha) {
-        gitExitCode(freshClone, 'fetch', 'origin', "gnomish/${taskId}:refs/remotes/origin/gnomish/${taskId}")
+        fetchFromOrigin(freshClone, "refs/heads/gnomish/${taskId}:refs/remotes/origin/gnomish/${taskId}")
         gitExitCode(freshClone, 'cat-file', '-e', sha) == 0
     }
 }

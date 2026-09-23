@@ -32,7 +32,7 @@ trait LifecyclePushFixture implements BareGitRepoFixture {
     void initLifecyclePushFixture() {
         origin = initBareRepo(tempDir, 'origin.git')
         cloneDir = tempDir.resolve('clone')
-        git.run(tempDir, 'clone', '-q', origin.toString(), cloneDir.toString())
+        seedClone(tempDir, origin.toString(), cloneDir, '-q')
         Files.writeString(cloneDir.resolve('a.txt'), 'a')
         commitAll(cloneDir, 'init')
         git.run(cloneDir, 'branch', BRANCH)

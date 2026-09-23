@@ -43,18 +43,15 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
         bareOrigin = initBareRepo(tempDir, 'origin.git')
         def seed = initWorkingRepo(tempDir, 'seed')
         commit(seed, 'seed.txt', 'seed content')
-        runner.run(seed, 'remote', 'add', 'origin', bareOrigin.toString())
-        runner.run(seed, 'push', 'origin', 'HEAD:refs/heads/main')
+        addRemote(seed, 'origin', bareOrigin.toString())
+        gitOutput(seed, 'push', 'origin', 'HEAD:refs/heads/main')
 
         worktreesRoot = tempDir.resolve('worktrees')
         def taskWorktrees = tempDir.resolve('task-build').resolve('worktrees')
         buildTaskBranch(seed, taskWorktrees, 'PROJ-1')
-        runner.run(seed, 'push', 'origin', 'gnomish/PROJ-1')
+        gitOutput(seed, 'push', 'origin', 'gnomish/PROJ-1')
 
-        clone = tempDir.resolve('clone')
-        def result = runner.run(tempDir, 'clone', '--branch', 'main', '--single-branch',
-                bareOrigin.toString(), clone.toString())
-        assert result.exitCode() == 0: "clone failed: ${result.stderr()}"
+        clone = seedClone(tempDir, bareOrigin.toString(), tempDir.resolve('clone'), '--branch', 'main', '--single-branch')
     }
 
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
@@ -72,16 +69,16 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
     private Map snapshot() {
         [
-            branch : runner.run(clone, 'symbolic-ref', '--short', 'HEAD').stdout().forParsing().trim(),
-            head : runner.run(clone, 'rev-parse', 'HEAD').stdout().forParsing().trim(),
-            porcelain : runner.run(clone, 'status', '--porcelain').stdout(),
-            localRefs : runner.run(clone, 'for-each-ref', 'refs/heads/').stdout(),
-            worktrees : runner.run(clone, 'worktree', 'list', '--porcelain').stdout(),
+            branch : gitOutput(clone, 'symbolic-ref', '--short', 'HEAD'),
+            head : gitOutput(clone, 'rev-parse', 'HEAD'),
+            porcelain : gitOutput(clone, 'status', '--porcelain'),
+            localRefs : gitOutput(clone, 'for-each-ref', 'refs/heads/'),
+            worktrees : gitOutput(clone, 'worktree', 'list', '--porcelain'),
         ]
     }
 
     private boolean trackingRefExists() {
-        runner.run(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1').exitCode() == 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') == 0
     }
 
     // FR13, M3: status against a branch not yet fetched locally exercises the narrow-fetch path
@@ -140,9 +137,9 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
     // git never ran a network operation the second time.
     def "M3, FR13: gnomish status on an already-fetched task branch performs zero mutation, not even a redundant fetch"() {
         given:
-        runner.run(clone, 'fetch', 'origin', 'gnomish/PROJ-1:refs/remotes/origin/gnomish/PROJ-1')
+        fetchFromOrigin(clone, 'refs/heads/gnomish/PROJ-1:refs/remotes/origin/gnomish/PROJ-1')
         assert trackingRefExists()
-        def trackingShaBefore = runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().forParsing().trim()
+        def trackingShaBefore = gitOutput(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1')
         def fetchHeadFile = clone.resolve('.git').resolve('FETCH_HEAD').toFile()
         def fetchHeadBefore = fetchHeadFile.exists() ? fetchHeadFile.lastModified() : -1L
         Thread.sleep(20)
@@ -156,7 +153,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         then: 'no new fetch happened: FETCH_HEAD is untouched and the tracking ref sha is unchanged'
         (fetchHeadFile.exists() ? fetchHeadFile.lastModified() : -1L) == fetchHeadBefore
-        runner.run(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1').stdout().forParsing().trim() == trackingShaBefore
+        gitOutput(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-1') == trackingShaBefore
 
         and:
         def after = snapshot()
