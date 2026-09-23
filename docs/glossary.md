@@ -319,6 +319,20 @@ trusted/task tier split, and the law-root rule.
   a real Docker daemon inside a per-task VM (step 3).
 - **Fail-closed** — when protection cannot be established or verified, the
   task does not start; never "run unprotected".
+- **Transfer** — one factory git fetch or clone as a value: the argument
+  list and the environment built by the one transfer owner from a transfer
+  source and one refspec, carrying the deny-by-default set of ADR 0008 (no
+  tag auto-following, no `FETCH_HEAD`, no submodule recursion, no prune,
+  validated objects, a closed protocol allowlist). *Not:* a push — pushes
+  are not transfers and keep their own argv. *Not:* a narrow fetch, which
+  is the base refresh's branch or tag transfer from `origin` (ADR 0006), one
+  kind of transfer among several. *Never:* fetch recipe, flag set.
+- **Transfer source** — where a transfer reads from, one of a closed set of
+  kinds each carrying its own protocol allowlist and configuration
+  isolation: the trusted `origin` remote, a task container reached over the
+  `ext::` transport, or the operator's clone as the seed path of a box's
+  working copy. A new sandbox backend adds a kind, never a flag list.
+  *Never:* remote kind, fetch target.
 - **Ownership asymmetry** — the repo may only tighten its sandbox; adapter
   bindings and any loosening are operator-only; reconciliation is fail-closed.
 

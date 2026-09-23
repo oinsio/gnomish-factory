@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -58,7 +57,6 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
     Path tempDir
 
     Path cloneDir
-    def gitRunner = new GitProcessRunner()
     String taskId = 'CTN-PIPE-1'
 
     // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
@@ -72,11 +70,10 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         cloneDir = initWorkingRepo(tempDir, 'container-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', '.gnomish/instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
         originUrl = gitea.createRepository("container-pipeline-${System.nanoTime()}")
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', originUrl)
-        gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        addRemote(cloneDir, 'origin', originUrl)
+        gitExitCode(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
     }
 
     def cleanup() {
@@ -122,27 +119,27 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
         then: 'the snapshot-first protocol is on the branch: snapshot commit, then the state commit on top'
         def branch = "gnomish/${taskId}"
-        def snapshotSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$').stdout().forParsing().trim()
+        def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
+                '^gnomish: snapshot work#0$')
         snapshotSha
-        def stateSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: round work#0$').stdout().forParsing().trim()
+        def stateSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
+                '^gnomish: round work#0$')
         stateSha
-        gitRunner.run(cloneDir, 'rev-parse', "${stateSha}^").stdout().forParsing().trim() == snapshotSha
+        gitOutput(cloneDir, 'rev-parse', "${stateSha}^") == snapshotSha
 
         and: 'the gnome round really ran inside the box: the fake agent wrote output.txt into the snapshot'
-        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', snapshotSha).stdout().forParsing().contains('output.txt')
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', snapshotSha).contains('output.txt')
 
         and: 'the completed tip is cleaned: no .gnomish-task/, the work is present'
-        def tipTree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()
+        def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
         tipTree.contains('output.txt')
         !tipTree.contains('.gnomish-task/')
 
         and: 'the branch reached the real remote via the factory-side push — proven from a fresh clone'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', originUrl, freshClone.toString())
-        gitRunner.run(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}")
-        gitRunner.run(freshClone, 'cat-file', '-e', stateSha).exitCode() == 0
+        seedClone(tempDir, originUrl, freshClone)
+        fetchFromOrigin(freshClone, "refs/heads/${branch}:refs/remotes/origin/${branch}")
+        gitExitCode(freshClone, 'cat-file', '-e', stateSha) == 0
 
         and: 'the task environment is disposed: no container, volume, or network object remains'
         ContainerE2eDocker.taskObjects(taskId).isEmpty()

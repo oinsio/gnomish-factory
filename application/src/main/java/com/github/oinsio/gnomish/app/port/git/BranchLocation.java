@@ -19,9 +19,13 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * <p>{@link NotFound} and {@link Unavailable} are the two halves of what was one outcome before
  * FR6 of harden-task-branch-contract: absence is a fact only origin can state, so a lookup that
  * never got an answer says so instead of borrowing absence's name — routing a duplicate branch
- * into existence is exactly what the conflation caused.
+ * into existence is exactly what the conflation caused. {@link Refused} is the third failure,
+ * split from {@link Unavailable} by FR5 of own-git-transfer-argv: origin answered and served the
+ * branch, and git's own object validation would not accept what arrived — a fact about the
+ * repository, never about the daemon.
  *
- * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract.
+ * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract; FR5 of
+ * own-git-transfer-argv.
  */
 public sealed interface BranchLocation {
 
@@ -68,4 +72,17 @@ public sealed interface BranchLocation {
      *     credentials already scrubbed
      */
     record Unavailable(UntrustedText reason) implements BranchLocation {}
+
+    /**
+     * Origin served the task branch and the fetch refused it: an object in the branch's history
+     * failed git's validation, so the branch cannot be read into this clone at all. A task-level
+     * refusal — the next fetch reads the same objects, so no retry and no infrastructure budget
+     * applies; the task parks with the report for a human, and the outage accounting never sees it
+     * (NFR-R1 of own-git-transfer-argv).
+     *
+     * @param report one operator-facing paragraph naming the branch, the validation message id and
+     *     the object git refused; carried as {@link UntrustedText} because the id and the object
+     *     are git's words about content a gnome or a remote authored, quoted through an exit
+     */
+    record Refused(UntrustedText report) implements BranchLocation {}
 }

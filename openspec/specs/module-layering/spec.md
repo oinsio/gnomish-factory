@@ -9,8 +9,9 @@ Defines the layered Gradle module tree of the factory — which modules exist, t
 ### Requirement: Layered Gradle module tree
 The build SHALL be organized into layered Gradle modules by hexagonal layer:
 `domain`, `subprocess`, `atomicfile`, `untrustedtext`, `operatorevent`,
-`logtext`, `gitobjects`, `baseref`, `gnomish-plugin-api`, `application`, one
-or more `adapters` modules, `sandbox` modules, and `bootstrap`. `atomicfile`
+`logtext`, `gitobjects`, `gittransfer`, `baseref`, `gnomish-plugin-api`,
+`application`, one or more `adapters` modules, `sandbox` modules, and
+`bootstrap`. `atomicfile`
 is the dependency-free leaf holding the shared atomic file writer (temp file +
 atomic rename) consumed by the host-side `.gnomish-task/` writers and the
 dashboard writer; the container-side persisters reach durability at commit
@@ -28,7 +29,14 @@ logging-support leaf holding the log-line sanitizer facade over
 shutdown-phase flag, and the subprocess access-log emitter with its argv
 redactor — the pieces every layer's log emitters share, so the access-record
 format and redaction have exactly one owner reachable from every spawn
-family. `baseref` is the base-resolution leaf holding the pure resolution
+family. `gittransfer` is the
+JDK-only leaf holding the git transfer owner — the closed set of transfer
+source kinds, the common deny-by-default side-effect set, the per-source
+protocol allowlist and configuration isolation, and the git version floor —
+as pure values (an argument list and an environment map) with no subprocess
+inside, so the git adapter that runs a transfer and the sandbox backend that
+renders the seed clone into its helper script build it from one owner
+although they share no other edge. `baseref` is the base-resolution leaf holding the pure resolution
 policy — allowed-bases pattern grammar, designator validation against the
 allowed bases, source priority, and the decision value types — a function
 from values to a decision, with no subprocess, no port, and no factory type
@@ -39,20 +47,27 @@ inside; extractability is a declared property.
 <!-- implements FR2, FR3 of add-subprocess-access-log -->
 <!-- implements FR10 of add-base-ref-resolution -->
 <!-- implements FR1, FR4 of split-logtext-leaves -->
+<!-- implements FR2 of own-git-transfer-argv -->
 
 #### Scenario: Modules resolve as distinct Gradle projects
 - **WHEN** `./gradlew projects` is run
 - **THEN** `:domain`, `:subprocess`, `:atomicfile`, `:untrustedtext`,
-  `:operatorevent`, `:logtext`, `:gitobjects`, `:baseref`,
+  `:operatorevent`, `:logtext`, `:gitobjects`, `:gittransfer`, `:baseref`,
   `:gnomish-plugin-api`, `:application`, the adapter module(s),
   `:sandbox:core`, `:sandbox:docker`, and `:bootstrap` each appear as a
   separate project
 - **AND** no production Java class remains in the former single root module
 
+#### Scenario: Two media build one transfer from one leaf
+- **WHEN** the git adapter builds a fetch and the sandbox backend builds the
+  seed clone script
+- **THEN** each takes its argument list and environment from `:gittransfer`,
+  and neither module holds a transfer flag of its own
+
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build:
-`subprocess`, `atomicfile`, `untrustedtext`, `operatorevent`, and `baseref`
-depend on nothing internal; `domain` depends only on JDK-only leafs — today
+`subprocess`, `atomicfile`, `untrustedtext`, `operatorevent`, `gittransfer`,
+and `baseref` depend on nothing internal; `domain` depends only on JDK-only leafs — today
 exactly `operatorevent` — and never on a module that carries a logging API, a
 framework, a serialization library or the filesystem; `logtext` depends only on
 `untrustedtext`; `gitobjects` depends only on `subprocess`;
@@ -66,14 +81,16 @@ launches OS processes, `atomicfile` where it writes factory-owned files
 atomically, `logtext` where it logs untrusted text or emits subprocess
 access-log records, `operatorevent` where it emits a coded operator line,
 `baseref` where it maps configuration into the resolution policy's value
-types, `:sandbox:core` where it bridges to the execution environment, and a
-sandbox backend module where it drives that backend) but never on a sibling
+types, `gittransfer` where it runs a git transfer, `:sandbox:core` where it
+bridges to the execution environment, and a sandbox backend module where it
+drives that backend) but never on a sibling
 adapter's internals — with one declared exception: `:adapters:agent` depends
 on the coarse `:adapters` remainder for the shared pipeline-law and briefing
 packages, narrowed to exactly those packages by a named ArchUnit rule;
 sandbox backend modules depend on `:sandbox:core` and `subprocess`, plus
 `logtext` and `operatorevent` where they log untrusted text, emit subprocess
-access-log records or coded operator lines, plus `application` where the
+access-log records or coded operator lines, plus `gittransfer` where they
+render a git transfer into a helper script, plus `application` where the
 backend realizes an application-owned port; no production module depends on
 the test-fixtures module; `bootstrap` is the only module that wires adapters
 together and the only one that reaches every adapter. `subprocess` and
@@ -81,13 +98,17 @@ together and the only one that reaches every adapter. `subprocess` and
 their consumers free of transitive coupling. `untrustedtext` and
 `operatorevent` SHALL likewise never acquire a dependency: the domain reaches
 the catalog and the published contract reaches both, so any edge added there is
-pushed into both. A module SHALL declare a leaf edge in the change that uses it
+pushed into both. `gittransfer` SHALL likewise never acquire a dependency: the
+git adapter and a sandbox backend reach it from opposite sides of the
+layering, so any edge added there is pushed into both. A module SHALL declare
+a leaf edge in the change that uses it
 and not ahead of one — the dependency-analysis gate reports an unused
 declaration, and an edge declared for a type that does not exist yet is exactly
 that.
 Because the layering gate walks the transitive production graph, every module
-whose classpath reaches `untrustedtext` or `operatorevent` — through `domain`,
-through `logtext`, or directly — SHALL list it in its own allowlist with a
+whose classpath reaches `untrustedtext`, `operatorevent`, or `gittransfer` —
+through `domain`, through `logtext`, through `:sandbox:docker` or
+`:adapters:git`, or directly — SHALL list it in its own allowlist with a
 comment naming the edge it arrives through; "depends only on" above describes
 declared edges, and the allowlist describes reach.
 `logtext` SHALL declare no internal module dependency beyond `untrustedtext`
@@ -106,6 +127,7 @@ defaulting to a no-op.
 <!-- implements FR2, FR3 of add-subprocess-access-log -->
 <!-- implements FR10, NFR-S3 of add-base-ref-resolution -->
 <!-- implements FR6, FR7, FR11, NFR-S1 of split-logtext-leaves -->
+<!-- implements FR2 of own-git-transfer-argv -->
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
 - **WHEN** a vendor adapter module stamps its writes with the claim epoch of
@@ -148,7 +170,9 @@ defaulting to a no-op.
   reaches `:untrustedtext` or `:operatorevent` without declaring the edge —
   `:sandbox:core` and `:gnomish-plugin-api` reaching the catalog through
   `:domain`, the sample plugin reaching both through `:gnomish-plugin-api`,
-  `:application` and the adapters reaching the text leaf through `:logtext`
+  `:application` and the adapters reaching the text leaf through `:logtext`,
+  `:adapters`, `:adapters:agent`, and `:bootstrap` reaching `:gittransfer`
+  through `:sandbox:docker` or `:adapters:git`
 - **THEN** the gate passes only because that module's allowlist names the
   leaf; removing the entry fails the gate naming the leaf as an unlisted reach
 
@@ -165,6 +189,12 @@ defaulting to a no-op.
   `:operatorevent`
 - **THEN** each declares no internal module dependency and no external
   dependency at all — the layering gate lists no allowed project for either
+
+#### Scenario: The gittransfer leaf stays empty of dependencies
+- **WHEN** the dependency gates run against `:gittransfer`
+- **THEN** it declares no internal module dependency and no external
+  dependency at all — the layering gate lists no allowed project for it —
+  and both `:adapters:git` and `:sandbox:docker` declare it
 
 #### Scenario: The logtext leaf carries only the logging API
 - **WHEN** the dependency gates run against `:logtext`

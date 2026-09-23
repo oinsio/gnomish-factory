@@ -14,9 +14,16 @@ import java.io.Serial;
  * as that existing violation — the round cannot be persisted and the task
  * aborts, with the evidence kept in the environment.
  *
+ * <p>The second shape, {@link #objectValidation}, is the same boundary violation
+ * decided one step earlier: git's object validation refused what the box sent
+ * (a malformed object, a {@code .gitmodules} that is a symbolic link), so the
+ * box's content is refused before its ancestry is even examined — the report
+ * names the message id and the object in the same shape as the rewrite
+ * refusal (FR5, UX3 of own-git-transfer-argv).
+ *
  * <p>Distinct from {@link HarvestFailedException}, which means the fetch could
  * not be completed at all (transport or repository trouble), not that git
- * examined the history and said no.
+ * examined what the box sent and said no.
  *
  * <p>The box and the clone are a replica pair like any other, and a refused harvest is that
  * pair's {@link DivergenceOutcome#DIVERGED} — the same verdict the clone-versus-origin reconciler
@@ -25,7 +32,8 @@ import java.io.Serial;
  * through, so this pair's divergence is resolved by disposing the box and re-seeding from the
  * decided tip, never by a discard-under-lease write.
  *
- * <p>Implements FR5 of add-sandbox-core; FR8 of harden-task-branch-contract.
+ * <p>Implements FR5 of add-sandbox-core; FR8 of harden-task-branch-contract; FR5, UX3 of
+ * own-git-transfer-argv.
  */
 public final class HarvestRefusedException extends RuntimeException {
 
@@ -39,6 +47,24 @@ public final class HarvestRefusedException extends RuntimeException {
     public HarvestRefusedException(String branch, UntrustedText stderr) {
         super("harvest refused for branch \"" + branch + "\": history was rewritten inside the environment"
                 + " (non-fast-forward): " + stderr);
+    }
+
+    private HarvestRefusedException(String message) {
+        super(message);
+    }
+
+    /**
+     * The refusal git's object validation decided: the box sent an object the factory will not
+     * accept, so the harvest is a boundary violation with the report naming what was refused.
+     *
+     * @param branch the task branch whose harvest was refused
+     * @param refusal the parsed refusal, naming the message id and the object
+     * @return the exception to throw
+     */
+    static HarvestRefusedException objectValidation(String branch, FetchRefusal refusal) {
+        return new HarvestRefusedException("harvest refused for branch \"" + branch
+                + "\": an object from the environment failed validation: "
+                + refusal.refusedObjectClause().forLog());
     }
 
     /**

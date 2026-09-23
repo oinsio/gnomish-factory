@@ -118,10 +118,14 @@ class UntrustedTextGateSpec extends Specification {
     private static final Map<String, String> PARSER_CONVERSIONS = [
         'com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch':
         'a failed harvest fetch\'s stderr into the failure class it belongs to',
+        'com.github.oinsio.gnomish.adapter.git.FetchRefusal':
+        'a transfer\'s stderr into the fsck message id and object git refused, or empty',
         'com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening':
         'rev-parse --absolute-git-dir output into the clone\'s git directory Path',
         'com.github.oinsio.gnomish.adapter.git.GitProcessRunner':
         'rev-parse --git-common-dir output into the Path the mutation lock keys on',
+        'com.github.oinsio.gnomish.adapter.git.GitVersionCheck':
+        'git --version output into the transfer leaf\'s typed GitVersion, judged against the floor',
         'com.github.oinsio.gnomish.adapter.git.GitShowTip':
         'a rev-list answer into the cleanup commit\'s id; the file content it reads at a revision is' +
         ' the document itself and stays a carrier',

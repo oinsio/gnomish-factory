@@ -79,6 +79,13 @@ dependencies {
     // host backend's spec (`:sandbox:docker`) and the container contract suite
     // (`:adapters`) run the same scenarios (task 6.1).
     api project(':sandbox:docker')
+    // The git-transfer owner leaf (FR8 of own-git-transfer-argv): the seed fixture's
+    // origin fetch goes through the owner's value and the runner's typed entry, since the
+    // untyped entry refuses a hand-built fetch. `api`, although the fixture names the leaf in
+    // method bodies only: `GitProcessRunner`'s typed entry takes the owner's value, and the
+    // Groovy compiler of every test tree that touches the runner resolves that signature, so
+    // the leaf has to reach every test classpath — which is this module's job.
+    api project(':gittransfer')
     api libs.groovy
     api libs.spock.core
     // `LogCaptureSupport` (task 2.4 of harden-logging-observability) attaches a Logback

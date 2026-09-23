@@ -54,33 +54,44 @@ not "add a call to capCause").
 
 ### 3. Write the body
 
-Use this structure; drop a section rather than filling it with filler:
+The body is for a reviewer who will read the diff anyway. It tells them **why** the change
+exists and **where to look first**; it does not retell what the diff shows. Budget: the whole
+body fits on one screen — about 150 words, never more than 25 lines. When the branch is one
+commit, one paragraph is enough. Cut, do not compress: fewer sentences, not denser ones.
 
 ```markdown
-## What
-
-One paragraph: what this branch changes, in plain language.
-
 ## Why
 
-The problem or requirement that drove it. Reference the OpenSpec change by name and the
-requirement IDs (`FR3`, `NFR-R1`) where they apply.
+Two or three sentences: the problem, and the OpenSpec change that owns it (name plus the
+requirement IDs it settles, e.g. `own-git-transfer-argv` FR3, NFR-R1). Link, do not
+summarize — the proposal already carries the reasoning.
 
-## How
+## What changed
 
-The design decisions a reviewer needs in order to read the diff — the non-obvious parts
-only, not a narration of every file.
+Three to six bullets, one line each, highest-impact first: a behavior, a new owner of a
+mechanism, a removed escape hatch, a changed signature or configuration key. Name a file
+only when the reviewer has to open it first.
 
-## Verification
+## Reviewer notes
 
-Which specs cover the change and which gates it passes (`check`, PIT, static analysis).
-Name spec classes, not counts.
-
-## Notes for reviewers
-
-Known limitations, deliberate omissions, follow-up work, migration or configuration
-impact. Omit if there is nothing.
+Only if something is non-obvious: a decision that looks wrong until explained (one sentence
+each), a deliberate omission, a follow-up change, a migration or configuration impact.
+Drop the section when it would be empty.
 ```
+
+What stays out of the body:
+
+- **A narration of the diff.** No walk through files, packages, or commits; no "also updated
+  the tests". If a bullet could be reconstructed from `--stat`, it is filler.
+- **The proposal, retold.** Motivation, alternatives, and design rationale live in
+  `proposal.md` / `design.md`; the body cites them by change name and requirement ID.
+- **Verification as a list.** One line at most, and only when it says something the build
+  does not already guarantee (`check` is green on every PR): a new architecture spec, a gate
+  added, a PIT exemption with its reason. Never a roll-call of spec classes or counts.
+- **Adjectives and reassurance.** "Comprehensive", "robust", "carefully", "ensures" — delete
+  the sentence they appear in and see whether anything was lost.
+- **Restating the title**, headings that introduce a single bullet, and any sentence that
+  describes the branch's intentions instead of what the diff does.
 
 Rules for the body:
 
@@ -88,9 +99,12 @@ Rules for the body:
   conversation with the human is in another language.
 - Plain, precise language; no jargon. Domain terms (factory, gnome, box, guard) are welcome
   and must match `docs/glossary.md`.
-- Markdown only; Mermaid where a diagram genuinely beats prose — never ASCII art, no images.
-- Describe what the diff *does*, not what the branch intends to do next.
+- Markdown only; a Mermaid diagram only when the change *is* a flow or state machine that
+  prose would garble — never ASCII art, no images.
 - No invented facts: if the diff does not show a test, do not claim one exists.
+
+Before delivering, reread the body once with the budget in hand and remove every line that
+fails the tests above. A body that a reviewer skims in thirty seconds is the target.
 
 ### 4. Deliver
 

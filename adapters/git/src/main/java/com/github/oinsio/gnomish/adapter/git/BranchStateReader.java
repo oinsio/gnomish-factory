@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
@@ -82,6 +83,8 @@ public final class BranchStateReader {
             // gone because their network blinked (FR6).
             case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
+            case BranchLocation.Refused(UntrustedText report) ->
+                throw new BranchLocationRefusedException(taskId, report);
             case BranchLocation.Local local -> readAt(cloneDir, local.ref());
             case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, tracking.ref());
         };

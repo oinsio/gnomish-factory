@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.StatePositionDto;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
@@ -85,6 +86,8 @@ public final class UsageHistoryWalker {
                     case BranchLocation.NotFound ignored -> null;
                     case BranchLocation.Unavailable(UntrustedText reason) ->
                         throw new BranchLocationUnavailableException(taskId, reason);
+                    case BranchLocation.Refused(UntrustedText report) ->
+                        throw new BranchLocationRefusedException(taskId, report);
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
                 };

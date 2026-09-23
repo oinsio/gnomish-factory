@@ -89,6 +89,12 @@ public final class GitTaskBranches implements TaskBranchGit {
             case BranchLocation.NotFound() -> new BranchShape.Bare();
             case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
+            // A branch git's validation refused is content this clone cannot read — the quarantine
+            // shape, so the take parks the task for a human on this first classification and spends
+            // no attempt: the next fetch reads the same objects (FR5 of own-git-transfer-argv). The
+            // report leaves its carrier through the log exit here, where it becomes the shape's
+            // diagnosis phrase.
+            case BranchLocation.Refused(UntrustedText report) -> new BranchShape.Corrupt(report.forLog());
         };
     }
 

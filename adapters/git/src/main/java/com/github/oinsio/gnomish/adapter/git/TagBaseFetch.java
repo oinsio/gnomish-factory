@@ -2,6 +2,9 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -43,7 +46,8 @@ record TagBaseFetch(GitProcessRunner runner) {
             return new BaseRefreshOutcome.Refused(
                     UntrustedText.factory(divergenceReport(name, before.get(), originCommit)));
         }
-        GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, ref + ":" + ref);
+        GitCommandResult fetch =
+                runner.run(cloneDir, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(ref + ":" + ref)));
         return RefreshedTip.of(runner, cloneDir, fetch, ref, name, BaseRefKind.TAG);
     }
 

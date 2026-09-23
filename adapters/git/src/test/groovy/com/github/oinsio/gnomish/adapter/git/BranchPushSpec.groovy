@@ -78,7 +78,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
     def "a non-fast-forward push rejection just WARNs, no force retry"() {
         given: 'the remote already has a commit the local branch does not, so the push is rejected'
         def otherClone = tempDir.resolve('other-clone')
-        runner.run(tempDir, 'clone', '-q', bareRepo.toString(), otherClone.toString())
+        seedClone(tempDir, bareRepo.toString(), otherClone, '-q')
         runner.run(otherClone, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
         new File(otherClone.toFile(), 'divergent.txt').text = 'pushed by someone else first'
         runner.run(otherClone, 'add', 'divergent.txt')

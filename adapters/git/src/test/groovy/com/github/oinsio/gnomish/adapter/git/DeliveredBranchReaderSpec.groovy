@@ -95,7 +95,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         runner.run(worktreesRoot.resolve('clone').resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
-        runner.run(tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), observerClone.toString())
+        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
 
         when:
         def delivered = new DeliveredBranchReader(runner).read(observerClone, 'PROJ-6')

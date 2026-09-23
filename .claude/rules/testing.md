@@ -154,3 +154,21 @@ that quarantined every legitimate reclaim in production was invisible (`fix-clai
   under the same name pointing elsewhere. A spec that needs the converged posture asks for it
   explicitly. Any bare-name resolution then fails an existing spec instead of waiting for a
   regression spec someone thought to write
+
+  The operator's git configuration is adversarial the same way: the whole test build — every
+  `Test` task, the `pitest` task and the minions it forks, and the packaged jar the E2E harness
+  spawns — runs with `GIT_CONFIG_GLOBAL` pointed at the committed
+  `test-fixtures/src/main/resources/adversarial-gitconfig` (design D11 of
+  `own-git-transfer-argv`), a global configuration that tries to widen every transfer
+  (submodule recursion, prune, a URL rewrite onto `ext::`, a marking credential helper), and
+  with an inherited per-process configuration (`GIT_CONFIG_COUNT` naming one inert key), so a
+  spec asserting that a transfer strips what the factory process inherited sees a real
+  difference rather than an unset that was never set. No
+  spec plants a global git configuration of its own (a temporary global file, a `HOME`
+  override): `AdversarialGitConfig` in `:test-fixtures` owns the file's meaning, and a spec that
+  proves isolation from the operator's configuration calls `assertInEffect(runner)` first, so a
+  run outside Gradle — where the file is not in force — fails instead of passing vacuously. A
+  side effect is hermeticity: the developer's `~/.gitconfig` reaches no test, so a spec that
+  commits supplies its own identity (`-c user.name=… -c user.email=…`), and a fixture fetch
+  spells its source in full (`refs/heads/<branch>:refs/remotes/origin/<branch>`): under
+  `fetch.prune=true` git deletes the destination of a short-name source instead of writing it

@@ -12,6 +12,9 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 plugins {
     id 'java-conventions'
     id 'pitest-conventions'
+    // The adversarial global git configuration every Test and pitest task runs under
+    // (own-git-transfer-argv, design D11); its own file, one thing per plugin.
+    id 'adversarial-gitconfig-conventions'
 }
 
 def libs = extensions.getByType(VersionCatalogsExtension).named('libs')

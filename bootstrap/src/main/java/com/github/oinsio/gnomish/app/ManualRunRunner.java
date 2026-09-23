@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
+import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
@@ -130,6 +131,8 @@ public final class ManualRunRunner implements ApplicationRunner {
     final AdapterBindingRegistry bindingRegistry;
 
     private final SubcommandDispatch subcommandDispatch;
+    /** The git version floor every command passes through before dispatch (FR10 of own-git-transfer-argv). */
+    private final GitVersionCheck gitVersionCheck;
     /** The console owner bound to standard error; see {@link ManualRunConfiguration#errorConsoleIO}. */
     private final ConsoleIO errorConsole;
     /**
@@ -173,8 +176,10 @@ public final class ManualRunRunner implements ApplicationRunner {
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
-            ServeProperties serveProperties) {
+            ServeProperties serveProperties,
+            GitVersionCheck gitVersionCheck) {
         this.argumentsParser = argumentsParser;
+        this.gitVersionCheck = gitVersionCheck;
         this.errorConsole = errorConsoleIO;
         this.console = systemConsoleIO;
         this.pipelineStartup = pipelineStartup;
@@ -292,6 +297,10 @@ public final class ManualRunRunner implements ApplicationRunner {
         try {
             RunExceptionReporting.run(
                     () -> {
+                        // FR10 of own-git-transfer-argv: the floor is checked before any
+                        // subcommand dispatches, so run, take and serve all pass through it and
+                        // no transfer, claim or tracker write precedes a refusal.
+                        gitVersionCheck.verify();
                         if (subcommandDispatch.dispatchNonRun(args)
                                 || RUN_FLAGS.stream().noneMatch(args::containsOption)) {
                             return;

@@ -105,14 +105,14 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         //     this clone", as soon as the suite is under enough load to straddle a second boundary.
         given: 'a bare origin, a seed clone that pushes two task branches, and an observer clone with only one local'
         def bare = initBareRepo(tempDir, 'origin.git')
-        def seedClone = initWorkingRepo(tempDir, 'seed-clone')
-        commit(seedClone, 'a.txt', 'first')
-        addRemote(seedClone, 'origin', bare.toString())
-        runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
+        def seedRepo = initWorkingRepo(tempDir, 'seed-clone')
+        commit(seedRepo, 'a.txt', 'first')
+        addRemote(seedRepo, 'origin', bare.toString())
+        runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
         // Task REMOTE-ONLY: created and pushed from the seed clone, never checked out locally by the observer.
-        createTaskAtHead(seedClone, seedWorktrees, 'REMOTE-ONLY')
+        createTaskAtHead(seedRepo, seedWorktrees, 'REMOTE-ONLY')
         new GitAttemptPersistence(runner, worktreeFor(seedWorktrees, 'seed-clone', 'REMOTE-ONLY'), 'REMOTE-ONLY', ClaimEpochSource.NONE)
                 .persist('REMOTE-ONLY', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
@@ -121,7 +121,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         runner.run(worktreeFor(seedWorktrees, 'seed-clone', 'REMOTE-ONLY'), 'push', 'origin', 'gnomish/REMOTE-ONLY')
 
         // Task BOTH: pushed from the seed clone too, so origin carries it.
-        createTaskAtHead(seedClone, seedWorktrees, 'BOTH')
+        createTaskAtHead(seedRepo, seedWorktrees, 'BOTH')
         new GitAttemptPersistence(runner, worktreeFor(seedWorktrees, 'seed-clone', 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
                 .persist('BOTH', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
@@ -130,12 +130,10 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         runner.run(worktreeFor(seedWorktrees, 'seed-clone', 'BOTH'), 'push', 'origin', 'gnomish/BOTH')
 
         def observerClone = tempDir.resolve('observer-clone')
-        def cloneResult = runner.run(
-                tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), observerClone.toString())
-        assert cloneResult.exitCode() == 0: "clone failed: ${cloneResult.stderr()}"
+        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
         // Fetch REMOTE-ONLY and BOTH as remote-tracking refs (no local branch), matching a peer instance's clone state.
-        runner.run(observerClone, 'fetch', 'origin', 'gnomish/REMOTE-ONLY:refs/remotes/origin/gnomish/REMOTE-ONLY')
-        runner.run(observerClone, 'fetch', 'origin', 'gnomish/BOTH:refs/remotes/origin/gnomish/BOTH')
+        fetchFromOrigin(observerClone, 'refs/heads/gnomish/REMOTE-ONLY:refs/remotes/origin/gnomish/REMOTE-ONLY')
+        fetchFromOrigin(observerClone, 'refs/heads/gnomish/BOTH:refs/remotes/origin/gnomish/BOTH')
 
         def observerWorktrees = tempDir.resolve('observer-worktrees')
         // BOTH also gets a local branch in the observer clone, at a further-along stage than origin.

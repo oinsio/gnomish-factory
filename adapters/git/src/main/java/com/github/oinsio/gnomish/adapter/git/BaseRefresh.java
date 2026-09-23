@@ -2,6 +2,9 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -113,7 +116,9 @@ public final class BaseRefresh {
 
     private BaseRefreshOutcome fetchBranch(Path cloneDir, String name) {
         String tracking = "refs/remotes/origin/" + name;
-        GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, "+refs/heads/" + name + ":" + tracking);
+        GitCommandResult fetch = runner.run(
+                cloneDir,
+                GitTransfer.fetch(TransferSource.ORIGIN, new Refspec("+refs/heads/" + name + ":" + tracking)));
         return RefreshedTip.of(runner, cloneDir, fetch, tracking, name, BaseRefKind.BRANCH);
     }
 

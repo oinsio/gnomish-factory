@@ -146,8 +146,8 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
     private void pushDescendantFromAnotherClone() {
         def other = initWorkingRepo(tempDir, 'other')
         addRemote(other, 'origin', origin.toString())
-        gitOutput(other, 'fetch', 'origin', BRANCH)
-        gitOutput(other, 'checkout', '-b', BRANCH, 'FETCH_HEAD')
+        assert fetchFromOrigin(other, 'refs/heads/' + BRANCH + ':refs/remotes/origin/' + BRANCH).exitCode() == 0
+        gitOutput(other, 'checkout', '-b', BRANCH, 'origin/' + BRANCH)
         Files.writeString(other.resolve('a.txt'), 'descendant')
         commitAll(other, 'descendant')
         assert new RefspecPush(runner).push(other, BRANCH).exitCode() == 0

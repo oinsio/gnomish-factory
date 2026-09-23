@@ -1,11 +1,18 @@
 # Proposal: own-git-transfer-argv
 
-Sequenced after `add-base-ref-resolution` (same `NarrowFetch` file; its
-working-tree changes must be committed first), after
-`signal-outage-gate-on-origin-contact` (its delta of "Base refresh fetch
-before task creation" is the text this change's delta is layered on), and
-after `split-logtext-leaves` (its module-tree delta is the text the
-`:gittransfer` leaf is layered on). The three sandbox executor changes on the
+Sequenced after `add-base-ref-resolution` (same `NarrowFetch` file; archived
+2026-09-13), after `signal-outage-gate-on-origin-contact` (archived 2026-09-13
+and synced: its origin-contact paragraph and two scenarios are part of the
+stable "Base refresh fetch before task creation" text this change's delta is
+written over), and after `split-logtext-leaves` (already synced into `openspec/specs/module-layering/`
+on 2026-09-21; this change's module-layering delta is written over that stable
+text, so the `:gittransfer` leaf sentences add to it rather than replace it), and
+after the `module-layering` text of `add-subprocess-access-log` (still active,
+but its two `module-layering` requirements already reached the stable spec
+through the `add-base-ref-resolution` sync, so this change's delta carries the
+access-log sentences and their `FR2, FR3` trailer as stable text; if
+`add-subprocess-access-log` archives after this change, its `module-layering`
+delta must be re-layered on the then-stable text, not synced as written). The three sandbox executor changes on the
 roadmap (`add-sandbox-colima-vm`, `add-sandbox-cloud-executor`,
 `add-sandbox-gha-executor`) each add a harvest source and are sequenced after
 this change, so they add it through the owner this change introduces.
@@ -53,6 +60,11 @@ to six.
   of the common set. (FR5)
 - **MODIFIED** `module-layering`: a JDK-only `:gittransfer` leaf joins the
   module tree; `adapters:git` and `sandbox:docker` depend on it. (FR2)
+- The test build runs every git subprocess — fixtures, specs, PIT minions,
+  the packaged jar — under one committed adversarial global git
+  configuration, so a transfer's isolation is proven against a hostile
+  operator setup in every spec, not only in the ones that ask. (FR12,
+  NFR-S2)
 - **ADDED** `docs/adr/0008-git-transfer-policy.md`; ADR 0006 keeps the
   refspec-per-kind decision and cites 0008 for the flag set. Three rows join
   `docs/sandbox-threat-registry.md`; "transfer" and "transfer source" join
@@ -71,7 +83,10 @@ to six.
   independent full clone", "Base refresh fetch before task creation" (layered
   on `signal-outage-gate-on-origin-contact`).
 - `module-layering`: "Layered Gradle module tree", "Enforced acyclic
-  dependency direction" (layered on `split-logtext-leaves`).
+  dependency direction" (written over the stable text as synced through
+  `split-logtext-leaves`, which already holds the `add-subprocess-access-log`
+  sentences for the same two requirements; that change is sequenced before
+  this one for `module-layering`, and this delta preserves its text).
 
 ## Goals
 
@@ -85,12 +100,14 @@ to six.
 ## Non-Goals
 
 - NG1: `--negotiation-tip` (bounding what the box learns about the operator's
-  commits during negotiation) — a disclosure concern, deferred to
-  `add-sandbox-hardening`.
+  commits during negotiation) — a disclosure concern, deferred to a later
+  change; no active change carries it yet.
 - NG2: a post-fetch connectivity check (`rev-list --objects <tip> --not
   --all`) — fsck validates objects; reachability closure is not this change.
 - NG3: replacing the git subprocess with JGit or libgit2 (ADR 0001).
-- NG4: `git bundle` as a harvest format.
+- NG4: `git bundle` as a harvest format. A bundle source kind is
+  `add-sandbox-gha-executor`'s to add through the owner (G3); this change adds
+  no bundle kind.
 - NG5: pushes. Push argv stays where it is; this change owns fetch and clone.
 - NG6: making the fsck legacy-ignore list operator-configurable (Q1).
 
@@ -128,10 +145,13 @@ to six.
   an options terminator before the source and refspec, and — for a named
   remote — an empty refmap. Full depth on every transfer.
 - FR4: Every transfer SHALL run under a closed protocol allowlist set by the
-  owner per source (`GIT_ALLOW_PROTOCOL`): `https:ssh:file` for `origin`,
-  exactly `ext` for a container, exactly `file` for a seed path; and with
-  `GIT_PROTOCOL_FROM_USER=0`, so nothing git initiates on its own may use a
-  user-policy protocol.
+  owner per source (`GIT_ALLOW_PROTOCOL`): `https:http:ssh:file` for `origin`,
+  exactly `ext` for a container, exactly `file` for a seed path. The
+  allowlist is the whole protocol policy: git treats each listed protocol as
+  `always` and every other as `never`, overriding every configuration scope,
+  so no `protocol.*.allow` key and no `GIT_PROTOCOL_FROM_USER` value has an
+  effect beside it and the owner emits neither. What git may start on its
+  own (submodule recursion) is closed by FR3, not by protocol policy.
 - FR5: Every transfer SHALL validate received objects (`fetch.fsckObjects` /
   `transfer.fsckObjects`), with exactly three legacy message ids downgraded
   to ignore (`badTimezone`, `missingSpaceBeforeDate`, `zeroPaddedFilemode`).
@@ -236,3 +256,11 @@ to six.
   list grows only by a change.
 - Q2: Should the `origin` allowlist include `git://` (unauthenticated)?
   Decided for now: no; an operator with such a remote reports it.
+- Q3: Should the `origin` allowlist include plain `http`? Decided 2026-09-22
+  (surfaced by group 4: the Gitea E2E lane's origin is `http`, and the
+  refusal reached the take's base refresh): yes. Git names `http` and
+  `https` as separate protocols, an `http` origin authenticates through the
+  operator's ambient credentials exactly as `https` does, and the allowlist
+  exists to close `ext`, `git://` and remote helpers — not to police the
+  operator's choice of transport security for their own server. Unlike
+  `git://` (Q2), `http` carries authentication.

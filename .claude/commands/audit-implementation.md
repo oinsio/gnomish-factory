@@ -1,5 +1,5 @@
 ---
-description: Read-only audit of an OpenSpec change's implementation — per-item completeness, code/test quality and security report with recommendations; changes nothing
+description: Read-only audit of an OpenSpec change's implementation — per-item completeness, code/test quality and security report with recommendations; changes nothing in the project, saves the recommendations and verdict to temporary-docs/
 argument-hint: "[change-name] [quick]"
 ---
 
@@ -7,8 +7,10 @@ argument-hint: "[change-name] [quick]"
 
 Audit how completely and how well an OpenSpec change is implemented. Produce a report with a
 verdict and a recommendation **for every item** — every task in `tasks.md`, every requirement,
-every quality rule. **Strictly read-only**: no file edits, no `git` state changes, no commits,
-no checkbox updates. The only artifact of this command is the report in the reply.
+every quality rule. **Strictly read-only** with respect to the project: no edits to code,
+specs or OpenSpec artifacts, no `git` state changes, no commits, no checkbox updates. The
+command produces two artifacts and nothing else: the report in the reply, and one Markdown
+file under `temporary-docs/` holding the report's actionable tail (step 10).
 
 Unlike a checkbox-trusting verification pass, this command
 re-verifies each item against the actual code, applies the project's own quality rules
@@ -203,4 +205,29 @@ N. **SEVERITY — <short title>** (`file:line`)
 
 Every finding must carry a `file:line` reference and an actionable recommendation — no vague
 "consider reviewing". When uncertain, downgrade severity rather than guessing. End with a
-reminder that nothing was modified and the human decides what to apply.
+reminder that nothing in the project was modified and the human decides what to apply.
+
+### 10. Persist the actionable tail
+
+After the report is written to the reply, write its **Recommendations, ordered** and
+**Verdict** sections — verbatim, same language as the reply, no translation, no rewording —
+to one new file:
+
+```
+temporary-docs/audit-<change-name>-<YYYY-MM-DD>.md
+```
+
+The file is written in the language the conversation is held in: `temporary-docs/` is the
+one place in the repository where documentation may be in the human's language rather than
+English — everywhere else (`docs/`, `openspec/`, `.claude/`, code comments) documentation is
+English only (`process-invariants.md`, "Documentation language"). When that language is not
+English, add its ISO 639-1 code before the extension (`.ru.md`, the convention the directory
+already follows); an English report keeps plain `.md`. Start the file with a level-1 heading
+naming the change and the date, then the two sections exactly as they appear in the reply. If the file already exists
+(a second audit of the same change on the same day), overwrite it — the newer audit
+supersedes the older one. Nothing else is written: no other file, no edit to `tasks.md` or
+`design.md`. In the reply, name the file's path in one line after the Verdict.
+
+`temporary-docs/` is scratch space: `openspec/**` artifacts must not reference this file
+(`process-invariants.md`, "No references to temporary files"); a finding worth keeping goes
+into the change's own artifacts by the human, not by a link.

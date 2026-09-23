@@ -1,5 +1,5 @@
 ---
-description: Read-only review of an OpenSpec change's artifacts — freshness against the current codebase, completeness, and internal + external consistency; changes nothing
+description: Read-only review of an OpenSpec change's artifacts — freshness against the current codebase, completeness, and internal + external consistency; changes nothing in the project, saves the recommendations and verdict to temporary-docs/
 argument-hint: "[change-name]"
 ---
 
@@ -17,7 +17,10 @@ Review the **artifacts** of an OpenSpec change — `proposal.md`, `design.md`, d
 
 Differs from `/audit-implementation`: that judges the *implementation* against the
 change; this command judges the *change itself* — typically before or during implementation.
-**Strictly read-only**: no file edits, no git state changes. The only artifact is the report.
+**Strictly read-only** with respect to the project: no edits to code, specs or OpenSpec
+artifacts, no git state changes. The command produces two artifacts and nothing else: the
+report in the reply, and one Markdown file under `temporary-docs/` holding the report's
+actionable tail (step 7).
 
 ## Input
 
@@ -148,5 +151,29 @@ N. **SEVERITY — <short title>** (`artifact-or-file:line`)
 Severity: CRITICAL — implementing as written would build the wrong thing or break existing
 behavior undeclared; WARNING — gap or drift that will surface during implementation;
 SUGGESTION — clarity/traceability polish. When uncertain, verify against code before
-reporting; downgrade rather than guess. End with a reminder that nothing was modified and
-the human decides what to apply.
+reporting; downgrade rather than guess. End with a reminder that nothing in the project was
+modified and the human decides what to apply.
+
+### 7. Persist the actionable tail
+
+After the report is written to the reply, write its **Recommendations, ordered** and
+**Verdict** sections — verbatim, same language as the reply, no translation, no rewording —
+to one new file:
+
+```
+temporary-docs/review-<change-name>-<YYYY-MM-DD>.md
+```
+
+The file is written in the language the conversation is held in: `temporary-docs/` is the
+one place in the repository where documentation may be in the human's language rather than
+English (`process-invariants.md`, "Documentation language"). When that language is not
+English, add its ISO 639-1 code before the extension (`.ru.md`, the convention the directory
+already follows); an English report keeps plain `.md`. Start the file with a level-1 heading
+naming the change and the date, then the two sections exactly as they appear in the reply.
+If the file already exists (a second review of the same change on the same day), overwrite
+it — the newer review supersedes the older one. Nothing else is written: no edit to the
+change's own artifacts. In the reply, name the file's path in one line after the Verdict.
+
+`openspec/**` artifacts must not reference this file (`process-invariants.md`, "No references
+to temporary files"); a recommendation the human accepts is applied to the artifacts
+directly (`/opsx:update`), never cited by link.

@@ -306,8 +306,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         and: 'a peer independently pushes a different commit for the same task branch'
         def peerClone = tempDir.resolve('peer-clone-22')
-        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
-        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22')
+        seedClone(tempDir, bare.toString(), peerClone)
+        assert fetchFromOrigin(peerClone, 'refs/heads/gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22').exitCode() == 0
         gitOutput(peerClone, 'checkout', 'gnomish/PROJ-22')
         Files.writeString(peerClone.resolve('peer-only.txt'), 'peer work')
         commitAll(peerClone, 'peer work')

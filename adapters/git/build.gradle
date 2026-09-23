@@ -49,6 +49,14 @@ dependencies {
     api project(':sandbox:docker')
     api project(':sandbox:core')
 
+    // The git-transfer owner leaf (FR1, FR8, design D1/D5 of own-git-transfer-argv):
+    // `GitProcessRunner`'s typed entry takes the owner's value and refuses every
+    // transfer that did not come from it. `implementation`, not `api`: the entry is
+    // package-private, so the value type sits on no signature this module exports (the
+    // Groovy compiler of a consuming test tree still resolves the whole class, which is why
+    // `:test-fixtures` carries the leaf as `api` for every test classpath).
+    implementation project(':gittransfer')
+
     implementation libs.slf4j.api
     // The shared subprocess wait/kill/drain discipline (FR9, design D9/D10 of
     // bound-subprocess-commands): `GitProcessRunner` bounds its network
@@ -153,6 +161,9 @@ layering {
         ':baseref',
         ':domain',
         ':gitobjects',
+        // The git-transfer owner leaf (FR2, design D1 of own-git-transfer-argv): the
+        // runner executes its values, the refusal parser grades its failures.
+        ':gittransfer',
         ':gnomish-plugin-api',
         ':logtext',
         // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):

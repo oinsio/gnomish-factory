@@ -40,16 +40,12 @@ protocol v0 without those options refuses it.
 
 ### Flags on every refresh
 
-`--no-tags` (narrow means exactly one ref, no auto-followed extras),
-`--no-write-fetch-head`, and an empty `--refmap=` (a clone with a
-non-standard `remote.origin.fetch` cannot make the fetch move refs the
-factory did not name). Full depth, never shallow: resume must resolve
-history.
-
-`NarrowFetch` is the one construction site of that argv, and it serves every
-factory fetch rather than the base refresh alone: the resume/inspection task-branch
-locate (`TaskBranchLocator`) is built there too, so no caller can quietly acquire a
-different flag set.
+The flag set, the environment, and the protocol allowlist of every factory
+transfer — the base refresh, the task-branch locate, the harvest, and the
+seed clone alike — are the transfer policy of ADR 0008, built by its one
+owner from a source kind and the refspec this table names. This ADR decides
+only where each base kind lands and what the refresh may change; it carries
+no flag of its own.
 
 ### The SHA is read from the destination, never from `FETCH_HEAD`
 
@@ -195,6 +191,9 @@ and park it with a report.
 
 ## See also
 
+- `docs/adr/0008-git-transfer-policy.md` — the one owner that builds the
+  argv and the environment of this fetch, its flag set, the protocol
+  allowlist, and object validation.
 - `docs/adr/0005-dependency-outage-accounting.md` — what a reachability
   failure of this fetch does to the daemon and the task.
 - `docs/adr/0003-crash-consistency.md` — the fetch precedes every durable

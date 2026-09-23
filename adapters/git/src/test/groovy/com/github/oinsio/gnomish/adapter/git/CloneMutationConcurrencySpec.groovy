@@ -79,7 +79,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     // is only that it participates in the same clone's mutation lock without
                     // corrupting anything.
                     def trackingRef = "refs/remotes/origin/${branchName}"
-                    runner.run(worktree, 'fetch', 'origin', "${branchName}:${trackingRef}")
+                    fetchFromOrigin(worktree, "refs/heads/${branchName}:${trackingRef}")
 
                     push.pushBestEffort(worktree, branchName)
 

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * Turns one completed refresh fetch and its destination ref into an outcome, under the rule that
@@ -34,7 +35,10 @@ import java.nio.file.Path;
  * which probes on any non-delivery, is that a SHA fetch has no prior refs read to lean on at all
  * ({@code docs/adr/0006-base-refresh-fetch.md}, "Auth refusal vs. genuine outage").
  *
- * <p>Implements FR6, FR9 of add-base-ref-resolution.
+ * <p>A fetch git's own object validation refused is neither: it is asked about first, from the
+ * stderr alone, and is a task-level refusal naming the object (FR5 of own-git-transfer-argv).
+ *
+ * <p>Implements FR6, FR9 of add-base-ref-resolution; FR5 of own-git-transfer-argv.
  */
 final class RefreshedTip {
 
@@ -74,6 +78,16 @@ final class RefreshedTip {
      */
     private static BaseRefreshOutcome undelivered(
             GitProcessRunner runner, Path cloneDir, GitCommandResult fetch, String name, BaseRefKind kind) {
+        // Asked first, before the probe (design D4 of own-git-transfer-argv): a refused object is a
+        // fact about origin's history, decided from the stderr alone, so no round trip is spent
+        // learning whether origin answers — it did.
+        Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
+        if (refusal.isPresent()) {
+            return new BaseRefreshOutcome.Refused(refusal.get()
+                    .report(
+                            "The base " + label(kind) + " '" + name + "' was found on origin",
+                            FetchRefusal.Remedy.NAME_ANOTHER_BASE));
+        }
         if (fetch.termination() != Termination.EXITED || !new OriginProbe(runner).answers(cloneDir)) {
             return new BaseRefreshOutcome.Unavailable(fetch.failureDetail(label(kind) + " fetch of " + name));
         }

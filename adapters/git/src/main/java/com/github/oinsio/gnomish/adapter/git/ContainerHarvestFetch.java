@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.gittransfer.GitTransfer;
+import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.TransferSource.Container;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerHarvest;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
@@ -7,6 +10,7 @@ import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * The git realization of {@link ContainerHarvest} (design D3, FR5): a
@@ -22,19 +26,25 @@ import java.nio.file.Path;
  * factory-derived values only — the container name comes from the factory's
  * own naming scheme and the branch from the sanitized task id; nothing
  * produced inside the box is ever interpolated. The refspec carries no {@code
- * +} prefix, so git itself refuses a rewritten history (fast-forward-only);
- * {@code --no-recurse-submodules} keeps in-box submodule references from
- * triggering any further fetch. The fetch updates a ref that is never checked
- * out factory-side (FR17), and runs through {@link GitProcessRunner}, which
- * serializes it with every other mutation of the same clone.
+ * +} prefix, so git itself refuses a rewritten history (fast-forward-only).
+ * Everything else about the fetch — no tag auto-following, no {@code
+ * FETCH_HEAD}, no submodule recursion, object validation, the {@code ext}-only
+ * protocol allowlist that is what enables the transport, and full isolation
+ * from the operator's git configuration — is the transfer owner's ({@link
+ * GitTransfer#fetch} for a {@link Container} source, design D2 of
+ * own-git-transfer-argv); this class chooses the source and the refspec and
+ * can vary nothing else. The fetch updates a ref that is never checked out
+ * factory-side (FR17), and runs through {@link GitProcessRunner}'s typed
+ * entry, which serializes it with every other mutation of the same clone.
  *
- * <p>Failure classification: a fast-forward refusal throws {@link
- * HarvestRefusedException} (the history-rewrite violation, a quality signal);
- * an unreachable docker daemon throws {@link DockerUnavailableException} (an
- * infrastructure failure, no attempt burned, NFR-R1); anything else throws
- * {@link HarvestFailedException}.
+ * <p>Failure classification: an object git's validation refused throws
+ * {@link HarvestRefusedException} naming it (a boundary violation of the box,
+ * FR5 of own-git-transfer-argv), as does a fast-forward refusal (the
+ * history-rewrite violation, a quality signal); an unreachable docker daemon
+ * throws {@link DockerUnavailableException} (an infrastructure failure, no
+ * attempt burned, NFR-R1); anything else throws {@link HarvestFailedException}.
  *
- * <p>Implements FR5 of add-sandbox-core.
+ * <p>Implements FR5 of add-sandbox-core; FR4, FR5, FR6 of own-git-transfer-argv.
  *
  * @param runner the git subprocess runner, shared with the run's other git-adapter machinery
  * @param cloneDir the factory clone the branch is fetched into; git commands run with this path
@@ -45,17 +55,8 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
 
     @Override
     public void fetch(String containerName, String branch) {
-        // protocol.ext.allow must be granted explicitly (git refuses the ext transport by
-        // default); "user" — not "always" — so the grant covers exactly this direct invocation
-        // and nothing git initiates on its own (e.g. a submodule fetch).
         GitCommandResult result = runner.run(
-                cloneDir,
-                "-c",
-                "protocol.ext.allow=user",
-                "fetch",
-                "--no-recurse-submodules",
-                url(containerName),
-                refspec(branch));
+                cloneDir, GitTransfer.fetch(new Container(url(containerName)), new Refspec(refspec(branch))));
         if (result.termination() != Termination.EXITED) {
             // A fetch killed on its deadline or cut short by a shutdown printed at most a partial
             // transcript, and git writes its "non-fast-forward" refusal at the very end — so
@@ -78,9 +79,8 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
      * The {@code ext::} transport URL: git runs the command after {@code ext::}
      * and speaks the pack protocol over its stdio, substituting {@code %S} with
      * the service name ({@code git-upload-pack} for a fetch). The transport is
-     * enabled per invocation with {@code -c protocol.ext.allow=user} — git
-     * refuses {@code ext::} by default, and the factory grants it only for this
-     * one direct, factory-assembled fetch.
+     * enabled by the owner's protocol allowlist for a {@link Container} source,
+     * which names {@code ext} and nothing else.
      */
     static String url(String containerName) {
         return "ext::docker exec -i " + containerName + " %S " + ContainerTaskExecutionEnvironment.WORKING_COPY;
@@ -92,11 +92,17 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
     }
 
     /**
-     * Maps a failed fetch to its failure class by git's stderr: a
+     * Maps a failed fetch to its failure class by git's stderr: an object that
+     * failed validation is a boundary violation of the box (asked first, through
+     * the one parser of that grammar, design D4 of own-git-transfer-argv), a
      * fast-forward refusal is the history-rewrite violation, a daemon outage is
      * infrastructure, everything else is a plain harvest failure.
      */
     static RuntimeException classify(String branch, UntrustedText stderr) {
+        Optional<FetchRefusal> refusal = FetchRefusal.parse(stderr);
+        if (refusal.isPresent()) {
+            return HarvestRefusedException.objectValidation(branch, refusal.get());
+        }
         if (DockerUnavailableException.reportsDaemonUnreachable(stderr.forParsing())) {
             return new DockerUnavailableException("docker daemon is unreachable during harvest", stderr);
         }

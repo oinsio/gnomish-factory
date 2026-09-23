@@ -54,7 +54,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
         defaultBranch = currentBranch(seed)
 
         clone = tempDir.resolve('clone')
-        assert runner.run(tempDir, 'clone', origin.toString(), clone.toString()).exitCode() == 0
+        seedClone(tempDir, origin.toString(), clone)
 
         // Origin moves on AFTER the clone was taken: an empty commit, so origin's tree is identical
         // and only the commit id distinguishes "origin's tip" from "what this clone last saw".

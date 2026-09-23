@@ -1,14 +1,10 @@
 # git-task-persistence — delta for own-git-transfer-argv
 
-"Base refresh fetch before task creation" is layered on that requirement as
-modified by `signal-outage-gate-on-origin-contact` (sequenced before this
-change), which is itself layered on `add-base-ref-resolution`: the text below
-is written over the outage-gate delta's text, not over `openspec/specs/`, so
-syncing in that order merges cleanly. If this change syncs first, the later
-sync must merge by hand — the origin-contact paragraph and its two scenarios
-are what must survive from that change; the owner sentence and the submodule
-scenario are what must survive from this one. The other two requirements are
-modified by no active change and are written over `openspec/specs/`.
+All three requirements are written over `openspec/specs/`: "Base refresh
+fetch before task creation" carries the origin-contact paragraph and its two
+scenarios from `signal-outage-gate-on-origin-contact` (archived and synced
+2026-09-13) unchanged, and adds the owner sentence and the submodule
+scenario; the other two requirements are modified by no active change.
 
 ## MODIFIED Requirements
 
@@ -90,7 +86,7 @@ changes no binding, park, or release decision; its one reader is the remote
 outage gate (see factory-serve, "Remote outage gate holds the feed off the
 tracker").
 <!-- implements FR6, FR9, NFR-P1, NFR-R1 of add-base-ref-resolution -->
-<!-- implements FR1, FR4, NFR-R1 of signal-outage-gate-on-origin-contact -->
+<!-- implements FR1, FR4, NFR-R1, NFR-S1 of signal-outage-gate-on-origin-contact -->
 <!-- implements FR5, NFR-R1 of own-git-transfer-argv -->
 
 #### Scenario: Fresh base at claim

@@ -71,7 +71,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
     /** Clones {@code origin} into a fresh worktree checked out on the task branch, with a fixed identity. */
     private Path cloneOrigin(String name, boolean onBranch = false) {
         Path dir = tempDir.resolve(name)
-        assert gitExitCode(tempDir, 'clone', '-q', origin.toString(), dir.toString()) == 0
+        seedClone(tempDir, origin.toString(), dir, '-q')
         gitExitCode(dir, 'config', 'user.email', "${name}@b.c")
         gitExitCode(dir, 'config', 'user.name', name)
         if (onBranch) {
@@ -159,7 +159,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         originTip() != head(zombieWork)
 
         and: 'the zombie\'s divergent commit never reached origin — the new holder\'s branch is untouched, no data corruption'
-        gitExitCode(holderWork, 'fetch', '-q', 'origin') == 0
+        fetchFromOrigin(holderWork, "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}").exitCode() == 0
         gitExitCode(holderWork, 'merge-base', '--is-ancestor', head(zombieWork), "origin/${BRANCH}") != 0
     }
 }

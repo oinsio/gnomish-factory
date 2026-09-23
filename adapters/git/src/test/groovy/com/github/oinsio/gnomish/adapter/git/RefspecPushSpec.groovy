@@ -86,7 +86,7 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
     def "a rejected push is reported, not forced through"() {
         given: 'origin already carries a commit the local branch does not'
         def otherClone = tempDir.resolve('other-clone')
-        gitOutput(tempDir, 'clone', '-q', origin.toString(), otherClone.toString())
+        seedClone(tempDir, origin.toString(), otherClone, '-q')
         gitOutput(otherClone, 'checkout', '-q', '-b', BRANCH)
         Files.writeString(otherClone.resolve('divergent.txt'), 'someone else')
         commitAll(otherClone, 'divergent')

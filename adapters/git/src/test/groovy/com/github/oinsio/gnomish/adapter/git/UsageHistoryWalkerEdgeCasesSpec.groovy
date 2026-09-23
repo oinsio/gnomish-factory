@@ -112,15 +112,15 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
     def "FR14: a task branch reachable only via origin is walked the same way, no local branch created"() {
         given: 'a bare origin carrying the task branch, and a fresh single-branch clone that lacks it'
         def bare = initBareRepo(tempDir, 'origin.git')
-        def seedClone = initWorkingRepo(tempDir, 'seed-clone')
-        new File(seedClone.toFile(), 'a.txt').text = 'first'
-        runner.run(seedClone, 'add', 'a.txt')
-        runner.run(seedClone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(seedClone, 'remote', 'add', 'origin', bare.toString())
-        runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
+        def seedRepo = initWorkingRepo(tempDir, 'seed-clone')
+        new File(seedRepo.toFile(), 'a.txt').text = 'first'
+        runner.run(seedRepo, 'add', 'a.txt')
+        runner.run(seedRepo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
+        runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
@@ -130,9 +130,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         runner.run(seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'push', 'origin', 'gnomish/PROJ-5')
 
         def observerClone = tempDir.resolve('observer-clone')
-        def cloneResult = runner.run(
-                tempDir, 'clone', '--branch', 'main', '--single-branch', bare.toString(), observerClone.toString())
-        assert cloneResult.exitCode() == 0: "clone failed: ${cloneResult.stderr()}"
+        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
 
         when:
         def result = (walker.walk(observerClone, 'PROJ-5') as UsageHistoryResult.Found)

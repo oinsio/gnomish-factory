@@ -37,7 +37,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def setup() {
         origin = initBareRepo(tempDir, 'origin.git')
         cloneDir = tempDir.resolve('clone')
-        runner.run(tempDir, 'clone', '-q', origin.toString(), cloneDir.toString())
+        seedClone(tempDir, origin.toString(), cloneDir, '-q')
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
         runner.run(cloneDir, 'push', '-q', 'origin', 'HEAD:refs/heads/main')

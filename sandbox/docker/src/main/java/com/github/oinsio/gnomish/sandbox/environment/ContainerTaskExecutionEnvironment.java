@@ -27,7 +27,8 @@ import org.slf4j.LoggerFactory;
  * carries factory labels so the startup orphan sweep can find it (FR11).
  *
  * <p>Git mechanics (design D3, FR3): {@code materialize} seeds the volume with a
- * {@code git clone --no-hardlinks} of the task branch from the factory's local
+ * single-branch, tagless clone of the task branch — the transfer owner's {@code SeedPath}
+ * value, rendered into the helper's script (design D6 of own-git-transfer-argv) — from the factory's local
  * clone, executed by a one-shot {@code run --rm} helper that mounts the factory
  * clone read-only — the task container itself mounts only the volume, so no
  * factory-clone path, remote address, or credential ever exists inside the box.

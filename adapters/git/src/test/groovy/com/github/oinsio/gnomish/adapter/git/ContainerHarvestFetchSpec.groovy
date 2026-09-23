@@ -10,10 +10,13 @@ import spock.lang.TempDir
 /**
  * FR5 of add-sandbox-core: the factory-side harvest fetch — a factory-fixed
  * {@code ext::docker exec} transport URL and refspec (never values from the
- * box), fast-forward-only by the absence of {@code +}, and the three-way
- * failure classification (rewrite refusal / daemon outage / plain failure).
- * The real box-to-factory transport is exercised by the Docker-gated specs;
- * here a recording fake git binary pins the exact argv without a daemon.
+ * box), fast-forward-only by the absence of {@code +}, and the failure
+ * classification (validation refusal / rewrite refusal / daemon outage / plain
+ * failure). The argv is the transfer owner's for a container source (FR4, FR6
+ * of own-git-transfer-argv), pinned here as the exact list so a flag that
+ * leaves the owner's common set is seen at this consumer too. The real
+ * box-to-factory transport is exercised by the Docker-gated specs; here a
+ * recording fake git binary pins the exact argv without a daemon.
  */
 class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixture {
 
@@ -23,7 +26,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     // The runner prefixes its own stall-detection options onto a fetch (FR4 of
     // bound-subprocess-commands); what this spec pins is the caller's half of the argv, which
     // follows them.
-    def "FR5: fetch runs the factory-fixed argv — no-recurse-submodules, ext transport, unforced refspec"() {
+    def "FR5, FR4, FR6: fetch runs the owner's container argv — common set, ext transport, unforced refspec"() {
         given: 'a fake git binary that records its argv'
         def record = tempDir.resolve('args.txt')
         def git = fakeGit(0, '', record)
@@ -32,15 +35,55 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir)
                 .fetch('gnomish-box-k7', 'gnomish/task-1')
 
-        then:
+        then: 'the owner\'s exact list: no protocol.ext.allow — the allowlist alone enables ext'
         Files.readAllLines(record) == stallDetectionArgv() + [
             '-c',
-            'protocol.ext.allow=user',
+            'fetch.recurseSubmodules=no',
+            '-c',
+            'submodule.recurse=false',
+            '-c',
+            'fetch.prune=false',
+            '-c',
+            'maintenance.auto=false',
+            '-c',
+            'gc.auto=0',
+            '-c',
+            'fetch.fsckObjects=true',
+            '-c',
+            'transfer.fsckObjects=true',
+            '-c',
+            'fetch.fsck.badTimezone=ignore',
+            '-c',
+            'fetch.fsck.missingSpaceBeforeDate=ignore',
+            '-c',
+            'fetch.fsck.zeroPaddedFilemode=ignore',
             'fetch',
+            '--no-tags',
             '--no-recurse-submodules',
+            '--no-write-fetch-head',
+            '--end-of-options',
             'ext::docker exec -i gnomish-box-k7 %S /gnomish/work',
             'gnomish/task-1:gnomish/task-1',
         ]
+    }
+
+    // FR5, NFR-R1, UX3 of own-git-transfer-argv (design D4): asked before the daemon and
+    //     non-fast-forward reads, and mapped to the same boundary violation as a rewrite, with the
+    //     report naming the message id and the object.
+    def "FR5: an object refused by validation is a boundary violation naming the object, never a plain failure"() {
+        given:
+        def git = fakeGit(128, FetchRefusalSpec.FETCH_REFUSAL)
+
+        when:
+        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+
+        then:
+        def ex = thrown(HarvestRefusedException)
+        ex.message.contains('harvest refused for branch "gnomish/task-1"')
+        ex.message.contains('failed validation')
+        ex.message.contains('missingEmail')
+        ex.message.contains(FetchRefusalSpec.OBJECT)
+        !ex.message.contains('history was rewritten')
     }
 
     def "FR5: a non-fast-forward refusal surfaces as the history-rewrite violation"() {

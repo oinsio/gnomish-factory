@@ -429,7 +429,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
      */
     private void writeStateCursor(String taskId, EgressCursorDto cursor) {
         Path work = tempDir.resolve('cursor-work-' + taskId.toLowerCase())
-        gitOutput(tempDir, 'clone', bareDir.toString(), work.toString())
+        seedClone(tempDir, bareDir.toString(), work)
         gitOutput(work, 'checkout', '-B', 'gnomish/' + taskId, 'origin/gnomish/' + taskId)
         Path stateJson = work.resolve('.gnomish-task').resolve('state.json')
         def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
@@ -447,7 +447,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         Path bare2 = initBareRepo(tempDir, 'origin2.git')
         addRemote(work2, 'origin', bare2.toString())
         // Reuse the same base commit object so both repos share an identical base tip.
-        gitOutput(work2, 'fetch', bareDir.toString(), 'base:base')
+        assert seedFetch(work2, bareDir.toString(), 'base:base').exitCode() == 0
         gitOutput(work2, 'push', 'origin', 'base:refs/heads/base')
         Path index2 = tempDir.resolve('index2')
         Files.createDirectories(index2)

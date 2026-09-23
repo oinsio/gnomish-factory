@@ -54,6 +54,20 @@ class RemotePrimitiveSingleSiteSpec extends Specification {
         ]
     }
 
+    // FR9, M3, design D7 of own-git-transfer-argv: the fetch argv is built by `GitTransfer` in
+    // `:gittransfer` and nowhere in this module — the five origin-fetch call sites and the literal
+    // harvest argv took theirs from the owner. The two hits are the classifiers that name the
+    // subcommand in a `case` arm (`isTransfer`/`isNetwork`, `isRepoLevelMutating`) so the runner
+    // can refuse, bound and lock it; neither constructs it. A third file is the regrowth this
+    // module-local scan reds on before the whole-tree `GitTransferBoundarySpec` gate does.
+    def "the fetch argv is constructed in no adapter file"() {
+        expect:
+        filesContaining('"fetch",') == [
+            'GitNetworkCommands.java',
+            'GitProcessRunner.java'
+        ]
+    }
+
     def "the remote name itself is spelled in exactly one place"() {
         expect:
         filesContaining('String NAME = "origin"') == ['OriginRemote.java']
