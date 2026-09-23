@@ -20,9 +20,9 @@ behavior belongs to it. Naming it removes 19 of the 63 violations outright — a
 signatures — without changing any behavior, and — more importantly — it removes the surface on which the seven declared
 host/container sync pairs must be kept identical by hand.
 
-Now, rather than after the change queue: `add-claim-return`, `fix-claim-epoch-fence` and
-`add-pipeline-routing` all edit these same signatures, and every change that lands first
-adds new hand-listed copies of the clump.
+Now, rather than after the change queue: `add-claim-return` and `add-pipeline-routing`
+both edit these same signatures, and every change that lands first adds new hand-listed
+copies of the clump.
 
 ## What Changes
 
@@ -95,14 +95,21 @@ adds new hand-listed copies of the clump.
 
 ### Non-Functional — Reliability
 
-- **NFR-R1** — The change is behavior-preserving: the existing suite passes unchanged,
-  with no spec's expectations edited to accommodate the refactor. A spec that must change
-  is evidence the refactor altered behavior and stops the task.
+- **NFR-R1** — The change is behavior-preserving. Spec files necessarily change at their
+  **call sites** — the 48 spec files in `:application` and `:bootstrap` that construct or
+  invoke a signature in the design's consumer table are edited to build and pass an order —
+  and nowhere else: no `then:` block, no `where:` table, no asserted log line, no
+  `LogCaptureSupport` attachment and no expected console or tracker output is edited. A
+  spec whose *expectation* must change is evidence the refactor altered behavior and stops
+  the task. "Call-site-only edits" in `tasks.md` means exactly this.
 
 ### Non-Functional — Observability
 
-- **NFR-O1** — Log messages, MDC keys and operator event codes are untouched; the
-  log-expectation gate passes with no expectation file edited.
+- **NFR-O1** — Log messages, MDC keys and operator event codes are untouched. The
+  build-wide log-expectation gate — the root task `checkLogExpectationGate`, which no
+  module's own `check` runs — passes, and no spec's log capture attachment or asserted log
+  line is edited (there is no separate expectation file: a spec's `LogCaptureSupport`
+  attachment is the expectation).
 
 ### Non-Functional — Security
 
@@ -120,9 +127,11 @@ adds new hand-listed copies of the clump.
 
 - **M1** — Signatures in the design's consumer table still enumerating order fields: 42
   before, 0 after.
-- **M2** — Parameter-limit violations in `src/main`: 63 before, **44** after — the 19 this
-  change resolves. (`introduce-slot-wiring` takes it to 30, `collapse-composition-roots` to
-  10, `add-parameter-count-gate` to 0.)
+- **M2** — Parameter-limit violations in `src/main`: the fresh baseline task 0.2 records,
+  minus the number of consumer-table signatures that baseline shows over the limit (19 on
+  the 2026-09-12 scan: 63 before, 44 after). The constants are the stale scan's; the
+  formula is the metric. (`introduce-slot-wiring`, `collapse-composition-roots` and
+  `add-parameter-count-gate` each take their own step down to 0.)
 - **M3** — Test suite: unchanged pass count, zero spec expectation edits (NFR-R1).
 - **M4** — Mutation score stays at the module gate for every touched module.
 
@@ -143,18 +152,21 @@ adds new hand-listed copies of the clump.
   `TakeContainerFreshClaim`, `TakeResumeRunner` / `TakeContainerResumeRunner`,
   `TakeResumeBootstrap` / `TakeContainerResumeBootstrap`, `TakeEngineExecution` /
   `TakeContainerEngineExecution`, `GitResumeRunner` / `ContainerResumeRunner`,
-  `GitModeRunner` / `ContainerGitModeRunner`, plus the `ResumeMechanics` implementations
-  `HostResumeMechanics` / `ContainerResumeMechanics`.
+  `GitModeRunner` / `ContainerGitModeRunner`, `GitResumeContinuation` /
+  `ContainerResumeOutcomes`. The `ResumeMechanics<B>` implementations `HostResumeMechanics` /
+  `ContainerResumeMechanics` also change, but they are a shared abstraction, not a declared
+  pair (no markers).
 - **Rules**: `.claude/rules/manual-sync-pairs.md` registry text only.
 - **Glossary**: two new domain terms (`order`, and the `run order` / `take order`
   distinction) in `docs/glossary.md`, added in this change per `process-invariants.md`.
 - **Dependencies**: none added.
-- **Sequencing**: lands after `add-base-ref-resolution` is committed **and after
-  `fix-claim-epoch-fence`** (decided 2026-09-13: that change deletes
-  `TakeDispositionResume.afterReconciliation`, one of this change's consumers, and makes
-  `TaskGit.epochs()` the single owner of the tenure book that `introduce-slot-wiring` would
-  otherwise duplicate). It lands before `introduce-slot-wiring`. The remaining queued
-  changes — `add-claim-return`, `add-pipeline-routing` — have their task text rebased onto
-  the new signatures afterwards (task 6.2).
+- **Sequencing**: both predecessors have landed — `add-base-ref-resolution` (archived
+  2026-09-13) and `fix-claim-epoch-fence` (archived 2026-09-14; decided 2026-09-13 as a
+  predecessor because it deleted `TakeDispositionResume.afterReconciliation`, one of this
+  change's consumers, and made `TaskGit.epochs()` the single owner of the tenure book that
+  `introduce-slot-wiring` would otherwise duplicate). This change lands before
+  `introduce-slot-wiring`. The remaining queued changes — `add-claim-return`,
+  `add-pipeline-routing` — have their task text rebased onto the new signatures afterwards
+  (task 6.2).
 - **Baseline freshness**: every count in this proposal comes from the 2026-09-12 scan, taken
-  before `fix-claim-epoch-fence` landed; task 1.0 re-takes it.
+  before `fix-claim-epoch-fence` landed; task 0.2 re-takes it.
