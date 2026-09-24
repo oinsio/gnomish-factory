@@ -50,10 +50,9 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
     private def assemble(TaskState initialState, EngineEventListener extraListener = null) {
         def assembly = extraListener == null ? newAssembly() : newAssembly().withExtraListener(extraListener)
         assembly.assemble(
-                definition(),
+                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 initialState,
-                RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any binding suffices.

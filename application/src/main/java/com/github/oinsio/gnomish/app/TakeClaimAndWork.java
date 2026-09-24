@@ -6,19 +6,15 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
 import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The shared "claim, then either create or resume the branch" logic behind both take entry points
@@ -96,7 +92,7 @@ public final class TakeClaimAndWork {
     }
 
     /**
-     * Claims {@code trackerTask.ref()} and, on success, either starts a fresh claim or resumes an
+     * Claims the order's task and, on success, either starts a fresh claim or resumes an
      * existing branch (see class javadoc). On a lost claim race, returns {@link #refuseHeld}.
      *
      * <p>Callers that already hold a successful {@link ClaimResult.Acquired} for this ref (bare
@@ -105,26 +101,17 @@ public final class TakeClaimAndWork {
      *
      * <p>Implements FR9, FR10, D3 of add-tracker-port.
      */
-    TakeResult claimAndWork(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        var ref = trackerTask.ref();
-        ClaimResult claim = tracker.claim(ref, instanceId.value());
+    TakeResult claimAndWork(TakeOrder order) {
+        ClaimResult claim =
+                order.tracker().claim(order.ref(), order.instanceId().value());
         if (claim instanceof ClaimResult.Held(String otherInstance)) {
             return refuseHeld(otherInstance);
         }
-        return dispatchAfterClaim(
-                cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
+        return dispatchAfterClaim(order);
     }
 
     /**
-     * Dispatches a fresh claim or an existing-branch resume for {@code trackerTask.ref()},
+     * Dispatches a fresh claim or an existing-branch resume for the order's task,
      * assuming the caller already holds a successful claim on it (see {@link #claimAndWork}'s
      * javadoc for when to call this directly instead).
      *
@@ -170,27 +157,18 @@ public final class TakeClaimAndWork {
      * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat; FR1
      * of add-factory-serve; FR15 of harden-task-branch-contract.
      */
-    public TakeResult dispatchAfterClaim(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        TaskRef ref = trackerTask.ref();
+    public TakeResult dispatchAfterClaim(TakeOrder order) {
+        TaskRef ref = order.ref();
         heartbeat.register(ref);
         try {
-            return TakeWorkRouter.locateAndWork(
-                    this, cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
+            return TakeWorkRouter.locateAndWork(this, order);
         } catch (UsageException | DivergedBranchException deliberate) {
-            releaseBestEffort(tracker, ref, deliberate);
+            releaseBestEffort(order.tracker(), ref, deliberate);
             throw deliberate;
         } catch (BranchQuarantineException quarantine) {
-            return TakeQuarantinePark.onQuarantine(definition, trackerTask, tracker, quarantine);
+            return TakeQuarantinePark.onQuarantine(order, quarantine);
         } catch (RuntimeException crash) {
-            return crashAbort.onCrash(definition, trackerTask, tracker, instanceId, crash);
+            return crashAbort.onCrash(order, crash);
         } finally {
             heartbeat.unregister(ref);
             // FR13 of harden-task-branch-contract: the tenure ends HERE, not at the terminal

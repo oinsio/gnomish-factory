@@ -1,8 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -59,18 +56,12 @@ public interface ResumeMechanics<B extends ResumedBranch> {
 
     /**
      * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park:
-     * salvages the interrupted round's leftovers — or discards them under {@code discardWork} — and
-     * runs the engine once from {@code finalState}.
+     * salvages the interrupted round's leftovers — or discards them under the order's {@code
+     * discardWork} — and runs the engine once from {@code finalState}. The whole order is passed
+     * although the pipeline it carries is also bound into this mechanics (design D4 of
+     * introduce-take-order): both are the same startup definition on the resume path.
      */
-    TakeResult resumeWithoutDecision(
-            Path cloneDir,
-            B branch,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId);
+    TakeResult resumeWithoutDecision(TakeOrder order, B branch, TaskState finalState);
 
     /**
      * Appends {@code decisionText} to the branch as a human decision, in one commit with the
@@ -89,13 +80,5 @@ public interface ResumeMechanics<B extends ResumedBranch> {
      * answer — or from the branch's own context when the return itself was the answer: runs the
      * engine once, appending nothing.
      */
-    TakeResult resumeDecided(
-            Path cloneDir,
-            B branch,
-            TaskContext context,
-            TaskState resetState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId);
+    TakeResult resumeDecided(TakeOrder order, B branch, TaskContext context, TaskState resetState);
 }

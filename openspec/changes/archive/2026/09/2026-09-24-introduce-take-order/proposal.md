@@ -16,13 +16,13 @@ Every layer of the take/serve chain re-lists those fields and passes them down u
 
 This is Fowler's *data clump* in its textbook form: the same group appears in many
 signatures, it has a name in the project's own language (the order a gnome works to), and
-behavior belongs to it. Naming it removes 19 of the 63 violations outright — and the clump from 42
+behavior belongs to it. Naming it removes 21 of the 65 violations counted by the fresh 2026-09-23 scan (task 0.2) outright — and the clump from 42
 signatures — without changing any behavior, and — more importantly — it removes the surface on which the seven declared
 host/container sync pairs must be kept identical by hand.
 
-Now, rather than after the change queue: `add-claim-return`, `fix-claim-epoch-fence` and
-`add-pipeline-routing` all edit these same signatures, and every change that lands first
-adds new hand-listed copies of the clump.
+Now, rather than after the change queue: `add-claim-return` and `add-pipeline-routing`
+both edit these same signatures, and every change that lands first adds new hand-listed
+copies of the clump.
 
 ## What Changes
 
@@ -33,7 +33,8 @@ adds new hand-listed copies of the clump.
   the tracker port and this instance's identity. Owns the identity derivations every path
   currently repeats (`ref()`, `taskId()`).
 - **MODIFIED**: every signature in the take/resume/serve chain that today enumerates four
-  or more of those fields takes the order instead — 38 signatures across 25 files,
+  or more of those fields takes the order instead — the 53 signatures of the design's
+  consumer table,
   including both ends of all seven declared sync pairs in the chain.
 - **MODIFIED**: `.claude/rules/manual-sync-pairs.md` registry rows for the affected pairs,
   where the synchronized invariant text names parameters that no longer exist.
@@ -42,9 +43,10 @@ adds new hand-listed copies of the clump.
 ## Goals
 
 - **G1** — Remove the order clump from every signature the design's consumer table names:
-  42 signatures, 0 remaining after the change.
-- **G2** — Bring the 19 parameter-limit violations the order alone resolves under the
-  limit, measured by the same scan that produced the 63-violation baseline.
+  53 signatures (42 measured, eleven added during apply 2026-09-23 and 2026-09-24 — see the design's
+  single-owner table), 0 remaining after the change.
+- **G2** — Bring the 21 parameter-limit violations the order alone resolves under the
+  limit, measured by the scan task 0.2 describes (65-violation baseline, 2026-09-23).
 - **G3** — Reduce what the seven declared host/container pairs must keep identical by
   hand: after the change, the mirrored signatures differ in no order field.
 - **G4** — Leave the behavior of every take, serve and run path bit-identical.
@@ -95,14 +97,21 @@ adds new hand-listed copies of the clump.
 
 ### Non-Functional — Reliability
 
-- **NFR-R1** — The change is behavior-preserving: the existing suite passes unchanged,
-  with no spec's expectations edited to accommodate the refactor. A spec that must change
-  is evidence the refactor altered behavior and stops the task.
+- **NFR-R1** — The change is behavior-preserving. Spec files necessarily change at their
+  **call sites** — the 48 spec files in `:application` and `:bootstrap` that construct or
+  invoke a signature in the design's consumer table are edited to build and pass an order —
+  and nowhere else: no `then:` block, no `where:` table, no asserted log line, no
+  `LogCaptureSupport` attachment and no expected console or tracker output is edited. A
+  spec whose *expectation* must change is evidence the refactor altered behavior and stops
+  the task. "Call-site-only edits" in `tasks.md` means exactly this.
 
 ### Non-Functional — Observability
 
-- **NFR-O1** — Log messages, MDC keys and operator event codes are untouched; the
-  log-expectation gate passes with no expectation file edited.
+- **NFR-O1** — Log messages, MDC keys and operator event codes are untouched. The
+  build-wide log-expectation gate — the root task `checkLogExpectationGate`, which no
+  module's own `check` runs — passes, and no spec's log capture attachment or asserted log
+  line is edited (there is no separate expectation file: a spec's `LogCaptureSupport`
+  attachment is the expectation).
 
 ### Non-Functional — Security
 
@@ -118,11 +127,17 @@ adds new hand-listed copies of the clump.
 
 ## Success Metrics
 
-- **M1** — Signatures in the design's consumer table still enumerating order fields: 42
-  before, 0 after.
-- **M2** — Parameter-limit violations in `src/main`: 63 before, **44** after — the 19 this
-  change resolves. (`introduce-slot-wiring` takes it to 30, `collapse-composition-roots` to
-  10, `add-parameter-count-gate` to 0.)
+- **M1** — Signatures in the design's consumer table still enumerating order fields: 53
+  before (42 measured, eleven added during apply 2026-09-23 and 2026-09-24), 0 after.
+- **M2** — Parameter-limit violations in `src/main`: 65 before, 44 after — the 2026-09-23
+  baseline (task 0.2) minus the 21 consumer-table signatures that drop to seven or fewer.
+  Six consumer-table signatures stay over the limit and are not subtracted:
+  `TakeOutcomeDispatch.dispatch` (11 → 9), the `TakeSlotRunner` constructor (16 → 15), and
+  the four fresh-claim methods `TakeFreshClaim.claim`/`claimAt` (15 → 9 each) and
+  `TakeContainerFreshClaim.claim` (16 → 10) / `claimAt` (15 → 9). Past the dispatch, the
+  rest is slot wiring (NG1). Corrected 2026-09-24: the plan counted the fresh-claim four as
+  dropping, but seven order fields folding into one leaves nine. (`introduce-slot-wiring`, `collapse-composition-roots` and
+  `add-parameter-count-gate` each take their own step down to 0.)
 - **M3** — Test suite: unchanged pass count, zero spec expectation edits (NFR-R1).
 - **M4** — Mutation score stays at the module gate for every touched module.
 
@@ -143,18 +158,22 @@ adds new hand-listed copies of the clump.
   `TakeContainerFreshClaim`, `TakeResumeRunner` / `TakeContainerResumeRunner`,
   `TakeResumeBootstrap` / `TakeContainerResumeBootstrap`, `TakeEngineExecution` /
   `TakeContainerEngineExecution`, `GitResumeRunner` / `ContainerResumeRunner`,
-  `GitModeRunner` / `ContainerGitModeRunner`, plus the `ResumeMechanics` implementations
-  `HostResumeMechanics` / `ContainerResumeMechanics`.
+  `GitModeRunner` / `ContainerGitModeRunner`, `GitResumeContinuation` /
+  `ContainerResumeOutcomes`. The `ResumeMechanics<B>` implementations `HostResumeMechanics` /
+  `ContainerResumeMechanics` also change, but they are a shared abstraction, not a declared
+  pair (no markers).
 - **Rules**: `.claude/rules/manual-sync-pairs.md` registry text only.
 - **Glossary**: two new domain terms (`order`, and the `run order` / `take order`
   distinction) in `docs/glossary.md`, added in this change per `process-invariants.md`.
 - **Dependencies**: none added.
-- **Sequencing**: lands after `add-base-ref-resolution` is committed **and after
-  `fix-claim-epoch-fence`** (decided 2026-09-13: that change deletes
-  `TakeDispositionResume.afterReconciliation`, one of this change's consumers, and makes
-  `TaskGit.epochs()` the single owner of the tenure book that `introduce-slot-wiring` would
-  otherwise duplicate). It lands before `introduce-slot-wiring`. The remaining queued
-  changes — `add-claim-return`, `add-pipeline-routing` — have their task text rebased onto
-  the new signatures afterwards (task 6.2).
-- **Baseline freshness**: every count in this proposal comes from the 2026-09-12 scan, taken
-  before `fix-claim-epoch-fence` landed; task 1.0 re-takes it.
+- **Sequencing**: both predecessors have landed — `add-base-ref-resolution` (archived
+  2026-09-13) and `fix-claim-epoch-fence` (archived 2026-09-14; decided 2026-09-13 as a
+  predecessor because it deleted `TakeDispositionResume.afterReconciliation`, one of this
+  change's consumers, and made `TaskGit.epochs()` the single owner of the tenure book that
+  `introduce-slot-wiring` would otherwise duplicate). This change lands before
+  `introduce-slot-wiring`. The remaining queued changes — `add-claim-return`,
+  `add-pipeline-routing` — have their task text rebased onto the new signatures afterwards
+  (task 6.2).
+- **Baseline freshness**: the Why section's 63 / 47 come from the 2026-09-12 scan, taken
+  before `fix-claim-epoch-fence` landed; task 0.2 re-took it on 2026-09-23 (65), and G2 and
+  M2 are stated against the fresh scan.

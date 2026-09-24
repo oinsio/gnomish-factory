@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.ContainerTakeSupport;
 import com.github.oinsio.gnomish.app.RunArguments;
 import com.github.oinsio.gnomish.app.RunAssembly;
+import com.github.oinsio.gnomish.app.RunOrder;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
 import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
+import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.TrustedBaseContext;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
@@ -15,7 +17,6 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import com.github.oinsio.gnomish.status.MdcEventListener;
@@ -37,7 +38,8 @@ import org.slf4j.MDC;
  * <p>Built once and reused across every slot invocation over the daemon's lifetime (unlike {@code
  * TakeBareAuto}, which {@code TakeDispatcher} builds fresh per bare-take run): the constructor
  * wires a single {@link TakeClaimAndWork} via {@link TakeClaimAndWorkFactory#forSlot} up front.
- * {@code serve} is unconditionally non-interactive (FR4): {@link RunArguments.InteractiveMode#NONE}.
+ * {@code serve} is unconditionally non-interactive (FR4): the {@link RunOrder} its caller builds
+ * carries {@link RunArguments.InteractiveMode#NONE}.
  *
  * <p>MDC: since {@link FeedAutomaton} starts one fresh virtual thread per slot and MDC is
  * thread-local, setting the {@code taskId} key inside {@link #run(TaskRef)} tags only that slot's
@@ -64,8 +66,7 @@ public final class TakeSlotRunner implements SlotRunner {
     private static final Logger log = LoggerFactory.getLogger(TakeSlotRunner.class);
 
     private final TakeClaimAndWork claimAndWork;
-    private final Path cloneDir;
-    private final PipelineDefinition definition;
+    private final RunOrder run;
     private final Tracker tracker;
     private final InstanceId instanceId;
     private final String taskIdMdcKey;
@@ -78,9 +79,10 @@ public final class TakeSlotRunner implements SlotRunner {
      * @param assembly the shared engine/ports assembly, reused across every slot; never null
      * @param git the task-git capability set every slot's store, branch and worktree operations
      *     come from; never null
-     * @param cloneDir the project clone every slot dispatches against; never null
+     * @param run the run order every slot dispatches under: the project clone, the loaded pipeline
+     *     every slot advances through, and serve's fixed non-interactive, no-base, salvaging
+     *     settings; never null
      * @param worktreesRoot the root under which {@code <project-name>/<taskId>/} worktrees are created; never null
-     * @param definition the loaded pipeline every slot advances through; never null
      * @param abortHandler the infrastructure-abort protocol; never null
      * @param abortThreshold the configured abort-fuse threshold (K); positive
      * @param taskIdMdcKey the MDC key set to the claimed ref's id for the slot's duration
@@ -99,9 +101,8 @@ public final class TakeSlotRunner implements SlotRunner {
     public TakeSlotRunner(
             RunAssembly assembly,
             TaskGit git,
-            Path cloneDir,
+            RunOrder run,
             Path worktreesRoot,
-            PipelineDefinition definition,
             AbortHandler abortHandler,
             int abortThreshold,
             String taskIdMdcKey,
@@ -125,8 +126,7 @@ public final class TakeSlotRunner implements SlotRunner {
                 claimLossFlag,
                 containerTakeSupport,
                 trustedBase);
-        this.cloneDir = cloneDir;
-        this.definition = definition;
+        this.run = run;
         this.tracker = tracker;
         this.instanceId = instanceId;
         this.taskIdMdcKey = taskIdMdcKey;
@@ -180,16 +180,10 @@ public final class TakeSlotRunner implements SlotRunner {
         MDC.put(taskIdMdcKey, claimed.id());
         long startedNanos = System.nanoTime();
         try {
-            TrackerTask trackerTask = tracker.fetchTask(claimed);
-            TakeResult result = claimAndWork.dispatchAfterClaim(
-                    cloneDir,
-                    null,
-                    definition,
-                    RunArguments.InteractiveMode.NONE,
-                    false,
-                    trackerTask,
-                    tracker,
-                    instanceId);
+            // One of the three places a take order is assembled (design single-owner table of
+            // introduce-take-order): the claimed task exists only from this fetch on.
+            var order = new TakeOrder(run, tracker.fetchTask(claimed), tracker, instanceId);
+            TakeResult result = claimAndWork.dispatchAfterClaim(order);
             outcomeLog.detail(claimed, result);
             if (drainReport != null) {
                 drainReport.record(claimed, result);

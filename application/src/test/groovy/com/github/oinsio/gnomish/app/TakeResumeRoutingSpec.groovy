@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
@@ -114,10 +115,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 
-    private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false) {
-        chain.resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE,
-                discardWork, 'PROJ-1', tracker, REF, INSTANCE)
+    private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs()) {
+        def run = new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork)
+        chain.resumeExisting(takeOrder(task, tracker, run), new BranchShape.InProgress())
     }
 
     // FR10, D10, NFR-C1: the branch's `.gnomish-task/` is GONE — the delivery cleanup commit ran but
@@ -153,7 +153,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given: 'a branch whose task.json reads back but whose state.json is absent'
         def executor = new ScriptedExecutor([completedRound()])
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
-        stateRead = { Optional.empty() }
+        stateRead = { Optional.<TaskState> empty() }
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -230,7 +230,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
 
         when:
-        def result = resume(resumeChain())
+        def result = resume(resumeChain(), false, heldByUsNamingConflictingBase())
 
         then:
         0 * tracker.park(*_)

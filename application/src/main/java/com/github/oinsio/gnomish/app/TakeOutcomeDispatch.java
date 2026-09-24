@@ -1,8 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -36,9 +33,8 @@ final class TakeOutcomeDispatch {
      * @param outcome the engine's terminal outcome for this run; never null
      * @param context the task context the run executed with; never null
      * @param branchName the task's branch name, for {@code Completed}/{@code Paused} reporting
-     * @param tracker the tracker port the terminal write is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity; never null
+     * @param order the take order the run executed: the tracker the terminal write is made
+     *     through, the task's identity and this instance's identity; never null
      * @param retry the bounded retry policy for the tracker's terminal write; never null
      * @param park the park's branch-side steps (FR10 of harden-task-branch-contract): the outcome
      *     commit and its delivery fence as the durable intent, the pending-marker clear as the
@@ -56,9 +52,7 @@ final class TakeOutcomeDispatch {
             TaskOutcome outcome,
             TaskContext context,
             String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             TerminalWriteRetry retry,
             ParkTransition park,
             AbortHandler abortHandler,
@@ -66,16 +60,14 @@ final class TakeOutcomeDispatch {
             FinishTransition finish) {
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
-                var facts = tracker.fetchTask(ref).abortFacts();
+                var facts = order.tracker().fetchTask(order.ref()).abortFacts();
                 yield abortHandler.handle(
-                        ref, aborted.finalState(), aborted.cause(), facts, abortThreshold, instanceId);
+                        order.ref(), aborted.finalState(), aborted.cause(), facts, abortThreshold, order.instanceId());
             }
-            case TaskOutcome.Escalated escalated ->
-                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, park);
+            case TaskOutcome.Escalated escalated -> TakeEscalationExit.exit(escalated, order, retry, park);
             case TaskOutcome.Completed completed ->
-                TakeFinishReport.finish(completed, context, branchName, tracker, ref, instanceId, retry, finish);
-            case TaskOutcome.Paused paused ->
-                TakePauseExit.finish(paused, context, branchName, tracker, ref, instanceId, retry, park);
+                TakeFinishReport.finish(completed, context, branchName, order, retry, finish);
+            case TaskOutcome.Paused paused -> TakePauseExit.finish(paused, context, branchName, order, retry, park);
         };
     }
 }

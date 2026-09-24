@@ -117,7 +117,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
 
         when: 'a fresh process resumes via the same --resume code path, salvaging by default'
         newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
+                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
 
         then: 'a salvage commit landed directly on top of the first round, ahead of the next round commit'
         def subjects = gitOutput(cloneDir, 'log', '--format=%s', "${branchTipAfterFirstRound}..gnomish/${taskId}")

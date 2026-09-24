@@ -54,7 +54,13 @@
       carries the pin (FR4, NFR-R1)
 - [ ] 4.3 Wire resolve-and-pin into both fresh-claim twins and
       read-pin-and-verify into both resume twins via the shared resolver
-      (registry rows per design D6); verify twin-parity specs: identical
+      (registry rows per design D6). Fresh claim: the resolver is called from
+      `claimAt` of `TakeFreshClaim` and `TakeContainerFreshClaim` (both take
+      `TakeOrder`) before `TaskTierLaw.bind`, and the selected definition
+      reaches the engine only through `TakeOrder.withDefinition` — no
+      pipeline-name field on the order, no definition parameter beside it.
+      Resume half: blocked on the design's open question on resume
+      rebinding — do not start it until that is decided; verify twin-parity specs: identical
       pin from both fresh paths, pinned-pipeline resume ignoring a changed
       table, hash-mismatch escalation (FR3, FR4)
 - [ ] 4.4 Route the no-match/conflict escalation through the standard
@@ -66,13 +72,17 @@
 
 - [ ] 5.1 Freeze each slot's law from its task's selected pipeline at the
       task's law commit through the law source of `add-base-ref-resolution`
-      (the startup load stays validation/display only); verify a serve spec
+      (the startup load stays validation/display only), through the same
+      `claimAt`/`withDefinition` path as 4.3 — not a new `TakeSlotRunner`
+      parameter; verify a serve spec
       with two concurrently routed tasks on different pipelines *and*
       different bases, each bound to its own base's definition; a pipeline
       name absent from the base's tree parks the task (FR3, design D3, D5)
 - [ ] 5.2 Add `--pipeline` to `gnomish run` (default: routing default;
       unknown name fails fast listing pipelines) and resolve `--from-stage`
-      against the selection before mode dispatch; verify manual-run specs
+      against the selection before mode dispatch — the selection happens
+      before `ManualRunDrive.order`, so the runners receive it inside
+      `RunOrder`; verify manual-run specs
       for the three scenarios of the delta (FR6)
 
 ## 6. Documentation and gates

@@ -18,7 +18,6 @@ import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.io.IOException;
@@ -263,22 +262,14 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public Run assemble(
-            PipelineDefinition definition,
+            RunOrder order,
             TaskContext context,
             TaskState initialState,
-            RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
             LawBinding lawBinding) {
         return RunAssembler.assemble(
-                this,
-                definition,
-                context,
-                initialState,
-                interactiveMode,
-                attemptPersistence,
-                credentialEnvVarsToScrub,
-                lawBinding);
+                this, order, context, initialState, attemptPersistence, credentialEnvVarsToScrub, lawBinding);
     }
 
     /**

@@ -76,8 +76,8 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         when:
         def result = TakeContainerFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()])), git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [], CLONE_DIR, null,
-                completingPipeline(), RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE,
+                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
                 new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then: 'the clone is hardened before the branch is created (mirrors ContainerGitModeRunner)'
@@ -90,6 +90,36 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
 
         and: 'the engine really ran the stage, and the run finished on the tracker'
         1 * tracker.finish(_, _)
+        result instanceof TakeResult.Delivered
+    }
+
+    // D6 of introduce-take-order (FR13 of add-base-ref-resolution): the container twin re-binds the
+    // order to the task's own law exactly as the host one does — the startup definition here names
+    // a stage the task tier does not have.
+    def "D6: runs the engine under the task's own law, not the startup definition the order was built with"() {
+        given:
+        def tracker = Mock(Tracker)
+        def git = new TaskGit(
+                Stub(TaskStoreGit), Mock(TaskBranchGit), Stub(TaskWorktreeGit),
+                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+        def support = Stub(SandboxRunSupport) {
+            taskRepository() >> Mock(TaskRepository)
+            persistence() >> new InMemoryAttemptPersistence()
+            workspace() >> new FakeWorkspace()
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+        }
+        def executor = new ScriptedExecutor([completedRound()])
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = TakeContainerFreshClaim.claim(
+                assemblyRunning(executor), git, containerTakeSupport(support),
+                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline())),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+
+        then:
+        executor.requests*.stage()*.name() == ['build']
         result instanceof TakeResult.Delivered
     }
 
@@ -113,8 +143,9 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         when:
         TakeContainerFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()])), git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [], CLONE_DIR, 'release/1.2',
-                completingPipeline(), RunArguments.InteractiveMode.NONE, readyTask('PROJ-9'), tracker, INSTANCE,
+                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask('PROJ-9'), tracker,
+                new RunOrder(CLONE_DIR, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
                 new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then:
@@ -149,8 +180,8 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         when:
         def result = TakeContainerFreshClaim.claim(
                 invalidAssembly, git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [], CLONE_DIR, null,
-                completingPipeline(), RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE,
+                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
                 new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then: 'parked, never having created the branch or reached the engine'

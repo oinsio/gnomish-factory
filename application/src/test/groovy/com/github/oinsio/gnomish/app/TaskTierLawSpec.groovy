@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -50,10 +49,6 @@ class TaskTierLawSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
-    private static claimedTask() {
-        TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
-    }
-
     // FR13, D14, FR15: a task tier that loads cleanly binds the task to the peeled law commit
     // itself — kept typed, so the branch's start point, the frozen law and the pin are one SHA by
     // construction and no string revision survives to be resolved a second time — and never parks.
@@ -63,7 +58,7 @@ class TaskTierLawSpec extends Specification {
         def definition = pipeline()
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, pipeline(), claimedTask(), tracker)
+        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         1 * assembly.bindTaskTier(binding) >> new BoundTaskTier(new LoadOutcome.Loaded(definition), LAW_COMMIT)
@@ -93,7 +88,7 @@ class TaskTierLawSpec extends Specification {
         def logs = LogCaptureSupport.attach(TaskTierLaw)
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, pipeline(), claimedTask(), tracker)
+        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         1 * assembly.bindTaskTier(binding) >> new BoundTaskTier(new LoadOutcome.Invalid(errors), LAW_COMMIT)
@@ -146,7 +141,7 @@ class TaskTierLawSpec extends Specification {
         def logs = LogCaptureSupport.attach(TaskTierLaw)
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, pipeline(), claimedTask(), tracker)
+        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         noExceptionThrown()
@@ -177,7 +172,7 @@ class TaskTierLawSpec extends Specification {
         }
 
         when:
-        TaskTierLaw.bind(assembly, binding, pipeline(), claimedTask(), tracker)
+        TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         thrown(UncheckedIOException)

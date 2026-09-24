@@ -80,16 +80,17 @@ final class ContainerResumeRunner {
     /**
      * Resumes the sandboxed task named by {@code taskId} to a terminal boundary.
      *
+     * @param order the run order: the {@code --dir} clone, the loaded pipeline, the console mode
+     *     and {@code --discard-work}; its {@code base} is not read, a resume starts from the branch
+     * @param taskId the {@code --resume} taskId, as supplied by the operator
+     * @param segments the run's container-bound segment plan; never empty
+     *
      * @throws UsageException if no branch for {@code taskId} is found, or its last recorded
      *     outcome is Aborted
      */
-    void run(
-            Path cloneDir,
-            String taskId,
-            PipelineDefinition definition,
-            List<Segment> segments,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork) {
+    void run(RunOrder order, String taskId, List<Segment> segments) {
+        Path cloneDir = order.cloneDir();
+        PipelineDefinition definition = order.definition();
         git.branches().harden(cloneDir);
         if (!git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
             throw new UsageException("no task branch found for \"" + taskId
@@ -110,18 +111,15 @@ final class ContainerResumeRunner {
 
         RecordedOutcome outcome = taskJson.outcome();
         if (outcome == null) {
-            ContainerResumeOutcomes.resumeFromRecordedPosition(
-                    this, support, definition, taskJson, state, interactiveMode, discardWork, cloneDir);
+            ContainerResumeOutcomes.resumeFromRecordedPosition(this, support, order, taskJson, state);
             return;
         }
         switch (outcome) {
             case RecordedOutcome.Completed ignored -> ContainerResumeOutcomes.reportCompleted(this, taskJson, state);
             case RecordedOutcome.Escalated ignored ->
-                ContainerResumeOutcomes.resumeEscalated(
-                        this, support, definition, taskJson, state, interactiveMode, cloneDir);
+                ContainerResumeOutcomes.resumeEscalated(this, support, order, taskJson, state);
             case RecordedOutcome.Paused paused ->
-                ContainerResumeOutcomes.resumePaused(
-                        this, support, definition, taskJson, state, paused.passedStage(), interactiveMode, cloneDir);
+                ContainerResumeOutcomes.resumePaused(this, support, order, taskJson, state, paused.passedStage());
             case RecordedOutcome.Aborted ignored ->
                 throw new UsageException("cannot resume task \"" + recordedTaskId
                         + "\": its last recorded outcome is Aborted — inspect the kept task environment and start a"

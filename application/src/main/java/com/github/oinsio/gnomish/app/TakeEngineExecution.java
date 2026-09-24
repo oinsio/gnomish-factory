@@ -2,9 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -105,27 +102,18 @@ record TakeEngineExecution(
      *
      * <p>Implements FR9, FR12, FR13, FR18, D2, D3, D11, D12 of add-tracker-port.
      *
-     * @param definition the pipeline the run advances through; never null
+     * @param order the take order the run executes: the pipeline it advances through (the task's
+     *     own law on a fresh claim, design D6 of introduce-take-order), the interactive mode, and
+     *     the tracker, task identity and instance identity for the revocation check and the
+     *     terminal write; never null
      * @param bootstrap the located/materialized bundle the worktree and taskId are read from
      * @param context the task context to run with — the caller's choice of original or
      *     decision-appended context
      * @param state the state to run with — the caller's choice of unchanged or attempt-reset state
-     * @param interactiveMode which role(s) use the interactive adapter
-     * @param tracker the tracker port, for the revocation check and, on an {@code Aborted}
-     *     outcome, the abort-facts fetch
-     * @param ref the task's tracker identity
-     * @param instanceId this factory instance's identity
      * @return the {@link TakeResult} the terminal outcome maps to
      */
-    TakeResult run(
-            PipelineDefinition definition,
-            ResumeBootstrap bootstrap,
-            TaskContext context,
-            TaskState state,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    TakeResult run(TakeOrder order, ResumeBootstrap bootstrap, TaskContext context, TaskState state) {
+        PipelineDefinition definition = order.run().definition();
         Path worktree = bootstrap.worktreePath();
         String taskId = bootstrap.taskId();
         // The task's repository is the one its law is bound to (D12): the binding is the only
@@ -133,23 +121,23 @@ record TakeEngineExecution(
         Path cloneDir = lawBinding.repositoryRoot();
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         var delegate = git.store().attemptPersistence(worktree, taskId);
-        var persistence = new RevocationCheckingAttemptPersistence(delegate, tracker, ref, instanceId, claimLossFlag);
+        var persistence = new RevocationCheckingAttemptPersistence(
+                delegate, order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
         var workspace = new DirectoryWorkspace(worktree);
         // The one take attachment point for the mid-round push decoration (FR1, FR3, design D3
         // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
         // funnel through this method, so neither entry point can silently lose it.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(
-                        definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, lawBinding);
+                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, lawBinding);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, workspace, assembled.ports());
 
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
             RevocationDetectedException revoked = revocation.get();
-            var handler = new RevocationHandler(tracker, git.worktrees().salvage(worktree), git.branches());
+            var handler = new RevocationHandler(order.tracker(), git.worktrees().salvage(worktree), git.branches());
             return handler.handle(
-                    ref,
+                    order.ref(),
                     taskId,
                     outcome.finalState(),
                     worktree,
@@ -193,9 +181,7 @@ record TakeEngineExecution(
                 outcome,
                 context,
                 bootstrap.branchName(),
-                tracker,
-                ref,
-                instanceId,
+                order,
                 retry,
                 park,
                 abortFuse.handler(),

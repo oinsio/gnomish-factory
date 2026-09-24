@@ -2,14 +2,10 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -107,50 +103,29 @@ final class TakeResumeRunner {
      *
      * <p>Implements FR9 of add-tracker-port.
      *
-     * @param cloneDir the project clone; never mutated
+     * @param order the take order being resumed: the clone (never mutated), the pipeline the run
+     *     advances through, the interactive mode, {@code --discard-work} (true discards
+     *     interrupted leftovers instead of salvaging them), and the tracker, task identity and
+     *     instance identity for the revocation check wrapped around persistence
      * @param bootstrap the located/materialized bundle from {@link #bootstrap}
-     * @param definition the pipeline the run advances through
      * @param finalState the state to resume from, unchanged from the park
-     * @param interactiveMode which role(s) use the interactive adapter
-     * @param discardWork {@code --discard-work}: true discards interrupted leftovers instead of
-     *     salvaging them
-     * @param tracker the tracker port, for the revocation check wrapped around persistence
-     * @param ref the task's tracker identity
-     * @param instanceId this factory instance's identity
      * @return the mapped {@link TakeResult} for the engine run
      */
-    public TakeResult resumeWithoutDecision(
-            Path cloneDir,
-            ResumeBootstrap bootstrap,
-            PipelineDefinition definition,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    public TakeResult resumeWithoutDecision(TakeOrder order, ResumeBootstrap bootstrap, TaskState finalState) {
         var salvage = git.worktrees().salvage(bootstrap.worktreePath());
-        if (discardWork) {
+        if (order.run().discardWork()) {
             salvage.discard();
         } else {
             salvage.salvage(bootstrap.taskId());
         }
 
         return execution.run(
-                cloneDir,
+                order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
-                ref,
-                tracker,
-                eng -> eng.run(
-                        definition,
-                        bootstrap,
-                        bootstrap.context(),
-                        finalState,
-                        interactiveMode,
-                        tracker,
-                        ref,
-                        instanceId));
+                order.ref(),
+                order.tracker(),
+                eng -> eng.run(order, bootstrap, bootstrap.context(), finalState));
     }
 
     /**
@@ -170,22 +145,14 @@ final class TakeResumeRunner {
      * @return the mapped {@link TakeResult} for the engine run
      */
     public TakeResult resumeDecided(
-            Path cloneDir,
-            ResumeBootstrap bootstrap,
-            PipelineDefinition definition,
-            TaskContext context,
-            TaskState resetState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+            TakeOrder order, ResumeBootstrap bootstrap, TaskContext context, TaskState resetState) {
         return execution.run(
-                cloneDir,
+                order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 resetState,
-                ref,
-                tracker,
-                eng -> eng.run(definition, bootstrap, context, resetState, interactiveMode, tracker, ref, instanceId));
+                order.ref(),
+                order.tracker(),
+                eng -> eng.run(order, bootstrap, context, resetState));
     }
 
     /**

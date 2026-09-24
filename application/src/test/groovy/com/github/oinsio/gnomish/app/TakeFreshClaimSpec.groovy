@@ -83,9 +83,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         TakeFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached),
                 git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
-                DEFAULT_TRUSTED_BASE)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then:
         attached.size() == 1
@@ -120,9 +120,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         when:
         def result = TakeFreshClaim.claim(
                 assemblyRunning(executor), git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, definition,
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
-                DEFAULT_TRUSTED_BASE)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)
@@ -144,6 +144,36 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         and: 'the engine really ran the stage, and the result is a delivery'
         executor.requests.size() == 1
         executor.requests[0].context().taskId() == 'PROJ-1'
+        result instanceof TakeResult.Delivered
+    }
+
+    // D6 of introduce-take-order (FR13 of add-base-ref-resolution): the order a fresh claim is handed
+    // carries the startup definition, and the claim re-binds it to the task's own law before
+    // anything runs. The startup definition here names a stage the task tier does not have, so a
+    // run that kept the order it was handed would ask the executor for the wrong stage.
+    def "D6: runs the engine under the task's own law, not the startup definition the order was built with"() {
+        given:
+        def tracker = Mock(Tracker)
+        def store = Stub(TaskStoreGit) {
+            taskRepository(_, _) >> Mock(TaskLifecycleStore)
+            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            readTaskRecord(_) >> Optional.of(freshRecord())
+        }
+        def executor = new ScriptedExecutor([completedRound()])
+        tracker.fetchTask(_) >> heldByUs()
+        def git = new TaskGit(
+                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(),
+                refreshingBaseRefGit(), new ClaimEpochBook())
+
+        when:
+        def result = TakeFreshClaim.claim(
+                assemblyRunning(executor), git, worktreesRoot,
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline(), cloneDir)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+
+        then:
+        executor.requests*.stage()*.name() == ['build']
         result instanceof TakeResult.Delivered
     }
 
@@ -171,9 +201,10 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         TakeFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),
                 git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, 'release/1.2', completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask('PROJ-9'), tracker, INSTANCE, new ClaimLossFlag(),
-                DEFAULT_TRUSTED_BASE)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask('PROJ-9'), tracker,
+                new RunOrder(cloneDir, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({
@@ -201,9 +232,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         when:
         TakeFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()])), git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
-                DEFAULT_TRUSTED_BASE)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then:
         def ex = thrown(InternalErrorException)
@@ -239,9 +270,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         when:
         def result = TakeFreshClaim.claim(
                 invalidAssembly, git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
-                DEFAULT_TRUSTED_BASE)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
+                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
 
         then: 'parked, never having created the branch or reached the engine'
         0 * lifecycleStore.createTask(*_)

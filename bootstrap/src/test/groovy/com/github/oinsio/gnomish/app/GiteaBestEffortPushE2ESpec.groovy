@@ -92,8 +92,8 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
         def taskId = 'PUSH-1'
 
         when:
-        newRunner().run(cloneDir, null, pipeline(), context(taskId), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        newRunner().run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                context(taskId), TaskState.atStageStart('build'))
 
         then: 'the run reached completion locally, and the round commit it made is identifiable by its fixed message'
         def roundSha = roundCommitSha(cloneDir, taskId, 'build')

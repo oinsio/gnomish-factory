@@ -1,8 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -50,17 +47,8 @@ record ContainerResumeMechanics(
     }
 
     @Override
-    public TakeResult resumeWithoutDecision(
-            Path cloneDir,
-            ContainerResumeBootstrap branch,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
-        return resumeRunner.resumeWithoutDecision(
-                cloneDir, branch, definition, finalState, interactiveMode, discardWork, tracker, ref, instanceId);
+    public TakeResult resumeWithoutDecision(TakeOrder order, ContainerResumeBootstrap branch, TaskState finalState) {
+        return resumeRunner.resumeWithoutDecision(order, branch, finalState);
     }
 
     @Override
@@ -75,15 +63,7 @@ record ContainerResumeMechanics(
 
     @Override
     public TakeResult resumeDecided(
-            Path cloneDir,
-            ContainerResumeBootstrap branch,
-            TaskContext context,
-            TaskState resetState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
-        return resumeRunner.resumeDecided(
-                cloneDir, branch, definition, context, resetState, interactiveMode, tracker, ref, instanceId);
+            TakeOrder order, ContainerResumeBootstrap branch, TaskContext context, TaskState resetState) {
+        return resumeRunner.resumeDecided(order, branch, context, resetState);
     }
 }

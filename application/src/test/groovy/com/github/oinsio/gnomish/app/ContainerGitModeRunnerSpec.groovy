@@ -62,8 +62,8 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
-            runner.run(CLONE_DIR, base, completingPipeline(), [], CONTEXT, TaskState.atStageStart('build'),
-            RunArguments.InteractiveMode.NONE)
+            runner.run(new RunOrder(CLONE_DIR, base, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+                    [], CONTEXT, TaskState.atStageStart('build'))
         } finally {
             System.out = originalOut
         }

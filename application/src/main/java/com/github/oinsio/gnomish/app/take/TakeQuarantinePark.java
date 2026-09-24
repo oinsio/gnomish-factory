@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineReport;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,28 +38,24 @@ public final class TakeQuarantinePark {
     private TakeQuarantinePark() {}
 
     /**
-     * Parks {@code trackerTask} as {@code AwaitingHuman(INFRA)} with the quarantine report.
+     * Parks the order's task as {@code AwaitingHuman(INFRA)} with the quarantine report.
      *
-     * @param definition the running pipeline; its first stage names the last structurally-known
-     *     position reported in the result — a quarantine never entered a stage; never null
-     * @param trackerTask the claimed task whose branch cannot be recovered; its already-fetched
-     *     accounting is quoted in the report, so no extra tracker read is paid for; never null
-     * @param tracker the tracker port for the best-effort park; never null
+     * @param order the take order whose branch cannot be recovered: its pipeline, whose first
+     *     stage names the last structurally-known position reported in the result — a quarantine
+     *     never entered a stage — the claimed task, whose already-fetched accounting is quoted in
+     *     the report so no extra tracker read is paid for, and the tracker for the best-effort
+     *     park; never null
      * @param quarantine the classification that stopped the run; never null
      * @return the terminal {@link TakeResult.AwaitingHuman} carrying the report
      */
-    public static TakeResult onQuarantine(
-            PipelineDefinition definition,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            BranchQuarantineException quarantine) {
-        TaskRef ref = trackerTask.ref();
-        String report =
-                BranchQuarantineReport.of(trackerTask.snapshot().id(), quarantine.shape(), trackerTask.abortFacts());
+    public static TakeResult onQuarantine(TakeOrder order, BranchQuarantineException quarantine) {
+        TaskRef ref = order.ref();
+        String report = BranchQuarantineReport.of(
+                order.taskId(), quarantine.shape(), order.trackerTask().abortFacts());
         log.error(OperatorEvent.TASK_QUARANTINED.head() + "Quarantining task {}", ref.id(), quarantine);
-        parkBestEffort(tracker, ref, report);
-        TaskState finalState =
-                TaskState.atStageStart(definition.stages().getFirst().name());
+        parkBestEffort(order.tracker(), ref, report);
+        TaskState finalState = TaskState.atStageStart(
+                order.run().definition().stages().getFirst().name());
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
     }
 

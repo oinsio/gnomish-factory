@@ -92,8 +92,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resume(TakeDispositionResume chain) {
-        chain.resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+        chain.resumeExisting(takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
     }
 
     // FR3: resume start is a touchpoint — after the worktree's own divergence reconcile pulls local

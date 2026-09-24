@@ -78,8 +78,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        support, completingPipeline(), trackerContext(), trackerState(), RunArguments.InteractiveMode.NONE,
-        tracker, REF, INSTANCE, 'PROJ-1', null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
 
         then:
         // NFR-P1 of add-serve-sandbox-lifecycle: the sweep never runs on the claim (slot) path —
@@ -110,8 +109,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([decisionRound()])), tracker).run(
-        support, completingPipeline(), trackerContext(), trackerState(), RunArguments.InteractiveMode.NONE,
-        tracker, REF, INSTANCE, 'PROJ-1', null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
 
         then:
         1 * support.keepStopped()
@@ -144,8 +142,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        support, manualCheckpointPipeline(), trackerContext(), trackerState(),
-        RunArguments.InteractiveMode.NONE, tracker, REF, INSTANCE, 'PROJ-1', null)
+        takeOrder(heldByUs(), tracker, runOrder(manualCheckpointPipeline())), support, trackerContext(), trackerState(), null)
 
         then:
         1 * support.keepStopped()
@@ -177,8 +174,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        support, completingPipeline(), trackerContext(), trackerState(), RunArguments.InteractiveMode.NONE,
-        tracker, REF, INSTANCE, 'PROJ-1', null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
 
         then:
         1 * support.recordAborted(_)
@@ -207,8 +203,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        support, completingPipeline(), trackerContext(), trackerState(), RunArguments.InteractiveMode.NONE,
-        tracker, REF, INSTANCE, 'PROJ-1', null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
 
         then:
         1 * support.revocationSalvageAndPush('PROJ-1')

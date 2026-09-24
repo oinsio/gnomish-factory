@@ -2,9 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
@@ -88,19 +85,10 @@ final class TakeContainerResumeRunner {
      * reused here for the salvage/discard decision, then routed through {@link
      * TakeContainerEngineExecution} instead of {@link ContainerTerminalDrive} (NFR-R4).
      */
-    TakeResult resumeWithoutDecision(
-            Path cloneDir,
-            ContainerResumeBootstrap bootstrap,
-            PipelineDefinition definition,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    TakeResult resumeWithoutDecision(TakeOrder order, ContainerResumeBootstrap bootstrap, TaskState finalState) {
         var support = bootstrap.support();
         var pending = support.pendingVerification().orElse(null);
-        if (discardWork) {
+        if (order.run().discardWork()) {
             support.disposeExistingEnvironment();
         } else if (finalState.position() instanceof Position.AtStage(String stage)) {
             support.reattachFor(stage);
@@ -110,23 +98,12 @@ final class TakeContainerResumeRunner {
         }
         return ResumeLawBinding.resolve(
                 git.baseRefs(),
-                cloneDir,
+                order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
-                ref,
-                tracker,
-                lawBinding -> newExecution(lawBinding)
-                        .run(
-                                support,
-                                definition,
-                                bootstrap.context(),
-                                finalState,
-                                interactiveMode,
-                                tracker,
-                                ref,
-                                instanceId,
-                                bootstrap.taskId(),
-                                pending));
+                order.ref(),
+                order.tracker(),
+                lawBinding -> newExecution(lawBinding).run(order, support, bootstrap.context(), finalState, pending));
     }
 
     /**
@@ -136,34 +113,15 @@ final class TakeContainerResumeRunner {
      * ContainerResumeOutcomes#resumeEscalated}'s decision commit) before running the engine once.
      */
     TakeResult resumeDecided(
-            Path cloneDir,
-            ContainerResumeBootstrap bootstrap,
-            PipelineDefinition definition,
-            TaskContext context,
-            TaskState resetState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+            TakeOrder order, ContainerResumeBootstrap bootstrap, TaskContext context, TaskState resetState) {
         return ResumeLawBinding.resolve(
                 git.baseRefs(),
-                cloneDir,
+                order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 resetState,
-                ref,
-                tracker,
-                lawBinding -> newExecution(lawBinding)
-                        .run(
-                                bootstrap.support(),
-                                definition,
-                                context,
-                                resetState,
-                                interactiveMode,
-                                tracker,
-                                ref,
-                                instanceId,
-                                bootstrap.taskId(),
-                                null));
+                order.ref(),
+                order.tracker(),
+                lawBinding -> newExecution(lawBinding).run(order, bootstrap.support(), context, resetState, null));
     }
 
     /**

@@ -66,25 +66,21 @@ final class GitResumeContinuation {
      * position, with no dialog. Divergence reconciliation already ran in {@link
      * GitResumeRunner#bootstrap} — the worktree's {@code HEAD} is exactly the last round (or
      * salvage) commit, so anything still dirty is the interrupted round's leftovers. Default
-     * ({@code discardWork} false): {@link com.github.oinsio.gnomish.app.port.git.TaskSalvage#salvage} commits the leftovers as-is
+     * ({@code --discard-work} absent): {@link com.github.oinsio.gnomish.app.port.git.TaskSalvage#salvage} commits the leftovers as-is
      * (not a round, never recorded in {@code state.json}) so the next round's gnome sees the
      * half-done work and the QC loop judges it. {@code --discard-work}: {@link
      * com.github.oinsio.gnomish.app.port.git.WorktreeSalvager#discard} resets to {@code HEAD}, so the loop replays the round clean.
      *
      * <p>Implements FR8, FR10 of add-git-workflow.
      */
-    void resumeFromRecordedPosition(
-            PipelineDefinition definition,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork) {
+    void resumeFromRecordedPosition(RunOrder order, TaskState finalState) {
         var salvage = git.worktrees().salvage(bootstrap.worktreePath());
-        if (discardWork) {
+        if (order.discardWork()) {
             salvage.discard();
         } else {
             salvage.salvage(bootstrap.taskId());
         }
-        runToTerminalBoundary(definition, bootstrap.context(), finalState, interactiveMode);
+        runToTerminalBoundary(order, bootstrap.context(), finalState);
     }
 
     /**
@@ -102,8 +98,7 @@ final class GitResumeContinuation {
      *
      * <p>Implements FR5, FR8, UX2 of add-git-workflow.
      */
-    void resumeEscalated(
-            PipelineDefinition definition, TaskState finalState, RunArguments.InteractiveMode interactiveMode) {
+    void resumeEscalated(RunOrder order, TaskState finalState) {
         EscalationReport report = bootstrap.lastEscalation();
         if (report == null) {
             throw new InternalErrorException("task \"" + bootstrap.taskId()
@@ -115,7 +110,7 @@ final class GitResumeContinuation {
         var dialog = new EscalationResumeDialog(console, Clock.systemUTC());
         RunnerOutcomeLoop.Resumption resumption = dialog.handle(bootstrap.context(), escalated);
         recordDecisionIfAppended(resumption.context(), resumption.state());
-        runToTerminalBoundary(definition, resumption.context(), resumption.state(), interactiveMode);
+        runToTerminalBoundary(order, resumption.context(), resumption.state());
     }
 
     /**
@@ -126,11 +121,7 @@ final class GitResumeContinuation {
      *
      * <p>Implements FR8, UX2 of add-git-workflow.
      */
-    void resumePaused(
-            PipelineDefinition definition,
-            TaskState finalState,
-            String passedStage,
-            RunArguments.InteractiveMode interactiveMode) {
+    void resumePaused(RunOrder order, TaskState finalState, String passedStage) {
         DialogConsole console = assembly.dialogConsole(bootstrap.context(), finalState);
         console.print("Stage '" + passedStage + "' passed. Manual checkpoint reached.");
         try {
@@ -138,7 +129,7 @@ final class GitResumeContinuation {
         } catch (ConsoleClosedException closed) {
             throw new CheckpointEofException(closed);
         }
-        runToTerminalBoundary(definition, bootstrap.context(), finalState, interactiveMode);
+        runToTerminalBoundary(order, bootstrap.context(), finalState);
     }
 
     /**
@@ -163,11 +154,8 @@ final class GitResumeContinuation {
      * the new terminal outcome — {@code Completed} (read back from {@code state.json}) or {@code
      * Aborted} (from the caught {@link AbortedException}) — through {@link GitOutcomeRecorder}.
      */
-    private void runToTerminalBoundary(
-            PipelineDefinition definition,
-            TaskContext context,
-            TaskState state,
-            RunArguments.InteractiveMode interactiveMode) {
+    private void runToTerminalBoundary(RunOrder order, TaskContext context, TaskState state) {
+        PipelineDefinition definition = order.definition();
         Path worktree = bootstrap.worktreePath();
         var persistence = git.store().attemptPersistence(worktree, bootstrap.taskId());
         var workspace = new DirectoryWorkspace(worktree);
@@ -176,10 +164,9 @@ final class GitResumeContinuation {
                 // run does (FR1, FR3, design D3 of wire-host-mid-round-push).
                 assembly.withHostGitPush(git.midRoundPush())
                         .assemble(
-                                definition,
+                                order,
                                 context,
                                 state,
-                                interactiveMode,
                                 persistence,
                                 List.of(),
                                 ManualResumeLawBinding.of(cloneDir, bootstrap.pin(), bootstrap.baseCommit()));

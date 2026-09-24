@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.TrackerTaskFixtures
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -43,9 +44,7 @@ class GuardedParkLogSpec extends Specification {
 
     private void recoveredPark(Runnable receipt) {
         GuardedPark.attempt(
-                tracker,
-                REF,
-                INSTANCE,
+                TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE),
                 ParkReason.ESCALATION,
                 'parked for a human',
                 VirtualTimeRetries.terminalWrite(),

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.DecisionAck;
@@ -39,14 +38,12 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
      * and the sub-state each one turns on — a still-set pending-write marker, the kind of park —
      * is read from the loaded bundle rather than from the shape.
      */
-    TakeResult route(
-            Path cloneDir,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            String taskId,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    TakeResult route(TakeOrder order) {
+        // The one place the order is unpacked for the branch load: the bootstraps behind
+        // loadBranch are shared with manual run --resume, which has no take order (FR5, design
+        // Sync surfaces of introduce-take-order).
+        Path cloneDir = order.run().cloneDir();
+        String taskId = order.taskId();
         B branch = mechanics.loadBranch(cloneDir, taskId);
         if (branch == null) {
             // Reconcile-on-resume's Completed case (FR10, D10, NFR-C1 of add-claim-heartbeat): the
@@ -56,7 +53,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
             // rather than refusing or re-running paid work. The finish reuses TakeFinishReport + the
             // ClaimGuard pre-write check, so a reconcile that races a takeover cannot clobber a
             // successor. Needs no environment in either mode: it is a history read and a tracker write.
-            return TakeReconcileFinish.deliverCompleted(git, cloneDir, taskId, tracker, ref, instanceId);
+            return TakeReconcileFinish.deliverCompleted(git, order);
         }
         TaskState finalState = mechanics.readFinalState(branch);
 
@@ -77,9 +74,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
                     branch,
                     finalState,
                     () -> mechanics.confirmTerminalWrite(cloneDir, branch),
-                    tracker,
-                    ref,
-                    instanceId,
+                    order,
                     git.branches().fenceParkDelivery(cloneDir, taskId));
         }
 
@@ -90,7 +85,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         // passed already, and re-running the last one would pay for delivered work (NFR-C1).
         if (branch.outcome() instanceof RecordedOutcome.Completed) {
             return TakeReconcileFinish.finishUncleaned(
-                    branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), tracker, ref, instanceId);
+                    branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), order);
         }
 
         // Route only a genuine ESCALATION-kind park through the decision dialog (design D3). The
@@ -99,17 +94,16 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         // a stale escalation report; those must "continue on the return alone" (FR9, D12), not be
         // steered back into the decision dialog.
         if (isEscalationDecision(branch.outcome(), branch.lastEscalation())) {
-            return decisionResume.resume(cloneDir, branch, finalState, interactiveMode, tracker, ref, instanceId);
+            return decisionResume.resume(order, branch, finalState);
         }
         // FR12 of harden-task-branch-contract: the kill window between a decision commit and its
         // acknowledge. The branch carries the answer, the tracker still reports the reply as pending
         // — so the acknowledge is re-driven (upsert, no duplicate) and nothing else is repeated. Only
         // a branch that actually records decisions and no outcome — the Answered shape — pays the
         // read that detects it.
-        redriveUnacknowledgedDecision(branch, tracker, ref);
+        redriveUnacknowledgedDecision(branch, order.tracker(), order.ref());
 
-        return mechanics.resumeWithoutDecision(
-                cloneDir, branch, finalState, interactiveMode, discardWork, tracker, ref, instanceId);
+        return mechanics.resumeWithoutDecision(order, branch, finalState);
     }
 
     /**

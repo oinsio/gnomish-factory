@@ -43,7 +43,7 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult run() {
-        bareAuto().run(CLONE_DIR, pipeline(), RunArguments.InteractiveMode.NONE, tracker, INSTANCE)
+        bareAuto().run(runOrder(), tracker, INSTANCE)
     }
 
     // FR10: the feed is read, the open front is counted, and the walk decides — an empty feed ends

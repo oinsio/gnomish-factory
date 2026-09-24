@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 
 /**
@@ -91,23 +90,17 @@ final class GitResumeRunner {
      *
      * <p>Implements FR5, FR8, UX2 of add-git-workflow.
      *
-     * @param cloneDir the {@code --dir} project clone; never mutated (FR7)
+     * @param order the run order: the {@code --dir} project clone (never mutated, FR7), the loaded
+     *     pipeline, the console mode, and {@code --discard-work} (FR10, design D10) — which resets
+     *     an interrupted round's uncommitted leftovers to the last recorded round instead of
+     *     salvaging them, meaningful only for the {@code null}-outcome continuation, harmless
+     *     otherwise; its {@code base} is not read, a resume starts from the branch
      * @param taskId the {@code --resume} taskId, as supplied by the operator
-     * @param definition the loaded pipeline the run advances through; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter
-     * @param discardWork {@code --discard-work} (FR10, design D10): true resets an interrupted
-     *     round's uncommitted leftovers to the last recorded round instead of salvaging them;
-     *     meaningful only for the {@code null}-outcome continuation, harmless otherwise
      * @throws UsageException if no branch for {@code taskId} is found
      */
-    void run(
-            Path cloneDir,
-            String taskId,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork) {
-        ResumeBootstrap bootstrap = bootstrap(cloneDir, taskId);
-        continueFrom(cloneDir, bootstrap, definition, interactiveMode, discardWork);
+    void run(RunOrder order, String taskId) {
+        ResumeBootstrap bootstrap = bootstrap(order.cloneDir(), taskId);
+        continueFrom(order, bootstrap);
     }
 
     /**
@@ -146,12 +139,8 @@ final class GitResumeRunner {
      * loop directly from {@code state.json}'s recorded position; {@code escalated}/{@code paused}
      * run their dialogs first; {@code completed} reports and returns without another engine run.
      */
-    private void continueFrom(
-            Path cloneDir,
-            ResumeBootstrap bootstrap,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork) {
+    private void continueFrom(RunOrder order, ResumeBootstrap bootstrap) {
+        Path cloneDir = order.cloneDir();
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         TaskState finalState = git.store()
                 .readRecordedState(bootstrap.worktreePath())
@@ -160,15 +149,13 @@ final class GitResumeRunner {
         RecordedOutcome outcome = bootstrap.outcome();
         var continuation = new GitResumeContinuation(assembly, git, taskRepository, cloneDir, bootstrap);
         if (outcome == null) {
-            continuation.resumeFromRecordedPosition(definition, finalState, interactiveMode, discardWork);
+            continuation.resumeFromRecordedPosition(order, finalState);
             return;
         }
         switch (outcome) {
             case RecordedOutcome.Completed ignored -> continuation.reportCompleted(finalState);
-            case RecordedOutcome.Escalated ignored ->
-                continuation.resumeEscalated(definition, finalState, interactiveMode);
-            case RecordedOutcome.Paused paused ->
-                continuation.resumePaused(definition, finalState, paused.passedStage(), interactiveMode);
+            case RecordedOutcome.Escalated ignored -> continuation.resumeEscalated(order, finalState);
+            case RecordedOutcome.Paused paused -> continuation.resumePaused(order, finalState, paused.passedStage());
             case RecordedOutcome.Aborted ignored ->
                 // An Aborted task.json means a prior visit's durability guarantee broke; nothing
                 // to resume automatically. A plain usage error keeps the operator from building

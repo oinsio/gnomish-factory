@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.util.List;
@@ -50,10 +49,12 @@ public interface RunAssembly {
     /**
      * Builds the per-run outcome loop and engine ports for one invocation.
      *
-     * @param definition the loaded pipeline the run advances through; never null
+     * @param order the run order: the pipeline the run advances through and which role(s), if
+     *     any, use the interactive console adapter (FR10, D6) — whole, as every caller holds one
+     *     (design D4 of introduce-take-order); on a take, the order already re-bound to the task's
+     *     own law (D6 of the same change); never null
      * @param context the task's identity and human decisions; never null
      * @param initialState the state the first engine call resumes from; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter (FR10, D6)
      * @param attemptPersistence the realization rounds commit through — supplied per call, not
      *     fixed at construction (design D8 of add-git-workflow): in-place mode passes the shared
      *     in-memory store, git mode a fresh worktree-rooted one, container mode the sandboxed one
@@ -71,10 +72,9 @@ public interface RunAssembly {
      * @return the outcome loop and the ports it drives; never null
      */
     Run assemble(
-            PipelineDefinition definition,
+            RunOrder order,
             TaskContext context,
             TaskState initialState,
-            RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
             LawBinding lawBinding);

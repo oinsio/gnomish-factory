@@ -111,8 +111,9 @@ exec sh '${scriptPath}' "\$@"
         def context = new TaskContext('BASE-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run based on release/1.18'
-        runner(captureFile.absolutePath).run(cloneDir, 'release/1.18', pipeline(), context,
-                TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE)
+        runner(captureFile.absolutePath).run(
+                new RunOrder(cloneDir, 'release/1.18', pipeline(), RunArguments.InteractiveMode.NONE, false),
+                context, TaskState.atStageStart('build'))
 
         then: 'the run reached Completed and left the delivered branch behind'
         gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/BASE-1') == 0
@@ -143,8 +144,9 @@ exec sh '${scriptPath}' "\$@"
         def context = new TaskContext('BASE-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run with no --base'
-        runner(captureFile.absolutePath).run(cloneDir, null, pipeline(), context,
-                TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE)
+        runner(captureFile.absolutePath).run(
+                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                context, TaskState.atStageStart('build'))
 
         then: 'the run reached Completed'
         gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/BASE-2') == 0

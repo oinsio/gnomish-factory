@@ -55,7 +55,7 @@ class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
 
         when:
         newResumeRunner(new ByteArrayInputStream(script.getBytes('UTF-8')), new PrintStream(out, true, 'UTF-8'))
-                .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
+                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
 
         then: 'the task still reaches completion'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -87,7 +87,7 @@ class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
 
         when: 'resuming with --discard-work drives the task to completion'
         newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, true)
+                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, true), taskId)
 
         then: 'half-done.txt never appears in any commit on the branch, even though the worktree itself was later removed'
         def allBlobPaths = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--name-only', '--format=')

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -49,9 +49,7 @@ import org.slf4j.Logger;
  */
 public final class GuardedPark implements TerminalEffect {
 
-    private final Tracker tracker;
-    private final TaskRef ref;
-    private final InstanceId instanceId;
+    private final TakeOrder order;
     private final ParkReason reason;
     private final String head;
     private final TerminalWriteRetry retry;
@@ -62,18 +60,14 @@ public final class GuardedPark implements TerminalEffect {
     private ParkDeliveryVerdict verdict;
 
     private GuardedPark(
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             ParkReason reason,
             String head,
             TerminalWriteRetry retry,
             ParkTransition transition,
             Logger log,
             String kind) {
-        this.tracker = tracker;
-        this.ref = ref;
-        this.instanceId = instanceId;
+        this.order = order;
         this.reason = reason;
         this.head = head;
         this.retry = retry;
@@ -92,9 +86,8 @@ public final class GuardedPark implements TerminalEffect {
      * Drives one park to its end and returns the report text it was written with — the same text the
      * caller's {@link TakeResult.AwaitingHuman} carries, whether the write landed or not.
      *
-     * @param tracker the tracker port the park call is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order whose task is parked: its tracker, the task's identity, and this
+     *     instance's identity for the pre-write claim check; never null
      * @param reason the park reason recorded on the tracker; never null
      * @param head the operator-facing report as the caller composed it, without the delivery note —
      *     this class appends that note itself, since the fence produces it only once the intent has
@@ -107,16 +100,14 @@ public final class GuardedPark implements TerminalEffect {
      * @return the report text the park was written with; never null
      */
     public static String attempt(
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             ParkReason reason,
             String head,
             TerminalWriteRetry retry,
             ParkTransition transition,
             Logger log,
             String kind) {
-        var park = new GuardedPark(tracker, ref, instanceId, reason, head, retry, transition, log, kind);
+        var park = new GuardedPark(order, reason, head, retry, transition, log, kind);
         if (transition instanceof ParkTransition.Fresh) {
             TerminalEffectDrive.deliverFresh(park);
         } else {
@@ -141,7 +132,7 @@ public final class GuardedPark implements TerminalEffect {
     @Override
     public EffectObservation observeAtTarget() {
         try {
-            return tracker.fetchTask(ref).state() instanceof TrackerTaskState.AwaitingHuman
+            return order.tracker().fetchTask(order.ref()).state() instanceof TrackerTaskState.AwaitingHuman
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
@@ -149,7 +140,7 @@ public final class GuardedPark implements TerminalEffect {
                     OperatorEvent.PARK_LANDING_UNVERIFIED.head()
                             + "could not verify whether the {} of {} already landed",
                     kind,
-                    ref.id(),
+                    order.ref().id(),
                     e);
             return EffectObservation.UNDETERMINED;
         }
@@ -157,16 +148,17 @@ public final class GuardedPark implements TerminalEffect {
 
     @Override
     public boolean deliver() {
-        if (!ClaimGuard.stillOurs(tracker, ref, instanceId)) {
+        if (!ClaimGuard.stillOurs(order.tracker(), order.ref(), order.instanceId())) {
             log.warn(
                     OperatorEvent.PARK_SKIPPED_CLAIM_LOST.head()
                             + "skipping {} of {}: claim is no longer held by this instance",
                     kind,
-                    ref.id());
+                    order.ref().id());
             return false;
         }
         String text = reportText();
-        if (retry.confirm(() -> tracker.park(ref, reason, text)) == TerminalWriteRetry.Result.CONFIRMED) {
+        if (retry.confirm(() -> order.tracker().park(order.ref(), reason, text))
+                == TerminalWriteRetry.Result.CONFIRMED) {
             return true;
         }
         log.error(
@@ -175,7 +167,7 @@ public final class GuardedPark implements TerminalEffect {
                         + "outcome as tracker-write pending and a later resume will reconcile the deferred "
                         + "park",
                 kind,
-                ref.id());
+                order.ref().id());
         return false;
     }
 

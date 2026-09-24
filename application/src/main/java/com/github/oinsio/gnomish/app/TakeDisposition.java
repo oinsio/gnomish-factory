@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -12,12 +11,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,50 +104,25 @@ final class TakeDisposition {
     }
 
     /**
-     * Dispatches on {@code trackerTask.state()} per the explicit-mode disposition matrix (FR9, UX2).
+     * Dispatches on the claimed task's {@code state()} per the explicit-mode disposition matrix (FR9, UX2).
      *
      * <p>Implements FR9, UX2, D2, D3 of add-tracker-port.
      *
-     * @param cloneDir the project clone; never mutated outside a task worktree
-     * @param base the {@code --base} override for a fresh claim, or {@code null}; ignored when
-     *     resuming an existing branch (D4: a tracker task always starts at the pipeline's first
-     *     stage on a fresh claim, only {@code --base} chooses where that start commit is)
-     * @param definition the loaded pipeline the run advances through; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter
-     * @param discardWork {@code --discard-work}: true discards an interrupted round's leftovers
-     *     instead of salvaging them, meaningful only when resuming
-     * @param trackerTask the already-fetched task fact set {@code take <ref>} is acting on; never
-     *     null
-     * @param tracker the tracker port; never null
-     * @param instanceId this factory instance's identity; never null
+     * @param order the take order {@code take <ref>} is acting on: the already-fetched task fact
+     *     set, the tracker and this instance's identity, and the run order — whose {@code --base}
+     *     override is ignored when resuming an existing branch (D4: a tracker task always starts
+     *     at the pipeline's first stage on a fresh claim, only {@code --base} chooses where that
+     *     start commit is) and whose {@code --discard-work} is meaningful only when resuming;
+     *     never null
      * @return the {@link TakeResult} of the disposition
      */
-    public TakeResult dispose(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        TaskRef ref = trackerTask.ref();
-        return switch (trackerTask.state()) {
-            case TrackerTaskState.Ready ignored when trackerTask.finished() -> refuseFinished(ref, tracker);
-            case TrackerTaskState.Ready ignored ->
-                claimAndWork.claimAndWork(
-                        cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
-            case TrackerTaskState.Working working ->
-                takeover.take(
-                        cloneDir,
-                        base,
-                        definition,
-                        interactiveMode,
-                        discardWork,
-                        trackerTask,
-                        tracker,
-                        instanceId,
-                        working.holder());
+    public TakeResult dispose(TakeOrder order) {
+        TaskRef ref = order.ref();
+        return switch (order.trackerTask().state()) {
+            case TrackerTaskState.Ready ignored
+            when order.trackerTask().finished() -> refuseFinished(ref, order.tracker());
+            case TrackerTaskState.Ready ignored -> claimAndWork.claimAndWork(order);
+            case TrackerTaskState.Working working -> takeover.take(order, working.holder());
             case TrackerTaskState.AwaitingHuman awaitingHuman -> refuseParked(awaitingHuman.reason());
             case TrackerTaskState.Finished ignored ->
                 new TakeResult.Skipped(

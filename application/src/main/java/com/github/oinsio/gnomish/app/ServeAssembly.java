@@ -60,12 +60,15 @@ final class ServeAssembly {
             TrustedBaseContext trustedBase,
             RemoteOutageGate remoteOutageGate) {
         AbortHandler abortHandler = new AbortHandler(tracker, clock);
+        // The serve arguments become the slots' run order here and nowhere else (D1 of
+        // introduce-take-order): serve is unconditionally non-interactive (FR4 of
+        // add-factory-serve), takes no --base, and always salvages.
+        var run = new RunOrder(serveArguments.dir(), null, definition, RunArguments.InteractiveMode.NONE, false);
         return new TakeSlotRunner(
                 serveAssembly,
                 git,
-                serveArguments.dir(),
+                run,
                 worktreesRoot,
-                definition,
                 abortHandler,
                 trackerConfig.abortThreshold(),
                 taskIdMdcKey,

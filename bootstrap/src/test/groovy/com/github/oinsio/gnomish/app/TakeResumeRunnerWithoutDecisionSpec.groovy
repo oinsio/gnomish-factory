@@ -29,7 +29,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then: 'the engine ran once (no manual dialog involved) and completed'
         result instanceof TakeResult.Delivered
@@ -53,7 +53,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
         when:
         runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then: 'a distinct salvage commit landed ahead of the round commit'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -74,7 +74,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
         when:
         runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, true, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId, true), bootstrap, state)
 
         then: 'no salvage commit landed on the branch'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -97,8 +97,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
         when: 'the pipeline pauses at a manual checkpoint, keeping the worktree afterward'
         runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(AdvancementModeManual()), state,
-                RunArguments.InteractiveMode.ALL, true, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(AdvancementModeManual()), taskId, true), bootstrap, state)
 
         then: 'the worktree survives (Paused keeps it) and the leftover file was wiped by discard'
         Files.exists(bootstrap.worktreePath())
@@ -118,8 +117,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(AdvancementModeManual()), state,
-                RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(AdvancementModeManual()), taskId), bootstrap, state)
 
         then:
         result instanceof TakeResult.AwaitingHuman

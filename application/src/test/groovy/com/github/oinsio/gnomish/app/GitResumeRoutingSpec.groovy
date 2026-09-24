@@ -103,7 +103,8 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, 'taskId')
 
         when:
-        runner.run(cloneDir, 'PROJ-1', completingPipeline(), RunArguments.InteractiveMode.NONE, false)
+        runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+                'PROJ-1')
 
         then:
         attached.size() == 1
@@ -121,7 +122,9 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
-            runner.run(cloneDir, 'PROJ-1', completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork)
+            runner.run(
+                    new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork),
+                    'PROJ-1')
         } finally {
             System.out = originalOut
         }
@@ -337,7 +340,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         'the final-state readback' | { GitResumeRoutingSpec it ->
             it.stateRead = {
-                Optional.empty()
+                Optional.<TaskState> empty()
             }
         }
         'the terminal-boundary read'| { GitResumeRoutingSpec it ->
@@ -345,7 +348,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
             // that second read is emptied — the first one must answer, or the run never gets there.
             int reads = 0
             it.stateRead = {
-                reads++ == 0 ? Optional.of(TaskState.atStageStart('build')) : Optional.empty()
+                reads++ == 0 ? Optional.of(TaskState.atStageStart('build')) : Optional.<TaskState> empty()
             }
         }
     }

@@ -4,9 +4,6 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -79,9 +76,9 @@ final class TakeReconcile {
      * @param branch the resumed branch: recorded park outcome, escalation report, branch name
      * @param finalState the branch's last durably recorded state, read by the caller's mechanics
      * @param clearMarker clears the durable "tracker-write pending" marker once the write confirms
-     * @param tracker the tracker port the deferred park is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order of the just-claimed task: the tracker the deferred park is made
+     *     through, the task's identity, and this instance's identity for the pre-write claim check;
+     *     never null
      * @param parkDelivery the caller's delivery-fence verdict for this branch (FR4, FR5 of
      *     fix-lifecycle-push). The resume-start touchpoint has already tried to bring origin up to
      *     the tip on the way in, but that catch-up is best-effort and swallows its failure — so the
@@ -95,9 +92,7 @@ final class TakeReconcile {
             ResumedBranch branch,
             TaskState finalState,
             Runnable clearMarker,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             ParkDeliveryVerdict parkDelivery) {
         var retry = TerminalWriteRetry.system();
         // A recovered park: its intent is already on the branch, so the protocol probes the tracker
@@ -105,15 +100,14 @@ final class TakeReconcile {
         var transition = new ParkTransition.Recovered(parkDelivery, clearMarker);
         if (branch.outcome() instanceof RecordedOutcome.Paused(var passedStage)) {
             var pausedOutcome = new TaskOutcome.Paused(finalState, passedStage);
-            return TakePauseExit.finish(
-                    pausedOutcome, branch.context(), branch.branchName(), tracker, ref, instanceId, retry, transition);
+            return TakePauseExit.finish(pausedOutcome, branch.context(), branch.branchName(), order, retry, transition);
         }
         // The only remaining park kind is Escalated: resumeExisting calls deliverPark solely for an
         // Escalated/Paused branch, and recordOutcome always records lastEscalation alongside an
         // Escalated outcome — so the report is present. The instanceof pattern above already handles
         // a null outcome (it simply doesn't match), so no explicit null case is needed here.
         var escalated = new TaskOutcome.Escalated(finalState, requireEscalationReport(branch.lastEscalation()));
-        return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, transition);
+        return TakeEscalationExit.exit(escalated, order, retry, transition);
     }
 
     // PIT M4 documented exception: @DoNotMutate — the null branch is provably unreachable on the

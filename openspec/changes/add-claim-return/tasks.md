@@ -3,6 +3,8 @@
 > Sequencing: start only after `add-base-ref-resolution` is archived — it owns
 > `FreshClaimBaseBinding`, `ResumeLawBinding`, and the `tracker-take`
 > requirement this change layers on (design, Context).
+> Signatures below are the post-`introduce-take-order` ones (rebased 2026-09-24):
+> the take chain carries one `TakeOrder`, and the claim identity comes from it.
 
 ## 1. Port and contract (FR1, FR2, FR3, FR8)
 
@@ -24,13 +26,13 @@
 
 ## 4. Application callers (FR5, FR6, FR7, NFR-R1, NFR-R3, NFR-O1, NFR-S1)
 
-- [ ] 4.1 Add three `OperatorEvent` codes (return landed INFO, return fenced DEBUG, return failed ERROR) and a `ClaimReturn` helper in `application` that resolves `ClaimIdentity` from `InstanceId` + `ClaimEpochBook`, calls the verb best-effort, and logs by outcome; verify a unit spec for each branch, including the sanitized reason (NFR-O1, NFR-S1)
-- [ ] 4.2 Switch `FreshClaimBaseBinding` and `ResumeLawBinding` from `release` to the return with reason "base refresh: origin unreachable"; message becomes "Task X returned to Ready: origin did not answer …"; verify `FreshClaimBaseBindingSpec`, `ResumeLawBindingSpec`, `OutageWarnFanOutSpec` updated and green; remove `harness.returnToReady` from `RemoteOutageServeEndToEndSpec` so the real return carries the scenario (FR5, M1, UX2)
-- [ ] 4.3 Switch `TakeClaimAndWork.releaseBestEffort` to the return with the usage error's sanitized summary; verify the bail-out spec asserts `Ready` and the marker text (FR7)
+- [ ] 4.1 Add three `OperatorEvent` codes (return landed INFO, return fenced DEBUG, return failed ERROR) and a `ClaimReturn` value in `application`, built by `ClaimReturn.of(TakeOrder, ClaimEpochBook)` from the order's tracker, ref and `InstanceId` and `TaskGit.epochs()`; it exposes `tracker()` and `ref()` for the park path and resolves `ClaimIdentity` when the return runs (not when built), calls the verb best-effort, and logs by outcome; verify a unit spec for each branch, including the sanitized reason and a re-claim between build and return (NFR-O1, NFR-S1, design D2)
+- [ ] 4.2 Replace the `(TaskRef ref, Tracker tracker)` pair in `FreshClaimBaseBinding.resolve` and `ResumeLawBinding.resolve` with one `ClaimReturn` (design D2), built from the order at `TakeFreshClaim.claim`, `TakeContainerFreshClaim.claim`, `TakeResumeRunner.resumeWithoutDecision`/`resumeDecided` (through `TakeResumeExecution.run`) and `TakeContainerResumeRunner`; switch both helpers from `release` to the return with reason "base refresh: origin unreachable"; message becomes "Task X returned to Ready: origin did not answer …"; verify `FreshClaimBaseBindingSpec`, `ResumeLawBindingSpec`, `OutageWarnFanOutSpec` updated and green; remove `harness.returnToReady` from `RemoteOutageServeEndToEndSpec` so the real return carries the scenario (FR5, M1, UX2)
+- [ ] 4.3 Switch `TakeClaimAndWork.releaseBestEffort` to the return through a `ClaimReturn` built in `dispatchAfterClaim(TakeOrder)` from the order and `git.epochs()`, with the usage error's sanitized summary; verify the bail-out spec asserts `Ready` and the marker text (FR7)
 - [ ] 4.4 Type the claim-loss cause: `ClaimLossFlag` records `ClaimLoss(cause, reason)`; `ServeShutdown` marks `SHUTDOWN`, the heartbeat marks `LOST`; `RevocationDetectedException` carries the cause; verify `ClaimLossFlagSpec` and `RevocationCheckingAttemptPersistenceSpec` cover both (FR6)
-- [ ] 4.5 Branch `RevocationHandler.handle` on the cause: SHUTDOWN → return, no note; LOST → note + `release` unchanged; verify a spec per arm with a tracker fake asserting exactly which verb ran (FR6, NG1)
-- [ ] 4.6 Shutdown lifecycle: verify `ServeShutdownDrainRaceSpec`/the serve lifecycle spec asserts every drained slot's task is `Ready` immediately after the drain on the in-memory tracker, and a GitHub WireMock variant sees the marker, the deletion, and the label flip; assert a failing tracker never delays the kill past grace (FR6, NFR-R3, M2)
-- [ ] 4.7 `ReleaseCallSiteBoundarySpec` in `:bootstrap`: scan `application/src/main` and fail on `.release(` outside `RevocationHandler` and on any string comparison against `SHUTDOWN_REASON`; verify it is red before 4.2–4.5 land and green after (M3, design single-owner table)
+- [ ] 4.5 Branch both ends of the declared revocation pair on the cause — `RevocationHandler.handle` (host) and the revocation arm of `TakeContainerEngineExecution.run` (container): SHUTDOWN → return, no note; LOST → note + `release` unchanged; rewrite the `Kept in sync with` sentence on both ends to the new invariant; verify a spec per arm per end with a tracker fake asserting exactly which verb ran (FR6, NG1, design Sync surfaces)
+- [ ] 4.6 Shutdown lifecycle: verify `ServeShutdownDrainRaceSpec`/the serve lifecycle spec asserts every drained slot's task is `Ready` immediately after the drain on the in-memory tracker, and a GitHub WireMock variant sees the marker, the deletion, and the label flip; the same `Ready` assertion holds for a container-mode slot; assert a failing tracker never delays the kill past grace (FR6, NFR-R3, M2)
+- [ ] 4.7 `ReleaseCallSiteBoundarySpec` in `:bootstrap`: scan `application/src/main` for `release(` on a tracker receiver (`tracker.` / `tracker().`) and fail outside the two allowlisted revocation files (`RevocationHandler`, `TakeContainerEngineExecution`), asserting the scan reached both; fail on any string comparison against `SHUTDOWN_REASON`; verify it is red before 4.2–4.5 land and green after, and that `SlotLedger`, `TakeBatch`, `FeedCycle` and `SnapshotWriter` do not trip it (M3, design single-owner table)
 
 ## 5. Crash consistency and durable documentation (NFR-R2, FR9, UX1)
 

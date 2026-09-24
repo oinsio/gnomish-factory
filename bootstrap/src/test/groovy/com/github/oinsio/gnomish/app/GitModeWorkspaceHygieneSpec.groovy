@@ -79,8 +79,8 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         def context = new TaskContext('HYG-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
-        runner.run(cloneDir, null, pipeline(), context, TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.NONE)
+        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                context, TaskState.atStageStart('build'))
 
         then: 'the branch carries exactly one round commit on top of init'
         def tipSha = gitOutput(cloneDir, 'rev-parse', 'gnomish/HYG-1')
@@ -114,8 +114,8 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         def context = new TaskContext('HYG-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
-        runner.run(cloneDir, null, pipeline(), context, TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.NONE)
+        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                context, TaskState.atStageStart('build'))
 
         then: 'no leftover gnomish-decision- directory anywhere under the worktree root'
         def worktree = expectedWorktree('HYG-2')

@@ -22,8 +22,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
         def mechanics = Stub(ResumeMechanics)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
-                .resumeExisting(CLONE_DIR, shape, RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', Stub(Tracker), REF, INSTANCE)
+                .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), shape)
     }
 
     // All three shapes are non-clean, so each verdict is raised inside the repair boundary of
@@ -59,8 +58,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
 
         when:
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
-                .resumeExisting(CLONE_DIR, new BranchShape.Parked(), RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', Stub(Tracker), REF, INSTANCE)
+                .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), new BranchShape.Parked())
 
         then:
         def failed = thrown(BranchRecoveryFailedException)

@@ -57,22 +57,10 @@ final class ManualRunDrive {
                 runner.sandboxProperties,
                 runner.bindingRegistry,
                 runner.dockerProbe);
+        RunOrder order = order(runArguments, definition);
         switch (plan.mode()) {
-            case HOST ->
-                runner.gitResumeRunner.run(
-                        runArguments.dir(),
-                        resume,
-                        definition,
-                        runArguments.interactiveMode(),
-                        runArguments.discardWork());
-            case CONTAINER ->
-                runner.containerResumeRunner.run(
-                        runArguments.dir(),
-                        resume,
-                        definition,
-                        plan.segments(),
-                        runArguments.interactiveMode(),
-                        runArguments.discardWork());
+            case HOST -> runner.gitResumeRunner.run(order, resume);
+            case CONTAINER -> runner.containerResumeRunner.run(order, resume, plan.segments());
         }
     }
 
@@ -91,25 +79,29 @@ final class ManualRunDrive {
                 runner.sandboxProperties,
                 runner.bindingRegistry,
                 runner.dockerProbe);
+        RunOrder order = order(runArguments, definition);
         switch (plan.mode()) {
-            case HOST ->
-                runner.gitModeRunner.run(
-                        runArguments.dir(),
-                        runArguments.base(),
-                        definition,
-                        synthesized.context(),
-                        synthesized.initialState(),
-                        runArguments.interactiveMode());
+            case HOST -> runner.gitModeRunner.run(order, synthesized.context(), synthesized.initialState());
             case CONTAINER ->
                 runner.containerGitModeRunner.run(
-                        runArguments.dir(),
-                        runArguments.base(),
-                        definition,
-                        plan.segments(),
-                        synthesized.context(),
-                        synthesized.initialState(),
-                        runArguments.interactiveMode());
+                        order, plan.segments(), synthesized.context(), synthesized.initialState());
         }
+    }
+
+    /**
+     * The one place a parsed {@link RunArguments} becomes a {@link RunOrder} — for the git-mode
+     * runners and the in-place assembly alike (design D1 of introduce-take-order): the parsed flags plus the definition loaded from
+     * {@code .gnomish/} after parsing.
+     *
+     * <p>Implements FR5 of introduce-take-order.
+     */
+    private static RunOrder order(RunArguments runArguments, PipelineDefinition definition) {
+        return new RunOrder(
+                runArguments.dir(),
+                runArguments.base(),
+                definition,
+                runArguments.interactiveMode(),
+                runArguments.discardWork());
     }
 
     /** The preserved add-manual-run flow (FR7, UX4, design D8): runs the outcome loop in-process. */
@@ -120,10 +112,9 @@ final class ManualRunDrive {
             RunArguments runArguments,
             PipelineLoadOutcome.Loaded loaded) {
         Run run = runner.assembly.assemble(
-                definition,
+                order(runArguments, definition),
                 synthesized.context(),
                 synthesized.initialState(),
-                runArguments.interactiveMode(),
                 runner.inPlacePersistence,
                 List.of(),
                 LawBinding.workingTree(loaded.workspace().root()));

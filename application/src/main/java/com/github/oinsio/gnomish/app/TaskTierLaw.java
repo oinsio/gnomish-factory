@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.BaseLawReport;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -91,21 +90,14 @@ final class TaskTierLaw {
      *
      * @param assembly the run assembly carrying the invocation's pipeline source; never null
      * @param binding which repository and revision the task's law is read from; never null
-     * @param startupDefinition the startup definition, whose first stage names the last
-     *     structurally-known position a parked task reports — a park here never entered a stage;
-     *     never null
-     * @param trackerTask the claimed task; never null
-     * @param tracker the tracker port for the best-effort park; never null
+     * @param order the take order of the claimed task, still carrying the startup definition —
+     *     whose first stage names the last structurally-known position a parked task reports, a
+     *     park here never entered a stage — and the tracker for the best-effort park; never null
      * @return the bound definition, or the park result; never null
      * @throws UncheckedIOException if the law cannot be read at all — an I/O fault, which the
      *     caller's crash arm classifies, never a validation problem
      */
-    static Outcome bind(
-            RunAssembly assembly,
-            LawBinding binding,
-            PipelineDefinition startupDefinition,
-            TrackerTask trackerTask,
-            Tracker tracker) {
+    static Outcome bind(RunAssembly assembly, LawBinding binding, TakeOrder order) {
         BoundTaskTier taskTier;
         try {
             taskTier = assembly.bindTaskTier(binding);
@@ -116,20 +108,14 @@ final class TaskTierLaw {
             case LoadOutcome.Loaded(var definition) ->
                 new Bound(definition, binding.repositoryRoot(), taskTier.lawCommit());
             case LoadOutcome.Invalid(List<ConfigError> errors) ->
-                new Parked(park(binding, taskTier.lawCommit(), errors, startupDefinition, trackerTask, tracker));
+                new Parked(park(binding, taskTier.lawCommit(), errors, order));
         };
     }
 
-    private static TakeResult park(
-            LawBinding binding,
-            ObjectId lawCommit,
-            List<ConfigError> errors,
-            PipelineDefinition startupDefinition,
-            TrackerTask trackerTask,
-            Tracker tracker) {
-        TaskRef ref = trackerTask.ref();
+    private static TakeResult park(LawBinding binding, ObjectId lawCommit, List<ConfigError> errors, TakeOrder order) {
+        TaskRef ref = order.ref();
         String baseRef = revisionOf(binding);
-        String report = BaseLawReport.of(trackerTask.snapshot().id(), baseRef, lawCommit, errors);
+        String report = BaseLawReport.of(order.taskId(), baseRef, lawCommit, errors);
         log.error(
                 OperatorEvent.TASK_BASE_LAW_INVALID.head()
                         + "parking task {}: the pipeline definition at base {} (law commit {}) fails to load with {}"
@@ -138,9 +124,9 @@ final class TaskTierLaw {
                 baseRef,
                 lawCommit.hex(),
                 errors.size());
-        parkBestEffort(tracker, ref, report);
-        TaskState finalState =
-                TaskState.atStageStart(startupDefinition.stages().getFirst().name());
+        parkBestEffort(order.tracker(), ref, report);
+        TaskState finalState = TaskState.atStageStart(
+                order.run().definition().stages().getFirst().name());
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
     }
 

@@ -59,8 +59,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult dispose(TrackerTask task) {
-        disposition().dispose(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
-                task, tracker, INSTANCE)
+        disposition().dispose(takeOrder(task, tracker))
     }
 
     private static TrackerTask taskIn(TrackerTaskState state, boolean finished = false) {

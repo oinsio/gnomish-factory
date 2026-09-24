@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
@@ -101,7 +100,15 @@ record TakeDispatcher(
         if (foreignRefusal.isPresent()) {
             return new TakeResult.Skipped(UntrustedText.factory(foreignRefusal.get()));
         }
-        TrackerTask trackerTask = tracker.fetchTask(ref);
+        // One of the three places a take order is assembled (design single-owner table of
+        // introduce-take-order), and the explicit-mode place a TakeArguments becomes a run order.
+        var run = new RunOrder(
+                takeArguments.dir(),
+                takeArguments.base(),
+                definition,
+                takeArguments.interactiveMode(),
+                takeArguments.discardWork());
+        var order = new TakeOrder(run, tracker.fetchTask(ref), tracker, instanceId);
         var disposition = new TakeDisposition(
                 takeAssembly,
                 git,
@@ -118,15 +125,7 @@ record TakeDispatcher(
                 containerTakeSupport,
                 trustedBase);
         long startedNanos = System.nanoTime();
-        TakeResult result = disposition.dispose(
-                takeArguments.dir(),
-                takeArguments.base(),
-                definition,
-                takeArguments.interactiveMode(),
-                takeArguments.discardWork(),
-                trackerTask,
-                tracker,
-                instanceId);
+        TakeResult result = disposition.dispose(order);
         summarize(result, startedNanos);
         return result;
     }
@@ -158,9 +157,12 @@ record TakeDispatcher(
                 new Random(),
                 containerTakeSupport,
                 trustedBase);
+        // The bare-mode place a TakeArguments becomes a run order (D1 of introduce-take-order). The
+        // parser refuses --base on bare take, and a bare take has always salvaged — --discard-work
+        // is not passed on here, exactly as before this order existed.
+        var run = new RunOrder(takeArguments.dir(), null, definition, takeArguments.interactiveMode(), false);
         long startedNanos = System.nanoTime();
-        TakeResult result =
-                bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
+        TakeResult result = bareAuto.run(run, tracker, instanceId);
         summarize(result, startedNanos);
         return result;
     }

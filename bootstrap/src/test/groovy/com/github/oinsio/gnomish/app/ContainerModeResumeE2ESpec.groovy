@@ -136,8 +136,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
                 sandboxProps, factoryProps, ContainerSupportFixture.real(gitOne.epochs()), LiveConsoleIO.onStdout())
-        instanceOne.run(cloneDir, null, pipeline(), segments(), context,
-                TaskState.atStageStart('work'), RunArguments.InteractiveMode.NONE)
+        instanceOne.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                segments(), context, TaskState.atStageStart('work'))
 
         then: 'the dialog EOF killed the run'
         thrown(EscalationEofException)
@@ -160,7 +160,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def resumeGit = TaskGitFixture.real()
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
-                .run(cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.NONE, false)
+                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                taskId, segments())
 
         then: 'the leftover was salvaged in-box and harvested (FR6)'
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
@@ -213,7 +214,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def resumeGit = TaskGitFixture.real()
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
-                .run(cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.NONE, false)
+                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                taskId, segments())
 
         then: 'the task completed — verification judged the harvested attempt commit, no agent ran'
         def branch = "gnomish/${taskId}"

@@ -80,8 +80,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resume(BranchShape shape) {
-        chain().resumeExisting(CLONE_DIR, shape, RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', tracker, REF, INSTANCE)
+        chain().resumeExisting(takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), shape)
     }
 
     // FR2: the sealed switch routes five shapes into the loaded-branch table, and each of them

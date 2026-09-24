@@ -35,7 +35,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
-        def result = TakeEscalationExit.exit(escalated, tracker, REF, INSTANCE)
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, { String report ->
@@ -64,7 +64,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, report)
 
         when:
-        def result = TakeEscalationExit.exit(escalated, tracker, REF, INSTANCE)
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, { String r ->
@@ -84,7 +84,7 @@ class TakeEscalationExitSpec extends Specification {
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
-        def result = TakeEscalationExit.exit(new TaskOutcome.Escalated(STATE, escalationReport), tracker, REF, INSTANCE)
+        def result = TakeEscalationExit.exit(new TaskOutcome.Escalated(STATE, escalationReport), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.park(REF, ParkReason.INFRA, { String r ->
@@ -111,7 +111,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
-        def result = TakeEscalationExit.exit(escalated, tracker, REF, INSTANCE)
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then: 'no park is written'
         0 * tracker.park(*_)

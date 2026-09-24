@@ -126,10 +126,12 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
         def originalOut = System.out
         System.out = new PrintStream(output, true, 'UTF-8')
         try {
-            runner.run(cloneDir, null,
+            runner.run(
+                    new RunOrder(cloneDir, null,
                     new PipelineDefinition('1', new AutonomyLimits(3), [stage()]),
+                    RunArguments.InteractiveMode.NONE, false),
                     new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
-                    TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE)
+                    TaskState.atStageStart('build'))
         } finally {
             System.out = originalOut
         }

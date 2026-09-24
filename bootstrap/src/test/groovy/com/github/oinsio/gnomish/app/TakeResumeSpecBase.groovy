@@ -90,6 +90,23 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
     }
 
     /**
+     * A take order for resuming {@code taskId} under {@link #REF}, {@link #tracker} and {@link
+     * #INSTANCE} from this fixture's clone — the values the resume entry points used to receive
+     * one by one (introduce-take-order).
+     */
+    protected TakeOrder resumeOrder(
+            PipelineDefinition definition,
+            String taskId = 'PROJ-1',
+            boolean discardWork = false,
+            RunArguments.InteractiveMode interactiveMode = RunArguments.InteractiveMode.ALL) {
+        def run = new RunOrder(cloneDir, null, definition, interactiveMode, discardWork)
+        def trackerTask = new TrackerTask(
+                REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
+                new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false)
+        new TakeOrder(run, trackerTask, tracker, INSTANCE)
+    }
+
+    /**
      * The escalation dialog bound to HOST resume mechanics — the seam {@link TakeDecisionResume}
      * dispatches through in either execution mode (design D8 of add-serve-sandbox-lifecycle).
      */

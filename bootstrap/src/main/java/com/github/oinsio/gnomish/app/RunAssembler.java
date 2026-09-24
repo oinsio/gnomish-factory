@@ -43,10 +43,10 @@ final class RunAssembler {
      * git-backed persistence rooted at the task worktree.
      *
      * @param assembly the assembly whose fields supply every collaborator; never null
-     * @param definition the loaded pipeline the run advances through; never null
+     * @param order the run order: the pipeline the run advances through and which role(s), if
+     *     any, use the interactive console adapter (FR10, D6); never null
      * @param context the synthesized task's identity; never null
      * @param initialState the synthesized task's initial state; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter (FR10, D6)
      * @param attemptPersistence the {@code AttemptPersistence} realization rounds commit through
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential env-var
      *     names (D17, NFR-S1 of add-tracker-port), combined here with the operator's {@code
@@ -67,13 +67,14 @@ final class RunAssembler {
      */
     static Run assemble(
             ManualRunAssembly assembly,
-            PipelineDefinition definition,
+            RunOrder order,
             TaskContext context,
             TaskState initialState,
-            RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
             LawBinding lawBinding) {
+        PipelineDefinition definition = order.definition();
+        RunArguments.InteractiveMode interactiveMode = order.interactiveMode();
         var runLaw = RunLaw.open(lawBinding);
         var law = runLaw.freeze(definition);
         var holder = new StatusSnapshotHolder(

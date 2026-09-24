@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RunArguments
+import com.github.oinsio.gnomish.app.RunOrder
+import com.github.oinsio.gnomish.app.TakeOrder
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -21,6 +24,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -55,6 +59,11 @@ class TakeCrashAbortSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
+    private TakeOrder order(TrackerTask task) {
+        new TakeOrder(new RunOrder(Path.of('/tmp/clone'), null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                task, tracker, INSTANCE)
+    }
+
     private static TrackerTask claimedTask(AbortFacts facts) {
         new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
@@ -69,7 +78,7 @@ class TakeCrashAbortSpec extends Specification {
         tracker.fetchTask(REF) >> claimedTask(AbortFacts.none())
 
         when:
-        def result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,
+        def result = crashAbort.onCrash(order(claimedTask(AbortFacts.none())),
                 new IllegalStateException('git worktree add exploded'))
 
         then: 'the abort is recorded, the fuse never parks, and the result is Aborted'
@@ -90,7 +99,7 @@ class TakeCrashAbortSpec extends Specification {
         tracker.fetchTask(REF) >> claimedTask(facts)
 
         when:
-        def result = crashAbort.onCrash(pipeline(), claimedTask(facts), tracker, INSTANCE,
+        def result = crashAbort.onCrash(order(claimedTask(facts)),
                 new RuntimeException('salvage push failed'))
 
         then:
@@ -112,7 +121,7 @@ class TakeCrashAbortSpec extends Specification {
                 'PROJ-1', new BranchShape.Parked(), new IllegalStateException('park write failed'))
 
         when:
-        crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE, crash(repairFailure))
+        crashAbort.onCrash(order(claimedTask(AbortFacts.none())), crash(repairFailure))
 
         then:
         1 * tracker.recordAbort(REF, { it.category() == expected })
@@ -141,7 +150,7 @@ class TakeCrashAbortSpec extends Specification {
         when:
         def result = null
         def events = LogCaptureSupport.capture(TakeCrashAbort, Level.WARN) {
-            result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,
+            result = crashAbort.onCrash(order(claimedTask(AbortFacts.none())),
             new RuntimeException('boom'))
         }
 

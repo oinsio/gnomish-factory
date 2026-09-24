@@ -102,7 +102,8 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     protected void resume(String taskId, InputStream input, PrintStream output, boolean discardWork = false) {
         runner(input, output).run(
-                cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.ALL, discardWork)
+                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, discardWork),
+                taskId, segments())
     }
 
     protected static InputStream lines(String... answers) {

@@ -44,8 +44,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         when:
         def decided = runner.appendDecision(cloneDir, bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
         runner.resumeDecided(
-                cloneDir, bootstrap, pipeline(), decided, escalatedState.resetAttempts(),
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, decided, escalatedState.resetAttempts())
 
         then: 'the answered decision text was committed via GitTaskRepository#appendDecision'
         def historicalTaskJsons = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H')
@@ -87,8 +86,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         when:
         def decided = runner.appendDecision(cloneDir, bootstrap, exhaustedState, exhaustedState.resetAttempts(), 'try again')
         def result = runner.resumeDecided(
-                cloneDir, bootstrap, limitOnePipeline, decided, exhaustedState.resetAttempts(),
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(limitOnePipeline, taskId), bootstrap, decided, exhaustedState.resetAttempts())
 
         then: 'the run reached completion rather than re-escalating immediately as AttemptsExhausted'
         result instanceof TakeResult.Delivered
@@ -115,8 +113,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         when:
         def decided = runner.appendDecision(cloneDir, bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
         def result = runner.resumeDecided(
-                cloneDir, bootstrap, pipeline(), decided, escalatedState.resetAttempts(),
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, decided, escalatedState.resetAttempts())
 
         then:
         result instanceof TakeResult.Delivered
