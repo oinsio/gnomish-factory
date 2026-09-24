@@ -6,9 +6,11 @@
       loses nine parameters, the Spring context spec passes unedited (NFR-R2) and
       `grep -rn "new ManualRunAssembly(" bootstrap/src/main` returns only the bean method.
 - [ ] 1.2 Add `FactoryPaths` with `worktreesRoot()` and `homeDir()` accessors and one bean
-      producing it (FR3, FR5, D4); verify the context starts with the same graph and that
-      `grep -rn "Path worktreesRoot\|Path homeDir" application/src/main bootstrap/src/main`
-      returns only `FactoryPaths`' own declaration.
+      producing it (FR3, FR5, D4); verify the context starts with the same graph, that
+      `grep -rn "Path worktreesRoot\|Path homeDir"` over the files of the design's
+      `FactoryPaths` row returns nothing, and that `SlotWiring`'s `worktreesRoot` is filled
+      from `FactoryPaths.worktreesRoot()` at both of its assembly points (the row's
+      exemption).
 - [ ] 1.3 Route every consumer in the design's `FactoryPaths` row through the new value;
       verify no signature takes two adjacent `Path` parameters and that each listed site
       lost both.
@@ -39,14 +41,19 @@
 - [ ] 3.2 Bring `ObservabilityAssembly.assemble:103` and `assembleSnapshot:175` under the
       limit; verify the observability specs pass unedited and the snapshot JSON is
       unchanged, asserted against the existing snapshot round-trip spec.
-- [ ] 3.3 Bring `TakeCommand` ctor:112, `TakeCommandFactory.of:53`, `ServeCommand` ctor:93,
-      `ServeAssembly.slotRunner:47` and `feedAutomaton:85` under the limit; verify the
+- [ ] 3.3 Bring `TakeCommand` ctor:107, `TakeCommandFactory.of:24` and `:53`, `ServeCommand`
+      ctor:94 and `ServeAssembly.feedAutomaton:85` under the limit; verify the
       command specs pass unedited.
 - [ ] 3.4 Bring `TakeRefDispatch.run:25`, `TakeOutcomeDispatch.dispatch:55`,
       `TakeBatch.dispatch:116` and `InstanceHeartbeat` ctor:118 under the limit; verify
       their specs pass unedited.
 - [ ] 3.5 Bring both `ManualRunAssembly` constructors (:82, :116) under the limit; verify
       the assembly's own specs and the context spec pass unedited.
+- [ ] 3.6 Bring `ContainerRunSupport.create:130` and `ContainerRunSupportFactory.create:61`
+      (`:bootstrap`) under the limit, judging any cluster against D2 and keeping plain
+      `run`'s claimless path free of slot wiring; verify each takes seven parameters or
+      fewer, the book still arrives only from `TaskGit.epochs()`, and
+      `ContainerRunSupportSpec` and `ManualRunRunnerContainerOwnershipSpec` pass unedited.
 
 ## 4. `FeedAutomaton` — inspect, then decide (D5, Q1)
 
@@ -63,7 +70,7 @@
 - [ ] 5.1 Verify FR4 across the change: every facade added carries at least one method
       beyond its accessors; list them with the method that justifies each, and list every
       cluster rejected with its reason (M2).
-- [ ] 5.2 Re-run the parameter-count scan over `src/main`; verify the twenty composition
+- [ ] 5.2 Re-run the parameter-count scan over `src/main`; verify the twenty-two composition
       sites are gone (M1) and that exactly the ten NG1 sites remain, named by file and
       line as the input list for `add-parameter-count-gate` (M4).
 - [ ] 5.3 Run `./gradlew :application:check :bootstrap:check` and verify every gate passes

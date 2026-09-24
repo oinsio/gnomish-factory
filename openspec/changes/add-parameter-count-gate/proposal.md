@@ -150,4 +150,4 @@ entirely package-private. The stock check cannot be the gate; a project check ca
 - **Build**: one compile-time artifact on the Error Prone processor path; dependency
   lockfiles regenerated. No runtime dependency, no change to any published API.
 - **Depends on**: `collapse-composition-roots` — the gate cannot be switched on until its
-  twenty sites are gone, and this change owns only the last ten.
+  twenty-two sites are gone, and this change owns only the last ten.

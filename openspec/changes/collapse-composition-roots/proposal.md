@@ -42,7 +42,7 @@ today tells apart only by parameter name.
 ## Goals
 
 - **G1** — Every composition root and assembly in `:application` and `:bootstrap` comes
-  under the seven-parameter limit: 20 sites before, 0 after.
+  under the seven-parameter limit: 22 sites before, 0 after.
 - **G2** — Each extracted facade is justified by aggregate behavior, not by grouping
   convenience: every facade the change adds has at least one method beyond its accessors,
   or is rejected and its cluster left flat with the reason recorded.
@@ -113,7 +113,7 @@ today tells apart only by parameter name.
 
 ## Success Metrics
 
-- **M1** — Composition-root and assembly sites over the limit: 20 before, 0 after.
+- **M1** — Composition-root and assembly sites over the limit: 22 before, 0 after.
 - **M2** — Facades added that carry only accessors: 0 (FR4).
 - **M3** — Spring context spec and the full suite pass with zero expectation edits.
 - **M4** — Parameter-limit violations remaining in `src/main` after this change: 10, all of
