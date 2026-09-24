@@ -93,8 +93,8 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
         def runner = new ContainerGitModeRunner(
                 newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), factory,
                 LiveConsoleIO.onStdout())
-        runner.run(cloneDir, base, pipeline(), segments(), context(taskId), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        runner.run(new RunOrder(cloneDir, base, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                segments(), context(taskId), TaskState.atStageStart('build'))
     }
 
     private static InputStream lines(String... answers) {

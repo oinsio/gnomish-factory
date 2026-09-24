@@ -9,12 +9,24 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.RunArguments
+import com.github.oinsio.gnomish.app.RunOrder
+import com.github.oinsio.gnomish.app.TakeOrder
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
@@ -75,6 +87,22 @@ class KillPointWorld implements BareGitRepoFixture {
     InMemoryTracker tracker
 
     InMemoryTrackerHarness trackerHarness
+
+    /**
+     * The take order a terminal effect's recovery is driven under: this world's {@link #tracker},
+     * {@link #ref} and {@link #instanceId}, for {@link #taskId} (introduce-take-order). The run
+     * half is inert here — a park or finish effect reads only the tracker and the identities.
+     */
+    TakeOrder takeOrder() {
+        def stage = new StageDefinition('build', 'purpose', [], [],
+        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
+        'instructions.md', [], new AutonomyLimits(1), AdvancementMode.AUTO)
+        def run = new RunOrder(repoDir, null, new PipelineDefinition('1', new AutonomyLimits(1), [stage]),
+        RunArguments.InteractiveMode.NONE, false)
+        def task = new TrackerTask(ref, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
+                new TrackerTaskState.Working(instanceId.value()), AbortFacts.none(), false)
+        new TakeOrder(run, task, tracker, instanceId)
+    }
 
     /** The classified shape's label, read through the production classifier over the real tip. */
     String shape() {

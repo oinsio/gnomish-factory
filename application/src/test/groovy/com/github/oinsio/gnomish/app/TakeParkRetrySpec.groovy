@@ -89,7 +89,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry,
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry,
                 new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
                     confirmed.incrementAndGet()
                 }))
@@ -107,7 +107,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry,
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry,
                 new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
                     confirmed.incrementAndGet()
                 }))
@@ -133,7 +133,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry,
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry,
                 new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
                     confirmed.incrementAndGet()
                 }))
@@ -150,7 +150,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, freshPark {
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry, freshPark {
                     confirmed.incrementAndGet()
                 })
 
@@ -173,7 +173,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, freshPark {
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry, freshPark {
                     confirmed.incrementAndGet()
                 })
 
@@ -199,7 +199,7 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakeEscalationExit) {
             result = TakeEscalationExit.exit(
-            escalated(), tracker, REF, INSTANCE, RetryFixtures.givingUpRetry(), freshPark {
+            escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), RetryFixtures.givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
             })
         }
@@ -225,7 +225,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, freshPark {
+                escalated(), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry, freshPark {
                     confirmed.incrementAndGet()
                 })
 
@@ -243,7 +243,7 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakePauseExit.finish(
-                paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, freshPark {
+                paused, CONTEXT, 'gnomish/PROJ-1', TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry, freshPark {
                     confirmed.incrementAndGet()
                 })
 
@@ -268,7 +268,7 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakePauseExit) {
             result = TakePauseExit.finish(
-            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, RetryFixtures.givingUpRetry(), freshPark {
+            paused, CONTEXT, 'gnomish/PROJ-1', TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), RetryFixtures.givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
             })
         }

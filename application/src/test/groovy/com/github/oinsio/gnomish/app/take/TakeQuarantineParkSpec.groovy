@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RunArguments
+import com.github.oinsio.gnomish.app.RunOrder
+import com.github.oinsio.gnomish.app.TakeOrder
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -20,6 +23,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
 
@@ -46,6 +50,11 @@ class TakeQuarantineParkSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
+    private TakeOrder order(TrackerTask task) {
+        new TakeOrder(new RunOrder(Path.of('/tmp/clone'), null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                task, tracker, INSTANCE)
+    }
+
     private static TrackerTask claimedTask(AbortFacts facts) {
         new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
@@ -65,7 +74,7 @@ class TakeQuarantineParkSpec extends Specification {
 
         when:
         def result = TakeQuarantinePark.onQuarantine(
-                pipeline(), claimedTask(facts), tracker,
+                order(claimedTask(facts)),
                 quarantine(new BranchShape.UnsupportedVersion('state.json', 9, 1)))
 
         then: 'the task parks with the diagnosis and the accounting it already had'
@@ -106,7 +115,7 @@ class TakeQuarantineParkSpec extends Specification {
 
         when:
         def result = TakeQuarantinePark.onQuarantine(
-                pipeline(), claimedTask(AbortFacts.none()), tracker,
+                order(claimedTask(AbortFacts.none())),
                 quarantine(new BranchShape.Corrupt('task.json: bad json')))
 
         then:

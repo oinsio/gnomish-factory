@@ -163,6 +163,13 @@ touches, and mirrored edits are in scope:
   `TaskJsonMapper` behind the version gate with its round-trip spec —
   writer and reader are one class, no new pair. Snapshot/ledger pairs are
   untouched (observability field is a non-goal).
+- **Signatures after `introduce-take-order`** (rebased 2026-09-24): the
+  fresh-claim and resume twins take one `TakeOrder`; the manual twins
+  (`GitModeRunner`/`ContainerGitModeRunner`,
+  `GitResumeRunner`/`ContainerResumeRunner`) take one `RunOrder`. `--pipeline`
+  selects the definition before `ManualRunDrive.order`, the only place a
+  `RunArguments` becomes a `RunOrder`, so the manual twins receive the
+  selection inside the order.
 - **No new parallel implementation**: routing logic exists exactly once
   (the resolver), and type extraction reuses the one designator mechanism
   from `add-base-ref-resolution` — one shared classification function, one
@@ -215,3 +222,16 @@ needed; the example belongs in the operator guide beside the research one.
   base default atop both mechanisms. Lands either in this change's routing
   table or as a small follow-up — decide when this change is applied,
   without reshaping either mechanism.
+- Resume rebinding of the definition (raised 2026-09-24 by the rebase onto
+  `introduce-take-order`). D3 and D4 have resume load the pinned pipeline
+  from the task's law commit, so the definition a resume runs under is no
+  longer the startup one. Today resume runs under the order's startup
+  definition (NG4 of `introduce-take-order`), and its D6 allows exactly one
+  rebinding site, `TakeOrder.withDefinition` in the fresh-claim `claimAt`,
+  naming a second site as the trigger to escalate to a separate bound-order
+  type. Two paths: (a) a second `withDefinition` call where resume binds its
+  law, with that rule amended to name both sites; (b) the bound-order type,
+  so the compiler proves the engine receives a bound definition on both
+  paths. Decide before this change is applied; `introduce-take-order` leaves
+  the related question — should resume re-read the task's law from its
+  pinned base — open as well. Task 4.3's resume half is blocked on it.

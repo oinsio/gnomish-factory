@@ -65,8 +65,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resolve(BareTakeClaimWalk subject, List<ReadyTask> readyTasks, int openFrontCount = 0) {
-        subject.resolve(CLONE_DIR, pipeline(), RunArguments.InteractiveMode.NONE, tracker, INSTANCE,
-                readyTasks, openFrontCount)
+        subject.resolve(runOrder(), tracker, INSTANCE, readyTasks, openFrontCount)
     }
 
     // FR10, D2: an empty feed is an EmptyQueue — the daemon's "nothing to do, idle" signal, which

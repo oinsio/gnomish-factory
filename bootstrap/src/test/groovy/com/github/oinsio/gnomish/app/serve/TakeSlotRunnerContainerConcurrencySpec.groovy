@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.app.ContainerE2eDocker
 import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
+import com.github.oinsio.gnomish.app.RunArguments
+import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
@@ -161,7 +163,8 @@ autonomy:
                 ContainerSupportFixture.tracked(git.epochs()))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
-                newAssembly(properties), git, cloneDir, worktreesRoot, pipeline(), abortHandler,
+                newAssembly(properties), git, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                worktreesRoot, abortHandler,
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
                 containerTakeSupport,
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),

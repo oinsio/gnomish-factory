@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -11,7 +10,6 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.ReportPlane;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -49,48 +47,27 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
      *
      * <p>Implements FR12, FR13 of add-tracker-port.
      *
-     * @param cloneDir the project clone; never mutated
+     * @param order the take order being resumed: the clone (never mutated), the interactive mode,
+     *     and the tracker used for decision collection, ack and park
      * @param branch the loaded branch; {@code lastEscalation()} must be {@link
      *     EscalationReport.AttemptsExhausted} or {@link EscalationReport.DecisionNeeded}
      * @param finalState the escalated state the park was produced from
-     * @param interactiveMode which role(s) use the interactive adapter
-     * @param tracker the tracker port: decision collection, ack, park
-     * @param ref the task's tracker identity
-     * @param instanceId this factory instance's identity
      * @return {@link TakeResult.AwaitingHuman} for a restated re-park, or the mapped result of the
      *     resumed engine run
      * @throws IllegalStateException if {@code branch.lastEscalation()} is not an {@code
      *     ESCALATION}-kind report
      */
-    public TakeResult resume(
-            Path cloneDir,
-            B branch,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
-        List<HumanReply> replies = tracker.collectDecisions(ref);
+    public TakeResult resume(TakeOrder order, B branch, TaskState finalState) {
+        List<HumanReply> replies = order.tracker().collectDecisions(order.ref());
         HumanReply latest = replies.isEmpty() ? null : replies.getLast();
 
         return switch (branch.lastEscalation()) {
             case EscalationReport.DecisionNeeded decisionNeeded
-            when latest == null -> reparkRestatingQuestion(decisionNeeded, finalState, tracker, ref);
-            case EscalationReport.DecisionNeeded _ ->
-                ackAndResume(cloneDir, branch, finalState, interactiveMode, tracker, ref, instanceId, latest);
+            when latest == null -> reparkRestatingQuestion(decisionNeeded, finalState, order.tracker(), order.ref());
+            case EscalationReport.DecisionNeeded _ -> ackAndResume(order, branch, finalState, latest);
             case EscalationReport.AttemptsExhausted _
-            when latest == null ->
-                mechanics.resumeDecided(
-                        cloneDir,
-                        branch,
-                        branch.context(),
-                        finalState.resetAttempts(),
-                        interactiveMode,
-                        tracker,
-                        ref,
-                        instanceId);
-            case EscalationReport.AttemptsExhausted _ ->
-                ackAndResume(cloneDir, branch, finalState, interactiveMode, tracker, ref, instanceId, latest);
+            when latest == null -> mechanics.resumeDecided(order, branch, branch.context(), finalState.resetAttempts());
+            case EscalationReport.AttemptsExhausted _ -> ackAndResume(order, branch, finalState, latest);
             case null, default ->
                 throw new IllegalStateException(
                         "TakeDecisionResume.resume called for a non-ESCALATION-kind escalation: "
@@ -105,25 +82,16 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
         return new TakeResult.AwaitingHuman(finalState, ParkReason.ESCALATION, report);
     }
 
-    private TakeResult ackAndResume(
-            Path cloneDir,
-            B branch,
-            TaskState finalState,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
-            HumanReply latest) {
+    private TakeResult ackAndResume(TakeOrder order, B branch, TaskState finalState, HumanReply latest) {
         // FR12 of harden-task-branch-contract: the decision is durable on the branch BEFORE its
         // acknowledge posts. Acknowledging first would, on a kill between the two, consume the reply
         // — the next collection starts after the ack — while the branch still carries no answer.
         var resetState = finalState.resetAttempts();
         TaskContext decided = DecisionAck.appendThenAcknowledge(
-                tracker,
-                ref,
+                order.tracker(),
+                order.ref(),
                 latest.body(),
-                () -> mechanics.appendDecision(cloneDir, branch, finalState, resetState, latest.body()));
-        return mechanics.resumeDecided(
-                cloneDir, branch, decided, resetState, interactiveMode, tracker, ref, instanceId);
+                () -> mechanics.appendDecision(order.run().cloneDir(), branch, finalState, resetState, latest.body()));
+        return mechanics.resumeDecided(order, branch, decided, resetState);
     }
 }

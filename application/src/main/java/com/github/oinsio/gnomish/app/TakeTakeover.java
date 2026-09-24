@@ -2,15 +2,12 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
@@ -36,12 +33,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR6 of add-claim-heartbeat.
  */
-final class TakeTakeover {
-
-    private final TakeClaimAndWork claimAndWork;
-    private final TakeoverConfirmation confirmation;
-    private final boolean takeoverFlag;
-    private final Clock clock;
+record TakeTakeover(
+        TakeClaimAndWork claimAndWork, TakeoverConfirmation confirmation, boolean takeoverFlag, Clock clock) {
 
     /**
      * @param claimAndWork the shared claim-and-resume sequence the confirmed path falls through to,
@@ -52,30 +45,17 @@ final class TakeTakeover {
      *     bypasses the seam entirely
      * @param clock the take run's clock, used only to render the display-only last-beat age; never null
      */
-    TakeTakeover(TakeClaimAndWork claimAndWork, TakeoverConfirmation confirmation, boolean takeoverFlag, Clock clock) {
-        this.claimAndWork = claimAndWork;
-        this.confirmation = confirmation;
-        this.takeoverFlag = takeoverFlag;
-        this.clock = clock;
-    }
+    TakeTakeover {}
 
     /**
-     * Runs the takeover gate for {@code trackerTask} (already known to be {@code Working} held by
+     * Runs the takeover gate for the order's task (already known to be {@code Working} held by
      * {@code holder}) and, when confirmed, the {@code removeStaleClaim} + ordinary claim + resume.
      *
      * <p>Implements FR6 of add-claim-heartbeat.
      */
-    TakeResult take(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId,
-            String holder) {
-        TaskRef ref = trackerTask.ref();
+    TakeResult take(TakeOrder order, String holder) {
+        TaskRef ref = order.ref();
+        Tracker tracker = order.tracker();
         ClaimFacts observed = observedClaim(tracker, ref);
         if (!takeoverFlag) {
             TakeoverConfirmation.Decision decision =
@@ -89,8 +69,7 @@ final class TakeTakeover {
             // way the ordinary claim below re-reads live state and decides (resume, or refuse Held).
             tracker.removeStaleClaim(ref, observed);
         }
-        return claimAndWork.claimAndWork(
-                cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
+        return claimAndWork.claimAndWork(order);
     }
 
     /** The claim footprint {@code listOpen} reports for {@code ref}, or none when it lists no such task. */

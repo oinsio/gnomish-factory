@@ -55,8 +55,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult take(TakeTakeover takeover, Tracker tracker) {
-        takeover.take(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
-                workingTask(HOLDER), tracker, INSTANCE, HOLDER)
+        takeover.take(takeOrder(workingTask(HOLDER), tracker), HOLDER)
     }
 
     // FR6: a declined confirmation refuses and changes NOTHING — no stale claim is returned, no

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.ClaimGuard;
@@ -55,7 +54,7 @@ final class TakeFinishReport {
     private TakeFinishReport() {}
 
     /**
-     * Renders the final report for {@code completed} and finishes {@code ref} on the tracker with
+     * Renders the final report for {@code completed} and finishes the order's task on the tracker with
      * it (FR18, D11), then returns the matching {@link TakeResult.Delivered}.
      *
      * <p>The {@code tracker.finish} write is git-unfenced, so it is preceded by {@link
@@ -70,25 +69,16 @@ final class TakeFinishReport {
      * @param context the task's identity and decisions, reflecting all decisions up to this run;
      *     never null
      * @param branchName the task branch's short name, appended as a report line; never null
-     * @param tracker the tracker port the finish call is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order whose task is finished: its tracker, the task's identity, and
+     *     this instance's identity for the pre-write claim check; never null
      * @return the {@link TakeResult.Delivered} the finish call was made with; never null
      */
-    static TakeResult finish(
-            TaskOutcome.Completed completed,
-            TaskContext context,
-            String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    static TakeResult finish(TaskOutcome.Completed completed, TaskContext context, String branchName, TakeOrder order) {
         return finish(
                 completed,
                 context,
                 branchName,
-                tracker,
-                ref,
-                instanceId,
+                order,
                 TerminalWriteRetry.system(),
                 // The caller of this convenience overload has already recorded the outcome commit and
                 // owns the cleanup itself, so both branch-side steps are empty here — but the write is
@@ -97,7 +87,7 @@ final class TakeFinishReport {
     }
 
     /**
-     * As {@link #finish(TaskOutcome.Completed, TaskContext, String, Tracker, TaskRef, InstanceId)},
+     * As {@link #finish(TaskOutcome.Completed, TaskContext, String, TakeOrder)},
      * but wraps the git-unfenced {@code tracker.finish} write in {@code retry} so a tracker outage
      * at the finish line is retried with backoff for the bounded hold-the-slot period (FR10, D10,
      * NFR-R3 of add-claim-heartbeat). The delivered outcome is already durable in the branch (the
@@ -113,19 +103,9 @@ final class TakeFinishReport {
             TaskOutcome.Completed completed,
             TaskContext context,
             String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             TerminalWriteRetry retry) {
-        return finish(
-                completed,
-                context,
-                branchName,
-                tracker,
-                ref,
-                instanceId,
-                retry,
-                new FinishTransition.Fresh(() -> {}, () -> {}));
+        return finish(completed, context, branchName, order, retry, new FinishTransition.Fresh(() -> {}, () -> {}));
     }
 
     /**
@@ -141,16 +121,14 @@ final class TakeFinishReport {
             TaskOutcome.Completed completed,
             TaskContext context,
             String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             TerminalWriteRetry retry,
             FinishTransition transition) {
         var report = StatusReport.build(context, completed.finalState(), null, LiveActivity.idle());
         String rendered = new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report);
         String summary = rendered + "\n" + "Branch: " + branchName;
 
-        new FinishEffect(tracker, ref, instanceId, summary, retry, transition, log).drive();
+        new FinishEffect(order, summary, retry, transition, log).drive();
         return new TakeResult.Delivered(completed.finalState(), summary);
     }
 }

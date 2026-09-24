@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Drives the fresh-run git-mode path (design D8 of add-git-workflow, task 4.4): the {@code
@@ -97,23 +96,17 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
      *
      * <p>Implements FR6, FR7, UX1 of add-git-workflow.
      *
-     * @param cloneDir the {@code --dir} project clone; never mutated (FR7)
-     * @param base the {@code --base} override, or {@code null} for the clone's current state
-     *     (design D7)
-     * @param definition the loaded pipeline the run advances through; never null
+     * @param order the run order: the {@code --dir} project clone (never mutated, FR7), the {@code
+     *     --base} override ({@code null} for the clone's current state, design D7), the loaded
+     *     pipeline and the console mode; its {@code discardWork} is meaningless on a fresh run
      * @param context the synthesized task's identity; never null
      * @param initialState the synthesized task's initial state; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter
      * @throws UsageException if the task branch already exists or {@code base} does not resolve
      */
-    void run(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            TaskContext context,
-            TaskState initialState,
-            RunArguments.InteractiveMode interactiveMode) {
+    void run(RunOrder order, TaskContext context, TaskState initialState) {
         String taskId = context.taskId();
+        Path cloneDir = order.cloneDir();
+        PipelineDefinition definition = order.definition();
 
         git.worktrees().pruneWorktrees(cloneDir);
         git.branches().harden(cloneDir);
@@ -126,8 +119,8 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
         // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
         // first, and the branch starts at that very commit — the manual tier's own way of keeping a
         // base name out of the repository port.
-        var law = ManualRunLawBinding.bind(assembly, cloneDir, base);
-        var baseDecision = GitFreshTaskSupport.resolveManualBase(base);
+        var law = ManualRunLawBinding.bind(assembly, cloneDir, order.base());
+        var baseDecision = GitFreshTaskSupport.resolveManualBase(order.base());
         GitFreshTaskSupport.createTask(
                 taskRepository,
                 taskId,
@@ -142,7 +135,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(definition, context, initialState, interactiveMode, persistence, List.of(), law.binding());
+                .assemble(order, context, initialState, persistence, List.of(), law.binding());
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

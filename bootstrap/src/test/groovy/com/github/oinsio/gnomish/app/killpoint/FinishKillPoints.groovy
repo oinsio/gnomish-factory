@@ -188,9 +188,7 @@ final class FinishKillPoints {
             return false
         }
         new FinishEffect(
-                world.tracker,
-                world.ref,
-                world.instanceId,
+                world.takeOrder(),
                 SUMMARY,
                 VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered({

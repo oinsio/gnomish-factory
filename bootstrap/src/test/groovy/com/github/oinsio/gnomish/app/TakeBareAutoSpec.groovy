@@ -94,7 +94,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -117,7 +117,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
@@ -133,7 +133,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         result instanceof TakeResult.EmptyQueue
@@ -150,7 +150,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         result instanceof TakeResult.EmptyQueue
@@ -169,7 +169,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-x1y2z3')
@@ -188,7 +188,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-a1')
@@ -211,7 +211,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -229,7 +229,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(1, headPick())
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(*_)
@@ -262,7 +262,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(1, headPick())
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(*_)
@@ -281,7 +281,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.declineFinished(new TaskRef('PROJ-1'), _)
@@ -305,7 +305,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(UNLIMITED_WIP, headPick(2))
 
         when:
-        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-3'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))

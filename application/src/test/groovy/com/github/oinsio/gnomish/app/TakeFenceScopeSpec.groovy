@@ -80,8 +80,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
 
         when:
         def result = chain().resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         0 * branches.fenceParkDelivery(_, _)

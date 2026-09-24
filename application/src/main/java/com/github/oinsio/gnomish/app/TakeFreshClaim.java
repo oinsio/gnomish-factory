@@ -5,18 +5,14 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TrackerTaskSynthesizer;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The "no branch exists yet" half of {@link TakeDisposition}'s {@code Ready} case (FR9, FR11,
@@ -44,7 +40,8 @@ import org.jspecify.annotations.Nullable;
  * harden, resolve+refresh the base, bind the task tier at that base, synthesize, create the
  * branch FROM THE BOUND LAW COMMIT with the base pin beside it (FR15, D12 revised 2026-09-10),
  * run the engine once — over their own execution medium (host worktree vs. sandbox task
- * repository).
+ * repository). Both hand on, past the task-tier bind, only the order re-bound to the task's law
+ * through {@link TakeOrder#withDefinition} (D6 of introduce-take-order).
  *
  * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
  * add-base-ref-resolution.
@@ -66,29 +63,23 @@ final class TakeFreshClaim {
             AbortHandler abortHandler,
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId,
+            TakeOrder order,
             ClaimLossFlag claimLossFlag,
             TrustedBaseContext trustedBase) {
-        String taskId = trackerTask.snapshot().id();
+        Path cloneDir = order.run().cloneDir();
 
         git.worktrees().pruneWorktrees(cloneDir);
         git.branches().harden(cloneDir);
 
-        TaskState notYetStarted =
-                TaskState.atStageStart(definition.stages().getFirst().name());
-        var baseRequest = new FreshClaimBaseBinding.Request(base, trackerTask, trustedBase);
+        TaskState notYetStarted = TaskState.atStageStart(
+                order.run().definition().stages().getFirst().name());
+        var baseRequest = new FreshClaimBaseBinding.Request(order.run().base(), order.trackerTask(), trustedBase);
         return FreshClaimBaseBinding.resolve(
                 git.baseRefs(),
                 cloneDir,
                 baseRequest,
                 notYetStarted,
-                tracker,
+                order.tracker(),
                 baseBound -> claimAt(
                         assembly,
                         git,
@@ -96,13 +87,7 @@ final class TakeFreshClaim {
                         abortHandler,
                         abortThreshold,
                         credentialEnvVarsToScrub,
-                        cloneDir,
-                        taskId,
-                        definition,
-                        interactiveMode,
-                        trackerTask,
-                        tracker,
-                        instanceId,
+                        order,
                         claimLossFlag,
                         baseBound));
     }
@@ -118,25 +103,24 @@ final class TakeFreshClaim {
             AbortHandler abortHandler,
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
-            Path cloneDir,
-            String taskId,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId,
+            TakeOrder order,
             ClaimLossFlag claimLossFlag,
             FreshClaimBaseBinding.Bound baseBound) {
         // FR13, D14 of add-base-ref-resolution: the task runs under the definition read from ITS
         // resolved base's law binding, never under the startup one.
-        var law = TaskTierLaw.bind(assembly, baseBound.lawBinding(), definition, trackerTask, tracker);
+        var law = TaskTierLaw.bind(assembly, baseBound.lawBinding(), order);
         if (law instanceof TaskTierLaw.Parked(TakeResult parked)) {
             return parked;
         }
         var bound = (TaskTierLaw.Bound) law;
-        PipelineDefinition taskDefinition = bound.definition();
+        // D6 of introduce-take-order: from here on only the order re-bound to the task's law is
+        // used — the one this method was handed still carries the startup definition.
+        TakeOrder lawBound = order.withDefinition(bound.definition());
+        Path cloneDir = lawBound.run().cloneDir();
+        String taskId = lawBound.taskId();
 
-        var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), taskDefinition);
+        var synthesized = TrackerTaskSynthesizer.synthesize(
+                lawBound.trackerTask().snapshot(), lawBound.run().definition());
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         // FR15, D12 of add-base-ref-resolution: the branch starts at the very commit the task's law
         // was peeled at — the refreshed base — and the resolved ref travels beside it as the pin.
@@ -171,14 +155,6 @@ final class TakeFreshClaim {
                 credentialEnvVarsToScrub,
                 claimLossFlag,
                 bound.lawBinding());
-        return execution.run(
-                taskDefinition,
-                bootstrap,
-                synthesized.context(),
-                synthesized.initialState(),
-                interactiveMode,
-                tracker,
-                trackerTask.ref(),
-                instanceId);
+        return execution.run(lawBound, bootstrap, synthesized.context(), synthesized.initialState());
     }
 }

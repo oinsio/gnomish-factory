@@ -99,8 +99,8 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, liveConsole())
 
         when:
-        runner.run(cloneDir, null, completingPipeline(), context(), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.NONE)
+        runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+                context(), TaskState.atStageStart('build'))
 
         then:
         attached.size() == 1
@@ -112,8 +112,8 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
-            runner().run(cloneDir, base, completingPipeline(), context(), TaskState.atStageStart('build'),
-                    RunArguments.InteractiveMode.NONE)
+            runner().run(new RunOrder(cloneDir, base, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+                    context(), TaskState.atStageStart('build'))
         } finally {
             System.out = originalOut
         }
@@ -183,7 +183,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     //     than recorded as a completion with a fabricated state.
     def "FR1: the terminal readback reports an impossible state when the tip carries no envelope"() {
         given:
-        stateRead = { Optional.empty() }
+        stateRead = { Optional.<TaskState> empty() }
 
         when:
         runCapturingStdout()

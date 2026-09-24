@@ -111,7 +111,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
@@ -141,7 +141,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then: 'the finish is posted from branch history, and no box is reattached or salvaged'
         1 * tracker.finish(REF, _)
@@ -166,7 +166,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         def ex = thrown(IllegalStateException)
@@ -193,7 +193,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         1 * branches.harden(CLONE_DIR)
@@ -221,7 +221,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, true, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, true)), new BranchShape.InProgress())
 
         then:
         1 * builtSupport.disposeExistingEnvironment()
@@ -249,7 +249,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         0 * builtSupport.reattachFor(_)
@@ -283,8 +283,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.CompletedUncleaned(), RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.CompletedUncleaned())
 
         then: 'the deferred finish is written, and only then is the envelope stripped'
         1 * tracker.finish(REF, _)
@@ -317,7 +316,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         0 * builtSupport.reattachFor(_)
@@ -348,7 +347,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then: 'no reattach/salvage — resumeWithDecision skips the null-outcome salvage step entirely'
         0 * builtSupport.reattachFor(_)
@@ -383,7 +382,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUsNamingConflictingBase(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         0 * tracker.park(*_)
@@ -420,7 +419,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then: 'FR17, D12 of harden-task-branch-contract: the kept box goes first — its clone could never learn of the decision commit'
         1 * builtSupport.disposeExistingEnvironment()
@@ -454,7 +453,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, {

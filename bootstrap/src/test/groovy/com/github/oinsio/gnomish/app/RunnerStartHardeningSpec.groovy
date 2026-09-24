@@ -88,8 +88,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
 
         when:
-        runner.run(clone, null, pipeline(), context('H-1'), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                context('H-1'), TaskState.atStageStart('build'))
 
         then:
         thrown(UsageException)
@@ -110,8 +110,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         ]
 
         when:
-        runner.run(clone, null, pipeline(), segments, context('C-1'), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                segments, context('C-1'), TaskState.atStageStart('build'))
 
         then:
         thrown(UsageException)
@@ -130,7 +130,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         ]
 
         when:
-        runner.run(clone, 'absent-task', pipeline(), segments, RunArguments.InteractiveMode.ALL, false)
+        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                'absent-task', segments)
 
         then:
         thrown(UsageException)
@@ -192,8 +193,9 @@ tracker:
         when:
         TakeFreshClaim.claim(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, new AbortHandler(tracker, Clock.systemUTC()), 3, [],
-                clone, null, pipeline(), RunArguments.InteractiveMode.ALL,
-                trackerTask, tracker, InstanceId.generate('test-instance'), new ClaimLossFlag(),
+                new TakeOrder(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                trackerTask, tracker, InstanceId.generate('test-instance')),
+                new ClaimLossFlag(),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))
 
         then:

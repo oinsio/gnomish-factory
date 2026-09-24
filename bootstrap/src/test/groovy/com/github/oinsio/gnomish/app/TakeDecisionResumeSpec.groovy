@@ -52,8 +52,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         def result = newDecisionResume(runner, pipeline()).resume(
-                cloneDir, bootstrap, escalatedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, escalatedState)
 
         then: 'the question was restated in the park report'
         1 * tracker.park(REF, ParkReason.ESCALATION, {
@@ -103,8 +102,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         def result = newDecisionResume(runner, pipeline()).resume(
-                cloneDir, bootstrap, escalatedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, escalatedState)
 
         then: 'ack happens before the engine resumes (no fetchTask call preceded it)'
         callOrder.indexOf('ack') == 0
@@ -138,8 +136,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         newDecisionResume(runner, pipeline()).resume(
-                cloneDir, bootstrap, escalatedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, escalatedState)
 
         then:
         1 * tracker.acknowledgeDecision(REF, inert('freshest reply'))
@@ -167,8 +164,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         def result = newDecisionResume(runner, limitOnePipeline).resume(
-                cloneDir, bootstrap, exhaustedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(limitOnePipeline, taskId), bootstrap, exhaustedState)
 
         then:
         0 * tracker.acknowledgeDecision(*_)
@@ -198,8 +194,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         def result = newDecisionResume(runner, limitOnePipeline).resume(
-                cloneDir, bootstrap, exhaustedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(limitOnePipeline, taskId), bootstrap, exhaustedState)
 
         then:
         1 * tracker.acknowledgeDecision(REF, inert('try again'))
@@ -236,8 +231,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         when:
         newDecisionResume(runner, pipeline()).resume(
-                cloneDir, bootstrap, escalatedState,
-                RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, escalatedState)
 
         then:
         thrown(IllegalStateException)

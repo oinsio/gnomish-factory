@@ -9,10 +9,8 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.StatusReport;
-import java.nio.file.Path;
 import java.time.Clock;
 
 /**
@@ -48,14 +46,11 @@ final class ContainerResumeOutcomes {
     static void resumeFromRecordedPosition(
             ContainerResumeRunner runner,
             SandboxRunSupport support,
-            PipelineDefinition definition,
+            RunOrder order,
             TaskRecord taskJson,
-            TaskState state,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            Path cloneDir) {
+            TaskState state) {
         PendingVerification pending = support.pendingVerification().orElse(null);
-        if (discardWork) {
+        if (order.discardWork()) {
             support.disposeExistingEnvironment();
         } else if (state.position() instanceof Position.AtStage(String stage)) {
             // Reattach now (start stopped box / recreate over volume / fresh clone) so both the
@@ -68,11 +63,10 @@ final class ContainerResumeOutcomes {
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
-                definition,
+                order,
                 taskJson.context(),
                 state,
-                interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 pending);
     }
 
@@ -80,11 +74,9 @@ final class ContainerResumeOutcomes {
     static void resumeEscalated(
             ContainerResumeRunner runner,
             SandboxRunSupport support,
-            PipelineDefinition definition,
+            RunOrder order,
             TaskRecord taskJson,
-            TaskState state,
-            RunArguments.InteractiveMode interactiveMode,
-            Path cloneDir) {
+            TaskState state) {
         EscalationReport report = taskJson.lastEscalation();
         if (report == null) {
             throw new InternalErrorException("task \"" + taskJson.context().taskId()
@@ -110,11 +102,10 @@ final class ContainerResumeOutcomes {
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
-                definition,
+                order,
                 resumption.context(),
                 resumption.state(),
-                interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 null);
     }
 
@@ -122,12 +113,10 @@ final class ContainerResumeOutcomes {
     static void resumePaused(
             ContainerResumeRunner runner,
             SandboxRunSupport support,
-            PipelineDefinition definition,
+            RunOrder order,
             TaskRecord taskJson,
             TaskState state,
-            String passedStage,
-            RunArguments.InteractiveMode interactiveMode,
-            Path cloneDir) {
+            String passedStage) {
         var console = runner.assembly.dialogConsole(taskJson.context(), state);
         console.print("Stage '" + passedStage + "' passed. Manual checkpoint reached.");
         try {
@@ -138,11 +127,10 @@ final class ContainerResumeOutcomes {
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
-                definition,
+                order,
                 taskJson.context(),
                 state,
-                interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 null);
     }
 

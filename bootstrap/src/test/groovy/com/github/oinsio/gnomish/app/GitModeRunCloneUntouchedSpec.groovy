@@ -107,8 +107,8 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         def before = snapshot()
 
         when:
-        runner.run(cloneDir, null, pipeline(), taskContext('CLONE-1'), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                taskContext('CLONE-1'), TaskState.atStageStart('build'))
 
         then: 'the work actually landed: the task branch and its round commit exist'
         gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/CLONE-1') == 0
@@ -153,8 +153,8 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
 
         when:
-        runner.run(cloneDir, null, pipeline(), taskContext(taskId), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                taskContext(taskId), TaskState.atStageStart('build'))
 
         then:
         thrown(AbortedException)

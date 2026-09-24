@@ -183,6 +183,21 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
     }
 
     /**
+     * A startup definition that is NOT the task tier {@link #assemblyRunning} binds: its one stage
+     * has a name the completing pipeline does not, so a run that used it instead of the task's own
+     * law would ask the executor for a different stage (D6 of introduce-take-order).
+     */
+    PipelineDefinition startupOnlyPipeline() {
+        def stage = new StageDefinition('startup-only', 'purpose', [], [],
+        new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
+        'instructions.md', [
+            new VerifyCheck.Builtin('files_exist', [:])
+        ],
+        new AutonomyLimits(1), AdvancementMode.AUTO)
+        new PipelineDefinition('1', new AutonomyLimits(3), [stage])
+    }
+
+    /**
      * A {@link RunAssembly} handing back the domain's scripted engine-port fakes — the one seam
      * that keeps a whole-run scenario a unit spec. The persistence the caller assembled with is
      * passed straight through, so the run's own revocation-checking wrapper still applies.
@@ -193,7 +208,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
         [
-            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, lawBinding ->
+            assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
@@ -244,7 +259,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         })
         def self = null
         self = [
-            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, lawBinding ->
+            assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
                 lawBindings << lawBinding
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
@@ -267,6 +282,19 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             lawCommitOf: { binding -> LAW_COMMIT },
         ] as RunAssembly
         return self
+    }
+
+    /**
+     * A run order over {@link #CLONE_DIR} with no {@code --base} override, no console roles and no
+     * discard — the shape every chain spec passed by hand before introduce-take-order bundled it.
+     */
+    RunOrder runOrder(PipelineDefinition definition = pipeline(), Path cloneDir = CLONE_DIR) {
+        new RunOrder(cloneDir, null, definition, RunArguments.InteractiveMode.NONE, false)
+    }
+
+    /** A take order for {@code task}, claimed through {@code tracker} under {@link #INSTANCE}. */
+    TakeOrder takeOrder(TrackerTask task, Tracker tracker, RunOrder run = runOrder()) {
+        new TakeOrder(run, task, tracker, INSTANCE)
     }
 
     /** One round the executor reports as completed. */

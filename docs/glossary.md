@@ -73,6 +73,21 @@ terms) live in `.claude/rules/process-invariants.md`.
   stage attempt limit, which counts quality failures.
 - **Resume** — any instance continuing a task from its branch and state file;
   requires no hand-off from the previous holder.
+- **Order** — the resolved description of the work one invocation performs,
+  handed to the runners as one value. Built by each entry point from its own
+  parsed arguments plus the loaded pipeline definition; two kinds, **run
+  order** and **take order**. *Not:* the parsed command line (`RunArguments`,
+  `TakeArguments`) — those are flags before validation, an order is the
+  instruction a runner acts on.
+- **Run order** — the order both manual `run` and tracker-driven `take` /
+  `serve` carry: the clone directory, the `--base` override (if any), the
+  pipeline definition, the interactive mode and the discard-work flag. Type:
+  `RunOrder`. Carries no tracker, task or instance identity — manual runs have
+  none.
+- **Take order** — the tracker-driven order: a run order plus the claimed
+  task, the tracker it was claimed through and this instance's identity. The
+  one place the claimed task's identity (its ref and task id) is derived.
+  Built only after the claimed task is fetched. Type: `TakeOrder`.
 - **Task branch** — the git branch holding the task's artifacts and state
   file; the single source of truth for task progress. Its configuration lives
   under the `task-branch:` section of `.gnomish/config.yaml` — the `base`

@@ -43,7 +43,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then:
         result instanceof TakeResult.Delivered
@@ -64,7 +64,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then:
         result instanceof TakeResult.AwaitingHuman
@@ -88,7 +88,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then:
         result instanceof TakeResult.InfrastructureUnavailable

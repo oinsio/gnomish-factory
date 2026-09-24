@@ -37,7 +37,7 @@ class FinishEffectSpec extends Specification {
     Tracker tracker = Mock(Tracker)
 
     private FinishEffect effect(Runnable cleanup) {
-        new FinishEffect(tracker, REF, INSTANCE, SUMMARY, VirtualTimeRetries.terminalWrite(),
+        new FinishEffect(TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), SUMMARY, VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered(cleanup), LoggerFactory.getLogger(FinishEffectSpec))
     }
 

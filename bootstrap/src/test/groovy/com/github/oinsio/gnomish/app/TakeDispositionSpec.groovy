@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
+import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
@@ -89,6 +90,12 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt, new ClaimEpoch(1)), UntrustedText.tracker('fixture title'))
     }
 
+    // The explicit take order for {@code task}: this fixture's clone and pipeline, interactive ALL,
+    // no base and no --discard-work, claimed through {@code via} under INSTANCE (introduce-take-order).
+    private TakeOrder order(TrackerTask task, Tracker via = tracker) {
+        new TakeOrder(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), task, via, INSTANCE)
+    }
+
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
         new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), false)
     }
@@ -107,9 +114,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then:
         result instanceof TakeResult.Delivered
@@ -129,9 +134,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), recording, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready()), recording))
 
         then:
         result instanceof TakeResult.Delivered
@@ -162,9 +165,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then: 'the stale registration is gone — pruneWorktrees ran as part of the fresh claim'
         def after = gitOutput(cloneDir, 'worktree', 'list', '--porcelain')
@@ -184,9 +185,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then: 'the crash became a recorded abort, not an escaping exception, and maps to exit 12'
         noExceptionThrown()
@@ -209,9 +208,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then:
         thrown(UsageException)
@@ -242,9 +239,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
                 new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), trustedBase())
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then: 'the claim is registered for beating the instant it is held'
         thrown(UsageException)
@@ -270,9 +265,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then: 'the task parks needs-human with the offending file named in the report'
         1 * tracker.park(REF, ParkReason.INFRA, { String report ->
@@ -322,9 +315,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def originTip = gitOutput(bare, 'rev-parse', 'refs/heads/gnomish/PROJ-22')
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then: 'the local line is discarded and the run goes on — no abort, no park'
         noExceptionThrown()
@@ -348,9 +339,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then: 'the engine resumed (not a second createTask) and completed'
         result instanceof TakeResult.Delivered
@@ -375,9 +364,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then:
         result instanceof TakeResult.AwaitingHuman
@@ -413,9 +400,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then: 'the deferred finish was posted from the branch-recorded delivery, and the run delivered'
         result instanceof TakeResult.Delivered
@@ -447,9 +432,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), taskId)))
 
         then: 'the engine resumed (no decision dialog) and completed'
         result instanceof TakeResult.Delivered
@@ -462,9 +445,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
 
         then:
         result instanceof TakeResult.Skipped
@@ -485,9 +466,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-other-x1y2z3')), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-other-x1y2z3'))))
 
         then: 'the operator was asked with the holder and the display-only last-beat age'
         1 * confirmation.confirm(REF, 'gnomish-other-x1y2z3', '47m') >> TakeoverConfirmation.Decision.DECLINED
@@ -512,9 +491,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'))))
 
         then:
         1 * confirmation.confirm(REF, 'gnomish-dead-x1', expectedAge) >> TakeoverConfirmation.Decision.DECLINED
@@ -552,9 +529,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, false)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-other-x1y2z3')), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-other-x1y2z3'))))
 
         then:
         result instanceof TakeResult.Skipped
@@ -586,9 +561,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId)))
 
         then: 'the old claim was removed with the observed version, then the ordinary lease claimed it'
         1 * tracker.removeStaleClaim(REF, new ClaimFacts.Live('gnomish-dead-x1', observed)) >>
@@ -615,9 +588,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(confirmation, true)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId)))
 
         then: 'the seam is never asked — the flag is the headless authorization'
         0 * confirmation.confirm(*_)
@@ -639,9 +610,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, true)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'))))
 
         then:
         0 * tracker.removeStaleClaim(*_)
@@ -667,9 +636,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'))))
 
         then:
         result instanceof TakeResult.Skipped
@@ -683,9 +650,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))))
 
         then:
         result instanceof TakeResult.Skipped
@@ -701,9 +666,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT)), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT))))
 
         then:
         result instanceof TakeResult.Skipped
@@ -718,9 +681,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.INFRA)), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.AwaitingHuman(ParkReason.INFRA))))
 
         then:
         result instanceof TakeResult.Skipped
@@ -736,9 +697,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Finished()), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Finished())))
 
         then:
         result instanceof TakeResult.Skipped
@@ -755,9 +714,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), true), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), true)))
 
         then:
         result instanceof TakeResult.Skipped
@@ -777,9 +734,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         }
 
         when:
-        disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Ready(), true), tracker, INSTANCE)
+        disposition.dispose(order(trackerTask(new TrackerTaskState.Ready(), true)))
 
         then:
         thrown(RuntimeException)
@@ -792,9 +747,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = newDisposition()
 
         when:
-        def result = disposition.dispose(
-                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
-                trackerTask(new TrackerTaskState.Gone()), tracker, INSTANCE)
+        def result = disposition.dispose(order(trackerTask(new TrackerTaskState.Gone())))
 
         then:
         result instanceof TakeResult.Skipped

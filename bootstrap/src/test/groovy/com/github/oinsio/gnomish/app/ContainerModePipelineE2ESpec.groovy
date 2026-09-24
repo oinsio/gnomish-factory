@@ -114,8 +114,9 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         ]
 
         when:
-        runner.run(cloneDir, null, pipeline(), segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
-                List.<Decision> of()), TaskState.atStageStart('work'), RunArguments.InteractiveMode.NONE)
+        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
+                List.<Decision> of()), TaskState.atStageStart('work'))
 
         then: 'the snapshot-first protocol is on the branch: snapshot commit, then the state commit on top'
         def branch = "gnomish/${taskId}"

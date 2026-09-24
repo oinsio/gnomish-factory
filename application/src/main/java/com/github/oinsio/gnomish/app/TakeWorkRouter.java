@@ -3,15 +3,9 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.branch.BranchRepairAction;
 import com.github.oinsio.gnomish.app.branch.BranchRepairLog;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import java.nio.file.Path;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The routing half of {@link TakeClaimAndWork}: with the claim already held and the heartbeat
@@ -34,26 +28,16 @@ final class TakeWorkRouter {
 
     private TakeWorkRouter() {}
 
-    static TakeResult locateAndWork(
-            TakeClaimAndWork w,
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        TaskRef ref = trackerTask.ref();
-        String taskId = trackerTask.snapshot().id();
+    static TakeResult locateAndWork(TakeClaimAndWork w, TakeOrder order) {
+        String taskId = order.taskId();
         // One classification decides the route (FR2 of harden-task-branch-contract): the branch is
         // read once, named once, and every path below — fresh, resume, reconcile — is a case of
         // that one name rather than a predicate of its own. A lookup that could not reach origin
         // throws from here (FR6), aborting the take through the crash-abort protocol, which
         // releases the claim rather than forking a second branch for a task that already has one.
-        BranchShape shape = w.git.branches().classifyShape(cloneDir, taskId);
+        BranchShape shape = w.git.branches().classifyShape(order.run().cloneDir(), taskId);
         if (shape instanceof BranchShape.Bare) {
-            return freshClaim(w, cloneDir, base, definition, interactiveMode, trackerTask, tracker, instanceId);
+            return freshClaim(w, order);
         }
         // NFR-O1: every pickup of an existing branch that is not the clean shape a healthy
         // progression expects leaves one line before its recovery owner runs — the repeat judged
@@ -65,8 +49,8 @@ final class TakeWorkRouter {
                 shape,
                 w.git.epochs().epochFor(taskId).orElse(null),
                 BranchRepairAction.phrase(shape),
-                trackerTask.abortFacts().recoveryCount());
-        return resume(w, cloneDir, shape, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+                order.trackerTask().abortFacts().recoveryCount());
+        return resume(w, order, shape);
     }
 
     /**
@@ -75,16 +59,8 @@ final class TakeWorkRouter {
      * claim is refused, not silently routed to host, when the operator's bindings resolve to
      * container without its prerequisites (image + reachable Docker).
      */
-    private static TakeResult freshClaim(
-            TakeClaimAndWork w,
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        var plan = plan(w, definition);
+    private static TakeResult freshClaim(TakeClaimAndWork w, TakeOrder order) {
+        var plan = plan(w, order.run().definition());
         return switch (plan.mode()) {
             case HOST ->
                 TakeFreshClaim.claim(
@@ -94,13 +70,7 @@ final class TakeWorkRouter {
                         w.abortHandler,
                         w.abortThreshold,
                         w.credentialEnvVarsToScrub,
-                        cloneDir,
-                        base,
-                        definition,
-                        interactiveMode,
-                        trackerTask,
-                        tracker,
-                        instanceId,
+                        order,
                         w.claimLossFlag,
                         w.trustedBase);
             case CONTAINER ->
@@ -112,13 +82,7 @@ final class TakeWorkRouter {
                         w.abortHandler,
                         w.abortThreshold,
                         w.credentialEnvVarsToScrub,
-                        cloneDir,
-                        base,
-                        definition,
-                        interactiveMode,
-                        trackerTask,
-                        tracker,
-                        instanceId,
+                        order,
                         w.claimLossFlag,
                         w.trustedBase);
         };
@@ -129,17 +93,8 @@ final class TakeWorkRouter {
      * SAME routing table ({@link TakeDispositionResume}) the mechanics for their mode, so a resumed
      * branch is dispatched identically either way and no routing branch can exist in one mode only.
      */
-    private static TakeResult resume(
-            TakeClaimAndWork w,
-            Path cloneDir,
-            BranchShape shape,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            String taskId,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    private static TakeResult resume(TakeClaimAndWork w, TakeOrder order, BranchShape shape) {
+        PipelineDefinition definition = order.run().definition();
         var plan = plan(w, definition);
         ResumeMechanics<? extends ResumedBranch> mechanics =
                 switch (plan.mode()) {
@@ -147,8 +102,7 @@ final class TakeWorkRouter {
                     case CONTAINER ->
                         new ContainerResumeMechanics(w.containerResumeRunner, plan.segments(), definition);
                 };
-        return routingTable(mechanics, w.git)
-                .resumeExisting(cloneDir, shape, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+        return routingTable(mechanics, w.git).resumeExisting(order, shape);
     }
 
     private static <B extends ResumedBranch> TakeDispositionResume<B> routingTable(

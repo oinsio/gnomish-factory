@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -65,17 +64,14 @@ final class TakeEscalationExit {
      * <p>Implements FR13, D12, UX3 of add-tracker-port; FR7 of add-claim-heartbeat.
      *
      * @param escalated the fresh engine escalation to exit the run with; never null
-     * @param tracker the tracker port the park call is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order whose task is parked: its tracker, the task's identity, and this
+     *     instance's identity for the pre-write claim check; never null
      * @return the {@link TakeResult.AwaitingHuman} the park call was made with; never null
      */
-    static TakeResult exit(TaskOutcome.Escalated escalated, Tracker tracker, TaskRef ref, InstanceId instanceId) {
+    static TakeResult exit(TaskOutcome.Escalated escalated, TakeOrder order) {
         return exit(
                 escalated,
-                tracker,
-                ref,
-                instanceId,
+                order,
                 TerminalWriteRetry.system(),
                 // The caller of this convenience overload has already recorded the outcome commit, so
                 // the intent here is only the delivery verdict it fenced with — a fresh write either
@@ -84,7 +80,7 @@ final class TakeEscalationExit {
     }
 
     /**
-     * As {@link #exit(TaskOutcome.Escalated, Tracker, TaskRef, InstanceId)}, but wraps the
+     * As {@link #exit(TaskOutcome.Escalated, TakeOrder)}, but wraps the
      * git-unfenced {@code tracker.park} write in {@code retry} via {@link GuardedPark#attempt} — a
      * tracker outage at the park line is retried with backoff for the bounded hold-the-slot period
      * (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code transition}'s receipt once (and
@@ -108,20 +104,15 @@ final class TakeEscalationExit {
      *     write. Either way the receipt clears the branch's pending marker once the park lands
      */
     static TakeResult exit(
-            TaskOutcome.Escalated escalated,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
-            TerminalWriteRetry retry,
-            ParkTransition transition) {
+            TaskOutcome.Escalated escalated, TakeOrder order, TerminalWriteRetry retry, ParkTransition transition) {
         var escalation = escalated.report();
         ParkReason reason = TakeOutcomeMapper.parkReason(escalation);
 
         String rendered = EscalationResumeDialog.renderEscalation(escalation, ReportPlane.COMMENT);
         String returnPath = reason == ParkReason.ESCALATION ? ESCALATION_RETURN_PATH : INFRA_RETURN_PATH;
 
-        String report = GuardedPark.attempt(
-                tracker, ref, instanceId, reason, rendered + "\n\n" + returnPath, retry, transition, log, "park");
+        String report =
+                GuardedPark.attempt(order, reason, rendered + "\n\n" + returnPath, retry, transition, log, "park");
         return new TakeResult.AwaitingHuman(escalated.finalState(), reason, report);
     }
 }

@@ -103,9 +103,13 @@ would silently continue on the wrong pipeline.
   `introduce-take-order` and `introduce-slot-wiring` restructure first — the
   static recipes become objects holding the slot wiring, and the per-invocation
   fields travel as one order. Rebase this change's task text onto those shapes
-  after they land (`introduce-take-order` task 6.2). The routing decision itself
-  is unaffected; where a task says "thread the pipeline name through the
-  fresh-claim recipe", the thread becomes a component of the order.
+  after they land (`introduce-take-order` task 6.2; rebased 2026-09-24). The
+  routing decision itself is unaffected. On a fresh claim the selected
+  pipeline feeds `TaskTierLaw.bind`, and the bound definition enters the chain
+  only through `TakeOrder.withDefinition` in `claimAt` (D6 of
+  `introduce-take-order`): the order gains no pipeline-name component and no
+  definition parameter travels beside it. How resume runs the pinned pipeline
+  is an open question of this design (Open Questions).
 - `domain`: `PipelineDefinition` gains a name; task-type value object;
   per-pipeline validation scopes.
 - `application`: selection point after claim in take/serve/run flows (both

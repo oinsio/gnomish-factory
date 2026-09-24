@@ -88,14 +88,12 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult claim(TakeClaimAndWork subject, Tracker tracker) {
-        subject.claimAndWork(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
-                readyTask(), tracker, INSTANCE)
+        subject.claimAndWork(takeOrder(readyTask(), tracker))
     }
 
     /** The same call, but on a pipeline the scripted engine really runs to completion. */
     private TakeResult claimAndRun(TakeClaimAndWork subject, Tracker tracker) {
-        subject.claimAndWork(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false,
-                readyTask(), tracker, INSTANCE)
+        subject.claimAndWork(takeOrder(readyTask(), tracker, runOrder(completingPipeline())))
     }
 
     /** The branch ports of a task that has no branch yet — every fresh-claim scenario's input. */
@@ -358,8 +356,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 TaskDesignators.of('base', Designator.conflict(['a', 'b'])))
 
         when:
-        def result = claimAndWork(git, tracker, Stub(RunAssembly)).claimAndWork(
-                CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false, conflictingTask, tracker, INSTANCE)
+        def result = claimAndWork(git, tracker, Stub(RunAssembly)).claimAndWork(takeOrder(conflictingTask, tracker))
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -413,8 +410,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def subject = claimAndWork(git, tracker, Stub(RunAssembly))
 
         when:
-        def result = subject.claimAndWork(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
-                taskWithAborts, tracker, INSTANCE)
+        def result = subject.claimAndWork(takeOrder(taskWithAborts, tracker))
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -459,8 +455,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 new ClaimLossFlag(), worktreesRoot)
 
         when: 'the first take hits the still-down remote and releases the claim'
-        def first = subject.claimAndWork(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE,
-                false, readyTask(), tracker, INSTANCE)
+        def first = subject.claimAndWork(takeOrder(readyTask(), tracker, runOrder(completingPipeline())))
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -469,8 +464,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         0 * lifecycleStore.createTask(_, _, _, _)
 
         when: 'a later take on the recovered remote reaches the fresh-claim path and delivers'
-        def second = subject.claimAndWork(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE,
-                false, readyTask(), tracker, INSTANCE)
+        def second = subject.claimAndWork(takeOrder(readyTask(), tracker, runOrder(completingPipeline())))
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(2))

@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -113,9 +112,9 @@ public final class TakeBareAuto {
      * <p>Implements FR10, NFR-C1 of add-tracker-port. Implements FR6, FR9, NFR-C1, D2, D5 of
      * add-factory-serve. Implements FR3, FR4, NFR-R2, NFR-R3, NFR-O1 of enforce-finish-terminality.
      *
-     * @param cloneDir the project clone; never mutated outside a task worktree
-     * @param definition the loaded pipeline the run advances through; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter
+     * @param run the run order: the project clone (never mutated outside a task worktree), the
+     *     loaded pipeline the run advances through, and which role(s), if any, use the interactive
+     *     console adapter; never null
      * @param tracker the tracker port; never null
      * @param instanceId this factory instance's identity; never null
      * @return the {@link TakeResult} of the one task processed; {@link TakeResult.EmptyQueue} when
@@ -123,16 +122,11 @@ public final class TakeBareAuto {
      *     WIP limit when only fresh WIP-blocked tasks remained; {@link TakeResult.Skipped} naming
      *     the claim race when every claim candidate lost its race
      */
-    public TakeResult run(
-            Path cloneDir,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            InstanceId instanceId) {
+    public TakeResult run(RunOrder run, Tracker tracker, InstanceId instanceId) {
         List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
         // A one-shot run: its own latch, cold, discarded with the run (FR12).
         new FinishedDecline().declineObserved(tracker, readyTasks);
         int openFrontCount = tracker.listOpen().size();
-        return walk.resolve(cloneDir, definition, interactiveMode, tracker, instanceId, readyTasks, openFrontCount);
+        return walk.resolve(run, tracker, instanceId, readyTasks, openFrontCount);
     }
 }

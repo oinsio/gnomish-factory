@@ -57,10 +57,9 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
     private def assemble(TaskState initialState) {
         newAssembly().assemble(
-                definition(),
+                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 initialState,
-                RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any binding suffices.
@@ -122,10 +121,9 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
         when:
         assembly.assemble(
-                definition(),
+                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
                 LawBinding.workingTree(Path.of('.')))
@@ -156,10 +154,9 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
         when:
         assembly.assemble(
-                definition(),
+                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
                 LawBinding.workingTree(Path.of('.')))

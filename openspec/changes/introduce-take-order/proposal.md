@@ -16,7 +16,7 @@ Every layer of the take/serve chain re-lists those fields and passes them down u
 
 This is Fowler's *data clump* in its textbook form: the same group appears in many
 signatures, it has a name in the project's own language (the order a gnome works to), and
-behavior belongs to it. Naming it removes 19 of the 63 violations outright — and the clump from 42
+behavior belongs to it. Naming it removes 21 of the 65 violations counted by the fresh 2026-09-23 scan (task 0.2) outright — and the clump from 42
 signatures — without changing any behavior, and — more importantly — it removes the surface on which the seven declared
 host/container sync pairs must be kept identical by hand.
 
@@ -33,7 +33,8 @@ copies of the clump.
   the tracker port and this instance's identity. Owns the identity derivations every path
   currently repeats (`ref()`, `taskId()`).
 - **MODIFIED**: every signature in the take/resume/serve chain that today enumerates four
-  or more of those fields takes the order instead — 38 signatures across 25 files,
+  or more of those fields takes the order instead — the 53 signatures of the design's
+  consumer table,
   including both ends of all seven declared sync pairs in the chain.
 - **MODIFIED**: `.claude/rules/manual-sync-pairs.md` registry rows for the affected pairs,
   where the synchronized invariant text names parameters that no longer exist.
@@ -42,9 +43,10 @@ copies of the clump.
 ## Goals
 
 - **G1** — Remove the order clump from every signature the design's consumer table names:
-  42 signatures, 0 remaining after the change.
-- **G2** — Bring the 19 parameter-limit violations the order alone resolves under the
-  limit, measured by the same scan that produced the 63-violation baseline.
+  53 signatures (42 measured, eleven added during apply 2026-09-23 and 2026-09-24 — see the design's
+  single-owner table), 0 remaining after the change.
+- **G2** — Bring the 21 parameter-limit violations the order alone resolves under the
+  limit, measured by the scan task 0.2 describes (65-violation baseline, 2026-09-23).
 - **G3** — Reduce what the seven declared host/container pairs must keep identical by
   hand: after the change, the mirrored signatures differ in no order field.
 - **G4** — Leave the behavior of every take, serve and run path bit-identical.
@@ -125,12 +127,16 @@ copies of the clump.
 
 ## Success Metrics
 
-- **M1** — Signatures in the design's consumer table still enumerating order fields: 42
-  before, 0 after.
-- **M2** — Parameter-limit violations in `src/main`: the fresh baseline task 0.2 records,
-  minus the number of consumer-table signatures that baseline shows over the limit (19 on
-  the 2026-09-12 scan: 63 before, 44 after). The constants are the stale scan's; the
-  formula is the metric. (`introduce-slot-wiring`, `collapse-composition-roots` and
+- **M1** — Signatures in the design's consumer table still enumerating order fields: 53
+  before (42 measured, eleven added during apply 2026-09-23 and 2026-09-24), 0 after.
+- **M2** — Parameter-limit violations in `src/main`: 65 before, 44 after — the 2026-09-23
+  baseline (task 0.2) minus the 21 consumer-table signatures that drop to seven or fewer.
+  Six consumer-table signatures stay over the limit and are not subtracted:
+  `TakeOutcomeDispatch.dispatch` (11 → 9), the `TakeSlotRunner` constructor (16 → 15), and
+  the four fresh-claim methods `TakeFreshClaim.claim`/`claimAt` (15 → 9 each) and
+  `TakeContainerFreshClaim.claim` (16 → 10) / `claimAt` (15 → 9). Past the dispatch, the
+  rest is slot wiring (NG1). Corrected 2026-09-24: the plan counted the fresh-claim four as
+  dropping, but seven order fields folding into one leaves nine. (`introduce-slot-wiring`, `collapse-composition-roots` and
   `add-parameter-count-gate` each take their own step down to 0.)
 - **M3** — Test suite: unchanged pass count, zero spec expectation edits (NFR-R1).
 - **M4** — Mutation score stays at the module gate for every touched module.
@@ -168,5 +174,6 @@ copies of the clump.
   `introduce-slot-wiring`. The remaining queued changes — `add-claim-return`,
   `add-pipeline-routing` — have their task text rebased onto the new signatures afterwards
   (task 6.2).
-- **Baseline freshness**: every count in this proposal comes from the 2026-09-12 scan, taken
-  before `fix-claim-epoch-fence` landed; task 0.2 re-takes it.
+- **Baseline freshness**: the Why section's 63 / 47 come from the 2026-09-12 scan, taken
+  before `fix-claim-epoch-fence` landed; task 0.2 re-took it on 2026-09-23 (65), and G2 and
+  M2 are stated against the fresh scan.

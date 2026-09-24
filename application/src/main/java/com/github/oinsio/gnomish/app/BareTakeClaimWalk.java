@@ -8,10 +8,8 @@ import com.github.oinsio.gnomish.app.take.BackoffPolicy;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -45,13 +43,7 @@ record BareTakeClaimWalk(
      * when no candidate could be claimed.
      */
     TakeResult resolve(
-            Path cloneDir,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            InstanceId instanceId,
-            List<ReadyTask> readyTasks,
-            int openFrontCount) {
+            RunOrder run, Tracker tracker, InstanceId instanceId, List<ReadyTask> readyTasks, int openFrontCount) {
         List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
                 readyTasks, backoffBase, backoffCap, clock.instant(), openFrontCount, wipLimit, random);
 
@@ -77,9 +69,10 @@ record BareTakeClaimWalk(
                 // has just filled, so it reports no free slot out of one — the identical fact the
                 // feed states about its own ledger, not a placeholder.
                 AnchorLog.claimAcquired(candidate.ref().id(), 0, 1);
-                var trackerTask = tracker.fetchTask(candidate.ref());
-                return claimAndWork.dispatchAfterClaim(
-                        cloneDir, null, definition, interactiveMode, false, trackerTask, tracker, instanceId);
+                // One of the three places a take order is assembled (design single-owner table of
+                // introduce-take-order): the claimed task exists only from this fetch on.
+                var order = new TakeOrder(run, tracker.fetchTask(candidate.ref()), tracker, instanceId);
+                return claimAndWork.dispatchAfterClaim(order);
             }
             // Held: another instance won the race for this entry between the feed read and this
             // claim attempt — fall through to the next eligible candidate (see class javadoc).

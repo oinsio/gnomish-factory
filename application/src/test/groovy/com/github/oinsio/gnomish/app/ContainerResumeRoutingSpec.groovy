@@ -75,7 +75,9 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
-            runner.run(CLONE_DIR, 'PROJ-1', completingPipeline(), [], RunArguments.InteractiveMode.NONE, discardWork)
+            runner.run(
+                    new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork),
+                    'PROJ-1', [])
         } finally {
             System.out = originalOut
         }

@@ -98,7 +98,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context('task-1'), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                new RunOrder(workspaceDir, null, definition(), interactiveMode, false), context('task-1'), initialState(),
+                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -118,7 +119,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context('task-1'), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                new RunOrder(workspaceDir, null, definition(), interactiveMode, false), context('task-1'), initialState(),
+                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -140,7 +142,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context('task-1'), initialState(), RunArguments.InteractiveMode.NONE,
+        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), RunArguments.InteractiveMode.NONE, false),
+                context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
@@ -197,7 +200,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context('task-1'), initialState(), RunArguments.InteractiveMode.NONE,
+        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), RunArguments.InteractiveMode.NONE, false),
+                context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing

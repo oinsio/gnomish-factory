@@ -90,7 +90,8 @@ exec sh '${scriptPath}' "\$@"
 
         def context = new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
-        def run = assembly.assemble(pipeline(), context, initialState, RunArguments.InteractiveMode.NONE,
+        def run = assembly.assemble(new RunOrder(workspaceDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                context, initialState,
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         when:

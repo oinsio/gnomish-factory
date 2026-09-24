@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
@@ -23,9 +21,8 @@ import org.slf4j.Logger;
  *
  * <p>Implements FR9, FR10 of harden-task-branch-contract; FR18, D11 of add-tracker-port.
  *
- * @param tracker the tracker port the finish is written through; never null
- * @param ref the task's tracker identity; never null
- * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+ * @param order the take order whose task is finished: its tracker, the task's identity, and this
+ *     instance's identity for the pre-write claim check; never null
  * @param summary the operator-facing final report the finish carries, finished text: its builder
  *     assembled it for the comment plane, quoted field by quoted field, and this record publishes
  *     what it was handed. Rendering it again here would fence the factory's own report lines as
@@ -36,13 +33,7 @@ import org.slf4j.Logger;
  * @param log the caller's logger, so log lines stay attributed to the calling class; never null
  */
 public record FinishEffect(
-        Tracker tracker,
-        TaskRef ref,
-        InstanceId instanceId,
-        String summary,
-        TerminalWriteRetry retry,
-        FinishTransition transition,
-        Logger log)
+        TakeOrder order, String summary, TerminalWriteRetry retry, FinishTransition transition, Logger log)
         implements TerminalEffect {
 
     /**
@@ -72,7 +63,7 @@ public record FinishEffect(
     @Override
     public EffectObservation observeAtTarget() {
         try {
-            var task = tracker.fetchTask(ref);
+            var task = order.tracker().fetchTask(order.ref());
             return task.finished() || task.state() instanceof TrackerTaskState.Finished
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
@@ -80,7 +71,7 @@ public record FinishEffect(
             log.warn(
                     OperatorEvent.FINISH_LANDING_UNVERIFIED.head()
                             + "could not verify whether the finish of {} already landed",
-                    ref.id(),
+                    order.ref().id(),
                     e);
             return EffectObservation.UNDETERMINED;
         }
@@ -88,21 +79,21 @@ public record FinishEffect(
 
     @Override
     public boolean deliver() {
-        if (!ClaimGuard.stillOurs(tracker, ref, instanceId)) {
+        if (!ClaimGuard.stillOurs(order.tracker(), order.ref(), order.instanceId())) {
             log.warn(
                     OperatorEvent.FINISH_SKIPPED_CLAIM_LOST.head()
                             + "skipping finish of {}: claim is no longer held by this instance",
-                    ref.id());
+                    order.ref().id());
             return false;
         }
-        if (retry.confirm(() -> tracker.finish(ref, summary)) == TerminalWriteRetry.Result.CONFIRMED) {
+        if (retry.confirm(() -> order.tracker().finish(order.ref(), summary)) == TerminalWriteRetry.Result.CONFIRMED) {
             return true;
         }
         log.error(
                 OperatorEvent.FINISH_UNWRITTEN_AFTER_RETRIES.head()
                         + "finish of {} could not be written before the retry bound elapsed; the branch records the "
                         + "delivery and a later resume will reconcile the deferred finish",
-                ref.id());
+                order.ref().id());
         return false;
     }
 

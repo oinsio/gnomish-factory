@@ -4,15 +4,11 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import java.nio.file.Path;
 
 /**
  * The completion half of reconcile-on-resume (FR9, FR10 of harden-task-branch-contract): a branch
@@ -50,26 +46,22 @@ final class TakeReconcileFinish {
      * <p>Implements FR10, D10, NFR-C1 of add-claim-heartbeat.
      *
      * @param git the task-git capability set the delivered branch state is read through; never null
-     * @param cloneDir the project clone; never mutated
-     * @param taskId the tracker's original taskId whose branch recorded {@code Completed}
-     * @param tracker the tracker port the deferred finish is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order of the just-claimed task whose branch recorded {@code Completed}:
+     *     the clone, the task's identity, the tracker the deferred finish is made through, and this
+     *     instance's identity for the pre-write claim check; never null
      * @return the {@link TakeResult.Delivered} the deferred finish produced; never null
      */
-    static TakeResult deliverCompleted(
-            TaskGit git, Path cloneDir, String taskId, Tracker tracker, TaskRef ref, InstanceId instanceId) {
-        DeliveredBranchState delivered = git.branches().readDelivered(cloneDir, taskId);
+    static TakeResult deliverCompleted(TaskGit git, TakeOrder order) {
+        DeliveredBranchState delivered =
+                git.branches().readDelivered(order.run().cloneDir(), order.taskId());
         var completed = new TaskOutcome.Completed(delivered.finalState());
         // A recovered completion, so the tracker is probed before the write is re-driven (FR10): a
         // task already finished there needs no second finish, only the cleanup this tip already has.
         return TakeFinishReport.finish(
                 completed,
                 delivered.context(),
-                TaskIdSanitizer.branchName(taskId),
-                tracker,
-                ref,
-                instanceId,
+                TaskIdSanitizer.branchName(order.taskId()),
+                order,
                 TerminalWriteRetry.system(),
                 new FinishTransition.Recovered(() -> {}));
     }
@@ -87,26 +79,18 @@ final class TakeReconcileFinish {
      * @param branch the resumed branch recording the completed outcome
      * @param finalState the branch's last durably recorded state, read by the caller's mechanics
      * @param cleanup the destructive tail: the cleanup commit and the workspace disposal behind it
-     * @param tracker the tracker port the deferred finish is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order of the just-claimed task: the tracker the deferred finish is
+     *     made through, the task's identity, and this instance's identity for the pre-write claim
+     *     check; never null
      * @return the {@link TakeResult.Delivered} the deferred finish produced; never null
      */
-    static TakeResult finishUncleaned(
-            ResumedBranch branch,
-            TaskState finalState,
-            Runnable cleanup,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    static TakeResult finishUncleaned(ResumedBranch branch, TaskState finalState, Runnable cleanup, TakeOrder order) {
         var completed = new TaskOutcome.Completed(finalState);
         return TakeFinishReport.finish(
                 completed,
                 branch.context(),
                 branch.branchName(),
-                tracker,
-                ref,
-                instanceId,
+                order,
                 TerminalWriteRetry.system(),
                 new FinishTransition.Recovered(cleanup));
     }

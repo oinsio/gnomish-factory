@@ -5,9 +5,6 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -86,22 +83,30 @@ record TakeContainerEngineExecution(
         ClaimLossFlag claimLossFlag,
         LawBinding lawBinding) {
 
+    /**
+     * Runs the engine exactly once against {@code support} (see class javadoc).
+     *
+     * @param order the take order the run executes: the pipeline it advances through (the task's
+     *     own law on a fresh claim, design D6 of introduce-take-order), the interactive mode, and
+     *     the tracker, task identity and instance identity for the revocation check and the
+     *     terminal write; never null
+     * @param support the sandboxed-run bundle the run executes against; never null
+     * @param context the task context to run with; never null
+     * @param state the state to run with; never null
+     * @param pending the interrupted verification to re-verify, or {@code null} for a normal run
+     * @return the {@link TakeResult} the terminal outcome maps to
+     */
     TakeResult run(
+            TakeOrder order,
             SandboxRunSupport support,
-            PipelineDefinition definition,
             TaskContext context,
             TaskState state,
-            RunArguments.InteractiveMode interactiveMode,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
-            String taskId,
             @Nullable PendingVerification pending) {
+        PipelineDefinition definition = order.run().definition();
         var persistence = new RevocationCheckingAttemptPersistence(
-                support.persistence(), tracker, ref, instanceId, claimLossFlag);
+                support.persistence(), order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(
-                        definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, lawBinding);
+                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, lawBinding);
 
         support.restoreDenials();
 
@@ -109,7 +114,7 @@ record TakeContainerEngineExecution(
 
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
-            support.revocationSalvageAndPush(taskId);
+            support.revocationSalvageAndPush(order.taskId());
             // The reason names what the tracker held — the new claim's holder, a closure reason —
             // so it leaves through the comment plane at the write, with the factory's own sentences
             // outside the fence (design D7 of type-untrusted-text). The fenced shape, not the
@@ -119,15 +124,15 @@ record TakeContainerEngineExecution(
             String note = "Work stopped:\n" + reason.forComment()
                     + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
                     + " this task.";
-            tracker.postNote(ref, note);
-            tracker.release(ref);
+            order.tracker().postNote(order.ref(), note);
+            order.tracker().release(order.ref());
             return new TakeResult.Revoked(outcome.finalState(), UntrustedText.factory(note));
         }
 
         settleTerminalBoundary(support, outcome);
 
         var retry = TerminalWriteRetry.system();
-        String branchName = TaskIdSanitizer.branchName(taskId);
+        String branchName = TaskIdSanitizer.branchName(order.taskId());
         // The park's intent is recorded here, not in settleTerminalBoundary: that method only settles
         // the box (kept stopped), and the outcome commit belongs to the protocol that follows it
         // (FR10, D12 of harden-task-branch-contract). No delivery fence exists in container mode —
@@ -143,17 +148,7 @@ record TakeContainerEngineExecution(
                 support::confirmTerminalWrite);
         var finish = new FinishTransition.Fresh(() -> {}, support::finishCleanup);
         return TakeOutcomeDispatch.dispatch(
-                outcome,
-                context,
-                branchName,
-                tracker,
-                ref,
-                instanceId,
-                retry,
-                park,
-                abortFuse.handler(),
-                abortFuse.threshold(),
-                finish);
+                outcome, context, branchName, order, retry, park, abortFuse.handler(), abortFuse.threshold(), finish);
     }
 
     /**

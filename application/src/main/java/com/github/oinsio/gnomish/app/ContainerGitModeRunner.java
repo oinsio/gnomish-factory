@@ -7,12 +7,10 @@ import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import java.nio.file.Path;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The container-mode counterpart of {@link GitModeRunner} (the integration
@@ -58,36 +56,29 @@ record ContainerGitModeRunner(
      * GitModeRunner#run}'s outcome handling; see that class's javadoc for why only {@code
      * Completed} and {@code Aborted} can reach this frame).
      *
-     * @param cloneDir the {@code --dir} project clone; harvest and lifecycle commits land here
-     * @param base the {@code --base} override, or {@code null} for the clone's current HEAD
-     * @param definition the loaded pipeline the run advances through; never null
+     * @param order the run order: the {@code --dir} project clone (harvest and lifecycle commits
+     *     land here), the {@code --base} override ({@code null} for the clone's current HEAD), the
+     *     loaded pipeline and the console mode; its {@code discardWork} is meaningless on a fresh run
      * @param segments the run's container-bound segment plan; never empty
      * @param context the synthesized task's identity; never null
      * @param initialState the synthesized task's initial state; never null
-     * @param interactiveMode which role(s), if any, use the interactive console adapter
      * @throws UsageException if the task branch already exists or {@code base} does not resolve
      */
-    void run(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            List<Segment> segments,
-            TaskContext context,
-            TaskState initialState,
-            RunArguments.InteractiveMode interactiveMode) {
+    void run(RunOrder order, List<Segment> segments, TaskContext context, TaskState initialState) {
         String taskId = context.taskId();
+        Path cloneDir = order.cloneDir();
 
         git.branches().harden(cloneDir);
         console.print("container mode: branch " + TaskIdSanitizer.branchName(taskId) + ConsoleIO.LINE_END);
         console.print("container mode: environment " + TaskIdSanitizer.sanitize(taskId) + ConsoleIO.LINE_END);
 
         var support = supportFactory.create(
-                cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
+                cloneDir, taskId, segments, sandboxProperties, factoryProperties, order.definition(), List.of());
         // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
         // first, and the branch starts at that very commit — the manual tier's own way of keeping a
         // base name out of the repository port.
-        var law = ManualRunLawBinding.bind(assembly, cloneDir, base);
-        var baseDecision = GitFreshTaskSupport.resolveManualBase(base);
+        var law = ManualRunLawBinding.bind(assembly, cloneDir, order.base());
+        var baseDecision = GitFreshTaskSupport.resolveManualBase(order.base());
         GitFreshTaskSupport.createTask(
                 support.taskRepository(),
                 taskId,
@@ -96,7 +87,6 @@ record ContainerGitModeRunner(
                 new BasePin(baseDecision.ref(), null, baseDecision.rule()),
                 initialState);
 
-        ContainerTerminalDrive.run(
-                assembly, support, definition, context, initialState, interactiveMode, law.binding(), null);
+        ContainerTerminalDrive.run(assembly, support, order, context, initialState, law.binding(), null);
     }
 }

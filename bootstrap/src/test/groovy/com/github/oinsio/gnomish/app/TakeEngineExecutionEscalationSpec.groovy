@@ -50,8 +50,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, failingPipeline, state,
-                RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(failingPipeline, taskId), bootstrap, state)
 
         then: 'the tracker was actually parked with ESCALATION and a return-path report'
         1 * tracker.park(REF, ParkReason.ESCALATION, { String report ->
@@ -76,7 +75,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then:
         0 * tracker.park(*_)
@@ -102,8 +101,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(AdvancementMode.MANUAL), state,
-                RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(AdvancementMode.MANUAL), taskId), bootstrap, state)
 
         then: 'the tracker was actually parked with CHECKPOINT and a checkpoint/return-path report'
         0 * tracker.finish(*_)

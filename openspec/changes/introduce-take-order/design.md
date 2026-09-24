@@ -3,7 +3,8 @@
 ## Context
 
 See `proposal.md` — Why; the decisions below implement FR1–FR6 and are held to NFR-R1. The measurement that drove this change: 38 signatures in
-`:application` + `:bootstrap` enumerate four or more fields of one group, and the group is
+`:application` + `:bootstrap` enumerate four or more fields of one group (the first pass; the
+consumer table below holds 53 after re-verification and apply), and the group is
 the same at every level of the chain — from `TakeDisposition.dispose` at the entry point
 down to `ResumeMechanics.resumeWithoutDecision` at the medium seam.
 
@@ -44,8 +45,8 @@ a `RunOrder` plus `TrackerTask trackerTask`, `Tracker tracker`, `InstanceId inst
 *Rationale:* the measured data has exactly this shape — the five manual-run signatures
 (`GitModeRunner.run`, `ContainerGitModeRunner.run`, `GitResumeRunner.run`,
 `GitResumeRunner.continueFrom`, `ContainerResumeRunner.run`) carry four of the five shared
-fields and none of the tracker three, while the 33 tracker-driven signatures carry both
-groups. Nesting keeps each record small (5 and 4 components) and keeps a null tracker off
+fields and none of the tracker three, while the 33 tracker-driven signatures of that first pass carry
+both groups. Nesting keeps each record small (5 and 4 components) and keeps a null tracker off
 every manual path. *Alternative rejected:* one nine-component `TakeOrder` with nullable
 tracker fields — it makes "is this a manual run?" a null check at every consumer, which is
 precisely the escape hatch `implementation.md` requires closing, and it would make the
@@ -79,7 +80,7 @@ keeps two copies of a one-line rule inside a declared sync pair, which is exactl
 **D3 — Records, and the criterion that makes the record exemption honest.** *Driven by* FR1, FR2 and NG3. Both types are
 `record`s, which the parameter-limit rule exempts by construction. That exemption is only
 defensible when the record meets the literature's criterion for a parameter object rather
-than a "bag of everything": the group must recur across many signatures (38 here), carry a
+than a "bag of everything": the group must recur across many signatures (53 in the consumer table), carry a
 domain name (the *order* a gnome works to, entered in `docs/glossary.md` by this change),
 and absorb behavior (D2). *Rationale:* recorded here because `add-parameter-count-gate`
 will make the record exemption load-bearing, and a count gate cannot tell the two apart —
@@ -92,7 +93,7 @@ real concept.
 `ResumeMechanics.resumeWithoutDecision` needs `cloneDir`, `interactiveMode`, `discardWork`,
 `tracker`, `ref`, `instanceId` but not `definition`; it takes the whole `TakeOrder`.
 *Rationale:* Fowler's Preserve Whole Object — the alternative is a per-consumer subset type
-for each of the 38 sites, which reintroduces the clump one level down. The port interface
+for each of the 53 sites, which reintroduces the clump one level down. The port interface
 `ResumeMechanics` is the one place this is a real trade-off (it widens what a seam sees);
 accepted because both implementations are in-module and the seam already receives the
 tracker and the ref. *Alternative rejected:* narrowing views (`ResumeOrder`, `ClaimOrder`,
@@ -113,13 +114,37 @@ rejected:* deferring them to `collapse-composition-roots` — that change is abo
 constructor injection in composition roots, a different concern, and the manual-run
 signatures would have to be edited twice.
 
+**D6 — The one place the order's definition is rebound: `withDefinition` at law binding.**
+*Driven by* FR4 and NFR-R1; added 2026-09-24 during apply. A fresh claim does not run under
+the definition the order was built with: once the base commit is resolved it reads the task's
+own law there (`TaskTierLaw`, FR13 of `add-base-ref-resolution`), and the engine and
+`RunAssembly.assemble` receive that task definition. `TakeOrder.withDefinition` (delegating to
+`RunOrder.withDefinition`) returns the order re-bound to the task's law; each fresh-claim
+`claimAt` builds it once, right after `TaskTierLaw.bind` returns `Bound`, and passes only that
+copy downstream. It is the only wither on either record. *Rationale:* downstream keeps one
+source for the definition. This is Preserve Whole Object applied to a value that really does
+change at one phase boundary. *Alternative rejected:* an explicit `PipelineDefinition`
+parameter beside the order, which puts two definitions in scope with no rule for which one
+wins. *Alternative rejected:* phase types (a separate bound order type, the way Gradle
+separates a configuration from its resolved form). The compiler would then prove that the
+engine gets a bound definition, but resume would have to "bind" by fiat, and with one rebinding
+site that is a type spent on one line. It becomes the escalation path if a second rebinding
+site or a second phase-dependent field appears. *Alternative rejected:* removing `definition`
+from the order, which returns the parameter to most of the chain. *Guards:* in `claimAt` the
+re-bound copy gets its own name and the pre-bind order is not used after it; the javadoc of
+`withDefinition` names `claimAt` as its only caller; and task 3.4 adds a unit spec per medium
+where the startup and task definitions differ and the engine must run the task's stage.
+Existing fixtures use one pipeline for both, so they cannot tell the two apart. Resume
+continues to run under the order's startup definition: that is the current behavior (NG4), and
+whether resume should rebind from the pinned base is a question outside this change.
+
 **Sync surfaces.** This change touches **seven declared pairs**, both ends of each:
 
 | Pair | What this change does to it |
 |------|------------------------------|
 | `TakeFreshClaim` / `TakeContainerFreshClaim` | both `claim`/`claimAt` take `TakeOrder`; the identity derivation each performed (D2) is deleted from both |
 | `TakeResumeRunner` / `TakeContainerResumeRunner` | both `resumeWithoutDecision`/`resumeDecided` take `TakeOrder` |
-| `TakeResumeBootstrap` / `TakeContainerResumeBootstrap` | both take `TakeOrder` where they take clone dir + identity today |
+| `TakeResumeBootstrap` / `TakeContainerResumeBootstrap` | **unchanged** (corrected 2026-09-24): the host end is shared with manual `run --resume` (`GitResumeRunner`), where FR5 forbids a `TakeOrder`, and both carry only `cloneDir` and `taskId` of the clump. The pair is held together by the `ResumeMechanics.loadBranch(Path, String)` contract, not by identical helper signatures. The order is unpacked once, in `TakeLoadedBranchRoutes.route`, the only `loadBranch` caller. Passing a whole object to a helper that reads two of its fields is the stamp coupling Preserve Whole Object makes an exception for |
 | `TakeEngineExecution` / `TakeContainerEngineExecution` | both `run` take `TakeOrder` |
 | `GitResumeRunner` / `ContainerResumeRunner` | both take `RunOrder` (no tracker on these paths) |
 | `GitModeRunner` / `ContainerGitModeRunner` | both `run` take `RunOrder` |
@@ -140,19 +165,21 @@ two per declared pair.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `RunOrder` | `RunOrder` (record) | `GitModeRunner.run:109`, `ContainerGitModeRunner.run:70`, `GitResumeRunner.run:103`, `GitResumeRunner.continueFrom:149`, `ContainerResumeRunner.run:86`, `ContainerResumeOutcomes.resumeFromRecordedPosition:48`, `ContainerResumeOutcomes.resumePaused:122`, their declared twins `GitResumeContinuation.resumeFromRecordedPosition:76`, `GitResumeContinuation.resumePaused:129`, `ContainerTerminalDrive.run:29`, `RunAssembler.assemble:68` (`:bootstrap`), the manual-mode assembly point `ManualRunDrive.driveResume` and `driveGit` (`:bootstrap`, the only place a `RunArguments` becomes a `RunOrder`, D1), the take-side assembly points `TakeDispatcher.runBare:163` (from `TakeArguments`) and `ServeAssembly:63` (from the serve arguments, constructing `TakeSlotRunner`), the three pre-claim sites `TakeBareAuto.run:126`, `BareTakeClaimWalk.resolve:47` and the `TakeSlotRunner` constructor:99 (these run before any task is chosen, so no `TrackerTask` exists there; `tracker` and `instanceId` stay separate parameters until `introduce-slot-wiring` groups them), and every `TakeOrder` consumer below through `order.run()` | the hand-listed quintuple `cloneDir, base, definition, interactiveMode, discardWork` in each of those signatures; no exemptions | the parameter type — each listed signature loses the five parameters, so a caller that still has them does not compile |
-| `TakeOrder` | `TakeOrder` (record) | `TakeDisposition.dispose:128`, `TakeDispositionResume.resumeExisting:45` / `routeByShape:71`, `TakeClaimAndWork.claimAndWork:108` / `dispatchAfterClaim:173`, `TakeWorkRouter.locateAndWork:37` / `freshClaim:78` / `resume:132`, `TakeFreshClaim.claim:62` / `claimAt:114`, `TakeContainerFreshClaim.claim:44` / `claimAt:96`, `TakeResumeRunner.resumeWithoutDecision:122` / `resumeDecided:172`, `TakeContainerResumeRunner.resumeWithoutDecision:91` / `resumeDecided:138`, `HostResumeMechanics.resumeWithoutDecision:75` / `resumeDecided:95`, `ContainerResumeMechanics.resumeWithoutDecision:53` / `resumeDecided:77`, `TakeEngineExecution.run:120`, `TakeContainerEngineExecution.run:89`, `TakeTakeover.take:68`, `TakeDecisionResume.resume:65` / `ackAndResume:108`, `TakeLoadedBranchRoutes.route:42`, `TakeReconcileFinish.deliverCompleted:60`, `TakeCrashAbort.onCrash:79`, the terminal chain that carries the order from the engine result to the park guard — `TakeOutcomeDispatch.dispatch:55`, `TakeEscalationExit.exit:110`, `TakeReconcile.deliverPark:94` — and its ends `TakeFinishReport.finish:140`, `TakePauseExit.finish:119`, `GuardedPark` ctor:64 and `attempt:109`; the two identity consumers that today read the id off a `TrackerTask` they receive directly, `TaskTierLaw.bind:103` and `TakeQuarantinePark.onQuarantine:52` | the hand-listed `trackerTask, tracker, instanceId` triple and the `cloneDir/base/definition/interactiveMode/discardWork` group in each; no exemptions | the parameter type. **Assembly points:** a `TakeOrder` is built in exactly two places, each right after the claimed task is fetched — `BareTakeClaimWalk.resolve:80` (after `tracker.fetchTask(candidate.ref())`, before `dispatchAfterClaim`) and `TakeSlotRunner.run:183` (after `tracker.fetchTask(claimed)`). No site earlier in the chain can build one without a null task, which FR2 and D1 forbid |
+| `RunOrder` | `RunOrder` (record) | `GitModeRunner.run:109`, `ContainerGitModeRunner.run:70`, `GitResumeRunner.run:103`, `GitResumeRunner.continueFrom:149`, `ContainerResumeRunner.run:86`, `ContainerResumeOutcomes.resumeFromRecordedPosition:48`, `ContainerResumeOutcomes.resumePaused:122`, their declared twins `GitResumeContinuation.resumeFromRecordedPosition:76`, `GitResumeContinuation.resumePaused:129`, `ContainerTerminalDrive.run:29`, `GitResumeContinuation.resumeEscalated` / `ContainerResumeOutcomes.resumeEscalated` and the private `GitResumeContinuation.runToTerminalBoundary` (added 2026-09-23 during apply, pair consistency), the assembly seam `RunAssembly.assemble` (interface, `:application`) with its implementation `ManualRunAssembly.assemble` and delegate `RunAssembler.assemble:68` (`:bootstrap`) — the order reaches the seam from every caller, `order.run()` on the take side — the manual-mode assembly point `ManualRunDrive.driveResume`, `driveGit` and `driveInPlace`, all through one `ManualRunDrive.order` helper (`:bootstrap`, the only place a `RunArguments` becomes a `RunOrder`, D1), the take-side assembly points `TakeDispatcher.runBare:163` (from `TakeArguments`) and `ServeAssembly:63` (from the serve arguments, constructing `TakeSlotRunner`), the three pre-claim sites `TakeBareAuto.run:126`, `BareTakeClaimWalk.resolve:47` and the `TakeSlotRunner` constructor:99 (these run before any task is chosen, so no `TrackerTask` exists there; `tracker` and `instanceId` stay separate parameters until `introduce-slot-wiring` groups them), and every `TakeOrder` consumer below through `order.run()` | the hand-listed quintuple `cloneDir, base, definition, interactiveMode, discardWork` in each of those signatures; no exemptions | the parameter type — each listed signature loses the order fields it carries today, so a caller that still has them does not compile |
+| `TakeOrder` | `TakeOrder` (record) | `TakeDisposition.dispose:128`, `TakeDispositionResume.resumeExisting:45` / `routeByShape:71`, `TakeClaimAndWork.claimAndWork:108` / `dispatchAfterClaim:173`, `TakeWorkRouter.locateAndWork:37` / `freshClaim:78` / `resume:132`, `TakeFreshClaim.claim:62` / `claimAt:114`, `TakeContainerFreshClaim.claim:44` / `claimAt:96`, `TakeResumeRunner.resumeWithoutDecision:122` / `resumeDecided:172`, `TakeContainerResumeRunner.resumeWithoutDecision:91` / `resumeDecided:138`, `HostResumeMechanics.resumeWithoutDecision:75` / `resumeDecided:95`, `ContainerResumeMechanics.resumeWithoutDecision:53` / `resumeDecided:77`, `TakeEngineExecution.run:120`, `TakeContainerEngineExecution.run:89`, `TakeTakeover.take:68`, `TakeDecisionResume.resume:65` / `ackAndResume:108`, `TakeLoadedBranchRoutes.route:42`, `TakeReconcileFinish.deliverCompleted:60` / `finishUncleaned:95` (added 2026-09-24: it calls `TakeFinishReport.finish`, so the order must reach it), `TakeCrashAbort.onCrash:79`, the terminal chain that carries the order from the engine result to the park guard — `TakeOutcomeDispatch.dispatch:55`, `TakeEscalationExit.exit:110`, `TakeReconcile.deliverPark:94` — and its ends `TakeFinishReport.finish:140`, `TakePauseExit.finish:119`, `GuardedPark` ctor:64 and `attempt:109` and its finish-side twin, the `FinishEffect` record (added 2026-09-24; a record, so exempt from the limit either way), together with the shorter convenience overloads of the same three exits (`TakeFinishReport.finish:78` / `:112`, `TakePauseExit.finish:74`, `TakeEscalationExit.exit:73`, added 2026-09-24; only specs call them, and leaving them would keep the triple alive beside the order); the two identity consumers that today read the id off a `TrackerTask` they receive directly, `TaskTierLaw.bind:103` and `TakeQuarantinePark.onQuarantine:52` | the hand-listed `trackerTask, tracker, instanceId` triple and the `cloneDir/base/definition/interactiveMode/discardWork` group in each. One exemption (2026-09-24): the resume bootstraps and `ResumeMechanics.loadBranch` keep `(cloneDir, taskId)`, because the host bootstrap is shared with manual `run --resume` (FR5; see the Sync surfaces row) | the parameter type. **Assembly points:** a `TakeOrder` is built in exactly three places, each right after the claimed task is fetched: `BareTakeClaimWalk.resolve:80` (after `tracker.fetchTask(candidate.ref())`, before `dispatchAfterClaim`), `TakeSlotRunner.run:183` (after `tracker.fetchTask(claimed)`) and `TakeDispatcher.runOneRef:104` (after `tracker.fetchTask(ref)`, the explicit `take <ref>` path; missing from this table until 2026-09-24). No site earlier in the chain can build one without a null task, which FR2 and D1 forbid. A built order is re-bound only through `withDefinition`, at the two fresh-claim `claimAt` sites (D6) |
 | `TakeOrder` (identity) | `TaskRef` / `String` via `ref()`, `taskId()` | the five sites the sweep finds today (2026-09-23): `TakeWorkRouter:48`, `TakeFreshClaim:78`, `TakeContainerFreshClaim:61` (D2) and `TaskTierLaw:132`, `TakeQuarantinePark:59` — the last two take the order in task 3.9 and read `order.taskId()`; no site keeps a `TrackerTask` parameter for the id alone | `trackerTask.snapshot().id()` at the call site — deleted everywhere; sweep `grep -rn "snapshot().id()" application/src/main bootstrap/src/main` must return only `TakeOrder`'s own body | the grep in task 5.1, run as part of the change; the method on the record is the only remaining source |
 
 `TakeDispositionResume.afterReconciliation:116` was in this table until 2026-09-13 and is
 not any more: `fix-claim-epoch-fence` (archived 2026-09-14) deleted that method together
 with the `StaleEpoch` arm it served; a 2026-09-23 grep of `application` and `bootstrap`
-finds neither name. Every count below therefore comes from the 2026-09-12 scan, taken before
-that deletion, and is re-taken at the start of this change (task 0.2).
+finds neither name. The over-limit counts below come from the 2026-09-23 re-scan (task 0.2);
+the signature lists were re-verified against the tree the same day.
 
 The consumer lists are the measured ones, re-verified 2026-09-13 against the scan that
-produced the baseline: 42 signatures take an order, of which **19 are today over the
-seven-parameter limit** and the rest are edited for consistency (a chain where only the
+produced the baseline: 42 signatures take an order, of which **27 are over the
+seven-parameter limit** on the 2026-09-23 scan — counting the two `ResumeMechanics` interface
+declarations changed by task 3.6, whose implementations are `@Override` and exempt — and 21
+of them drop to seven or fewer; the rest are edited for consistency (a chain where only the
 long links take the order would leave the clump alive in the short ones). The five sites
 added on that re-verification — `RunAssembler.assemble`, `TakeFinishReport.finish`,
 `TakePauseExit.finish` and both `GuardedPark` members — carry three order fields each, below
@@ -163,18 +190,47 @@ the order cannot reach those four (`TakeOutcomeDispatch.dispatch`, `TakeEscalati
 `TakeReconcile.deliverPark` — they carry only `tracker, ref, instanceId`, so the first pass
 did not count them as order sites), and the two remaining `snapshot().id()` readers
 (`TaskTierLaw.bind`, `TakeQuarantinePark.onQuarantine`) that the sweep in task 5.1 would
-otherwise have found unlisted. `TakeOutcomeDispatch.dispatch` is the one consumer that stays
-over the limit after this change (eleven parameters become nine): its remaining excess is
+otherwise have found unlisted. Six consumers stay over the limit after this change:
+`TakeOutcomeDispatch.dispatch` (eleven parameters become nine), whose remaining excess is
 retry, park, abort and finish policy, not order fields, and is left to
-`add-parameter-count-gate`.
+`add-parameter-count-gate`; and the `TakeSlotRunner` constructor (sixteen become fifteen),
+which carries only `cloneDir` and `definition` of the order — the rest is slot wiring, left
+to `introduce-slot-wiring` (NG1); and the four fresh-claim methods (`TakeFreshClaim.claim` /
+`claimAt` 9 each, `TakeContainerFreshClaim.claim` 10 / `claimAt` 9), where seven order fields
+become one and the eight or nine left are slot wiring, also left to `introduce-slot-wiring`.
+The plan counted those four among the ones that drop, and M2 said 40. The 2026-09-24 scan
+after apply showed 44, and M2 was corrected. Passing `TakeClaimAndWork` whole, as
+`TakeWorkRouter` does, would have reached 40, but it hands every fresh claim all of the
+slot's wiring (stamp coupling) and settles in advance a grouping that `introduce-slot-wiring`
+has not designed yet.
+
+Apply on 2026-09-23 added five signatures to the table: `RunAssembly.assemble` and its
+`@Override` implementation — `RunAssembler.assemble` could not take the order alone, since
+its only caller is that implementation and holds no `cloneDir`, `base` or `discardWork` — and
+the two `resumeEscalated` arms plus `runToTerminalBoundary`, for pair consistency. None of the
+five is over the limit (the interface has seven parameters, the implementation is `@Override`,
+the others five or fewer), so they do not change the violation count.
+The table now holds 47 signatures.
+
+Apply on 2026-09-24 added six more, none over the limit before or after:
+`TakeReconcileFinish.finishUncleaned`, the four convenience overloads of the three exits and
+the `FinishEffect` record (the completion's twin of `GuardedPark`). `ClaimGuard.stillOurs`,
+`RevocationCheckingAttemptPersistence`, `RevocationHandler`, `AbortHandler.handle` and
+`TakeResumeExecution.run` still take the tracker, the ref or the instance identity as separate
+values. They are leaf helpers, the claim-identity boundary that `add-claim-return` types as
+`ClaimIdentity` (D4), and each receives its values unpacked from the order at one call site.
+The resume bootstraps, which the table never listed but task 3.5 named, stay unchanged, as
+recorded above. The table now holds 53 signatures, and M2 is unchanged.
 
 No row claims two values are one by construction, so no identity spec is required by
 `testing.md`; the behavior-preservation requirement (NFR-R1) is carried by the existing
-suite instead.
+suite instead. D6 is the exception: it claims that the definition a fresh claim runs under is
+the task's own, and the unit specs of task 3.4 check this with a startup definition that
+differs from it.
 
 ## Risks / Trade-offs
 
-- **A 38-signature mechanical edit can hide one non-mechanical change.** → NFR-R1 makes it
+- **A 53-signature mechanical edit can hide one non-mechanical change.** → NFR-R1 makes it
   checkable: no spec expectation may be edited. Any spec that goes red is treated as
   evidence the refactor changed behavior, and the task stops rather than adjusting the
   spec.

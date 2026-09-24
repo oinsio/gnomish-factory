@@ -134,7 +134,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     private TakeSlotRunner newSlotRunner() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
-                newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
+                newAssembly(), TaskGitFixture.real(), new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                worktreesRoot, abortHandler, 3, 'taskId',
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and

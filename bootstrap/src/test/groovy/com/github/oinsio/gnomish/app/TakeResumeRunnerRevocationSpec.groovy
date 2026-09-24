@@ -40,7 +40,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then: 'the result is Revoked'
         result instanceof TakeResult.Revoked
@@ -80,7 +80,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
 
         when:
         def result = runner.resumeWithoutDecision(
-                cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+                resumeOrder(pipeline(), taskId), bootstrap, state)
 
         then: 'the run reacts as a revocation'
         result instanceof TakeResult.Revoked

@@ -105,8 +105,8 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         when: 'instance A completes only the first stage\'s round, then its stdin runs out mid-second-stage: only one Enter is supplied, enough for "build" to pass and advance, not enough for "verify" to also complete — simulating a died process (GitModeRunner deliberately leaves such an exit without any outcome write, per its own javadoc)'
         new GitModeRunner(assembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))),
                 TaskGitFixture.real(), worktreesA, LiveConsoleIO.onStdout())
-                .run(instanceA, null, pipeline(), context(taskId), TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL)
+                .run(new RunOrder(instanceA, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                context(taskId), TaskState.atStageStart('build'))
 
         then: 'stdin exhaustion propagates — the task stopped mid-run, with only the first round durably committed'
         thrown(InputExhaustedException)
@@ -128,7 +128,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         def twoEnters = (System.lineSeparator() * 2)
         new GitResumeRunner(assembly(new ByteArrayInputStream(twoEnters.getBytes('UTF-8'))),
                 TaskGitFixture.real(), worktreesB, 'taskId')
-                .run(instanceB, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
+                .run(new RunOrder(instanceB, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
 
         then: 'instance B\'s own round commit for "verify" exists, distinct from instance A\'s "build" round'
         def verifyRoundSha = roundCommitSha(instanceB, taskId, 'verify')

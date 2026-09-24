@@ -60,8 +60,21 @@ proposal's "Why" records the cost; Kubernetes filed the same gap as a bug.
 adapter.** The verb takes `ClaimIdentity(holder, epoch)`; the adapter
 re-reads the live claim and proceeds only on an exact match, else
 `ReturnResult.Mismatch(currentFacts)`. The caller obtains its identity from
-`ClaimEpochBook.epochFor(taskId)` plus its `InstanceId` — both already in
-hand at every call site. *Rationale:* this is Kleppmann's fencing token and
+`ClaimEpochBook.epochFor(taskId)` plus its `InstanceId`. Since
+`introduce-take-order` the take chain carries the instance and the task in
+one `TakeOrder` (`order.instanceId()`, `order.taskId()`), and `TaskGit.epochs()`
+owns the book, so each call site builds one `ClaimReturn` value —
+`ClaimReturn.of(order, git.epochs())`, holding the tracker, the ref, the
+`InstanceId` and the epoch source — and hands it down instead of a separate
+tracker and ref. In `FreshClaimBaseBinding.resolve` and
+`ResumeLawBinding.resolve` it replaces the `(TaskRef ref, Tracker tracker)`
+pair; the park path inside those helpers reads `claim.tracker()` and
+`claim.ref()`. The `ClaimIdentity` is resolved when the return runs, not when
+the value is built (see Risks). *Alternative rejected:* an eighth
+`ClaimIdentity` parameter beside `(ref, tracker)` — `ResumeLawBinding.resolve`
+already has seven, and D4 of `introduce-take-order` derives the identity from
+the order at the release sites rather than adding a second identity parameter
+beside it. *Rationale:* this is Kleppmann's fencing token and
 client-go's `holderIdentity` + `resourceVersion` check; the epoch is
 monotonic per task, so a re-claim by the same instance after a reap is a
 different identity and the stale return still no-ops. *Alternative
@@ -91,10 +104,11 @@ windows would fall between port operations no adapter owns.
 **D4 — A typed claim-loss cause decides the verb at the round boundary.**
 `ClaimLossFlag` records `ClaimLoss(cause, reason)` with `cause ∈
 {SHUTDOWN, LOST}`; `RevocationDetectedException` carries it;
-`RevocationHandler.handle` runs salvage and best-effort push for both, then
-branches: `SHUTDOWN` → `returnToReady` with the shutdown reason and no
-"work stopped" note (UX3); `LOST` → the existing `postNote` + `release`,
-byte-for-byte. The `TakeResult` for a shutdown stop stays `Revoked` (the
+both ends of the declared revocation pair — `RevocationHandler.handle` (host)
+and the revocation arm of `TakeContainerEngineExecution.run` (container) —
+run salvage and best-effort push for both causes, then branch: `SHUTDOWN` →
+`returnToReady` with the shutdown reason and no "work stopped" note (UX3);
+`LOST` → the existing `postNote` + `release`, byte-for-byte. The `TakeResult` for a shutdown stop stays `Revoked` (the
 exit-code mapping and the slot outcome line are unchanged; the line's
 reason text already says "daemon shutting down"). *Rationale:* the
 decision must not rest on string equality with `SHUTDOWN_REASON`, and the
@@ -148,16 +162,26 @@ reaper entry gains "or returned by its holder".
 **Sync surfaces.** The in-memory and GitHub realizations of the retirement
 routine are two adapters of one port operation, held equal by the contract
 suite (`TrackerReturnContract`), not a hand-synced pair; the `Retirement`
-parameter object is the shared shape on each side. This change touches no
-pair declared in `manual-sync-pairs.md`. Host and container fresh-claim
-paths already share `FreshClaimBaseBinding`, so switching the verb there
-switches both.
+parameter object is the shared shape on each side. Host and container
+fresh-claim paths already share `FreshClaimBaseBinding` (and resume paths
+`ResumeLawBinding`), so switching the verb there switches both.
+
+This change touches one declared pair: `RevocationHandler` ↔
+`TakeContainerEngineExecution` (both ends carry `Kept in sync with`; the
+invariant is "the same stop note and the same two tracker writes"). D4's
+cause branch is a mirrored edit on both ends, and both marker sentences are
+rewritten to the new invariant: on `LOST`, the "Work stopped:" note then
+`release`; on `SHUTDOWN`, `returnToReady` with no note; never `park`,
+`recordAbort` or `finish`. The pair still has two ends, so no abstraction is
+extracted (rule of three). The container end was missing from this design
+until the 2026-09-24 rebase onto `introduce-take-order` (its task 6.2): the
+gap predates that refactor, which only renamed the call.
 
 **Single-owner mechanisms.**
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| Adapter claim-retirement routine (`GithubClaimRetirement`, `ClaimLeases`) | `ReturnResult` for a `ClaimIdentity` | `FreshClaimBaseBinding.releaseBestEffort`, `ResumeLawBinding.releaseBestEffort`, `TakeClaimAndWork.releaseBestEffort`, `RevocationHandler.handle` (SHUTDOWN arm) | `tracker.release(ref)` at those four sites — deleted; the surviving exemption is `RevocationHandler`'s LOST arm (revocation keeps `release` by decision, NG1) | `ReleaseCallSiteBoundarySpec` in `:bootstrap`: scans `application/src/main` and fails on any `.release(` outside `RevocationHandler` (M3); the port type `ClaimIdentity` (no `String` holder overload) |
+| Adapter claim-retirement routine (`GithubClaimRetirement`, `ClaimLeases`) | `ReturnResult` for a `ClaimIdentity` | `FreshClaimBaseBinding.releaseBestEffort`, `ResumeLawBinding.releaseBestEffort`, `TakeClaimAndWork.releaseBestEffort`, `RevocationHandler.handle` (SHUTDOWN arm), `TakeContainerEngineExecution.run` (SHUTDOWN arm, container end of the revocation pair; added 2026-09-24) — each through one `ClaimReturn` built from the `TakeOrder` and `TaskGit.epochs()` (D2) | `tracker.release(ref)` at those five sites — deleted; the surviving exemptions are the LOST arms of both revocation ends (revocation keeps `release` by decision, NG1) | `ReleaseCallSiteBoundarySpec` in `:bootstrap`: scans `application/src/main` for `release(` called on a tracker receiver (`tracker.` / `tracker().`) and fails outside the two allowlisted revocation files, asserting the scan reached both (M3). The receiver is part of the pattern because a bare `.release(` also matches `SlotLedger`, `TakeBatch`, `FeedCycle` and `SnapshotWriter`, which release slots, permits and a wake signal, not claims. Plus the port type `ClaimIdentity` (no `String` holder overload) and the `ClaimReturn` parameter type in both binding helpers (no `(ref, tracker)` form left) |
 | `ClaimLossFlag` | `ClaimLoss(cause, reason)` | `RevocationCheckingAttemptPersistence`, `RevocationHandler`, `ServeShutdown`, `TakeHeartbeat` (LOST) | `claimLost(ref, String reason)` and `reason(ref)` as the discriminator — replaced by the typed record; `SHUTDOWN_REASON` stays as the reason text only | The `ClaimLoss` type; no string-compare of the reason survives (grep gate in the same spec) |
 
 ## Risks / Trade-offs

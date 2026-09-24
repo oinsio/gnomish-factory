@@ -70,7 +70,7 @@ class TakeFinishReportSpec extends Specification {
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE)
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.finish(REF, { String summary ->
@@ -104,7 +104,7 @@ class TakeFinishReportSpec extends Specification {
         String published = null
 
         when:
-        TakeFinishReport.finish(new TaskOutcome.Completed(STATE), context, BRANCH, tracker, REF, INSTANCE)
+        TakeFinishReport.finish(new TaskOutcome.Completed(STATE), context, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
@@ -134,7 +134,7 @@ class TakeFinishReportSpec extends Specification {
         String captured = null
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE)
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then:
         1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
@@ -153,7 +153,7 @@ class TakeFinishReportSpec extends Specification {
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE)
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
 
         then: 'no finish is written'
         0 * tracker.finish(*_)
@@ -190,7 +190,7 @@ class TakeFinishReportSpec extends Specification {
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE, retry)
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry)
 
         then:
         attempts.get() == 3
@@ -214,7 +214,7 @@ class TakeFinishReportSpec extends Specification {
 
         when:
         def events = capture {
-            result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE, retry)
+            result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), retry)
         }
 
         then:
@@ -241,7 +241,7 @@ class TakeFinishReportSpec extends Specification {
 
         when:
         def result = TakeFinishReport.finish(
-                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE,
+                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE),
                 VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered({ cleaned.incrementAndGet() }))
 
@@ -263,7 +263,7 @@ class TakeFinishReportSpec extends Specification {
 
         when:
         TakeFinishReport.finish(
-                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE,
+                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE),
                 RetryFixtures.givingUpRetry(),
                 new FinishTransition.Fresh({}, { cleaned.incrementAndGet() }))
 

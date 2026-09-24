@@ -1,15 +1,13 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.slf4j.Logger;
@@ -66,31 +64,24 @@ public final class TakeCrashAbort {
      *
      * <p>Implements FR14, D3, D16 of add-tracker-port.
      *
-     * @param definition the running pipeline; its first stage names the last structurally-known
-     *     position reported in the aborted result's final state — a crash has no live engine state
-     *     to carry; never null
-     * @param trackerTask the claimed task the run crashed on; never null
-     * @param tracker the tracker port, for the best-effort abort-facts read and the abort write;
-     *     never null
-     * @param instanceId this factory instance's identity; never null
+     * @param order the take order the run crashed on: its pipeline, whose first stage names the
+     *     last structurally-known position reported in the aborted result's final state — a crash
+     *     has no live engine state to carry — the claimed task, the tracker for the best-effort
+     *     abort-facts read and the abort write, and this instance's identity; never null
      * @param crash the uncaught exception the post-claim run died with; never null
      * @return the abort protocol's terminal {@link TakeResult}
      */
-    public TakeResult onCrash(
-            PipelineDefinition definition,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId,
-            RuntimeException crash) {
-        TaskRef ref = trackerTask.ref();
+    public TakeResult onCrash(TakeOrder order, RuntimeException crash) {
+        TaskRef ref = order.ref();
         // A fold of the crash's own chain, whose messages quote whatever the failing machinery
         // captured — a git subprocess, an agent CLI — so it is minted at the fold with that
         // operation's provenance (design D3's fold row, D5 of type-untrusted-text).
         UntrustedText cause = UntrustedText.subprocess("uncaught exception during the take run: " + crash);
-        AbortFacts facts = abortFactsBestEffort(tracker, ref);
-        TaskState finalState =
-                TaskState.atStageStart(definition.stages().getFirst().name());
-        return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId, categoryOf(crash), crash);
+        AbortFacts facts = abortFactsBestEffort(order.tracker(), ref);
+        TaskState finalState = TaskState.atStageStart(
+                order.run().definition().stages().getFirst().name());
+        return abortHandler.handle(
+                ref, finalState, cause, facts, abortThreshold, order.instanceId(), categoryOf(crash), crash);
     }
 
     /**

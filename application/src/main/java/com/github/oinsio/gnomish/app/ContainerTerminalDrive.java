@@ -29,10 +29,9 @@ final class ContainerTerminalDrive {
     static void run(
             RunAssembly assembly,
             SandboxRunSupport support,
-            PipelineDefinition definition,
+            RunOrder order,
             TaskContext context,
             TaskState state,
-            RunArguments.InteractiveMode interactiveMode,
             LawBinding lawBinding,
             @Nullable PendingVerification pending) {
         // Runner start prunes objects a dead instance left labelled (FR11, NFR-R2), keeping this
@@ -42,8 +41,9 @@ final class ContainerTerminalDrive {
         // one continues the denial delta from the position its last attempt committed instead of
         // replaying the container's whole log onto this round (FR5 of fix-denial-report-attachment).
         support.restoreDenials();
+        PipelineDefinition definition = order.definition();
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(definition, context, state, interactiveMode, support.persistence(), List.of(), lawBinding);
+                .assemble(order, context, state, support.persistence(), List.of(), lawBinding);
 
         boolean completed = false;
         try {

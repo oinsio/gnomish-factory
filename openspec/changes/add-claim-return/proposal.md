@@ -192,8 +192,10 @@ as a bug (kubernetes#119905), not a documentation fix.
 - M2: the shutdown lifecycle spec asserts `Ready` for every drained slot
   immediately after `ServeShutdown` completes, on the in-memory tracker and
   on the GitHub adapter through WireMock.
-- M3: `grep -rn "\.release(" application/src/main` lists exactly one
-  caller: the revocation handler.
+- M3: in `application/src/main`, `release(` called on a tracker receiver
+  appears in exactly two places: the LOST arms of the declared revocation
+  pair (`RevocationHandler` on the host, `TakeContainerEngineExecution` in
+  the container).
 - M4: PIT stays at 100% in every touched module; the contract suite's new
   properties pass on both adapters and the plugin sample.
 
@@ -227,10 +229,14 @@ as a bug (kubernetes#119905), not a documentation fix.
 - **Sequencing (noted 2026-09-13)**: the parameter-limit family
   (`introduce-take-order`, then `introduce-slot-wiring`) rewrites the take-chain
   signatures this change edits — `TakeClaimAndWork`, `FreshClaimBaseBinding`'s
-  callers, the fresh-claim and resume pairs. This change is rebased onto the new
-  signatures after `introduce-take-order` lands (its task 6.2), which is a
-  rename of call sites, not a change of this proposal's scope: the release-call
-  boundary spec and the `ClaimIdentity` port type are untouched by the refactor.
+  callers, the fresh-claim and resume pairs. Rebased onto `introduce-take-order`
+  on 2026-09-24 (its task 6.2): the call sites now hold one `TakeOrder`, and the
+  claim identity is derived from it through a `ClaimReturn` value (design D2)
+  rather than passed beside it. The rebase also found the container end of the
+  revocation pair (`TakeContainerEngineExecution`), a fifth `release` site that
+  predates the refactor; FR6 covers it, since shutdown is not medium-specific,
+  so it joins the consumers and the pair gets a mirrored edit (design, Sync
+  surfaces).
 - `gnomish-plugin-api`: `Tracker` gains one method and one result type; the
   `TrackerHealthTracker` decorator and the plugin `SampleTracker` implement
   it; the adapter author guide's port table gains a row.
@@ -241,8 +247,9 @@ as a bug (kubernetes#119905), not a documentation fix.
   `CLAIM_RETURNED`; the marker reader recognizes it as a boundary.
 - `application`: `FreshClaimBaseBinding`, `ResumeLawBinding`,
   `TakeClaimAndWork`, `ServeShutdown`/`ClaimLossFlag`/
-  `RevocationCheckingAttemptPersistence`/`TakeEngineExecution` (typed loss
-  cause), `EpochRecordingTracker` decorator; operator-event codes for the
+  `RevocationCheckingAttemptPersistence`/`TakeEngineExecution`/
+  `TakeContainerEngineExecution` (typed loss cause), a `ClaimReturn` value
+  built from `TakeOrder`, `EpochRecordingTracker` decorator; operator-event codes for the
   three log lines.
 - `test-fixtures`: `TrackerReturnContract` appended to the contract chain;
   kill-point row for the return sequence in `bootstrap`.

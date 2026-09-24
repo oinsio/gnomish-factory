@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
+import com.github.oinsio.gnomish.app.RunArguments
+import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
@@ -150,7 +152,9 @@ tracker:
         def properties = testProperties(
                 agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
         new TakeSlotRunner(
-                newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
+                newAssembly(properties), TaskGitFixture.real(),
+                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false), worktreesRoot,
+                abortHandler, ABORT_THRESHOLD, MDC_KEY,
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
                 new TrustedBaseContext(BaseDefinition.none(),
                 new DefaultBranch(currentBranch(cloneDir))),

@@ -115,9 +115,7 @@ final class ParkKillPoints {
             return
         }
         GuardedPark.attempt(
-                world.tracker,
-                world.ref,
-                world.instanceId,
+                world.takeOrder(),
                 ParkReason.ESCALATION,
                 REPORT,
                 VirtualTimeRetries.terminalWrite(),

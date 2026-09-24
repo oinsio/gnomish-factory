@@ -3,12 +3,8 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
-import java.nio.file.Path;
 
 /**
  * The "branch already exists" half of {@link TakeDisposition}'s {@code Ready} case (FR9, D3): the
@@ -35,24 +31,17 @@ record TakeDispositionResume<B extends ResumedBranch>(
         ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git) {
 
     /**
-     * Dispatches {@code taskId}'s branch on its classified shape (see class javadoc).
+     * Dispatches the order's task branch on its classified shape (see class javadoc).
      *
      * <p>Implements FR9, D3 of add-tracker-port; FR1 of add-serve-sandbox-lifecycle; FR2, FR15 of
      * harden-task-branch-contract.
      *
+     * @param order the take order of the just-claimed task; never null
      * @param shape the branch tip's classification, as the caller read it once
      */
-    TakeResult resumeExisting(
-            Path cloneDir,
-            BranchShape shape,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            String taskId,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    TakeResult resumeExisting(TakeOrder order, BranchShape shape) {
         if (shape.isClean()) {
-            return routeByShape(cloneDir, shape, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+            return routeByShape(order, shape);
         }
         // A non-clean shape is being repaired, and this is the one place that knows it: a failure
         // below is a failed recovery, so it is named as one before it reaches the take's crash
@@ -60,33 +49,24 @@ record TakeDispositionResume<B extends ResumedBranch>(
         // indistinguishable (FR14). Deliberate control flow keeps its own meaning — a usage refusal
         // still exits 2, and the two branch verdicts already carry their own classification.
         try {
-            return routeByShape(cloneDir, shape, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+            return routeByShape(order, shape);
         } catch (UsageException | BranchQuarantineException | BranchRecoveryFailedException classified) {
             throw classified;
         } catch (RuntimeException failure) {
-            throw new BranchRecoveryFailedException(taskId, shape, failure);
+            throw new BranchRecoveryFailedException(order.taskId(), shape, failure);
         }
     }
 
-    private TakeResult routeByShape(
-            Path cloneDir,
-            BranchShape shape,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            String taskId,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    private TakeResult routeByShape(TakeOrder order, BranchShape shape) {
+        String taskId = order.taskId();
         return switch (shape) {
             // Delivery is terminal: the branch is done and only the tracker write may be owed.
-            case BranchShape.Delivered() ->
-                TakeReconcileFinish.deliverCompleted(git, cloneDir, taskId, tracker, ref, instanceId);
+            case BranchShape.Delivered() -> TakeReconcileFinish.deliverCompleted(git, order);
             case BranchShape.Created(),
                     BranchShape.InProgress(),
                     BranchShape.Answered(),
                     BranchShape.Parked(),
-                    BranchShape.CompletedUncleaned() ->
-                routes().route(cloneDir, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+                    BranchShape.CompletedUncleaned() -> routes().route(order);
             // Bare is routed to the fresh-claim path before resume is ever reached (TakeWorkRouter),
             // so arriving here with it is a routing defect, not a branch state — and the three
             // non-recoverable shapes stop the run with their own diagnosis (FR15).

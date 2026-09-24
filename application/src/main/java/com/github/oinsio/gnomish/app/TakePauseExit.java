@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -66,25 +65,16 @@ final class TakePauseExit {
      * @param context the task's identity and decisions, reflecting all decisions up to this run;
      *     never null
      * @param branchName the task branch's short name, appended as a report line; never null
-     * @param tracker the tracker port the park call is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param order the take order whose task is parked: its tracker, the task's identity, and this
+     *     instance's identity for the pre-write claim check; never null
      * @return the {@link TakeResult.AwaitingHuman} the park call was made with; never null
      */
-    static TakeResult finish(
-            TaskOutcome.Paused paused,
-            TaskContext context,
-            String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
+    static TakeResult finish(TaskOutcome.Paused paused, TaskContext context, String branchName, TakeOrder order) {
         return finish(
                 paused,
                 context,
                 branchName,
-                tracker,
-                ref,
-                instanceId,
+                order,
                 TerminalWriteRetry.system(),
                 // The caller of this convenience overload has already recorded the outcome commit, so
                 // the intent here is only the delivery verdict it fenced with — a fresh write either
@@ -93,7 +83,7 @@ final class TakePauseExit {
     }
 
     /**
-     * As {@link #finish(TaskOutcome.Paused, TaskContext, String, Tracker, TaskRef, InstanceId)}, but
+     * As {@link #finish(TaskOutcome.Paused, TaskContext, String, TakeOrder)}, but
      * wraps the git-unfenced checkpoint {@code tracker.park} write in {@code retry} via {@link
      * GuardedPark#attempt} — a tracker outage is retried with backoff for the bounded hold-the-slot
      * period (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code transition}'s receipt once
@@ -120,9 +110,7 @@ final class TakePauseExit {
             TaskOutcome.Paused paused,
             TaskContext context,
             String branchName,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId,
+            TakeOrder order,
             TerminalWriteRetry retry,
             ParkTransition transition) {
         var report = StatusReport.build(context, paused.finalState(), null, LiveActivity.idle());
@@ -130,8 +118,8 @@ final class TakePauseExit {
         String checkpoint = "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.";
         String head = rendered + "\nBranch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
 
-        String reportText = GuardedPark.attempt(
-                tracker, ref, instanceId, ParkReason.CHECKPOINT, head, retry, transition, log, "checkpoint park");
+        String reportText =
+                GuardedPark.attempt(order, ParkReason.CHECKPOINT, head, retry, transition, log, "checkpoint park");
         return new TakeResult.AwaitingHuman(paused.finalState(), ParkReason.CHECKPOINT, reportText);
     }
 }

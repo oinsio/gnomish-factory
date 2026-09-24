@@ -79,8 +79,7 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
         def subject = claimAndWork(gitClassifying(shape, store), tracker, Stub(RunAssembly), ClaimBeat.NONE,
                 new ClaimLossFlag(), WORKTREES_ROOT)
         return capture {
-            subject.claimAndWork(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
-            taskWith(facts), tracker, INSTANCE)
+            subject.claimAndWork(takeOrder(taskWith(facts), tracker))
         }
     }
 

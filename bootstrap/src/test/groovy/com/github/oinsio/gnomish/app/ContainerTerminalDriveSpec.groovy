@@ -79,8 +79,9 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
 
         when:
         ContainerTerminalDrive.run(
-                assembly, support, definition, context, TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL, LawBinding.atRevision(cloneDir, GitObjects.HEAD), null)
+                assembly, support, new RunOrder(cloneDir, null, definition, RunArguments.InteractiveMode.ALL, false),
+                context, TaskState.atStageStart('build'), LawBinding.atRevision(cloneDir, GitObjects.HEAD),
+                null)
 
         then: 'the durability break escapes as AbortedException, carrying the outcome'
         def e = thrown(AbortedException)
