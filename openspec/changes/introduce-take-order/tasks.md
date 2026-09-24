@@ -60,16 +60,16 @@ attachment and no expected console or tracker output changes. 48 spec files in
 `:application` and `:bootstrap` are such call sites (counted 2026-09-23); editing them is
 expected, editing an expectation stops the task.
 
-- [x] 2.1 Change `GitModeRunner.run:109` and `ContainerGitModeRunner.run:70` to take one
+- [x] 2.1 Change `GitModeRunner.run:106` and `ContainerGitModeRunner.run:67` to take one
       `RunOrder`, keeping both ends of the declared pair identical; verify their existing
       specs pass with call-site-only edits (NFR-R1).
-- [x] 2.2 Change `GitResumeRunner.run:103`, `GitResumeRunner.continueFrom:149` and
-      `ContainerResumeRunner.run:86` to take one `RunOrder`, keeping that declared pair
+- [x] 2.2 Change `GitResumeRunner.run:101`, `GitResumeRunner.continueFrom:142` and
+      `ContainerResumeRunner.run:91` to take one `RunOrder`, keeping that declared pair
       identical; verify the resume specs pass with call-site-only edits (NFR-R1).
-- [x] 2.3 Change `ContainerResumeOutcomes.resumeFromRecordedPosition:48`,
-      `ContainerResumeOutcomes.resumePaused:122`, their declared twins
+- [x] 2.3 Change `ContainerResumeOutcomes.resumeFromRecordedPosition:46`,
+      `ContainerResumeOutcomes.resumePaused:113`, their declared twins
       `GitResumeContinuation.resumeFromRecordedPosition:76` /
-      `GitResumeContinuation.resumePaused:129` (both ends of the pair, FR6) and
+      `GitResumeContinuation.resumePaused:124` (both ends of the pair, FR6) and
       `ContainerTerminalDrive.run:29` to take `RunOrder`; verify each drops below eight
       parameters and both the host and the container resume specs pass with call-site-only edits (NFR-R1).
       *Applied 2026-09-23:* `resumeEscalated` on both ends of the pair and the private
@@ -87,12 +87,12 @@ expected, editing an expectation stops the task.
 
 ## 3. Tracker-driven chain takes `TakeOrder`
 
-- [x] 3.1 Change the entry points — `TakeDisposition.dispose:128` and `TakeTakeover.take:68`
-      — to build and pass one `TakeOrder`. The three pre-claim sites — `TakeBareAuto.run:126`,
-      `BareTakeClaimWalk.resolve:47` and the `TakeSlotRunner` constructor's order fields —
+- [x] 3.1 Change the entry points — `TakeDisposition.dispose:119` and `TakeTakeover.take:56`
+      — to build and pass one `TakeOrder`. The three pre-claim sites — `TakeBareAuto.run:125`,
+      `BareTakeClaimWalk.resolve:45` and the `TakeSlotRunner` constructor's order fields —
       take a `RunOrder` instead (no `TrackerTask` exists there yet; `tracker` and
       `instanceId` stay separate until `introduce-slot-wiring`), built by their callers
-      `TakeDispatcher.runBare:163` (from `TakeArguments`) and `ServeAssembly:63` (from the serve
+      `TakeDispatcher.runBare:133` (from `TakeArguments`) and `ServeAssembly:63` (from the serve
       arguments) — the take-side assembly points of the design table, and the `TakeOrder` is
       assembled at the two points named in the design table: `BareTakeClaimWalk.resolve`
       right after `fetchTask`, before `dispatchAfterClaim`, and `TakeSlotRunner.run` right
@@ -100,16 +100,16 @@ expected, editing an expectation stops the task.
       `fetchTask` (added 2026-09-24, it was missing from the design table). `runBare` keeps
       today's `discardWork = false` and `base = null` for bare take, even though the parser
       accepts `--discard-work` there; changing that would be a behavior change (NG4); verify the take and serve specs pass with call-site-only edits (NFR-R1).
-- [x] 3.2 Change the claim layer — `TakeClaimAndWork.claimAndWork:108` and
-      `dispatchAfterClaim:173`, `TakeCrashAbort.onCrash:79` — to take `TakeOrder`; verify
+- [x] 3.2 Change the claim layer — `TakeClaimAndWork.claimAndWork:104` and
+      `dispatchAfterClaim:160`, `TakeCrashAbort.onCrash:74` — to take `TakeOrder`; verify
       `TakeClaimAndWork`'s specs pass with call-site-only edits (NFR-R1) and both methods drop to three parameters
       or fewer.
-- [x] 3.3 Change the routing layer — `TakeWorkRouter.locateAndWork:37`, `freshClaim:78`,
-      `resume:132`, and `TakeDispositionResume.resumeExisting:45`, `routeByShape:71`,
-      and `TakeLoadedBranchRoutes.route:42` — to take
+- [x] 3.3 Change the routing layer — `TakeWorkRouter.locateAndWork:31`, `freshClaim:62`,
+      `resume:96`, and `TakeDispositionResume.resumeExisting:42`, `routeByShape:60`,
+      and `TakeLoadedBranchRoutes.route:41` — to take
       `TakeOrder`; verify the routing specs pass with call-site-only edits (NFR-R1).
-- [x] 3.4 Change the fresh-claim pair — `TakeFreshClaim.claim:62`/`claimAt:114` and
-      `TakeContainerFreshClaim.claim:44`/`claimAt:96` — to take `TakeOrder`, editing both
+- [x] 3.4 Change the fresh-claim pair — `TakeFreshClaim.claim:59`/`claimAt:99` and
+      `TakeContainerFreshClaim.claim:42`/`claimAt:82` — to take `TakeOrder`, editing both
       ends together (FR6); verify each of the four drops from 15–16 parameters and that
       both classes' specs pass with call-site-only edits (NFR-R1). Each `claimAt` re-binds
       the order to the task's law with `TakeOrder.withDefinition` (D6, added 2026-09-24), right
@@ -118,26 +118,26 @@ expected, editing an expectation stops the task.
       plus one new feature each in `TakeFreshClaimSpec` and `TakeContainerFreshClaimSpec`: the
       startup definition differs from the task's, and the engine must run the task's stage.
       These are new specs, not edits to an expectation.
-- [x] 3.5 Change the resume pair — `TakeResumeRunner.resumeWithoutDecision:122`/
-      `resumeDecided:172` and `TakeContainerResumeRunner.resumeWithoutDecision:91`/
-      `resumeDecided:138` — to take `TakeOrder`, both ends together; verify their specs pass
+- [x] 3.5 Change the resume pair — `TakeResumeRunner.resumeWithoutDecision:114`/
+      `resumeDecided:147` and `TakeContainerResumeRunner.resumeWithoutDecision:88`/
+      `resumeDecided:115` — to take `TakeOrder`, both ends together; verify their specs pass
       with call-site-only edits (NFR-R1). `TakeResumeBootstrap` / `TakeContainerResumeBootstrap`
       and `ResumeMechanics.loadBranch` stay unchanged (corrected 2026-09-24, design Sync
       surfaces): the host bootstrap is shared with manual `run --resume`, where FR5 forbids a
       `TakeOrder`.
 - [x] 3.6 Change the `ResumeMechanics<B>` interface's `resumeWithoutDecision` and
       `resumeDecided` to take `TakeOrder` (D4) and follow with both implementations,
-      `HostResumeMechanics:75,95` and `ContainerResumeMechanics:53,77`; verify the
+      `HostResumeMechanics:72,83` and `ContainerResumeMechanics:50,65`; verify the
       interface's contract specs pass with call-site-only edits (NFR-R1) and both methods drop to three parameters.
-- [x] 3.7 Change the engine-execution pair — `TakeEngineExecution.run:120` and
-      `TakeContainerEngineExecution.run:89` — and the decision-resume path
-      `TakeDecisionResume.resume:65`/`ackAndResume:108` and `TakeReconcileFinish
-      .deliverCompleted:60`, to take `TakeOrder`; verify their specs pass with call-site-only edits (NFR-R1).
+- [x] 3.7 Change the engine-execution pair — `TakeEngineExecution.run:115` and
+      `TakeContainerEngineExecution.run:99` — and the decision-resume path
+      `TakeDecisionResume.resume:60`/`ackAndResume:85` and `TakeReconcileFinish
+      .deliverCompleted:54`, to take `TakeOrder`; verify their specs pass with call-site-only edits (NFR-R1).
 - [x] 3.8 Change the terminal chain to carry `TakeOrder` from the engine result to the park
-      guard — the three intermediate callers `TakeOutcomeDispatch.dispatch:55`,
-      `TakeEscalationExit.exit:110`, `TakeReconcile.deliverPark:94`, and the four ends
-      `TakeFinishReport.finish:140`, `TakePauseExit.finish:119`, `GuardedPark` ctor:64 with
-      `attempt:109` — replacing the `tracker, ref, instanceId` triple in each, together with
+      guard — the three intermediate callers `TakeOutcomeDispatch.dispatch:51`,
+      `TakeEscalationExit.exit:106`, `TakeReconcile.deliverPark:91`, and the four ends
+      `TakeFinishReport.finish:120`, `TakePauseExit.finish:109`, `GuardedPark` ctor:62 with
+      `attempt:102` — replacing the `tracker, ref, instanceId` triple in each, together with
       `TakeReconcileFinish.finishUncleaned` and the spec-only convenience overloads
       `TakeFinishReport.finish` (six and seven parameters), `TakePauseExit.finish` (six) and
       `TakeEscalationExit.exit` (four), all added 2026-09-24; verify the
@@ -147,8 +147,8 @@ expected, editing an expectation stops the task.
       change until the 2026-09-13 re-verification; the three intermediates were added on
       2026-09-23 because without them the order cannot reach the ends.
 - [x] 3.9 Change the two identity consumers that receive a `TrackerTask` only to read its
-      id — `TaskTierLaw.bind:103` (called from both `claimAt` sites of 3.4) and
-      `TakeQuarantinePark.onQuarantine:52` (called from `TakeClaimAndWork.dispatchAfterClaim`)
+      id — `TaskTierLaw.bind:100` (called from both `claimAt` sites of 3.4) and
+      `TakeQuarantinePark.onQuarantine:51` (called from `TakeClaimAndWork.dispatchAfterClaim`)
       — to take `TakeOrder` and read `order.taskId()` / `order.ref()`; verify no
       `TrackerTask` parameter survives on either and their specs pass with call-site-only edits (NFR-R1).
 - [x] 3.10 Change the `RunAssembly.assemble` interface (`:application`) to take one `RunOrder`
@@ -173,8 +173,13 @@ expected, editing an expectation stops the task.
 
 - [x] 4.1 Re-read the `Kept in sync with` sentence on both ends of all seven pairs listed
       in the design's Sync surfaces table and update any that names a parameter the change
-      removed; verify `grep -rn "Kept in sync with" */src/main` still enumerates fourteen
-      markers and that each names its twin with a resolvable `{@link}`.
+      removed; verify that, among the fourteen chain markers — two per each of the seven
+      declared pairs this change touches — none names a parameter the change removed and
+      each names its twin with a resolvable `{@link}`. (The bare `grep -rn "Kept in sync
+      with" */src/main` over the whole tree returns more than fourteen lines: it also
+      matches pre-existing pairs unrelated to this change, e.g. `RemoteOutageHealth` /
+      `RemoteHealth`. The fourteen count is scoped to the seven pairs this change lists, not
+      to the raw grep total.)
       *Applied 2026-09-24:* none of the fourteen chain markers names a parameter; each states
       an invariant. The fresh-claim pair's markers gained the D6 sentence (both hand on only
       the re-bound order past the task-tier bind).
@@ -240,7 +245,13 @@ expected, editing an expectation stops the task.
         `LivenessOracle` (a minion crash under load). A clean rerun had none.
       - Call-site-only check: `git diff HEAD -U0 -- '*/src/test/*'` (68 files across groups 2
         and 3) has no removed line with an assertion, interaction, `where:`, `thrown` or
-        log-capture token.
+        log-capture token. Three files are a stated exception to "call-site-only", not a
+        violation of NFR-R1: `TakeFreshClaimSpec.groovy` and `TakeContainerFreshClaimSpec.groovy`
+        each add one new `then:`-bearing feature for D6 ("runs the engine under the task's own
+        law, not the startup definition the order was built with"), and `TakeOrderSpec.groovy`
+        is a wholly new spec file with its own `expect:`/`then:` blocks covering `withDefinition`.
+        All three are new coverage of new behavior added by this change (D6, task 3.4), not an
+        edit to an existing expectation — NFR-R1 forbids the latter, not the former.
 - [x] 6.2 Update the task text of the queued changes that edit these signatures —
       `add-claim-return`, `add-pipeline-routing` — through `/opsx:update`; verify each
       names the post-refactor signature (for `add-claim-return`, that `ClaimIdentity` is
