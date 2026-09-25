@@ -69,7 +69,8 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Abort fuse** — the bound on infrastructure aborts a task may accumulate
   before it is quarantined: the abort protocol (the handler that releases or
   parks an aborted task) together with its threshold *K*, carried as one
-  value because the protocol is never run without the threshold. *Not:* the
+  value because the protocol is never run without the threshold. Type:
+  `AbortFuse`, a member of the **slot wiring**. *Not:* the
   stage attempt limit, which counts quality failures.
 - **Resume** — any instance continuing a task from its branch and state file;
   requires no hand-off from the previous holder.
@@ -88,6 +89,25 @@ terms) live in `.claude/rules/process-invariants.md`.
   task, the tracker it was claimed through and this instance's identity. The
   one place the claimed task's identity (its ref and task id) is derived.
   Built only after the claimed task is fetched. Type: `TakeOrder`.
+- **Slot wiring** — the equipment one take slot works with: the run assembly,
+  the task-git capability set, the worktrees root, the task-id MDC key, the
+  **abort fuse**, the credential variable names to scrub, the container
+  support seam, the **claim tenure** and the trusted base tier. Type:
+  `SlotWiring`. Its lifetime is what separates it from the order: an order
+  describes one invocation's job and is passed as a parameter, while the
+  wiring is fixed for as long as the slot exists — built once per `take`
+  invocation, or once per `serve` daemon and shared by all its slots — and is
+  held as fields by the components that use it. *Not:* the order, and not a
+  composition root's argument list — it is built only after the tracker is
+  provisioned.
+- **Claim tenure** — as a type, the liveness view of one tenure (one holding
+  of a claim, identified by its **claim epoch**): the claim beat that keeps the
+  claim alive and the claim-loss flag the beat sets when the claim is lost.
+  Type: `ClaimTenure`, built only from the run's heartbeat, which owns both
+  and requires the flag to be the one wired as the beat's sink. Lives as long
+  as the slot wiring that carries it. It deliberately does not carry the
+  claim epoch itself: the task-git capability set's epoch book is that
+  value's single owner.
 - **Task branch** — the git branch holding the task's artifacts and state
   file; the single source of truth for task progress. Its configuration lives
   under the `task-branch:` section of `.gnomish/config.yaml` — the `base`

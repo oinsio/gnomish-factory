@@ -4,22 +4,14 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
-import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -64,22 +56,17 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
         summaryLogger.addAppender(logged)
     }
 
-    private TakeDispatcher dispatcher() {
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
-        new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                ContainerTakeSupport.hostOnly(), DEFAULT_TRUSTED_BASE)
+    private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
+        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, WORKTREES_ROOT, ContainerTakeSupport.hostOnly(),
+                heartbeat.tenure()), testProperties(), FIXED_CLOCK,
+                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
-        TakeRefDispatch.run(dispatcher(),
+        TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
                 new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-                pipeline(), TRACKER_CONFIG, tracker, INSTANCE, [], factory,
-                assemblyRunning(null), heartbeat, SERVE_PROPERTIES, LOG)
+                pipeline(), TRACKER_CONFIG, tracker, INSTANCE, factory, SERVE_PROPERTIES, LOG)
     }
 
     // FR10: no refs means BARE mode — the queue is read and one task is walked for. An empty queue

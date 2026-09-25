@@ -40,6 +40,21 @@ class TakeHeartbeatSpec extends Specification {
         heartbeat.flag() != null
     }
 
+    // FR3 of introduce-slot-wiring: the tenure is a view of this heartbeat, not a second source —
+    //     it carries the SAME flag instance wired as the beat's lost-claim sink, and the same beat.
+    def "tenure carries this heartbeat's own beat and claim-loss flag instances"() {
+        given:
+        def heartbeat = TakeHeartbeat.forRun(
+                Mock(Tracker), new TrackerConfig('fixture', 3), { Duration d -> } as Sleeper)
+
+        when:
+        def tenure = heartbeat.tenure()
+
+        then:
+        tenure.lossFlag().is(heartbeat.flag())
+        tenure.beat().is(heartbeat.instance())
+    }
+
     // FR1, FR7 of add-serve-observability: the serve overload wires the state listener into the
     //     InstanceHeartbeat, so the worker-start transition driven through the assembled beat
     //     lifecycle fires it — proving the listener is threaded through, not dropped.

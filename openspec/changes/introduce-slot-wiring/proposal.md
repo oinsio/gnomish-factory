@@ -32,14 +32,17 @@ and repairs the instances it produced in the take chain.
 ## What Changes
 
 - **ADDED**: `SlotWiring` — the equipment one take slot works with, with two cohesive
-  sub-groups named as their own types: `AbortPolicy` (handler + threshold, already consumed
-  as a pair by `TakeCrashAbort`) and `ClaimTenure` (heartbeat + claim-loss flag).
+  sub-groups named as their own types: `AbortFuse` (handler + threshold — the existing
+  `app.take` record the engine executions already take, reused rather than duplicated) and `ClaimTenure` (heartbeat + claim-loss flag).
 - **MODIFIED**: the twenty signatures that enumerate four or more of those collaborators
   take `SlotWiring` instead.
 - **MODIFIED**: the take chain's static "recipes" become objects holding the wiring as
   fields rather than receiving it as parameters — `TakeFreshClaim`,
   `TakeContainerFreshClaim`, `TakeWorkRouter`, `TakeClaimAndWorkFactory`. This is the
   transformation that repairs the file-size-driven splits rather than papering over them.
+- **MODIFIED**: `TakeSlotRunner` no longer takes a `RemoteOutageGate` and no longer decorates
+  its own `TaskGit`; the outage-signaling decoration is applied at the serve assembly point
+  through one owner, `RemoteOutageGates.signaling` (design D6).
 - **MODIFIED**: `.claude/rules/process-invariants.md` — the file-size section gains the
   rule that a split must not convert fields into parameters, with the correct transformation
   named.
@@ -90,11 +93,12 @@ and repairs the instances it produced in the take chain.
 ### Functional
 
 - **FR1** — `SlotWiring` carries exactly: `RunAssembly assembly`, `TaskGit git`, `Path
-  worktreesRoot`, `String taskIdMdcKey`, `AbortPolicy abort`, `List<String>
+  worktreesRoot`, `String taskIdMdcKey`, `AbortFuse abort`, `List<String>
   credentialEnvVarsToScrub`, `ContainerTakeSupport containerTakeSupport`, `ClaimTenure
   tenure`, `TrustedBaseContext trustedBase` — no epoch book (FR3).
-- **FR2** — `AbortPolicy` carries the abort handler and its positive threshold, and is the
-  only pairing of those two that reaches `TakeCrashAbort`.
+- **FR2** — `AbortFuse` (the existing record, glossary *abort fuse*) carries the abort handler
+  and its positive threshold, and is the only pairing of those two that reaches
+  `TakeCrashAbort`; no second type for the same pair is introduced.
 - **FR3** — `ClaimTenure` carries the claim beat and the claim-loss flag, and is built only
   from the run's `TakeHeartbeat` (its `tenure()` accessor), which stays their owner. It does **not**
   carry the epoch book: `fix-claim-epoch-fence` makes `TaskGit.epochs()` that value's single
@@ -156,14 +160,16 @@ and repairs the instances it produced in the take chain.
 
 ## Impact
 
-- **Modules**: `:application` (`app`, `app.take`, `app.serve`), `:bootstrap` (the take and
-  serve command wiring). No new module edge.
+- **Modules**: `:application` (`app`, `app.take`, `app.serve` — which gains one public static
+  method, `RemoteOutageGates.signaling`, design D6), `:bootstrap` (the take and serve command
+  wiring). No new module edge.
 - **Declared sync pairs touched**: `TakeFreshClaim` / `TakeContainerFreshClaim`,
   `TakeResumeRunner` / `TakeContainerResumeRunner`. `GitResumeRunner` /
   `ContainerResumeRunner` is not touched: it serves only the claimless
   `gnomish run --resume` path (design, Sync surfaces).
 - **Rules**: `.claude/rules/process-invariants.md` (file-size section, FR7).
-- **Glossary**: `slot wiring`, `abort policy`, `claim tenure` added to `docs/glossary.md`.
+- **Glossary**: `slot wiring`, `claim tenure` added to `docs/glossary.md`; the existing
+  *abort fuse* entry already names the abort pair.
 - **Depends on**: `introduce-take-order` — the same signatures are edited, and doing them in
   the other order means editing each twice. Also **depends on `fix-claim-epoch-fence`**,
   which must land first: it makes `TaskGit.epochs()` the single owner of the epoch book and

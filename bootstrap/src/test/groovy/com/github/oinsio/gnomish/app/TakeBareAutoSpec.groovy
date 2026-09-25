@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.lease.ClaimBeat
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -10,10 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.baseref.BaseDefinition
-import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
@@ -58,17 +53,12 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     }
 
     private TakeBareAuto newBareAuto(int wipLimit = UNLIMITED_WIP, Random random = headPick()) {
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         // FR5, FR13 of add-base-ref-resolution: the shorter constructor's placeholder trusted tier
         // ('HEAD', a non-existent origin ref) is only safe for a scenario that never reaches a
         // fresh claim's base resolution; setup() wires a real 'origin' remote (TakeResumeSpecBase),
-        // so this spec's claimed scenarios need the clone's actual default branch instead.
-        new TakeBareAuto(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', BASE, CAP, CLOCK, [],
-                ClaimBeat.NONE, new ClaimLossFlag(),
-                wipLimit, random, ContainerTakeSupport.hostOnly(),
-                new TrustedBaseContext(BaseDefinition.none(),
-                new DefaultBranch(currentBranch(cloneDir))))
+        // so this spec's claimed scenarios need the clone's actual default branch instead — which
+        // is the trusted tier the fixture's slot wiring carries.
+        new TakeBareAuto(slotWiring(newAssembly(), TaskGitFixture.real()), BASE, CAP, CLOCK, wipLimit, random)
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {

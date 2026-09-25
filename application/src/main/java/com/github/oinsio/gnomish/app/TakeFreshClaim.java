@@ -2,17 +2,13 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
-import com.github.oinsio.gnomish.app.take.AbortFuse;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TrackerTaskSynthesizer;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * The "no branch exists yet" half of {@link TakeDisposition}'s {@code Ready} case (FR9, FR11,
@@ -33,8 +29,9 @@ import java.util.List;
  * that cannot be resolved or refreshed parks or releases the claim there — see {@link
  * FreshClaimBaseBinding}'s javadoc for the classification.
  *
- * <p>Split out of {@link TakeDisposition} purely to respect the file-size guidance
- * (`.claude/rules/process-invariants.md`).
+ * <p>An instance owns the host fresh-claim recipe over the slot's {@link SlotWiring}, which it
+ * holds as a field for the slot's lifetime: each claim receives only its {@link TakeOrder}, never
+ * the equipment (D2 of introduce-slot-wiring).
  *
  * <p>Kept in sync with {@link TakeContainerFreshClaim}: both run the SAME fresh-claim recipe —
  * harden, resolve+refresh the base, bind the task tier at that base, synthesize, create the
@@ -44,11 +41,15 @@ import java.util.List;
  * through {@link TakeOrder#withDefinition} (D6 of introduce-take-order).
  *
  * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
- * add-base-ref-resolution.
+ * add-base-ref-resolution; FR5 of introduce-slot-wiring.
  */
 final class TakeFreshClaim {
 
-    private TakeFreshClaim() {}
+    private final SlotWiring wiring;
+
+    TakeFreshClaim(SlotWiring wiring) {
+        this.wiring = wiring;
+    }
 
     /**
      * Creates the task branch/worktree for a first claim and runs the engine once (see class
@@ -56,16 +57,8 @@ final class TakeFreshClaim {
      *
      * <p>Implements FR9, FR11, D3 of add-tracker-port.
      */
-    static TakeResult claim(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            TakeOrder order,
-            ClaimLossFlag claimLossFlag,
-            TrustedBaseContext trustedBase) {
+    TakeResult claim(TakeOrder order) {
+        TaskGit git = wiring.git();
         Path cloneDir = order.run().cloneDir();
 
         git.worktrees().pruneWorktrees(cloneDir);
@@ -73,42 +66,27 @@ final class TakeFreshClaim {
 
         TaskState notYetStarted = TaskState.atStageStart(
                 order.run().definition().stages().getFirst().name());
-        var baseRequest = new FreshClaimBaseBinding.Request(order.run().base(), order.trackerTask(), trustedBase);
+        var baseRequest =
+                new FreshClaimBaseBinding.Request(order.run().base(), order.trackerTask(), wiring.trustedBase());
         return FreshClaimBaseBinding.resolve(
                 git.baseRefs(),
                 cloneDir,
                 baseRequest,
                 notYetStarted,
                 order.tracker(),
-                baseBound -> claimAt(
-                        assembly,
-                        git,
-                        worktreesRoot,
-                        abortHandler,
-                        abortThreshold,
-                        credentialEnvVarsToScrub,
-                        order,
-                        claimLossFlag,
-                        baseBound));
+                baseBound -> claimAt(order, baseBound));
     }
 
     /**
      * The remainder of a fresh claim once its base is resolved and refreshed: bind the task tier
      * at that base, create the branch from the resolved ref, and run the engine once.
      */
-    private static TakeResult claimAt(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            TakeOrder order,
-            ClaimLossFlag claimLossFlag,
-            FreshClaimBaseBinding.Bound baseBound) {
+    private TakeResult claimAt(TakeOrder order, FreshClaimBaseBinding.Bound baseBound) {
+        TaskGit git = wiring.git();
+        Path worktreesRoot = wiring.worktreesRoot();
         // FR13, D14 of add-base-ref-resolution: the task runs under the definition read from ITS
         // resolved base's law binding, never under the startup one.
-        var law = TaskTierLaw.bind(assembly, baseBound.lawBinding(), order);
+        var law = TaskTierLaw.bind(wiring.assembly(), baseBound.lawBinding(), order);
         if (law instanceof TaskTierLaw.Parked(TakeResult parked)) {
             return parked;
         }
@@ -148,12 +126,12 @@ final class TakeFreshClaim {
                 content.pin());
 
         var execution = new TakeEngineExecution(
-                assembly,
+                wiring.assembly(),
                 git,
                 worktreesRoot,
-                new AbortFuse(abortHandler, abortThreshold),
-                credentialEnvVarsToScrub,
-                claimLossFlag,
+                wiring.abort(),
+                wiring.credentialEnvVarsToScrub(),
+                wiring.tenure().lossFlag(),
                 bound.lawBinding());
         return execution.run(lawBound, bootstrap, synthesized.context(), synthesized.initialState());
     }

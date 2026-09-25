@@ -17,6 +17,30 @@ number — that is a violation of this rule, not compliance ("extracted for file
 ownership transfer is the tell). If no responsibility boundary exists, reduce the class's
 responsibilities first; the line count follows.
 
+**A split that converts fields into parameters is not a responsibility split.** When an
+oversized class holds collaborators, moving part of its code into a static helper that
+receives those collaborators as arguments leaves ownership where it was and turns the field
+set into a parameter list that every call re-supplies — and that each further split
+multiplies along the chain. The correct transformation gives the extracted half the
+collaborators as **fields**: it becomes an instance, constructed once with the equipment it
+uses (grouped into a parameter object when the set is large), whose methods take only the
+per-call job. The failure this clause exists for: the take chain's `TakeFreshClaim`,
+`TakeContainerFreshClaim`, `TakeWorkRouter` and `TakeClaimAndWorkFactory` were each extracted
+"for file size" as static recipes, and four signatures ended up carrying the same eleven
+collaborators, up to sixteen parameters each (`introduce-slot-wiring`, which turned them into
+instances holding `SlotWiring`).
+
+**The parameter object stops at the last relay.** A component that only passes the equipment
+on takes the object whole; the leaf that actually uses it declares exactly the members it
+uses and is constructed from explicit reads of the object (Fowler's stated exception to
+Preserve Whole Object; the interface-segregation principle). A leaf handed the whole object
+depends on members it never touches, and its spec has to build placeholders for them — the
+"too many dependencies" signal of *Growing Object-Oriented Software*. A leaf that would need
+more than seven members gets its own facade over the cohesive cluster it uses, exposed by the
+parameter object as one accessor — never the whole object. Precedent: `TakeEngineExecution`
+and `TakeContainerEngineExecution`, built per run from `SlotWiring` reads
+(`introduce-slot-wiring`, design, exemption row).
+
 ## Parameter count limit
 
 A constructor or method with **more than 7 parameters** must take a parameter object instead

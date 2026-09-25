@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
@@ -14,7 +13,6 @@ import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -74,11 +72,10 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         tracker.fetchTask(_) >> heldByUs()
 
         when:
-        def result = TakeContainerFreshClaim.claim(
-                assemblyRunning(new ScriptedExecutor([completedRound()])), git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+        def result = new TakeContainerFreshClaim(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+                [] as List<Segment>)
 
         then: 'the clone is hardened before the branch is created (mirrors ContainerGitModeRunner)'
         1 * branches.harden(CLONE_DIR)
@@ -112,11 +109,10 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         tracker.fetchTask(_) >> heldByUs()
 
         when:
-        def result = TakeContainerFreshClaim.claim(
-                assemblyRunning(executor), git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+        def result = new TakeContainerFreshClaim(slotWiring(
+                        assemblyRunning(executor), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline())),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+                [] as List<Segment>)
 
         then:
         executor.requests*.stage()*.name() == ['build']
@@ -141,12 +137,11 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         tracker.fetchTask(_) >> heldByUs('PROJ-9')
 
         when:
-        TakeContainerFreshClaim.claim(
-                assemblyRunning(new ScriptedExecutor([completedRound()])), git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+        new TakeContainerFreshClaim(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
                 new RunOrder(CLONE_DIR, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+                [] as List<Segment>)
 
         then:
         1 * repository.createTask({
@@ -178,11 +173,10 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         ] as RunAssembly
 
         when:
-        def result = TakeContainerFreshClaim.claim(
-                invalidAssembly, git, containerTakeSupport(support),
-                [] as List<Segment>, new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+        def result = new TakeContainerFreshClaim(slotWiring(
+                        invalidAssembly, git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+                [] as List<Segment>)
 
         then: 'parked, never having created the branch or reached the engine'
         0 * repository.createTask(*_)

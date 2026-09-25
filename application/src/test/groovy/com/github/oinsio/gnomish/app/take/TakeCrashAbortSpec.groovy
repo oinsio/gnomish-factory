@@ -48,7 +48,7 @@ class TakeCrashAbortSpec extends Specification {
 
     private Tracker tracker = Mock()
     private AbortHandler abortHandler = new AbortHandler(tracker, CLOCK)
-    private TakeCrashAbort crashAbort = new TakeCrashAbort(abortHandler, THRESHOLD)
+    private TakeCrashAbort crashAbort = new TakeCrashAbort(new AbortFuse(abortHandler, THRESHOLD))
 
     private static PipelineDefinition pipeline() {
         def stage = new StageDefinition(

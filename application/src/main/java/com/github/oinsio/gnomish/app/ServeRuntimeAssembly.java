@@ -19,6 +19,8 @@ import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
+import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -97,22 +99,22 @@ final class ServeRuntimeAssembly {
                 serveProperties.remoteSustainedOpenThreshold(),
                 dirtyNotifier::markDirty,
                 remoteOutageLedgerSink);
-        TakeSlotRunner slotRunner = ServeAssembly.slotRunner(
-                serveArguments,
+        // The serve side's one slot wiring (design "Where a SlotWiring is built" of
+        // introduce-slot-wiring): built once per daemon, as soon as the heartbeat, the augmented
+        // assembly and the gate exist, and shared by every slot through the one slot runner. Its
+        // git is the gate-signaling one (D6): the decoration is this root's decision, not the slot's.
+        var wiring = new SlotWiring(
+                serveAssembly,
+                RemoteOutageGates.signaling(git, remoteOutageGate),
                 worktreesRoot,
                 taskIdMdcKey,
-                definition,
-                trackerConfig,
-                factory,
-                trackerHealth,
-                instanceId,
-                serveAssembly,
-                git,
-                heartbeat,
-                clock,
+                new AbortFuse(new AbortHandler(trackerHealth, clock), trackerConfig.abortThreshold()),
+                factory.credentialEnvVars(trackerConfig),
                 containerTakeSupport,
-                trustedBase,
-                remoteOutageGate);
+                heartbeat.tenure(),
+                trustedBase);
+        TakeSlotRunner slotRunner =
+                ServeAssembly.slotRunner(serveArguments, definition, trackerHealth, instanceId, wiring);
         FeedAutomaton automaton = ServeAssembly.feedAutomaton(
                 factoryProperties,
                 serveProperties,

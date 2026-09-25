@@ -40,9 +40,9 @@ job) plus a hand-listed tail of equipment. This change collapses the tail.
 
 **D1 — `SlotWiring` is a record with nine components, two of them named sub-groups.** Driven
 by FR1, FR2 and FR3. The eleven collaborators become `RunAssembly assembly`, `TaskGit git`, `Path worktreesRoot`,
-`String taskIdMdcKey`, `AbortPolicy abort`, `List<String> credentialEnvVarsToScrub`,
+`String taskIdMdcKey`, `AbortFuse abort`, `List<String> credentialEnvVarsToScrub`,
 `ContainerTakeSupport containerTakeSupport`, `ClaimTenure tenure`, `TrustedBaseContext
-trustedBase`. *Rationale:* `AbortPolicy` and `ClaimTenure` are not arbitrary partitions —
+trustedBase`. *Rationale:* `AbortFuse` and `ClaimTenure` are not arbitrary partitions —
 `TakeCrashAbort` already takes exactly the abort pair, and the two tenure members are the
 claim lifecycle that `TakeClaimAndWork` starts and ends together. `ClaimTenure` is derived
 from `TakeHeartbeat`, which already carries the pair among its five components, rather than
@@ -121,6 +121,39 @@ book through `git` where it needs it. *Alternative rejected:* taking the `epochs
 would put an ownership transfer that touches tracker wiring inside a change whose whole
 contract is that behavior does not change.
 
+**D6 — The serve slot's outage decoration is applied at the assembly point, not by the
+slot.** Driven by FR4 and NFR-R1; decided 2026-09-25 in an architecture session. Today
+`TakeSlotRunner` ctor:120 takes a raw `TaskGit` plus the `RemoteOutageGate` and wraps the git's
+base-ref port in `RemoteOutageSignalingBaseRefGit` itself, before handing it down. With the
+constructor taking a `SlotWiring` whole, that wrap has to move: the wiring's `git` is
+decorated in `ServeRuntimeAssembly.assemble`, through one public owner,
+`RemoteOutageGates.signaling(TaskGit, RemoteOutageGate)` (the record stays package-private
+in `app.serve`), and `TakeSlotRunner` stops taking the gate. *Rationale:* a decorator is
+composition-root work — Seemann's Interception pattern — and a component that decorates its
+own injected dependency is his Control Freak anti-pattern: it keeps a decision about which
+adapter chain is in effect that the root is supposed to own. The codebase already follows
+that rule everywhere else (`RunAssembly.withHostGitPush`, `withExtraListener`,
+`withPipelineSource` are all applied from `TakeCommand`, `ServeCommand` and
+`ManualRunRunner`); `TakeSlotRunner` was the one consumer wrapping its own dependency. The
+difference between the two modes is real and stays — a one-shot `take` has no one to keep
+claiming after an outage, a daemon does — but it is one extra assembly step on the serve
+side, not a property of the slot. *Alternative rejected, with its case made first:*
+`SlotWiring.withGit(TaskGit)`, so the slot keeps wrapping inside its constructor. The form is
+idiomatic here (`TaskGit.withBaseRefs`, `RunOrder.withDefinition`; JEP 468's native `with`
+expressions have not shipped through Java 25, so hand-written withers stay the right
+idiom), and the diff is smallest. It breaks on three points: the knowledge that the
+decorator exists lands in two places (the wither and the consumer that calls it); the
+equipment stops being a value assembled once and becomes something a consumer edits before
+use — the direction in which a wiring record drifts toward a service locator; and the
+method's only reason to exist would be sparing three test fixtures, which is production
+surface shaped by tests rather than by a need. *Fixture impact, checked:* three specs
+construct `TakeSlotRunner` — `TakeSlotRunnerSpec`, `ServeShutdownWiringSpec`,
+`TakeSlotRunnerContainerConcurrencySpec`. Two pass an inert gate over `BaseRefGit.UNWIRED`
+and never read it: they drop the argument. `TakeSlotRunnerSpec` has one scenario asserting
+the gate saw a real refresh; its `newSlotRunner()` decorates through the same owner the root
+uses. No expectation is edited (NFR-R1). `RemoteOutageServeEndToEndSpec` and
+`OutageWarnFanOutSpec` do not construct the slot runner and are untouched.
+
 **Sync surfaces.** This change touches **two declared pairs**, both ends of each:
 
 | Pair | What this change does to it |
@@ -133,7 +166,7 @@ touched, and no mirrored change is needed on either end. Both are constructed on
 `ManualRunRunner` — the `gnomish run --resume` path, which holds no claim and has no slot —
 from `(assembly, git, worktreesRoot, TASK_ID_KEY)` plus, on the container end, the sandbox
 and factory properties and the `MANUAL` container support seam. That path has no abort
-policy, no heartbeat, no claim-loss flag, no trusted base tier and no per-slot credential
+fuse, no heartbeat, no claim-loss flag, no trusted base tier and no per-slot credential
 list, so a `SlotWiring` for it could only be built from placeholders — the claimless-path
 objection that also excludes `ContainerRunSupport` below. Neither constructor is over the
 limit (four and six parameters), so leaving them costs M2 nothing.
@@ -148,9 +181,10 @@ is not edited.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `SlotWiring` | `SlotWiring` (record) | `TakeClaimAndWorkFactory.forSlot:33`, `TakeClaimAndWork` ctor:66, `TakeDisposition` ctor:76, `TakeBareAuto` ctor:73, `TakeSlotRunner` ctor:101, `ServeAssembly.slotRunner:46`, the `TakeDispatcher` record:34 and its `runExplicit:46`, `runOneRef:77`, `runBare:133` and `runBatch:200`, `TakeBatch.dispatch:116`, `TakeRefDispatch.run:25`, `TakeFreshClaim.claim:59`/`claimAt:99`, `TakeContainerFreshClaim.claim:42`/`claimAt:82`, `TakeResumeRunner` ctor:63, `TakeContainerResumeRunner` ctor:48, `TakeResumeExecution` record:26 | the hand-listed members of the clump in each signature, and the per-ref `TakeDispatcher.newAbortHandler:226` (the take assembly point builds the one handler). Exemptions: the constructors and factories upstream of tracker provisioning — `TakeCommand` ctor:107, `TakeCommandFactory.of:24` and `:53`, `ServeCommand` ctor:94, `SubcommandDispatchFactory.of:30`, and `ServeRuntimeAssembly.assemble:50` as a signature — are **not reduced** by this change: they hold only five of the members (`assembly`, `git`, `worktreesRoot`, `taskIdMdcKey`, `containerTakeSupport`), because the other four (abort policy, tenure, credential list, trusted base) come into existence only after the tracker is provisioned, so no `SlotWiring` can exist where they are. They are composition roots and belong to `collapse-composition-roots`. `TakeDispatcher.runOneRef` (11 → 8), `TakeBatch.dispatch` (11 → 8) and `TakeRefDispatch.run` (12 → 9) lose the three wiring members they relay but stay over the limit on per-invocation values (the parsed arguments, definition, tracker config, tracker, instance id, adapter factory); they are handed to `collapse-composition-roots` with the residual list (task 6.2). `ContainerRunSupport.create:130` and `ContainerRunSupportFactory.create:61` (`:bootstrap`) keep their `credentialEnvVarsToScrub` parameter — they are not consumers of the wiring (see below) and are handed to `collapse-composition-roots`. `GitResumeRunner` and `ContainerResumeRunner`, and the `ManualRunRunner` that builds them, keep their constructors — they serve only the claimless `gnomish run --resume` path (see Sync surfaces) | the parameter type — every listed signature loses the members, so a caller still holding them does not compile. **Assembly points:** see "Where a `SlotWiring` is built" below — exactly two, checked by `grep -rn "new SlotWiring(" */src/main` |
-| `AbortPolicy` | `AbortPolicy` (record) | `TakeCrashAbort` ctor, and every consumer above that passed `abortHandler, abortThreshold` adjacently | the adjacent `(AbortHandler, int)` pair — a transposition hazard by `process-invariants.md`; sweep `grep -rn "abortThreshold" application/src/main bootstrap/src/main` must show no signature taking it beside a bare `AbortHandler` | the parameter type |
+| `SlotWiring` | `SlotWiring` (record) | `TakeClaimAndWorkFactory.forSlot:33`, `TakeClaimAndWork` ctor:66, `TakeDisposition` ctor:76, `TakeBareAuto` ctor:73, `TakeSlotRunner` ctor:101, `ServeAssembly.slotRunner:46`, the `TakeDispatcher` record:34 and its `runExplicit:46`, `runOneRef:77`, `runBare:133` and `runBatch:200`, `TakeBatch.dispatch:116`, `TakeRefDispatch.run:25`, `TakeFreshClaim.claim:59`/`claimAt:99`, `TakeContainerFreshClaim.claim:42`/`claimAt:82`, `TakeResumeRunner` ctor:63, `TakeContainerResumeRunner` ctor:48, `TakeResumeExecution` record:26 | the hand-listed members of the clump in each signature, and the per-ref `TakeDispatcher.newAbortHandler:226` (the take assembly point builds the one handler). Exemptions: the constructors and factories upstream of tracker provisioning — `TakeCommand` ctor:107, `TakeCommandFactory.of:24` and `:53`, `ServeCommand` ctor:94, `SubcommandDispatchFactory.of:30`, and `ServeRuntimeAssembly.assemble:50` as a signature — are **not reduced** by this change: they hold only five of the members (`assembly`, `git`, `worktreesRoot`, `taskIdMdcKey`, `containerTakeSupport`), because the other four (abort fuse, tenure, credential list, trusted base) come into existence only after the tracker is provisioned, so no `SlotWiring` can exist where they are. They are composition roots and belong to `collapse-composition-roots`. `TakeDispatcher.runOneRef` (11 → 8), `TakeBatch.dispatch` (11 → 8) and `TakeRefDispatch.run` (12 → 9) lose the three wiring members they relay but stay over the limit on per-invocation values (the parsed arguments, definition, tracker config, tracker, instance id, adapter factory); they are handed to `collapse-composition-roots` with the residual list (task 6.2). `ContainerRunSupport.create:130` and `ContainerRunSupportFactory.create:61` (`:bootstrap`) keep their `credentialEnvVarsToScrub` parameter — they are not consumers of the wiring (see below) and are handed to `collapse-composition-roots`. `GitResumeRunner` and `ContainerResumeRunner`, and the `ManualRunRunner` that builds them, keep their constructors — they serve only the claimless `gnomish run --resume` path (see Sync surfaces). **Leaf consumers, decided 2026-09-25 (task 5.2 sweep, architecture review):** `TakeEngineExecution` (5 members + the per-run `lawBinding`) and `TakeContainerEngineExecution` (3 members + `lawBinding`) are the chain's end — they call `assembly.assemble`, `git.store()` and the fuse rather than relaying them — and are built per run, not per slot, at their four construction sites (`TakeFreshClaim`, `TakeResumeExecution`, `TakeContainerFreshClaim`, `TakeContainerResumeRunner`) from explicit `wiring.*` reads. They keep their exact member lists: handing them the whole wiring would make the host-mode engine depend on the container seam, the MDC key and the trusted base it never touches, and force `TakeContainerEngineExecutionSpec` to build a nine-member wiring from placeholders — the same objection that excludes `ContainerRunSupport`. The rule is recorded in `process-invariants.md` ("the parameter object stops at the last relay"). Two triggers revisit this: a leaf needing more than seven members gets a facade over its cohesive cluster (Seemann's Facade Service) exposed by `SlotWiring` as one accessor; construction duplicated across more than three callers with *divergent* member sets collapses into one factory. Both are records, outside the parameter-count scan, so M1/M2 are unaffected | the parameter type — every listed signature loses the members, so a caller still holding them does not compile. **Assembly points:** see "Where a `SlotWiring` is built" below — exactly two, checked by `grep -rn "new SlotWiring(" */src/main` |
+| `AbortFuse` (existing record in `app.take`, glossary *abort fuse*; corrected 2026-09-25 from a proposed new `AbortPolicy`, which would have been a second type for the same pair) | `AbortFuse` (record) | `TakeCrashAbort` ctor, `TakeEngineExecution` and `TakeContainerEngineExecution` (already), `TakeOutcomeDispatch.dispatch` (added by the task 5.1 sweep: both engine executions unpacked the fuse into an adjacent `abortHandler, abortThreshold` pair for it; it now takes the fuse, 9 → 8 parameters, still over the limit and in the scan's residual list), and every consumer above that passed `abortHandler, abortThreshold` adjacently | the adjacent `(AbortHandler, int)` pair — a transposition hazard by `process-invariants.md`; sweep `grep -rn "abortThreshold" application/src/main bootstrap/src/main` must show no signature taking it beside a bare `AbortHandler` | the parameter type |
 | `ClaimTenure` | `ClaimTenure` (record), built only by `TakeHeartbeat.tenure()` | `TakeClaimAndWork` ctor, `TakeSlotRunner` ctor, `TakeDisposition` ctor, `TakeBareAuto` ctor, `TakeClaimAndWorkFactory.forSlot` | the hand-listed `heartbeat, claimLossFlag` pair, read today as `heartbeat.instance()` / `heartbeat.flag()` at `TakeDispatcher:120,124,154,155` and `ServeAssembly:76,77`. `TakeHeartbeat` stays the owner of both values — its javadoc requires the flag to be the SAME instance wired as the beat's lost-claim sink — and `ClaimTenure` is a narrower view of it, not a second source: a `ClaimTenure` assembled from any other flag would silently detach the round-boundary consult from the beat. Specs may build one from `ClaimBeat.NONE` and a fresh flag, as they pass that pair today. The epoch book is **not** included and is not this change's to own (D5): it reaches its consumers through `TaskGit.epochs()`, established by `fix-claim-epoch-fence` | the parameter type |
+| `RemoteOutageGates.signaling(TaskGit, RemoteOutageGate)` (D6) | the `TaskGit` a serve slot reads its base refs through — the real one with every claim-time base read reported to the gate | `ServeRuntimeAssembly.assemble`, the serve assembly point, which fills `SlotWiring.git` with its result; the take assembly point has no gate and fills the member with the raw git | `TakeSlotRunner` ctor:120's own `git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), remoteOutageGate))` and its `RemoteOutageGate remoteOutageGate` parameter; sweep `grep -rn "RemoteOutageSignalingBaseRefGit(" */src/main` must return only the record's own declaration and `RemoteOutageGates` | the parameter type — the constructor takes a `SlotWiring` and no gate, so no consumer can re-decorate; the grep gate above for the record's construction |
 | `process-invariants.md` file-size clause (FR7) | rule text | every future split of an oversized class | the unstated assumption that static-helper extraction is an acceptable split | review, plus `add-parameter-count-gate`'s gate catching the symptom afterwards; stated here because the rule change cannot be mechanically enforced on its own |
 
 The consumer list was re-verified 2026-09-13 against the baseline scan and corrected
@@ -168,7 +202,7 @@ and `ContainerRunSupportFactory.create` (nine parameters each); they are removed
 are the container-bundle builder reached only through the `ContainerSupportFactory` lambda
 `ManualRunRunner.containerSupportFactory` returns, and that lambda serves plain `gnomish run`
 (`OwnershipMode.MANUAL`) as well as take/serve — a path with no slot, no claim, no abort
-policy and no trusted base. Of the nine `SlotWiring` members they carry one,
+fuse and no trusted base. Of the nine `SlotWiring` members they carry one,
 `credentialEnvVarsToScrub`, arriving as a lambda argument; taking `SlotWiring` would not
 shorten them, and would force the claimless path to build a slot's wiring. They are
 assembly code of the composition root and belong to `collapse-composition-roots`, which
@@ -197,7 +231,7 @@ Expected after this change: 44 − 12 = **32** (proposal M2), all of them handed
 `collapse-composition-roots`, whose starting table carries these figures, and 10 to
 `add-parameter-count-gate`.
 
-**Where a `SlotWiring` is built.** Four of the nine members — the abort policy (its handler
+**Where a `SlotWiring` is built.** Four of the nine members — the abort fuse (its handler
 wraps the tracker), the tenure (from the run's `TakeHeartbeat`), the credential list (from the
 resolved adapter factory) and the trusted base (from the startup law) — exist only after the
 tracker is provisioned, and the assembly member is the listener-augmented `RunAssembly` built
@@ -214,7 +248,9 @@ holds it:
   for every ref of the invocation.
 - `ServeRuntimeAssembly.assemble`, once per daemon, right after `serveAssembly`:81, handed to
   `ServeAssembly.slotRunner`:100. The handler built today at `ServeAssembly.slotRunner:62`
-  moves here with it; every slot already shares one.
+  moves here with it; every slot already shares one. Its `git` member is the decorated one —
+  `RemoteOutageGates.signaling(git, remoteOutageGate)` — so the slot reads its base refs
+  through the gate-signaling port without knowing it (D6).
 
 **Who owns the worktrees path.** `SlotWiring.worktreesRoot` is a carrier, not an owner. In
 this change both assembly points fill it from the `Path worktreesRoot` their enclosing

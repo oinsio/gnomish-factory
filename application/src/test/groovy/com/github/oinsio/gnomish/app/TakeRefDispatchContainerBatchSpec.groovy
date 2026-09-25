@@ -15,7 +15,6 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -30,7 +29,6 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.nio.file.Path
 import java.time.Duration
-import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -82,26 +80,34 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         }, containerSupport)
     }
 
-    private TakeDispatcher dispatcher(Map<String, TaskRepository> repositories) {
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.NotFound()
-            classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
-        new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                containerTakeSupport(repositories), DEFAULT_TRUSTED_BASE)
+    private TakeDispatcher dispatcher(
+            Map<String, TaskRepository> repositories, RunAssembly assembly, TakeHeartbeat heartbeat) {
+        def branchGit = [
+            locate: { Path cloneDir, String taskId ->
+                new com.github.oinsio.gnomish.app.port.git.BranchLocation.NotFound()
+            },
+            classifyShape: { Path cloneDir, String taskId ->
+                new com.github.oinsio.gnomish.domain.branch.BranchShape.Bare()
+            },
+        ] as com.github.oinsio.gnomish.app.port.git.TaskBranchGit
+        def git = new com.github.oinsio.gnomish.app.port.git.TaskGit([:] as com.github.oinsio.gnomish.app.port.git.TaskStoreGit,
+        branchGit, [:] as com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit,
+        java.util.function.UnaryOperator.identity(), refreshingBaseRefGit(), new com.github.oinsio.gnomish.app.lease.ClaimEpochBook())
+        new TakeDispatcher(slotWiring(assembly, git, tracker, WORKTREES_ROOT, containerTakeSupport(repositories),
+                heartbeat.tenure()), testProperties(), FIXED_CLOCK,
+                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
-        TakeRefDispatch.run(dispatcher(repositories),
+        def assembly = assemblyRunning(new ScriptedExecutor([
+            completedRound('PROJ-1'),
+            completedRound('PROJ-2')
+        ]))
+        TakeRefDispatch.run(dispatcher(repositories, assembly, heartbeat),
                 new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-                completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, [], factory,
-                assemblyRunning(new ScriptedExecutor([
-                    completedRound('PROJ-1'),
-                    completedRound('PROJ-2')
-                ])),
-                heartbeat, SERVE_PROPERTIES, LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
+                completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, factory,
+                SERVE_PROPERTIES, LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
     }
 
     // FR1: two fresh Ready tasks, both bound to the container adapter (the default), reach the

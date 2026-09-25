@@ -4,21 +4,23 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
+import com.github.oinsio.gnomish.app.ClaimTenure
 import com.github.oinsio.gnomish.app.ContainerE2eDocker
 import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.RunOrder
+import com.github.oinsio.gnomish.app.SlotWiring
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -39,7 +41,6 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
-import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
@@ -162,16 +163,13 @@ autonomy:
                 properties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
                 ContainerSupportFixture.tracked(git.epochs()))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        def wiring = new SlotWiring(
+                newAssembly(properties), git, worktreesRoot, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
+                containerTakeSupport, new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
-                newAssembly(properties), git, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
-                worktreesRoot, abortHandler,
-                ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
-                containerTakeSupport,
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
+                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                tracker, INSTANCE)
     }
 
     // Scenario (factory-serve): two slots hold container-bound tasks at once — each task runs in

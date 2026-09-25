@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.take.AbortFuse;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -37,30 +34,20 @@ import org.jspecify.annotations.Nullable;
  */
 final class TakeContainerResumeRunner {
 
-    private final RunAssembly assembly;
+    private final SlotWiring wiring;
     private final TaskGit git;
-    private final AbortHandler abortHandler;
-    private final int abortThreshold;
-    private final List<String> credentialEnvVarsToScrub;
-    private final ClaimLossFlag claimLossFlag;
     private final TakeContainerResumeBootstrap resumeBootstrap;
 
-    TakeContainerResumeRunner(
-            RunAssembly assembly,
-            TaskGit git,
-            ContainerTakeSupport containerTakeSupport,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            ClaimLossFlag claimLossFlag,
-            String taskIdMdcKey) {
-        this.assembly = assembly;
-        this.git = git;
-        this.abortHandler = abortHandler;
-        this.abortThreshold = abortThreshold;
-        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
-        this.claimLossFlag = claimLossFlag;
-        this.resumeBootstrap = new TakeContainerResumeBootstrap(git, containerTakeSupport, taskIdMdcKey);
+    /**
+     * @param wiring the slot's equipment (D2 of introduce-slot-wiring): the task git and container
+     *     support seam the bootstrap reads the branch through, the MDC key it binds, and the
+     *     assembly, abort fuse, credential names and tenure every engine execution is built with
+     */
+    TakeContainerResumeRunner(SlotWiring wiring) {
+        this.wiring = wiring;
+        this.git = wiring.git();
+        this.resumeBootstrap =
+                new TakeContainerResumeBootstrap(git, wiring.containerTakeSupport(), wiring.taskIdMdcKey());
     }
 
     /**
@@ -141,10 +128,10 @@ final class TakeContainerResumeRunner {
 
     private TakeContainerEngineExecution newExecution(LawBinding lawBinding) {
         return new TakeContainerEngineExecution(
-                assembly,
-                new AbortFuse(abortHandler, abortThreshold),
-                credentialEnvVarsToScrub,
-                claimLossFlag,
+                wiring.assembly(),
+                wiring.abort(),
+                wiring.credentialEnvVarsToScrub(),
+                wiring.tenure().lossFlag(),
                 lawBinding);
     }
 }

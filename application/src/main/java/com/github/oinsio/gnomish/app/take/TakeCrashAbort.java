@@ -43,18 +43,15 @@ public final class TakeCrashAbort {
 
     private static final Logger log = LoggerFactory.getLogger(TakeCrashAbort.class);
 
-    private final AbortHandler abortHandler;
-    private final int abortThreshold;
+    private final AbortFuse abortFuse;
 
     /**
-     * @param abortHandler the shared best-effort abort protocol (same instance the engine {@code
-     *     Aborted} path uses); never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed through to {@code
-     *     abortHandler}; positive
+     * @param abortFuse the shared best-effort abort protocol (same handler the engine {@code
+     *     Aborted} path uses) together with the configured threshold K it trips at (FR2 of
+     *     introduce-slot-wiring); never null
      */
-    public TakeCrashAbort(AbortHandler abortHandler, int abortThreshold) {
-        this.abortHandler = abortHandler;
-        this.abortThreshold = abortThreshold;
+    public TakeCrashAbort(AbortFuse abortFuse) {
+        this.abortFuse = abortFuse;
     }
 
     /**
@@ -80,8 +77,17 @@ public final class TakeCrashAbort {
         AbortFacts facts = abortFactsBestEffort(order.tracker(), ref);
         TaskState finalState = TaskState.atStageStart(
                 order.run().definition().stages().getFirst().name());
-        return abortHandler.handle(
-                ref, finalState, cause, facts, abortThreshold, order.instanceId(), categoryOf(crash), crash);
+        return abortFuse
+                .handler()
+                .handle(
+                        ref,
+                        finalState,
+                        cause,
+                        facts,
+                        abortFuse.threshold(),
+                        order.instanceId(),
+                        categoryOf(crash),
+                        crash);
     }
 
     /**

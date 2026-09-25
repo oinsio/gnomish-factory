@@ -1,14 +1,11 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -36,10 +33,8 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new TakeBareAuto(Stub(RunAssembly), git, WORKTREES_ROOT, new AbortHandler(tracker, FIXED_CLOCK),
-                3, 'taskId', Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, [],
-                ClaimBeat.NONE, new ClaimLossFlag(), 10, new Random(1),
-                ContainerTakeSupport.hostOnly(), DEFAULT_TRUSTED_BASE)
+        new TakeBareAuto(slotWiring(Stub(RunAssembly), git, tracker),
+                Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, 10, new Random(1))
     }
 
     private TakeResult run() {

@@ -281,7 +281,7 @@ tracker:
     // the slot runner it assembles, and joins the heartbeat's progress listener into the assembly
     // BEFORE the (reused-for-the-daemon's-lifetime) slot runner is built — not the ClaimBeat.NONE/
     // disposable-listener seam task 5.1 wired as a placeholder. Reaches through the private fields
-    // FeedCycle/TakeSlotRunner/TakeClaimAndWork already carry (no new production seam needed) via
+    // FeedCycle/TakeSlotRunner/TakeClaimAndWork/TakeWorkRouter already carry (no new production seam needed) via
     // Groovy's ".@" direct field access, since none of these classes expose them for inspection.
     def "wires the real cross-slot heartbeat and claim-loss flag into the assembled slot runner (FR13)"() {
         given:
@@ -298,7 +298,9 @@ tracker:
         TakeSlotRunner slotRunner = (TakeSlotRunner) starter.captured.@cycle.@slotRunner
         def claimAndWork = slotRunner.@claimAndWork
         ClaimBeat heartbeat = claimAndWork.@heartbeat
-        def joinedAssembly = claimAndWork.@assembly
+        // The assembly is slot equipment: it reaches TakeClaimAndWork's router inside the one
+        // SlotWiring the serve assembly point builds (introduce-slot-wiring).
+        def joinedAssembly = claimAndWork.@router.@wiring.assembly()
 
         and: 'the beat is the real InstanceHeartbeat, not the ClaimBeat.NONE no-op seam'
         heartbeat instanceof InstanceHeartbeat

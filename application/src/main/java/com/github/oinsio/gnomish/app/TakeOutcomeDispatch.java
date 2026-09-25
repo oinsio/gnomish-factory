@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -39,10 +40,8 @@ final class TakeOutcomeDispatch {
      * @param park the park's branch-side steps (FR10 of harden-task-branch-contract): the outcome
      *     commit and its delivery fence as the durable intent, the pending-marker clear as the
      *     receipt
-     * @param abortHandler the infrastructure-abort protocol (task 5.3), applied when {@code outcome}
-     *     is {@code Aborted}; never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code abortHandler};
-     *     positive
+     * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
+     *     when {@code outcome} is {@code Aborted}; never null
      * @param finish the completion's branch-side steps (FR10 of harden-task-branch-contract): the
      *     {@code Completed} outcome commit as the durable intent, and the cleanup commit plus
      *     workspace disposal as the destructive tail behind the confirmed finish
@@ -55,14 +54,20 @@ final class TakeOutcomeDispatch {
             TakeOrder order,
             TerminalWriteRetry retry,
             ParkTransition park,
-            AbortHandler abortHandler,
-            int abortThreshold,
+            AbortFuse abortFuse,
             FinishTransition finish) {
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = order.tracker().fetchTask(order.ref()).abortFacts();
-                yield abortHandler.handle(
-                        order.ref(), aborted.finalState(), aborted.cause(), facts, abortThreshold, order.instanceId());
+                yield abortFuse
+                        .handler()
+                        .handle(
+                                order.ref(),
+                                aborted.finalState(),
+                                aborted.cause(),
+                                facts,
+                                abortFuse.threshold(),
+                                order.instanceId());
             }
             case TaskOutcome.Escalated escalated -> TakeEscalationExit.exit(escalated, order, retry, park);
             case TaskOutcome.Completed completed ->

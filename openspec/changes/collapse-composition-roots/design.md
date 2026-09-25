@@ -29,7 +29,7 @@ what `introduce-slot-wiring`'s design says it leaves):
 | `ServeAssembly.feedAutomaton` | 10 → 10 |
 | `TakeRefDispatch.run` | 12 → 9 |
 | `TakeCommandFactory.of` (two, :24 and :53) | 11, 12 → 11, 12 |
-| `TakeOutcomeDispatch.dispatch` | 9 → 9 |
+| `TakeOutcomeDispatch.dispatch` | 9 → 8 (`introduce-slot-wiring` task 5.1: takes `AbortFuse` in place of the adjacent handler/threshold pair) |
 | `TakeBatch.dispatch` | 11 → 8 |
 | `InstanceHeartbeat` ctor | 8 → 8 |
 | `ContainerRunSupport.create`, `ContainerRunSupportFactory.create` (`:bootstrap`) | 9 → 9 each |
@@ -38,6 +38,18 @@ what `introduce-slot-wiring`'s design says it leaves):
 to seven or fewer. The command constructors, both `TakeCommandFactory.of` and the two
 composition roots keep their full signatures there, because no `SlotWiring` can exist before
 the tracker is provisioned (that change's exemption row).
+
+One candidate outside the parameter count was handed over by `introduce-slot-wiring` on
+2026-09-25, from its architecture review of why `take` and `serve` differ: the slot body is
+already one — `new TakeOrder(run, tracker.fetchTask(ref), tracker, instanceId)` followed by
+`claimAndWork.dispatchAfterClaim(order)` — but it is spelled twice, at
+`BareTakeClaimWalk:74-75` and in `TakeSlotRunner.run`, and `introduce-take-order` lists both
+among the "three places a take order is assembled". When this change reworks the take
+dispatch chain (`TakeDispatcher.runOneRef`, `TakeBatch.dispatch`, `TakeRefDispatch.run`), fold
+the pair into one `TakeClaimAndWork.workClaimed(RunOrder, TaskRef)` so the order for an
+already-claimed task is assembled in one place. Behavior-preserving; what stays different
+around it (who claims, who sets the MDC key, who prints the summary) is the two modes' own
+responsibility and is not to be merged.
 
 The last row was handed over by `introduce-slot-wiring` on 2026-09-24: the two static
 builders assemble the container bundle behind the `ContainerSupportFactory` lambda that

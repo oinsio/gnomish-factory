@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
+import com.github.oinsio.gnomish.app.ClaimTenure
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.RunOrder
+import com.github.oinsio.gnomish.app.SlotWiring
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
@@ -23,6 +25,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -53,6 +56,7 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import spock.lang.Specification
 import spock.lang.TempDir
+
 
 /**
  * {@link TakeSlotRunner}, task 4.3 of add-factory-serve: proves the "slot body unchanged"
@@ -151,14 +155,16 @@ tracker:
         // claude on PATH.
         def properties = testProperties(
                 agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
+        // The slot's git is decorated through the same owner the serve assembly point uses (D6 of
+        // introduce-slot-wiring), so the gate scenario below sees the slot's real refresh.
+        def wiring = new SlotWiring(
+                newAssembly(properties), RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
+                worktreesRoot, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
+                ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
-                newAssembly(properties), TaskGitFixture.real(),
-                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false), worktreesRoot,
-                abortHandler, ABORT_THRESHOLD, MDC_KEY,
-                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new TrustedBaseContext(BaseDefinition.none(),
-                new DefaultBranch(currentBranch(cloneDir))),
-                remoteOutageGate)
+                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                tracker, INSTANCE)
     }
 
     // Scenario: slot body unchanged — a pre-claimed fresh task dispatches through
@@ -185,7 +191,7 @@ tracker:
         given:
         tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
         def slotRunner = newSlotRunner()
-        remoteOutageGate.health().lastSuccessAt() == null
+        assert remoteOutageGate.health().lastSuccessAt() == null
 
         when:
         slotRunner.run(new TaskRef('PROJ-1'))

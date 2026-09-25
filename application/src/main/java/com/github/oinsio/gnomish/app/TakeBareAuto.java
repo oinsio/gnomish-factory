@@ -1,16 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -44,62 +39,22 @@ public final class TakeBareAuto {
     private final BareTakeClaimWalk walk;
 
     /**
-     * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
-     * @param git the task-git capability set every claim/resume path's store, branch and worktree
-     *     operations come from; never null
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6); never null
-     * @param abortHandler the infrastructure-abort protocol (task 5.3); never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed through to {@code
-     *     abortHandler}; positive
-     * @param taskIdMdcKey the MDC key set to the claimed candidate's ref id the moment a claim
-     *     actually succeeds (NFR-O1), matching {@link GitResumeRunner}'s own key
+     * @param wiring the slot's equipment (D2 of introduce-slot-wiring), fixed for the whole take
+     *     invocation; its MDC key is set to the claimed candidate's ref id the moment a claim
+     *     actually succeeds (NFR-O1), matching {@link GitResumeRunner}'s own key; never null
      * @param backoffBase the abort-backoff base (design D10); never null
      * @param backoffCap the abort-backoff cap (design D10); never null
      * @param clock supplies "now" for the backoff filter; never null
-     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
-     *     environment variable names (design D17, NFR-S1 of add-tracker-port); never null
-     * @param heartbeat the instance heartbeat lifecycle registered/unregistered around the claimed
-     *     run (task 6.1 of add-claim-heartbeat, FR1); {@link ClaimBeat#NONE} when no beat runs
-     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
-     *     add-claim-heartbeat); never null
      * @param wipLimit the configured WIP limit W (design D3 of add-factory-serve): fresh tasks are
      *     claimable only while the open-front count stays below it
      * @param random the source of randomness for {@link FeedPolicy}'s head-zone pick (design D4);
      *     never null — a seeded instance makes the pick deterministic for tests
-     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
-     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     TakeBareAuto(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            Duration backoffBase,
-            Duration backoffCap,
-            Clock clock,
-            List<String> credentialEnvVarsToScrub,
-            ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag,
-            int wipLimit,
-            Random random,
-            ContainerTakeSupport containerTakeSupport,
-            TrustedBaseContext trustedBase) {
-        var claimAndWork = TakeClaimAndWorkFactory.forSlot(
-                assembly,
-                git,
-                worktreesRoot,
-                taskIdMdcKey,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                heartbeat,
-                claimLossFlag,
-                containerTakeSupport,
-                trustedBase);
-        this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
+            SlotWiring wiring, Duration backoffBase, Duration backoffCap, Clock clock, int wipLimit, Random random) {
+        var claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
+        this.walk = new BareTakeClaimWalk(
+                claimAndWork, wiring.taskIdMdcKey(), backoffBase, backoffCap, clock, wipLimit, random);
     }
 
     /**

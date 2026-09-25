@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -15,7 +13,6 @@ import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
 import com.github.oinsio.gnomish.status.WallTime;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -25,23 +22,20 @@ import org.slf4j.MDC;
 
 /**
  * The explicit-mode and bare-auto dispatch of one {@code gnomish take} invocation, extracted from
- * {@link TakeCommand} for file size. Holds the per-invocation-invariant collaborators; each dispatch
- * method takes the run-specific values ({@link Tracker}, {@link TakeHeartbeat}, assembly) built by
- * {@link TakeCommand#run}.
+ * {@link TakeCommand} for file size. Holds the per-invocation-invariant collaborators — among them
+ * the invocation's one {@link SlotWiring}, shared by explicit, bare and batch mode as the heartbeat
+ * inside it already is (D2 of introduce-slot-wiring); each dispatch method takes only the
+ * run-specific values ({@link Tracker}, definition, tracker config) built by {@link TakeCommand#run}.
  *
- * <p>Implements FR9, FR10, D8, D15, D16 of add-tracker-port.
+ * <p>Implements FR9, FR10, D8, D15, D16 of add-tracker-port; FR4 of introduce-slot-wiring.
  */
 record TakeDispatcher(
-        TaskGit git,
-        Path worktreesRoot,
-        String taskIdMdcKey,
+        SlotWiring wiring,
         FactoryProperties factoryProperties,
         Clock clock,
         Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
         SecretsProvider secretsProvider,
-        TakeoverConfirmation takeoverConfirmation,
-        ContainerTakeSupport containerTakeSupport,
-        TrustedBaseContext trustedBase) {
+        TakeoverConfirmation takeoverConfirmation) {
 
     TakeResult runExplicit(
             TakeArguments takeArguments,
@@ -50,22 +44,9 @@ record TakeDispatcher(
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
-            TrackerAdapterFactory factory,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat) {
+            TrackerAdapterFactory factory) {
         return runOneRef(
-                takeArguments,
-                rawRef,
-                definition,
-                trackerConfig,
-                tracker,
-                instanceId,
-                credentialEnvVarsToScrub,
-                factory,
-                takeAssembly,
-                heartbeat,
-                takeoverConfirmation);
+                takeArguments, rawRef, definition, trackerConfig, tracker, instanceId, factory, takeoverConfirmation);
     }
 
     /**
@@ -81,17 +62,14 @@ record TakeDispatcher(
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
             TrackerAdapterFactory factory,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat,
             TakeoverConfirmation confirmation) {
         // NFR-O1: the canonical ref is known as soon as short-ref expansion resolves it, before
         // fetchTask/dispose ever run — so every explicit-mode disposition outcome, including a
         // refusal (AwaitingHuman/Working/Finished/Gone in TakeDisposition, none of which reach any
         // deeper resume/fresh-claim MDC-setting code), is logged under the correct taskId.
         TaskRef ref = TakeRefResolution.resolve(rawRef, trackerConfig, trackerAdapterRegistry);
-        MDC.put(taskIdMdcKey, ref.id());
+        MDC.put(wiring.taskIdMdcKey(), ref.id());
         // FR9, design D8: a full canonical id naming a repo the adapter cannot reconcile to the
         // configured binding (GitHub: neither the configured repo nor a rename predecessor of it)
         // is refused here — before fetchTask ever touches the foreign repo — as exit 15 (Skipped),
@@ -109,21 +87,7 @@ record TakeDispatcher(
                 takeArguments.interactiveMode(),
                 takeArguments.discardWork());
         var order = new TakeOrder(run, tracker.fetchTask(ref), tracker, instanceId);
-        var disposition = new TakeDisposition(
-                takeAssembly,
-                git,
-                worktreesRoot,
-                newAbortHandler(tracker),
-                trackerConfig.abortThreshold(),
-                taskIdMdcKey,
-                credentialEnvVarsToScrub,
-                heartbeat.instance(),
-                takeArguments.takeover(),
-                confirmation,
-                clock,
-                heartbeat.flag(),
-                containerTakeSupport,
-                trustedBase);
+        var disposition = new TakeDisposition(wiring, takeArguments.takeover(), confirmation, clock);
         long startedNanos = System.nanoTime();
         TakeResult result = disposition.dispose(order);
         summarize(result, startedNanos);
@@ -135,28 +99,15 @@ record TakeDispatcher(
             PipelineDefinition definition,
             TrackerConfig trackerConfig,
             Tracker tracker,
-            InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat) {
+            InstanceId instanceId) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         var bareAuto = new TakeBareAuto(
-                takeAssembly,
-                git,
-                worktreesRoot,
-                newAbortHandler(tracker),
-                trackerConfig.abortThreshold(),
-                taskIdMdcKey,
+                wiring,
                 trackerProperties.abortBackoffBase(),
                 trackerProperties.abortBackoffCap(),
                 clock,
-                credentialEnvVarsToScrub,
-                heartbeat.instance(),
-                heartbeat.flag(),
                 trackerConfig.wipLimit(),
-                new Random(),
-                containerTakeSupport,
-                trustedBase);
+                new Random());
         // The bare-mode place a TakeArguments becomes a run order (D1 of introduce-take-order). The
         // parser refuses --base on bare take, and a bare take has always salvaged — --discard-work
         // is not passed on here, exactly as before this order existed.
@@ -203,27 +154,9 @@ record TakeDispatcher(
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
             TrackerAdapterFactory factory,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat,
             int slots)
             throws InterruptedException {
-        return TakeBatch.dispatch(
-                this,
-                takeArguments,
-                definition,
-                trackerConfig,
-                tracker,
-                instanceId,
-                credentialEnvVarsToScrub,
-                factory,
-                takeAssembly,
-                heartbeat,
-                slots);
-    }
-
-    private AbortHandler newAbortHandler(Tracker tracker) {
-        return new AbortHandler(tracker, clock);
+        return TakeBatch.dispatch(this, takeArguments, definition, trackerConfig, tracker, instanceId, factory, slots);
     }
 }

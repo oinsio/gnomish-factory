@@ -16,12 +16,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -55,35 +52,15 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
      */
     def claimEpochBook = taskGit.epochs()
 
-    /**
-     * FR13, D15 of add-base-ref-resolution: the trusted tier for this spec's real-git fixtures —
-     * {@link TakeResumeSpecBase#setup()} wires a real {@code origin} remote, so the default branch
-     * named here must be the clone's actual current branch, read lazily (not a static constant:
-     * {@code cloneDir} only exists once {@code setup()} has run).
-     */
-    private TrustedBaseContext trustedBase() {
-        new TrustedBaseContext(
-                BaseDefinition.none(),
-                new DefaultBranch(currentBranch(cloneDir)))
-    }
-
     private TakeDisposition newDisposition() {
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeDisposition(newAssembly(), taskGit, worktreesRoot, abortHandler,
-                ABORT_THRESHOLD, 'taskId', [],
-                ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), trustedBase())
+        new TakeDisposition(slotWiring(newAssembly()), false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC())
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
     // over a fixed clock, so the Working case's TakeTakeover path is exercised deterministically.
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(
-                newAssembly(), taskGit, worktreesRoot, abortHandler, ABORT_THRESHOLD,
-                'taskId', [],
-                ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), trustedBase())
+                slotWiring(newAssembly()), takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC))
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -232,11 +209,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         gitOutput(cloneDir, 'branch', 'gnomish/PROJ-1', 'HEAD')
         def beat = Mock(ClaimBeat)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def disposition = new TakeDisposition(
-                newAssembly(), taskGit, worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
-                beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), trustedBase())
+                slotWiring(newAssembly(), taskGit, [], new ClaimTenure(beat, new ClaimLossFlag())),
+                false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC))
 
         when:
         disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))
