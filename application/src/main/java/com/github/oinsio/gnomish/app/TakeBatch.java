@@ -96,7 +96,8 @@ final class TakeBatch {
 
     /**
      * Wires {@link TakeDispatcher#runOneRef} as the {@link #run} loop's {@code perRef} function for
-     * one {@code take} batch invocation, then delegates: shares {@code heartbeat} (so one {@link
+     * one {@code take} batch invocation, then delegates: shares the dispatcher's one slot wiring,
+     * and with it the heartbeat's tenure (so one {@link
      * com.github.oinsio.gnomish.app.lease.ClaimLossFlag} and one beat cover the whole run, exactly
      * as {@link com.github.oinsio.gnomish.app.serve.TakeSlotRunner} shares them across serve's
      * slots) and {@code takeArguments.takeover()} across every ref (design D6: batch {@code
@@ -120,10 +121,7 @@ final class TakeBatch {
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
             TrackerAdapterFactory factory,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat,
             int slots)
             throws InterruptedException {
         return run(takeArguments.refs(), slots, rawRef -> {
@@ -135,10 +133,7 @@ final class TakeBatch {
                         trackerConfig,
                         tracker,
                         instanceId,
-                        credentialEnvVarsToScrub,
                         factory,
-                        takeAssembly,
-                        heartbeat,
                         TakeoverConfirmation.UNAVAILABLE);
             } finally {
                 // FR8: the whole context map, not the three keys by name. Each ref runs on its own

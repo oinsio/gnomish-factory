@@ -18,6 +18,8 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
+import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -123,10 +125,13 @@ tracker:
     }
 
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
-        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation,
-        ContainerTakeSupport.hostOnly(),
-        new TrustedBaseContext(BaseDefinition.none(),
-        new DefaultBranch(currentBranch(cloneDir))))
+        // The invocation's one slot wiring, as TakeCommand#run builds it: the listener-free assembly,
+        // an abort fuse of ABORT_THRESHOLD over this spec's tracker, and a beat-less heartbeat's tenure.
+        def wiring = new SlotWiring(newAssembly(testProps()), TaskGitFixture.real(), worktreesRoot, 'taskId',
+                new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD), [],
+                ContainerTakeSupport.hostOnly(), noopHeartbeat().tenure(),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
+        new TakeDispatcher(wiring, testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation)
     }
 
     private static TakeHeartbeat noopHeartbeat() {
@@ -182,8 +187,7 @@ tracker:
 
         when:
         def outcomes = dispatcher.runBatch(
-                batchArgs(refs), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker, INSTANCE,
-                [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 3)
+                batchArgs(refs), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker, INSTANCE, passthroughFactory(), 3)
 
         then: 'every ref is present, in order'
         outcomes*.ref() == refs
@@ -212,7 +216,7 @@ tracker:
         when:
         def outcomes = dispatcher.runBatch(
                 batchArgs([WORKING_REF.id()]), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker,
-                INSTANCE, [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 2)
+                INSTANCE, passthroughFactory(), 2)
 
         then:
         outcomes[0].result() instanceof TakeResult.Skipped
@@ -233,7 +237,7 @@ tracker:
         when:
         def outcomes = dispatcher.runBatch(
                 batchArgs([WORKING_REF.id()], true), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD),
-                tracker, INSTANCE, [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 2)
+                tracker, INSTANCE, passthroughFactory(), 2)
 
         then: 'no observable claim version, so removeStaleClaim is skipped and the ordinary claim decides'
         0 * tracker.removeStaleClaim(*_)

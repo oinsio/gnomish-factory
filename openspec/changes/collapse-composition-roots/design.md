@@ -2,32 +2,60 @@
 
 ## Context
 
-See `proposal.md` — Why. After `introduce-take-order` and `introduce-slot-wiring`, thirty
-signatures in `src/main` remain over the limit; twenty of them are in `:application` and
-`:bootstrap` and are composition code. This design covers those twenty. The other ten
+See `proposal.md` — Why. After `introduce-take-order` and `introduce-slot-wiring`, thirty-two
+signatures in `src/main` remain over the limit; twenty-two of them are in `:application` and
+`:bootstrap` and are composition code. This design covers those twenty-two. The other ten
 (`sandbox/docker` environment builders, agent round executions, `GithubMarkerJson`,
 `PipelineModelBuilder.mapAndValidate`) are not composition and are deliberately left to
 `add-parameter-count-gate`, which must reach zero.
 
-The measured starting shape, after the two preceding changes:
+The measured starting shape, after the two preceding changes (re-measured 2026-09-25 with
+the scanner of `introduce-take-order` task 0.2, which exempts record members and `@Override`
+methods; the "now" column is the tree after `introduce-take-order`, the "after" column is
+what `introduce-slot-wiring`'s design says it leaves):
 
 | Site | Params now → after slot wiring |
 |------|--------------------------------|
-| `ManualRunRunner` ctor (`:bootstrap`) | 27 → 26 |
+| `ManualRunRunner` ctor (`:bootstrap`) | 28 → 28 |
 | `ObservabilityAssembly.assemble` | 16 → 16 |
-| `SubcommandDispatchFactory.of` | 19 → 14 |
+| `SubcommandDispatchFactory.of` | 19 → 19 |
 | `ObservabilityAssembly.assembleSnapshot` | 14 → 14 |
-| `ServeRuntimeAssembly.assemble` | 20 → 13 |
-| `ManualRunAssembly` ctors (two) | 13, 9 → 13, 9 |
-| `TakeCommand` ctor | 17 → 12 |
-| `FeedAutomaton` ctors (three) | 13, 12, 11 → 12, 11, 10 |
-| `ServeCommand` ctor | 16 → 11 |
+| `ServeRuntimeAssembly.assemble` | 19 → 19 |
+| `ManualRunAssembly` ctors (two, `:bootstrap`) | 14, 10 → 14, 10 |
+| `TakeCommand` ctor | 16 → 16 |
+| `FeedAutomaton` ctors (three) | 13, 12, 11 → 13, 12, 11 |
+| `ServeCommand` ctor | 16 → 16 |
 | `ObservabilityWiring` ctor | 9 → 9 |
-| `ServeAssembly.feedAutomaton` / `slotRunner` | 10, 16 → 9, 8 |
+| `ServeAssembly.feedAutomaton` | 10 → 10 |
 | `TakeRefDispatch.run` | 12 → 9 |
-| `TakeCommandFactory.of` | 12 → 8 |
-| `TakeOutcomeDispatch.dispatch`, `TakeBatch.dispatch` | 11 → 8 each |
+| `TakeCommandFactory.of` (two, :24 and :53) | 11, 12 → 11, 12 |
+| `TakeOutcomeDispatch.dispatch` | 9 → 8 (`introduce-slot-wiring` task 5.1: takes `AbortFuse` in place of the adjacent handler/threshold pair) |
+| `TakeBatch.dispatch` | 11 → 8 |
 | `InstanceHeartbeat` ctor | 8 → 8 |
+| `ContainerRunSupport.create`, `ContainerRunSupportFactory.create` (`:bootstrap`) | 9 → 9 each |
+
+`ServeAssembly.slotRunner` (15 today) is not in the table: `introduce-slot-wiring` brings it
+to seven or fewer. The command constructors, both `TakeCommandFactory.of` and the two
+composition roots keep their full signatures there, because no `SlotWiring` can exist before
+the tracker is provisioned (that change's exemption row).
+
+One candidate outside the parameter count was handed over by `introduce-slot-wiring` on
+2026-09-25, from its architecture review of why `take` and `serve` differ: the slot body is
+already one — `new TakeOrder(run, tracker.fetchTask(ref), tracker, instanceId)` followed by
+`claimAndWork.dispatchAfterClaim(order)` — but it is spelled twice, at
+`BareTakeClaimWalk:74-75` and in `TakeSlotRunner.run`, and `introduce-take-order` lists both
+among the "three places a take order is assembled". When this change reworks the take
+dispatch chain (`TakeDispatcher.runOneRef`, `TakeBatch.dispatch`, `TakeRefDispatch.run`), fold
+the pair into one `TakeClaimAndWork.workClaimed(RunOrder, TaskRef)` so the order for an
+already-claimed task is assembled in one place. Behavior-preserving; what stays different
+around it (who claims, who sets the MDC key, who prints the summary) is the two modes' own
+responsibility and is not to be merged.
+
+The last row was handed over by `introduce-slot-wiring` on 2026-09-24: the two static
+builders assemble the container bundle behind the `ContainerSupportFactory` lambda that
+`ManualRunRunner.containerSupportFactory` returns, for plain `run` (`OwnershipMode.MANUAL`)
+as well as take/serve, so they are composition code of the manual-run root rather than slot
+wiring. Their `ClaimEpochSource epochs` parameter is fed only from `TaskGit.epochs()`.
 
 ## Goals / Non-Goals
 
@@ -93,7 +121,7 @@ grouping. *Alternative rejected:* deciding now without reading it — the cluste
 is measured, but whether a cluster is *behavioral* cannot be measured from the signature.
 
 **Sync surfaces: none — this change adds no parallel implementation and touches no declared
-pair.** Verified by `grep -rn "Kept in sync with" */src/main` against the twenty sites: no
+pair.** Verified by `grep -rn "Kept in sync with" */src/main` against the twenty-two sites: no
 composition root or assembly in the list carries a marker or is named by one. If the
 `FeedAutomaton` inspection (D5) produces a second implementation of anything, that outcome
 is out of this change's scope by NG2 and moves to the follow-up it recommends.
@@ -102,7 +130,7 @@ is out of this change's scope by NG2 and moves to the follow-up it recommends.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `FactoryPaths` | `FactoryPaths` (record, accessors `worktreesRoot()` / `homeDir()`) | `ManualRunRunner` ctor:141, `SubcommandDispatchFactory.of:30`, `ServeRuntimeAssembly.assemble:51`, `ObservabilityAssembly.assemble:103`, `ServeCommand` ctor:93, `TakeCommand` ctor:112, `TakeCommandFactory.of:53`, and the Spring configuration that declares both `Path` beans | the two bare `Path` beans resolved by parameter name, and every `(Path, Path)` adjacency; sweep `grep -rn "Path worktreesRoot\|Path homeDir" application/src/main bootstrap/src/main` must return only `FactoryPaths`' own declaration. Exemption: none | the parameter type — a bare `Path` no longer satisfies these signatures, so a transposed or misnamed injection does not compile |
+| `FactoryPaths` | `FactoryPaths` (record, accessors `worktreesRoot()` / `homeDir()`) | `ManualRunRunner` ctor:141, `SubcommandDispatchFactory.of:30`, `ServeRuntimeAssembly.assemble:51`, `ObservabilityAssembly.assemble:103`, `ServeCommand` ctor:93, `TakeCommand` ctor:112, `TakeCommandFactory.of:53`, and the Spring configuration that declares both `Path` beans | the two bare `Path` beans resolved by parameter name, and every `(Path, Path)` adjacency; sweep: `grep -rn "Path worktreesRoot\|Path homeDir"` over the files of the sites in this row must return nothing, and across `application/src/main bootstrap/src/main` no signature may take the two adjacently. Exemption: downstream carriers of a single path are fed from `FactoryPaths`, not owners of it — the `SlotWiring` component `worktreesRoot` (introduced by `introduce-slot-wiring`), filled from `FactoryPaths.worktreesRoot()` at its two assembly points, `TakeCommand.run` and `ServeRuntimeAssembly.assemble`; and the leaf components that take one worktrees path (`TaskWorktreeGit`, `WorktreeJanitor`, `HostResumeMechanics`, `GitResumeRunner`, `StatusCommand` and the like), which receive it from those two values | the parameter type — a bare `Path` no longer satisfies these signatures, so a transposed or misnamed injection does not compile |
 | `ManualRunAssembly` | `ManualRunAssembly` | `ManualRunRunner` ctor:141 | the nine ingredient parameters and the inline `new ManualRunAssembly(...)` in the runner's constructor body; sweep `grep -rn "new ManualRunAssembly(" bootstrap/src/main` must return only the bean method | the parameter type |
 | `ReportCommands` | `ReportCommands` (facade over status / usage / board / dashboard) | `ManualRunRunner` ctor:141, `SubcommandDispatchFactory.of:30` | the four hand-listed command parameters. Conditional: if the cluster fails D2's criterion (no method beyond accessors), it is not extracted and the reason is recorded instead | the parameter type, if extracted |
 | `VitalSources` | `VitalSources` (facade over the snapshot's vital feeds) | `ObservabilityAssembly.assemble:103`, `ObservabilityAssembly.assembleSnapshot:175`, `ObservabilityWiring` ctor:47 | the eight hand-listed feed parameters those three share. Conditional on D2 as above | the parameter type, if extracted |

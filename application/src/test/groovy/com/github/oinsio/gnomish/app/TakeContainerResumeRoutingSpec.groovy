@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
@@ -20,7 +19,6 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
@@ -72,9 +70,9 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
                 AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
                 { false },
                 containerSupportFactory)
-        def resumeRunner = new TakeContainerResumeRunner(
-                assemblyRunning(new ScriptedExecutor([completedRound()])), git, containerTakeSupport,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag(), 'taskId')
+        def resumeRunner = new TakeContainerResumeRunner(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT,
+                        containerTakeSupport))
         def mechanics = new ContainerResumeMechanics(
                 resumeRunner, [] as List<Segment>, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
@@ -461,15 +459,5 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         })
         0 * tracker.finish(_, _)
         result instanceof TakeResult.AwaitingHuman
-    }
-
-    /**
-     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
-     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
-     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
-     * "untrusted machine output" label would be untrue about.
-     */
-    private static String inert(String text) {
-        UntrustedText.tracker(text).forCommentInline()
     }
 }

@@ -2,15 +2,20 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
+import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.Designator
@@ -21,10 +26,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
@@ -53,6 +60,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 
 /**
  * The run chains' collaborators — take, git-mode and container-mode — built from PORT fakes only:
@@ -292,6 +300,31 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         new RunOrder(cloneDir, null, definition, RunArguments.InteractiveMode.NONE, false)
     }
 
+    /**
+     * A {@link TaskGit} whose branch port reports the task as not-yet-created (bare shape): the
+     * shape both {@code TakeRefDispatchSpec} and {@code TakeRefDispatchContainerBatchSpec} drive
+     * their fresh-claim dispatch through, since neither scenario cares about anything past that.
+     * {@code harden} is also answered, as a no-op: both the host and container fresh-claim
+     * recipes call it before ever reaching {@code locate}/{@code classifyShape}.
+     *
+     * <p>Plain closure-backed ports, not Spock {@code Stub}s: a trait's shared method runs outside
+     * the per-feature scope Spock's mock controller requires, the same reason {@link
+     * #refreshingBaseRefGit} is built this way rather than as a {@code Stub}.
+     */
+    TaskGit bareGit() {
+        def branchGit = [
+            harden: { Path cloneDir -> },
+            locate: { Path cloneDir, String taskId ->
+                new BranchLocation.NotFound()
+            },
+            classifyShape: { Path cloneDir, String taskId ->
+                new BranchShape.Bare()
+            },
+        ] as TaskBranchGit
+        new TaskGit([:] as TaskStoreGit, branchGit, [:] as TaskWorktreeGit,
+        UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+    }
+
     /** A take order for {@code task}, claimed through {@code tracker} under {@link #INSTANCE}. */
     TakeOrder takeOrder(TrackerTask task, Tracker tracker, RunOrder run = runOrder()) {
         new TakeOrder(run, task, tracker, INSTANCE)
@@ -349,9 +382,31 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             ClaimBeat beat = ClaimBeat.NONE, ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
             Path root = WORKTREES_ROOT,
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        TakeClaimAndWorkFactory.forSlot(
-                assembly, git, root, 'taskId',
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag, ContainerTakeSupport.hostOnly(),
-                trustedBase)
+        new TakeClaimAndWorkFactory(slotWiring(assembly, git, tracker, root, ContainerTakeSupport.hostOnly(),
+                new ClaimTenure(beat, claimLossFlag), trustedBase)).forSlot()
+    }
+
+    /**
+     * The {@link SlotWiring} the take-chain specs run with: abort fuse K=3 over the given tracker,
+     * no credential names to scrub, MDC key {@code taskId}, and by default a host-only seam and a
+     * beat-less tenure over a fresh flag.
+     */
+    SlotWiring slotWiring(RunAssembly assembly, TaskGit git, Tracker tracker, Path root = WORKTREES_ROOT,
+            ContainerTakeSupport containerTakeSupport = ContainerTakeSupport.hostOnly(),
+            ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+            TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
+        new SlotWiring(assembly, git, root, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
+        containerTakeSupport, tenure, trustedBase)
+    }
+
+    /**
+     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
+     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
+     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
+     * "untrusted machine output" label would be untrue about. Shared by the host and container
+     * resume-routing specs, which both acknowledge a reply through the same tracker call.
+     */
+    String inert(String text) {
+        UntrustedText.tracker(text).forCommentInline()
     }
 }

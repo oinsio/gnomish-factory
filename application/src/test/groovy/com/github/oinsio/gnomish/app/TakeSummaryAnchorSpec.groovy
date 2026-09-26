@@ -78,7 +78,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         capture.detach()
     }
 
-    private TakeDispatcher dispatcher() {
+    private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> Stub(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
@@ -91,18 +91,17 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(
                 store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
-                git, worktreesRoot, 'taskId', testProperties(),
-                FIXED_CLOCK, ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE,
-                TakeoverConfirmation.UNAVAILABLE, ContainerTakeSupport.hostOnly(),
-                DEFAULT_TRUSTED_BASE)
+                slotWiring(assembly, git, tracker, worktreesRoot, ContainerTakeSupport.hostOnly(), heartbeat.tenure()),
+                testProperties(), FIXED_CLOCK, ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE,
+                TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
-        TakeRefDispatch.run(dispatcher(),
-                new TakeArguments(cloneDir, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-                completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, [], Stub(TrackerAdapterFactory),
-                assemblyRunning(new ScriptedExecutor([completedRound()])), heartbeat, SERVE_PROPERTIES, LOG)
+        TakeRefDispatch.run(dispatcher(assemblyRunning(new ScriptedExecutor([completedRound()])), heartbeat),
+        new TakeArguments(cloneDir, refs, RunArguments.InteractiveMode.NONE, null, false, false),
+        completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, Stub(TrackerAdapterFactory),
+        SERVE_PROPERTIES, LOG)
     }
 
     /** The rendered {@code wall=} field of the one captured summary line. */

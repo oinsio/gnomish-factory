@@ -21,13 +21,11 @@ import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.util.Objects;
 import java.util.Random;
 
@@ -42,44 +40,21 @@ final class ServeAssembly {
 
     private ServeAssembly() {}
 
-    /** FR13: {@code heartbeat}'s {@code ClaimBeat}/{@code ClaimLossFlag} are shared by every slot. */
+    /**
+     * FR13: the one slot runner every slot shares, over the daemon's one {@code wiring} — so the
+     * heartbeat's {@code ClaimBeat}/{@code ClaimLossFlag} in its tenure are shared by every slot.
+     */
     static TakeSlotRunner slotRunner(
             ServeArguments serveArguments,
-            Path worktreesRoot,
-            String taskIdMdcKey,
             PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            TrackerAdapterFactory factory,
             Tracker tracker,
             InstanceId instanceId,
-            RunAssembly serveAssembly,
-            TaskGit git,
-            TakeHeartbeat heartbeat,
-            Clock clock,
-            ContainerTakeSupport containerTakeSupport,
-            TrustedBaseContext trustedBase,
-            RemoteOutageGate remoteOutageGate) {
-        AbortHandler abortHandler = new AbortHandler(tracker, clock);
+            SlotWiring wiring) {
         // The serve arguments become the slots' run order here and nowhere else (D1 of
         // introduce-take-order): serve is unconditionally non-interactive (FR4 of
         // add-factory-serve), takes no --base, and always salvages.
         var run = new RunOrder(serveArguments.dir(), null, definition, RunArguments.InteractiveMode.NONE, false);
-        return new TakeSlotRunner(
-                serveAssembly,
-                git,
-                run,
-                worktreesRoot,
-                abortHandler,
-                trackerConfig.abortThreshold(),
-                taskIdMdcKey,
-                factory.credentialEnvVars(trackerConfig),
-                heartbeat.instance(),
-                heartbeat.flag(),
-                tracker,
-                instanceId,
-                containerTakeSupport,
-                trustedBase,
-                remoteOutageGate);
+        return new TakeSlotRunner(wiring, run, tracker, instanceId);
     }
 
     static FeedAutomaton feedAutomaton(

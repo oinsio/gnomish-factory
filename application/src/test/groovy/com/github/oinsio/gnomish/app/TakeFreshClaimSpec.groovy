@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
@@ -13,7 +12,6 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Engine
@@ -80,12 +78,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        TakeFreshClaim.claim(
-                assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached),
-                git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
-                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+        new TakeFreshClaim(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached), git, tracker, worktreesRoot)).claim(
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
         attached.size() == 1
@@ -118,11 +113,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                 store, branches, worktrees, UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        def result = TakeFreshClaim.claim(
-                assemblyRunning(executor), git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
-                takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+        def result = new TakeFreshClaim(slotWiring(
+                        assemblyRunning(executor), git, tracker, worktreesRoot)).claim(
+                takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)))
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)
@@ -166,11 +159,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                 refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        def result = TakeFreshClaim.claim(
-                assemblyRunning(executor), git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
-                takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline(), cloneDir)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+        def result = new TakeFreshClaim(slotWiring(
+                        assemblyRunning(executor), git, tracker, worktreesRoot)).claim(
+                takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline(), cloneDir)))
 
         then:
         executor.requests*.stage()*.name() == ['build']
@@ -198,13 +189,10 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                 store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        TakeFreshClaim.claim(
-                assemblyRunning(new ScriptedExecutor([completedRound()])),
-                git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
+        new TakeFreshClaim(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot)).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
-                new RunOrder(cloneDir, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+                new RunOrder(cloneDir, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)))
 
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({
@@ -230,11 +218,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                 store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        TakeFreshClaim.claim(
-                assemblyRunning(new ScriptedExecutor([completedRound()])), git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
-                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+        new TakeFreshClaim(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot)).claim(
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
         def ex = thrown(InternalErrorException)
@@ -268,11 +254,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                 store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
-        def result = TakeFreshClaim.claim(
-                invalidAssembly, git, worktreesRoot,
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [],
-                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)),
-                new ClaimLossFlag(), DEFAULT_TRUSTED_BASE)
+        def result = new TakeFreshClaim(slotWiring(
+                        invalidAssembly, git, tracker, worktreesRoot)).claim(
+                takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then: 'parked, never having created the branch or reached the engine'
         0 * lifecycleStore.createTask(*_)

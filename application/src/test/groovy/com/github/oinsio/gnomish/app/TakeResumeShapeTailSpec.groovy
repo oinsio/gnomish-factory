@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -73,8 +71,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
-        def runner = new TakeResumeRunner(assemblyRunning(executor), git,
-                worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git, tracker, worktreesRoot))
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }

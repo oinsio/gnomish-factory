@@ -1,20 +1,14 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.time.Clock;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,59 +41,17 @@ final class TakeDisposition {
     private final TakeTakeover takeover;
 
     /**
-     * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
-     * @param git the task-git capability set every claim/resume path's store, branch and worktree
-     *     operations come from; never null
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6); never null
-     * @param abortHandler the infrastructure-abort protocol (task 5.3); never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed through to {@code
-     *     abortHandler}; positive
-     * @param taskIdMdcKey the MDC key set to the branch's recorded taskId once a resume bootstrap
-     *     succeeds, matching {@link GitResumeRunner}'s own key
-     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
-     *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded down to
-     *     every {@link TakeEngineExecution} this disposition eventually constructs; never null
-     * @param heartbeat the instance heartbeat lifecycle registered/unregistered around the claimed
-     *     run (task 6.1 of add-claim-heartbeat, FR1); {@link ClaimBeat#NONE} when no beat runs
+     * @param wiring the slot's equipment (D2 of introduce-slot-wiring), fixed for the whole take
+     *     invocation: the claim/resume paths' assembly, task git, worktrees root, MDC key, abort
+     *     fuse, credential names, container seam, claim tenure and trusted base tier; never null
      * @param takeoverFlag whether {@code --takeover} authorized a headless {@code Working} takeover
      *     (task 6.2, FR6): bypasses the {@code confirmation} seam
      * @param confirmation the pre-claim takeover-confirmation seam (task 6.2, FR6, design D9); never null
      * @param clock the run's clock, used only to render the display-only last-beat age in the
      *     takeover facts (design D9); never null
-     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
-     *     add-claim-heartbeat), threaded down to every {@link TakeEngineExecution} this disposition
-     *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
-     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
-     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
-    TakeDisposition(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            List<String> credentialEnvVarsToScrub,
-            ClaimBeat heartbeat,
-            boolean takeoverFlag,
-            TakeoverConfirmation confirmation,
-            Clock clock,
-            ClaimLossFlag claimLossFlag,
-            ContainerTakeSupport containerTakeSupport,
-            TrustedBaseContext trustedBase) {
-        this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
-                assembly,
-                git,
-                worktreesRoot,
-                taskIdMdcKey,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                heartbeat,
-                claimLossFlag,
-                containerTakeSupport,
-                trustedBase);
+    TakeDisposition(SlotWiring wiring, boolean takeoverFlag, TakeoverConfirmation confirmation, Clock clock) {
+        this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }
 

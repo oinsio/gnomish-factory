@@ -147,8 +147,7 @@ record TakeContainerEngineExecution(
                 },
                 support::confirmTerminalWrite);
         var finish = new FinishTransition.Fresh(() -> {}, support::finishCleanup);
-        return TakeOutcomeDispatch.dispatch(
-                outcome, context, branchName, order, retry, park, abortFuse.handler(), abortFuse.threshold(), finish);
+        return TakeOutcomeDispatch.dispatch(outcome, context, branchName, order, retry, park, abortFuse, finish);
     }
 
     /**

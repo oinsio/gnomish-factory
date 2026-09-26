@@ -1,13 +1,10 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
-import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -28,7 +25,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Kept in sync with {@link TakeContainerResumeRunner}: both resolve the resumed law binding
  * through {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution
- * tail.
+ * tail — the current tip of the pinned base ref, narrow-fetched or read locally, parking or
+ * releasing the claim exactly alike on the two failure branches.
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution.
  */
@@ -40,40 +38,23 @@ final class TakeResumeRunner {
     private final TakeResumeExecution execution;
 
     /**
-     * @param assembly the shared engine/ports assembly, reused from the manual-run path — builds
-     *     the same {@link com.github.oinsio.gnomish.domain.engine.EnginePorts} bundle a live run
-     *     uses, minus the dialog console take never opens
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6); production wiring resolves {@code
-     *     ~/.gnomish/worktrees}, tests pass a temp directory
-     * @param git the task-git capability set the resumed run's store, branch and worktree
-     *     operations come from; never null
-     * @param taskIdMdcKey the MDC key set to the branch's recorded taskId once bootstrap succeeds,
-     *     matching {@link GitResumeRunner}'s own key
-     * @param abortHandler the infrastructure-abort protocol (task 5.3), applied when a resumed
-     *     engine run returns {@code Aborted}; never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code abortHandler}; positive
-     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
-     *     environment variable names (design D17, NFR-S1 of add-tracker-port), forwarded to
-     *     {@link TakeResumeExecution} for every engine execution it builds; never null
-     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
-     *     add-claim-heartbeat), forwarded to {@link TakeResumeExecution} so the round boundary
-     *     reacts to a beat-detected loss as a revocation; never null
+     * @param wiring the slot's equipment (D2 of introduce-slot-wiring): the shared engine/ports
+     *     assembly reused from the manual-run path (the same {@link
+     *     com.github.oinsio.gnomish.domain.engine.EnginePorts} bundle a live run uses, minus the
+     *     dialog console take never opens); the task-git capability set the resumed run's store,
+     *     branch and worktree operations come from; the worktrees root (design D6); the MDC key set
+     *     to the branch's recorded taskId once bootstrap succeeds, matching {@link
+     *     GitResumeRunner}'s own key; the abort fuse applied when a resumed engine run returns
+     *     {@code Aborted} (task 5.3); the tracker adapter's declared credential variable names
+     *     (design D17, NFR-S1 of add-tracker-port); and the tenure whose claim-loss flag makes the
+     *     round boundary react to a beat-detected loss as a revocation (task 6.3, FR8 of
+     *     add-claim-heartbeat) — all forwarded to {@link TakeResumeExecution}
      */
-    TakeResumeRunner(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            String taskIdMdcKey,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            ClaimLossFlag claimLossFlag) {
-        this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.resumeBootstrap = new TakeResumeBootstrap(git, worktreesRoot, taskIdMdcKey);
-        this.execution = new TakeResumeExecution(
-                assembly, git, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub, claimLossFlag);
+    TakeResumeRunner(SlotWiring wiring) {
+        this.git = wiring.git();
+        this.worktreesRoot = wiring.worktreesRoot();
+        this.resumeBootstrap = new TakeResumeBootstrap(git, worktreesRoot, wiring.taskIdMdcKey());
+        this.execution = new TakeResumeExecution(wiring);
     }
 
     /**

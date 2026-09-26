@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
+import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -102,7 +104,7 @@ final class TakeCommand {
      *     flag); never null
      * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
      *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
-     * @param containerTakeSupport the container-mode take support handed to {@link TakeDispatcher}
+     * @param containerTakeSupport the container-mode take support carried in the invocation's {@link SlotWiring}
      */
     TakeCommand(
             RunAssembly assembly,
@@ -200,17 +202,28 @@ final class TakeCommand {
                 // task tier through (FR13 of add-base-ref-resolution): one registry, two reads.
                 RunAssembly takeAssembly =
                         assembly.withExtraListener(heartbeat.progress()).withPipelineSource(pipelineSource);
-                var dispatcher = new TakeDispatcher(
+                // The take side's one slot wiring (design "Where a SlotWiring is built" of
+                // introduce-slot-wiring): built once per invocation, as soon as the heartbeat and
+                // the augmented assembly exist, and shared by explicit, bare and batch mode. One
+                // abort handler for the invocation — it is a stateless record over the tracker and
+                // clock, and the tracker is the same for every ref.
+                var wiring = new SlotWiring(
+                        takeAssembly,
                         git,
                         worktreesRoot,
                         taskIdMdcKey,
+                        new AbortFuse(new AbortHandler(tracker, clock), trackerConfig.abortThreshold()),
+                        credentialEnvVarsToScrub,
+                        containerTakeSupport,
+                        heartbeat.tenure(),
+                        trustedBase);
+                var dispatcher = new TakeDispatcher(
+                        wiring,
                         factoryProperties,
                         clock,
                         trackerAdapterRegistry,
                         secretsProvider,
-                        takeoverConfirmation,
-                        containerTakeSupport,
-                        trustedBase);
+                        takeoverConfirmation);
                 TakeRefDispatch.run(
                         dispatcher,
                         takeArguments,
@@ -218,10 +231,7 @@ final class TakeCommand {
                         trackerConfig,
                         tracker,
                         instanceId,
-                        credentialEnvVarsToScrub,
                         factory,
-                        takeAssembly,
-                        heartbeat,
                         serveProperties,
                         log);
             } finally {

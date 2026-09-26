@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
@@ -18,7 +19,6 @@ import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -104,8 +104,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
 
     /** The real routing chain, over the ports above. */
     private TakeDispositionResume resumeChain(ScriptedExecutor executor = new ScriptedExecutor([completedRound()])) {
-        def runner = new TakeResumeRunner(assemblyRunning(executor), git(), worktreesRoot, 'taskId',
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git(), tracker, worktreesRoot))
         chainOver(runner, git())
     }
 
@@ -364,9 +363,8 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
-        def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        ownGit, worktreesRoot, 'taskId',
-        new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(
+                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), ownGit, tracker, worktreesRoot))
         def chain = chainOver(runner, ownGit)
 
         when:
@@ -439,8 +437,8 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         lostFlag.claimLost(REF, 'taken over')
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
-        def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        git(), worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], lostFlag)
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])),
+        git(), tracker, worktreesRoot, ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
 
         when:
         def result = resume(chainOver(runner, git()))
@@ -457,12 +455,12 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
-        def runner = new TakeResumeRunner(
-                assemblyRunning(new ScriptedExecutor([
-                    completedRound(),
-                    completedRound()
-                ]), new Verdict.Fail([])),
-                git(), worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(slotWiring(
+                        assemblyRunning(new ScriptedExecutor([
+                            completedRound(),
+                            completedRound()
+                        ]), new Verdict.Fail([])),
+                        git(), tracker, worktreesRoot))
 
         when:
         def result = resume(chainOver(runner, git()))
@@ -471,15 +469,5 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         1 * tracker.park(REF, ParkReason.ESCALATION, _)
         1 * lifecycleStore.confirmTerminalWrite('PROJ-1')
         result instanceof TakeResult.AwaitingHuman
-    }
-
-    /**
-     * The comment plane's rendering of the acknowledged reply, as the tracker write publishes it:
-     * the inline shape, no label and no fence (design D6 of type-untrusted-text, revised
-     * 2026-09-19) — the reply is the human's own words quoted back, which is the one thing an
-     * "untrusted machine output" label would be untrue about.
-     */
-    private static String inert(String text) {
-        UntrustedText.tracker(text).forCommentInline()
     }
 }

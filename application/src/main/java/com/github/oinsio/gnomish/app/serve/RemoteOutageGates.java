@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
+import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
@@ -15,7 +16,11 @@ import java.util.function.Consumer;
  * virtual time and the one the daemon builds on the system clock are the same object, and only the
  * wiring differs.
  *
- * <p>Implements FR14, NFR-O1, NFR-O3 of add-base-ref-resolution.
+ * <p>Also the one owner of the gate's decoration of a serve slot's git ({@link #signaling}): the
+ * decorator is applied by the composition root, never by the slot it equips (D6 of
+ * introduce-slot-wiring).
+ *
+ * <p>Implements FR14, NFR-O1, NFR-O3 of add-base-ref-resolution; FR4 of introduce-slot-wiring.
  */
 public final class RemoteOutageGates {
 
@@ -67,5 +72,21 @@ public final class RemoteOutageGates {
                         sustainedOpenThreshold,
                         onTransition,
                         onClosedOutage));
+    }
+
+    /**
+     * The task git a serve slot works with: {@code git} with its base-ref port wrapped in {@link
+     * RemoteOutageSignalingBaseRefGit}, so every claim-time base read reports to {@code gate} at
+     * the moment it returns (FR14 of add-base-ref-resolution). The only construction of that
+     * decorator: the serve assembly point fills the slot wiring's {@code git} from here, and the
+     * slot itself never re-decorates (D6 of introduce-slot-wiring).
+     *
+     * @param git the undecorated task git; never null
+     * @param gate the daemon's one remote outage gate — the SAME instance its feed automaton
+     *     consults; never null
+     * @return a copy of {@code git} differing only in its base-ref port; never null
+     */
+    public static TaskGit signaling(TaskGit git, RemoteOutageGate gate) {
+        return git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), gate));
     }
 }

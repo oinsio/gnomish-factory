@@ -53,14 +53,9 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
         when:
         def slotRunner = ServeAssembly.slotRunner(
-                new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, 'taskId', pipeline(),
-                new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
-                assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly(),
-                DEFAULT_TRUSTED_BASE,
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
+                new ServeArguments(CLONE_DIR, null, false), pipeline(), tracker, INSTANCE,
+                slotWiring(assemblyRunning(null), git, tracker, WORKTREES_ROOT, ContainerTakeSupport.hostOnly(),
+                heartbeat.tenure()))
 
         then:
         slotRunner != null

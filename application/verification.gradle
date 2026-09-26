@@ -44,7 +44,7 @@ pitest {
         // and TakeSlotRunnerSpec, which run the whole claim-and-resume flow through it.
         'com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory',
         // Straight-line assembly of the serve runtime over ServeAssembly's leaf builders; driven by
-        // :bootstrap's ServeCommandSpec, which starts the assembled runtime.
+        // :bootstrap's ServeRuntimeWiringSpec, which proves each wiring by its effect on a real drain.
         'com.github.oinsio.gnomish.app.ServeRuntimeAssembly',
 
         // Integration-covered exemptions (task 8.7 of split-into-modules, design D13(c); the bar is
@@ -61,9 +61,11 @@ pitest {
         // first, a line logged during the drain still reaching the file, the second pass a no-op),
         // all driven through this class's own ShutdownHookRegistrar seam.
         'com.github.oinsio.gnomish.app.ServeShutdownWiring',
-        // ServeCommandSpec, 10 scenarios — startup refusal and failure paths, the shared
-        // heartbeat/claim-loss wiring, the ledger-writer attach, --drain vs the forever loop, the
-        // janitor and standing reaper actually starting, and the --slots override.
+        // The ServeCommandSpecBase family, 10 scenarios — startup refusal and failure paths
+        // (ServeStartupFailureSpec), --drain vs the forever loop, the --slots override and the start
+        // anchor (ServeLaunchSpec), the janitor and standing reaper actually starting
+        // (ServeBackgroundDutiesSpec); plus ServeRuntimeWiringSpec, 3 scenarios — the shared
+        // heartbeat and its progress listener, the ledger-writer attach, the tracker health decorator.
         'com.github.oinsio.gnomish.app.ServeCommand',
         // TakeSlotRunnerSpec, 11 scenarios — the take cycle, the MDC frame, all three optional
         // attachments present and absent, outcome logging, the swallowed fetch failure, and both

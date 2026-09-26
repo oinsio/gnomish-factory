@@ -1,11 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -77,8 +75,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */
     private TakeDispositionResume chain(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass()) {
         def git = git()
-        def runner = new TakeResumeRunner(assemblyRunning(executor, verdict), git, worktreesRoot, 'taskId',
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor, verdict), git, tracker, worktreesRoot))
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }

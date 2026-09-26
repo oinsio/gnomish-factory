@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -10,7 +9,6 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -68,8 +66,8 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
-        def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])), git,
-        worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
+        def runner = new TakeResumeRunner(
+                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot))
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }

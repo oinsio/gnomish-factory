@@ -29,10 +29,7 @@ final class TakeRefDispatch {
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub,
             TrackerAdapterFactory factory,
-            RunAssembly takeAssembly,
-            TakeHeartbeat heartbeat,
             ServeProperties serveProperties,
             Logger log)
             throws IOException, InterruptedException {
@@ -43,16 +40,7 @@ final class TakeRefDispatch {
             // serveProperties.slots() concurrently (FR2: "the N limit applies to batch and
             // serve" — no separate batch flag).
             List<TakeBatchOutcome> outcomes = dispatcher.runBatch(
-                    takeArguments,
-                    definition,
-                    trackerConfig,
-                    tracker,
-                    instanceId,
-                    credentialEnvVarsToScrub,
-                    factory,
-                    takeAssembly,
-                    heartbeat,
-                    serveProperties.slots());
+                    takeArguments, definition, trackerConfig, tracker, instanceId, factory, serveProperties.slots());
             // FR3, NFR-O2, UX3: the checklist summary is logged before the aggregate exit code
             // is thrown, so it is visible regardless of how the caller handles the exit code.
             TakeBatchSummary.log(outcomes, log);
@@ -60,27 +48,10 @@ final class TakeRefDispatch {
         }
         TakeResult result;
         if (refs.isEmpty()) {
-            result = dispatcher.runBare(
-                    takeArguments,
-                    definition,
-                    trackerConfig,
-                    tracker,
-                    instanceId,
-                    credentialEnvVarsToScrub,
-                    takeAssembly,
-                    heartbeat);
+            result = dispatcher.runBare(takeArguments, definition, trackerConfig, tracker, instanceId);
         } else {
             result = dispatcher.runExplicit(
-                    takeArguments,
-                    refs.getFirst(),
-                    definition,
-                    trackerConfig,
-                    tracker,
-                    instanceId,
-                    credentialEnvVarsToScrub,
-                    factory,
-                    takeAssembly,
-                    heartbeat);
+                    takeArguments, refs.getFirst(), definition, trackerConfig, tracker, instanceId, factory);
         }
         throw new TakeExitCodeException(TakeExitCodeMapper.exitCodeFor(result));
     }

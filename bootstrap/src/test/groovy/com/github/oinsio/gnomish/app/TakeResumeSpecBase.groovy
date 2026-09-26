@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -11,7 +12,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
@@ -84,9 +88,26 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
             ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
             TaskGit git = taskGit) {
         def assembly = newAssembly(input, System.out, factoryProperties)
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeResumeRunner(
-                assembly, git, worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub, claimLossFlag)
+        new TakeResumeRunner(slotWiring(
+                        assembly, git, credentialEnvVarsToScrub, new ClaimTenure(ClaimBeat.NONE, claimLossFlag)))
+    }
+
+    /**
+     * The {@link SlotWiring} the take specs over this fixture run with: this fixture's worktrees
+     * root, MDC key {@code taskId}, an abort fuse of {@link #ABORT_THRESHOLD} over {@link
+     * #tracker}, a host-only container seam, and a trusted base whose default branch is the
+     * clone's actual current branch — read lazily, since {@code cloneDir} only exists once {@code
+     * setup()} has run.
+     */
+    protected SlotWiring slotWiring(
+            RunAssembly assembly,
+            TaskGit git = taskGit,
+            List<String> credentialEnvVarsToScrub = [],
+            ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag())) {
+        new SlotWiring(assembly, git, worktreesRoot, 'taskId',
+                new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD),
+                credentialEnvVarsToScrub, ContainerTakeSupport.hostOnly(), tenure,
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
     }
 
     /**

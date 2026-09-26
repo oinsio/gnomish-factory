@@ -10,14 +10,14 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 /**
  * The routing half of {@link TakeClaimAndWork}: with the claim already held and the heartbeat
  * already beating, decide WHERE the work runs — fresh claim or resume by whether the task branch
- * exists, then host or container by the sandbox mode the operator's bindings resolve to. Extracted
- * from {@link TakeClaimAndWork}, which keeps the claim/crash-abort/heartbeat lifecycle, so neither
- * file carries both concerns (file-size target, {@code process-invariants.md}); the behavior is
- * unchanged and {@link TakeClaimAndWork} is passed whole as the parameter object, the same shape
- * {@code ContainerRunTermination} uses for {@code ContainerRunSupport}.
+ * exists, then host or container by the sandbox mode the operator's bindings resolve to. {@link
+ * TakeClaimAndWork} keeps the claim/crash-abort/heartbeat lifecycle; this class owns the route and
+ * the equipment every route needs — the slot's {@link SlotWiring}, the two resume runners and the
+ * two fresh-claim recipes built from that wiring — constructed once per slot and holding no
+ * reference back to its owner (D2 of introduce-slot-wiring).
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle;
- * FR6, NFR-O1 of harden-task-branch-contract.
+ * FR6, NFR-O1 of harden-task-branch-contract; FR5 of introduce-slot-wiring.
  */
 final class TakeWorkRouter {
 
@@ -26,18 +26,30 @@ final class TakeWorkRouter {
     // rather than threaded through the take wiring as a collaborator.
     private static final BranchRepairLog REPAIR_LOG = new BranchRepairLog();
 
-    private TakeWorkRouter() {}
+    private final SlotWiring wiring;
+    private final TakeResumeRunner resumeRunner;
+    private final TakeContainerResumeRunner containerResumeRunner;
+    private final TakeFreshClaim hostFreshClaim;
+    private final TakeContainerFreshClaim containerFreshClaim;
 
-    static TakeResult locateAndWork(TakeClaimAndWork w, TakeOrder order) {
+    TakeWorkRouter(SlotWiring wiring, TakeResumeRunner resumeRunner, TakeContainerResumeRunner containerResumeRunner) {
+        this.wiring = wiring;
+        this.resumeRunner = resumeRunner;
+        this.containerResumeRunner = containerResumeRunner;
+        this.hostFreshClaim = new TakeFreshClaim(wiring);
+        this.containerFreshClaim = new TakeContainerFreshClaim(wiring);
+    }
+
+    TakeResult locateAndWork(TakeOrder order) {
         String taskId = order.taskId();
         // One classification decides the route (FR2 of harden-task-branch-contract): the branch is
         // read once, named once, and every path below — fresh, resume, reconcile — is a case of
         // that one name rather than a predicate of its own. A lookup that could not reach origin
         // throws from here (FR6), aborting the take through the crash-abort protocol, which
         // releases the claim rather than forking a second branch for a task that already has one.
-        BranchShape shape = w.git.branches().classifyShape(order.run().cloneDir(), taskId);
+        BranchShape shape = wiring.git().branches().classifyShape(order.run().cloneDir(), taskId);
         if (shape instanceof BranchShape.Bare) {
-            return freshClaim(w, order);
+            return freshClaim(order);
         }
         // NFR-O1: every pickup of an existing branch that is not the clean shape a healthy
         // progression expects leaves one line before its recovery owner runs — the repeat judged
@@ -47,10 +59,10 @@ final class TakeWorkRouter {
         REPAIR_LOG.classified(
                 taskId,
                 shape,
-                w.git.epochs().epochFor(taskId).orElse(null),
+                wiring.git().epochs().epochFor(taskId).orElse(null),
                 BranchRepairAction.phrase(shape),
                 order.trackerTask().abortFacts().recoveryCount());
-        return resume(w, order, shape);
+        return resume(order, shape);
     }
 
     /**
@@ -59,32 +71,11 @@ final class TakeWorkRouter {
      * claim is refused, not silently routed to host, when the operator's bindings resolve to
      * container without its prerequisites (image + reachable Docker).
      */
-    private static TakeResult freshClaim(TakeClaimAndWork w, TakeOrder order) {
-        var plan = plan(w, order.run().definition());
+    private TakeResult freshClaim(TakeOrder order) {
+        var plan = plan(order.run().definition());
         return switch (plan.mode()) {
-            case HOST ->
-                TakeFreshClaim.claim(
-                        w.assembly,
-                        w.git,
-                        w.worktreesRoot,
-                        w.abortHandler,
-                        w.abortThreshold,
-                        w.credentialEnvVarsToScrub,
-                        order,
-                        w.claimLossFlag,
-                        w.trustedBase);
-            case CONTAINER ->
-                TakeContainerFreshClaim.claim(
-                        w.assembly,
-                        w.git,
-                        w.containerTakeSupport,
-                        plan.segments(),
-                        w.abortHandler,
-                        w.abortThreshold,
-                        w.credentialEnvVarsToScrub,
-                        order,
-                        w.claimLossFlag,
-                        w.trustedBase);
+            case HOST -> hostFreshClaim.claim(order);
+            case CONTAINER -> containerFreshClaim.claim(order, plan.segments());
         };
     }
 
@@ -93,16 +84,16 @@ final class TakeWorkRouter {
      * SAME routing table ({@link TakeDispositionResume}) the mechanics for their mode, so a resumed
      * branch is dispatched identically either way and no routing branch can exist in one mode only.
      */
-    private static TakeResult resume(TakeClaimAndWork w, TakeOrder order, BranchShape shape) {
+    private TakeResult resume(TakeOrder order, BranchShape shape) {
         PipelineDefinition definition = order.run().definition();
-        var plan = plan(w, definition);
+        var plan = plan(definition);
         ResumeMechanics<? extends ResumedBranch> mechanics =
                 switch (plan.mode()) {
-                    case HOST -> new HostResumeMechanics(w.resumeRunner, w.git, w.worktreesRoot, definition);
-                    case CONTAINER ->
-                        new ContainerResumeMechanics(w.containerResumeRunner, plan.segments(), definition);
+                    case HOST ->
+                        new HostResumeMechanics(resumeRunner, wiring.git(), wiring.worktreesRoot(), definition);
+                    case CONTAINER -> new ContainerResumeMechanics(containerResumeRunner, plan.segments(), definition);
                 };
-        return routingTable(mechanics, w.git).resumeExisting(order, shape);
+        return routingTable(mechanics, wiring.git()).resumeExisting(order, shape);
     }
 
     private static <B extends ResumedBranch> TakeDispositionResume<B> routingTable(
@@ -110,12 +101,13 @@ final class TakeWorkRouter {
         return new TakeDispositionResume<>(mechanics, new TakeDecisionResume<>(mechanics), git);
     }
 
-    private static SandboxModeSelector.Plan plan(TakeClaimAndWork w, PipelineDefinition definition) {
+    private SandboxModeSelector.Plan plan(PipelineDefinition definition) {
+        ContainerTakeSupport containerTakeSupport = wiring.containerTakeSupport();
         return SandboxModeSelector.plan(
                 definition,
-                w.containerTakeSupport.bindingProperties(),
-                w.containerTakeSupport.sandboxProperties(),
-                w.containerTakeSupport.bindingRegistry(),
-                w.containerTakeSupport.dockerProbe());
+                containerTakeSupport.bindingProperties(),
+                containerTakeSupport.sandboxProperties(),
+                containerTakeSupport.bindingRegistry(),
+                containerTakeSupport.dockerProbe());
     }
 }

@@ -1,28 +1,20 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.app.ContainerTakeSupport;
 import com.github.oinsio.gnomish.app.RunArguments;
-import com.github.oinsio.gnomish.app.RunAssembly;
 import com.github.oinsio.gnomish.app.RunOrder;
+import com.github.oinsio.gnomish.app.SlotWiring;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
 import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
 import com.github.oinsio.gnomish.app.TakeOrder;
-import com.github.oinsio.gnomish.app.TrustedBaseContext;
-import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import com.github.oinsio.gnomish.status.MdcEventListener;
 import com.github.oinsio.gnomish.status.WallTime;
-import java.nio.file.Path;
-import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,12 +46,15 @@ import org.slf4j.MDC;
  *
  * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> The slot signals the
  * shared {@link RemoteOutageGate} from its base reads themselves, not from its terminal {@link
- * TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} inside the {@link
- * TaskGit} handed to {@link TakeClaimAndWorkFactory#forSlot} is wrapped in {@link
- * RemoteOutageSignalingBaseRefGit}, so an outage opens the gate and a refresh confirms recovery at
- * the instant either happens — a terminal result arrives hours after the refresh it implies (see
- * that class for the stale-signal defect this closes). Opening the gate never touches an in-flight
- * slot: it only changes what the NEXT feed cycle's {@link FeedCycle#claimOrAbandon} does.
+ * TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} inside the wiring's
+ * {@link com.github.oinsio.gnomish.app.port.git.TaskGit} is already wrapped in {@link
+ * RemoteOutageSignalingBaseRefGit} by the serve assembly point, through {@link
+ * RemoteOutageGates#signaling} (D6 of introduce-slot-wiring) — the slot reads through it without
+ * knowing it and never decorates its own equipment. An outage opens the gate and a refresh
+ * confirms recovery at the instant either happens — a terminal result arrives hours after the
+ * refresh it implies (see that class for the stale-signal defect this closes). Opening the gate
+ * never touches an in-flight slot: it only changes what the NEXT feed cycle's {@link
+ * FeedCycle#claimOrAbandon} does.
  */
 public final class TakeSlotRunner implements SlotRunner {
 
@@ -76,60 +71,22 @@ public final class TakeSlotRunner implements SlotRunner {
     private @Nullable RunSummaryAccumulator runSummaryAccumulator;
 
     /**
-     * @param assembly the shared engine/ports assembly, reused across every slot; never null
-     * @param git the task-git capability set every slot's store, branch and worktree operations
-     *     come from; never null
+     * @param wiring the slot's equipment (D2 of introduce-slot-wiring), built once per daemon and
+     *     shared by every slot; its task git already reports every base read to the daemon's
+     *     remote outage gate (D6), and its MDC key is set to the claimed ref's id for the slot's
+     *     duration; never null
      * @param run the run order every slot dispatches under: the project clone, the loaded pipeline
      *     every slot advances through, and serve's fixed non-interactive, no-base, salvaging
      *     settings; never null
-     * @param worktreesRoot the root under which {@code <project-name>/<taskId>/} worktrees are created; never null
-     * @param abortHandler the infrastructure-abort protocol; never null
-     * @param abortThreshold the configured abort-fuse threshold (K); positive
-     * @param taskIdMdcKey the MDC key set to the claimed ref's id for the slot's duration
-     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential env var names; never null
-     * @param heartbeat the heartbeat lifecycle registered/unregistered around the run; {@link ClaimBeat#NONE} when none
-     * @param claimLossFlag the per-run heartbeat claim-loss flag; never null
      * @param tracker the tracker port every slot fetches and dispatches through; never null
      * @param instanceId this factory instance's identity; never null
-     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
-     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
-     * @param remoteOutageGate the remote outage gate every base read of this slot reports to
-     *     through {@link RemoteOutageSignalingBaseRefGit} (FR14, task 7.3 of
-     *     add-base-ref-resolution) — the SAME instance the daemon's {@link FeedAutomaton}
-     *     consults; never null
      */
-    public TakeSlotRunner(
-            RunAssembly assembly,
-            TaskGit git,
-            RunOrder run,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            List<String> credentialEnvVarsToScrub,
-            ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag,
-            Tracker tracker,
-            InstanceId instanceId,
-            ContainerTakeSupport containerTakeSupport,
-            TrustedBaseContext trustedBase,
-            RemoteOutageGate remoteOutageGate) {
-        this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
-                assembly,
-                git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), remoteOutageGate)),
-                worktreesRoot,
-                taskIdMdcKey,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                heartbeat,
-                claimLossFlag,
-                containerTakeSupport,
-                trustedBase);
+    public TakeSlotRunner(SlotWiring wiring, RunOrder run, Tracker tracker, InstanceId instanceId) {
+        this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.run = run;
         this.tracker = tracker;
         this.instanceId = instanceId;
-        this.taskIdMdcKey = taskIdMdcKey;
+        this.taskIdMdcKey = wiring.taskIdMdcKey();
     }
 
     /**

@@ -178,14 +178,6 @@ record TakeEngineExecution(
 
         var retry = TerminalWriteRetry.system();
         return TakeOutcomeDispatch.dispatch(
-                outcome,
-                context,
-                bootstrap.branchName(),
-                order,
-                retry,
-                park,
-                abortFuse.handler(),
-                abortFuse.threshold(),
-                finish);
+                outcome, context, bootstrap.branchName(), order, retry, park, abortFuse, finish);
     }
 }

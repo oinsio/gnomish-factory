@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -191,12 +193,13 @@ tracker:
                 new TrackerTaskState.Ready(), AbortFacts.none(), false)
 
         when:
-        TakeFreshClaim.claim(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, new AbortHandler(tracker, Clock.systemUTC()), 3, [],
+        new TakeFreshClaim(new SlotWiring(
+                        newAssembly(), TaskGitFixture.real(), worktreesRoot, 'taskId',
+                        new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], ContainerTakeSupport.hostOnly(),
+                        new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(
                 new TakeOrder(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
-                trackerTask, tracker, InstanceId.generate('test-instance')),
-                new ClaimLossFlag(),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))
+                trackerTask, tracker, InstanceId.generate('test-instance')))
 
         then:
         thrown(UsageException)

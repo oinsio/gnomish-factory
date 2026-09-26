@@ -2,19 +2,15 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
 import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
-import java.util.List;
 
 /**
  * The shared "claim, then either create or resume the branch" logic behind both take entry points
@@ -27,8 +23,9 @@ import java.util.List;
  *
  * <p>Extracted out of {@link TakeDisposition} (task 5.9) so bare auto mode (task 5.10) can reuse
  * the identical claim-and-dispatch sequence without duplicating it; explicit mode's {@link
- * TakeDisposition#dispose} still delegates here for its {@code Ready} case. Split purely to respect
- * the file-size guidance (`.claude/rules/process-invariants.md`).
+ * TakeDisposition#dispose} still delegates here for its {@code Ready} case. It owns that sequence
+ * and the claim lifecycle around it, holding the slot's equipment as fields built once from the
+ * {@link SlotWiring} rather than receiving it on every call (D2 of introduce-slot-wiring).
  *
  * <p>The class and {@link #dispatchAfterClaim} are {@code public} — the only members widened
  * beyond this package's usual package-private convention (see the sibling {@code Take*} claim/
@@ -39,56 +36,25 @@ import java.util.List;
  * caller outside {@code app} claims fresh itself.
  *
  * <p>This class owns the claim, heartbeat and crash-abort lifecycle only; WHERE the work runs —
- * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, which reads the
- * collaborators below directly (hence package-private rather than private fields, the same shape
- * {@code ContainerRunSupport} uses for {@code ContainerRunTermination}).
+ * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, an instance this
+ * class builds once from the slot's {@link SlotWiring} and holds (D2 of introduce-slot-wiring).
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port. Implements FR1, M2 of add-factory-serve.
+ * Implements FR4, FR5 of introduce-slot-wiring.
  */
 public final class TakeClaimAndWork {
 
-    final RunAssembly assembly;
-    final TaskGit git;
-    final Path worktreesRoot;
-    final AbortHandler abortHandler;
-    final int abortThreshold;
-    final List<String> credentialEnvVarsToScrub;
-    final TakeResumeRunner resumeRunner;
+    private final TaskGit git;
     private final ClaimBeat heartbeat;
-    final ClaimLossFlag claimLossFlag;
     private final TakeCrashAbort crashAbort;
-    final ContainerTakeSupport containerTakeSupport;
-    final TakeContainerResumeRunner containerResumeRunner;
-    // FR13, D15 of add-base-ref-resolution: the trusted tier bound once at startup, read by the
-    // routing point's fresh-claim base resolution — never re-read per claim.
-    final TrustedBaseContext trustedBase;
+    private final TakeWorkRouter router;
 
     TakeClaimAndWork(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            TakeResumeRunner resumeRunner,
-            ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag,
-            ContainerTakeSupport containerTakeSupport,
-            TakeContainerResumeRunner containerResumeRunner,
-            TrustedBaseContext trustedBase) {
-        this.assembly = assembly;
-        this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.abortHandler = abortHandler;
-        this.abortThreshold = abortThreshold;
-        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
-        this.resumeRunner = resumeRunner;
-        this.heartbeat = heartbeat;
-        this.claimLossFlag = claimLossFlag;
-        this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
-        this.containerTakeSupport = containerTakeSupport;
-        this.containerResumeRunner = containerResumeRunner;
-        this.trustedBase = trustedBase;
+            SlotWiring wiring, TakeResumeRunner resumeRunner, TakeContainerResumeRunner containerResumeRunner) {
+        this.git = wiring.git();
+        this.heartbeat = wiring.tenure().beat();
+        this.crashAbort = new TakeCrashAbort(wiring.abort());
+        this.router = new TakeWorkRouter(wiring, resumeRunner, containerResumeRunner);
     }
 
     /**
@@ -161,7 +127,7 @@ public final class TakeClaimAndWork {
         TaskRef ref = order.ref();
         heartbeat.register(ref);
         try {
-            return TakeWorkRouter.locateAndWork(this, order);
+            return router.locateAndWork(order);
         } catch (UsageException | DivergedBranchException deliberate) {
             releaseBestEffort(order.tracker(), ref, deliberate);
             throw deliberate;

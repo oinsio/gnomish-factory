@@ -57,6 +57,17 @@ record TakeHeartbeat(
         LivenessOracle livenessOracle) {
 
     /**
+     * The claim tenure a slot works with: this heartbeat's beat lifecycle and its claim-loss flag,
+     * the very instance wired as the beat's lost-claim sink. The only production construction of
+     * a {@link ClaimTenure}, so the pairing cannot come apart.
+     *
+     * <p>Implements FR3 of introduce-slot-wiring.
+     */
+    ClaimTenure tenure() {
+        return new ClaimTenure(instance, flag);
+    }
+
+    /**
      * Builds the heartbeat machinery for one {@code take} run against {@code tracker}, reading the
      * beat interval and TTL multiplier from {@code config} (design D8). The claim staleness TTL is
      * {@code interval × multiplier}; the reaper's per-run staleness memory is driven by the {@link

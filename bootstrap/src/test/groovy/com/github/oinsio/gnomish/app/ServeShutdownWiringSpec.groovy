@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
@@ -20,10 +19,10 @@ import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
 import com.github.oinsio.gnomish.app.serve.RecordingKiller
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -133,15 +132,13 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
     private TakeSlotRunner newSlotRunner() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        def wiring = new SlotWiring(
+                newAssembly(), TaskGitFixture.real(), worktreesRoot, 'taskId', new AbortFuse(abortHandler, 3), [],
+                ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
         new TakeSlotRunner(
-                newAssembly(), TaskGitFixture.real(), new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
-                worktreesRoot, abortHandler, 3, 'taskId',
-                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
+                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                tracker, INSTANCE)
     }
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
