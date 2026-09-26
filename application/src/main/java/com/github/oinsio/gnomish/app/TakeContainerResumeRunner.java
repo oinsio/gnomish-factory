@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -35,7 +34,6 @@ import org.jspecify.annotations.Nullable;
 final class TakeContainerResumeRunner {
 
     private final SlotWiring wiring;
-    private final TaskGit git;
     private final TakeContainerResumeBootstrap resumeBootstrap;
 
     /**
@@ -45,9 +43,8 @@ final class TakeContainerResumeRunner {
      */
     TakeContainerResumeRunner(SlotWiring wiring) {
         this.wiring = wiring;
-        this.git = wiring.git();
         this.resumeBootstrap =
-                new TakeContainerResumeBootstrap(git, wiring.containerTakeSupport(), wiring.taskIdMdcKey());
+                new TakeContainerResumeBootstrap(wiring.git(), wiring.containerTakeSupport(), wiring.taskIdMdcKey());
     }
 
     /**
@@ -84,7 +81,7 @@ final class TakeContainerResumeRunner {
             }
         }
         return ResumeLawBinding.resolve(
-                git.baseRefs(),
+                wiring.git().baseRefs(),
                 order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
@@ -102,7 +99,7 @@ final class TakeContainerResumeRunner {
     TakeResult resumeDecided(
             TakeOrder order, ContainerResumeBootstrap bootstrap, TaskContext context, TaskState resetState) {
         return ResumeLawBinding.resolve(
-                git.baseRefs(),
+                wiring.git().baseRefs(),
                 order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 resetState,

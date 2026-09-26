@@ -135,6 +135,15 @@ that quarantined every legitimate reclaim in production was invisible (`fix-clai
 - One capability per spec file; descriptive method names in natural language (Spock convention)
 - Contract tests for every port: each adapter must pass the same port-level spec suite
 - Integration tests are the slowest — scope runs to what the change affects
+- **Specs observe effects, not private fields.** Groovy's direct field access (`obj.@field`) and
+  plain property access to a private field bind a spec to names the production code is free to
+  change: a rename fails the spec with no behavior regressed, and a chain of them
+  (`a.@b.@c.assembly()`) fails on every refactoring of the graph between. Assert the wiring by
+  the effect only it produces — a line in the ledger, a field of the snapshot, a payload the
+  tracker received — on the real flow (`ServeRuntimeWiringSpec` is the in-repo model: one
+  feature per wiring, each shown red with that wiring removed). Where no effect exists, the gap
+  is a missing seam to design, not a field to reach. New `.@` reads are not added; the survivors
+  in `ServeShutdownWiringSpec` and `ManualRunContainerDispatchSpec` are known debt
 - **Every wire vocabulary has a round-trip spec.** When an enum is serialized to wire tokens
   by one component and parsed back by another (ledger, snapshot, state files), a data-driven
   spec must assert `fromWire(wire(e)) == e` for **every** constant — iterate `values()`, no

@@ -44,7 +44,7 @@ import spock.util.concurrent.PollingConditions
  * was flaky until it was given its own, never-driven reaper sleeper. This spec sidesteps that
  * ambiguity entirely by asserting on OBSERVABLE tracker state via {@link PollingConditions}
  * (bounded, no sleep-and-hope for anything this spec expects TO happen), the same idiom already
- * used for real-thread proofs elsewhere (e.g. {@code ServeCommandSpec}, {@code FeedAutomatonSpec}).
+ * used for real-thread proofs elsewhere (e.g. {@code ServeBackgroundDutiesSpec}, {@code FeedAutomatonSpec}).
  *
  * <p>Covers tracker-take's "Take runs the heartbeat thread and the reaper duty" as modified (FR1,
  * FR5): the standing reaper starts independent of any claim and is stopped exactly once the run

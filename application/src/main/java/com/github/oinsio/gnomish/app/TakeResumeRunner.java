@@ -25,7 +25,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Kept in sync with {@link TakeContainerResumeRunner}: both resolve the resumed law binding
  * through {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution
- * tail.
+ * tail — the current tip of the pinned base ref, narrow-fetched or read locally, parking or
+ * releasing the claim exactly alike on the two failure branches.
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution.
  */

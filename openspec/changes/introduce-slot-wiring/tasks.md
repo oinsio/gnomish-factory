@@ -85,7 +85,10 @@
       fixtures that construct `TakeSlotRunner`: `ServeShutdownWiringSpec` and
       `TakeSlotRunnerContainerConcurrencySpec` drop their inert gate; `TakeSlotRunnerSpec.
       newSlotRunner()` decorates through `RemoteOutageGates.signaling` so its gate scenario
-      still sees the refresh — no expectation edited. Verify `slotRunner` takes seven
+      still sees the refresh — no expectation edited. One precondition line of that scenario
+      gains `assert`: as a bare boolean in `given:` Spock never evaluated it as a condition,
+      so it was dead; asserting it adds a check without changing what the scenario verifies.
+      Verify `slotRunner` takes seven
       parameters or fewer, the `ServeCommand` constructor, `ServeRuntimeAssembly.assemble`
       and `SubcommandDispatchFactory.of` keep their signatures, `grep -rn "new SlotWiring("
       */src/main` shows exactly the two assembly points of the design, `grep -rn

@@ -2,13 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
@@ -82,18 +76,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
 
     private TakeDispatcher dispatcher(
             Map<String, TaskRepository> repositories, RunAssembly assembly, TakeHeartbeat heartbeat) {
-        def branchGit = [
-            locate: { Path cloneDir, String taskId ->
-                new com.github.oinsio.gnomish.app.port.git.BranchLocation.NotFound()
-            },
-            classifyShape: { Path cloneDir, String taskId ->
-                new com.github.oinsio.gnomish.domain.branch.BranchShape.Bare()
-            },
-        ] as com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-        def git = new com.github.oinsio.gnomish.app.port.git.TaskGit([:] as com.github.oinsio.gnomish.app.port.git.TaskStoreGit,
-        branchGit, [:] as com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit,
-        java.util.function.UnaryOperator.identity(), refreshingBaseRefGit(), new com.github.oinsio.gnomish.app.lease.ClaimEpochBook())
-        new TakeDispatcher(slotWiring(assembly, git, tracker, WORKTREES_ROOT, containerTakeSupport(repositories),
+        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, WORKTREES_ROOT, containerTakeSupport(repositories),
                 heartbeat.tenure()), testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
     }
