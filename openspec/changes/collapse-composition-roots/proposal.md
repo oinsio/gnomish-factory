@@ -3,9 +3,9 @@
 ## Why
 
 The two preceding changes name the things a take slot carries: the order (one invocation's
-job) and the wiring (one slot's equipment). Twenty signatures remain that carry neither —
+job) and the wiring (one slot's equipment). Twenty-two signatures remain that carry neither —
 they are the code that **builds** collaborators rather than the code that uses them:
-`ManualRunRunner` with 27 injected dependencies, `SubcommandDispatchFactory.of` with 19,
+`ManualRunRunner` with 28 injected dependencies, `SubcommandDispatchFactory.of` with 19,
 `ObservabilityAssembly.assemble` with 16, `ServeRuntimeAssembly.assemble`, the three
 `FeedAutomaton` constructors, the `*Command` constructors and the `*Assembly` classes.
 
@@ -17,9 +17,11 @@ without removing what caused it. Spring's own reference documentation says the s
 sentence: "a large number of constructor arguments is a bad code smell, implying that the
 class likely has too many responsibilities".
 
-`ManualRunRunner` is the clearest instance. Nine of its 27 arguments are exactly the nine
+`ManualRunRunner` is the clearest instance. Ten of its 28 arguments are exactly the ten
 `ManualRunAssembly` already takes — the runner re-lists the assembly's ingredients instead
-of taking the assembly. Four more are the pre-built report commands. Two are `Path
+of taking the assembly; three of the ten it holds for no other purpose, the other seven it
+also uses itself and sheds only with the cluster each belongs to. Four more are the pre-built
+report commands. Two are `Path
 worktreesRoot` and `Path homeDir`, adjacent parameters of the same type, which
 `process-invariants.md` already calls a transposition hazard at any count and which Spring
 today tells apart only by parameter name.
@@ -37,6 +39,9 @@ today tells apart only by parameter name.
   context assembly rather than plain Java.
 - **MODIFIED**: `ManualRunRunner` takes the `ManualRunAssembly` it currently rebuilds from
   ingredients.
+- **MODIFIED**: the order for an already-claimed task is assembled and dispatched in one
+  place, `TakeClaimAndWork.workClaimed`, instead of being spelled identically by the bare
+  take walk and the serve slot runner (handed over by `introduce-slot-wiring`).
 - No behavior change, no spec requirement changed, no new module edge.
 
 ## Goals
@@ -65,10 +70,10 @@ today tells apart only by parameter name.
 
 ## Users & Scenarios
 
-- **U1** — A developer adding a subcommand today edits `ManualRunRunner`'s 27-argument
+- **U1** — A developer adding a subcommand today edits `ManualRunRunner`'s 28-argument
   constructor, `SubcommandDispatchFactory.of`'s 19 and the Spring wiring; afterwards the
   command joins `ReportCommands` and the two roots are untouched.
-- **U2** — A reviewer asking "what does `ManualRunRunner` actually do?" today reads 27
+- **U2** — A reviewer asking "what does `ManualRunRunner` actually do?" today reads 28
   arguments and cannot tell responsibilities apart; afterwards the constructor names the
   five or six things it composes.
 - **U3** — An operator is unaffected, and must be: the same beans reach the same places
@@ -79,14 +84,21 @@ today tells apart only by parameter name.
 ### Functional
 
 - **FR1** — Every site in the design's cluster table takes seven parameters or fewer.
-- **FR2** — `ManualRunRunner` takes a `ManualRunAssembly`, not the nine ingredients that
-  assembly is built from.
+- **FR2** — `ManualRunRunner` takes a `ManualRunAssembly`, not the ten ingredients that
+  assembly is built from; the three ingredients it held only for the assembly leave its
+  constructor, and it reads none of the other seven back through the assembly.
 - **FR3** — `worktreesRoot` and `homeDir` reach their consumers through one value with
   distinct accessors, so no call site can transpose them.
 - **FR4** — Every facade type added by this change carries at least one method beyond its
   accessors (G2), or the cluster is left flat and the reason recorded in the design.
 - **FR5** — Where a facade replaces beans Spring resolved by parameter name, a bean
-  producing the facade exists and the context starts with the same graph.
+  producing the facade exists and the context starts with the same graph — including every
+  `@Component` that Spring fed from the replaced beans, not only the composition roots.
+- **FR6** — A `TakeOrder` for a task the caller has already claimed is assembled and
+  dispatched by one owner, `TakeClaimAndWork.workClaimed(RunOrder, TaskRef)`, used by the
+  bare take walk and the serve slot runner; the explicit-ref path, which builds its order
+  before claiming, is the named exemption. Behavior-preserving: MDC, anchor log and summary
+  stay with the callers.
 
 ### Non-Functional — Reliability
 
@@ -129,13 +141,20 @@ today tells apart only by parameter name.
 
 ## Impact
 
-- **Baseline freshness**: every count in this proposal comes from the 2026-09-12
-  scan, taken before `fix-claim-epoch-fence` landed. The preceding change re-takes
-  it (`introduce-take-order` task 0.2); correct these figures through
-  `/opsx:update` if the fresh count differs, rather than reporting against a stale
-  number.
+- **Baseline freshness**: every count in this proposal was confirmed on 2026-09-26 by
+  re-running the scanner of `introduce-take-order` task 0.2 over the working tree after
+  both predecessors were archived: 32 signatures over the limit in `src/main`, 22 in
+  `:application` / `:bootstrap` (this change) and 10 elsewhere (NG1), at the file:line
+  positions recorded in `introduce-slot-wiring`'s residual list (task 6.2). Re-take the
+  scan at the start of `/opsx:apply` (task 0.1) and correct the figures through
+  `/opsx:update` if it differs.
 - **Modules**: `:application` (`app`, `app.serve`), `:bootstrap` (the composition root and
   Spring configuration). No new module edge, no new dependency.
+- **Test fixtures**: twenty-five spec and fixture files under `bootstrap/src/test` and
+  `application/src/test` construct the listed sites by hand (`new ServeCommand(...)`,
+  `TakeCommandFactory.of(...)`, `new StatusCommand(...)`, ...) and therefore change with
+  every signature this change touches; task 3.8 names them. Their assertions do not change
+  (NFR-R1): "no expectation edited" is the criterion, not "unedited".
 - **Declared sync pairs touched**: none expected — the composition roots are single
   implementations. Confirmed by the design's Sync surfaces decision.
 - **Spring**: one wiring point changes shape (FR3, FR5).
@@ -143,3 +162,9 @@ today tells apart only by parameter name.
   change, per `process-invariants.md`.
 - **Depends on**: `introduce-slot-wiring` — several of these sites shrink there first, and
   their residual shape is this change's starting point.
+- **Sequenced before**: `add-claim-return` (edits `TakeClaimAndWork`, the owner of FR6's
+  `workClaimed`), `add-pipeline-routing` (edits `TakeCommand` / `ServeCommand`, the
+  composition roots whose signatures sections 1–3 change) and `add-epic-decomposition` (edits
+  `TakeOutcomeDispatch`, in the design's site table). This change lands first, and each of
+  the three rebases its task text onto the resulting signatures, as they already did onto
+  `introduce-take-order`. `add-parameter-count-gate` states its own dependency on this change.
