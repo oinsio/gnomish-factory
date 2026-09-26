@@ -38,6 +38,8 @@ plugins {
     id 'docker-test-conventions'
     // The FR2 direction gate (task 5.2); the permitted reach is stated below.
     id 'layering-conventions'
+    // Root LICENSE and NOTICE under META-INF/ of the boot jar (FR3 of add-project-license).
+    id 'distribution-terms-conventions'
     alias(libs.plugins.spring.boot)
 }
 

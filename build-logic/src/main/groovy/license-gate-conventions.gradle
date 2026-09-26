@@ -1,0 +1,37 @@
+// The dependency-license GATE over the distributed modules (FR4, FR6, design
+// D1/D3 of add-project-license; policy: ADR 0009). Applied at the root project.
+//
+// `checkLicense` resolves the `runtimeClasspath` of the two modules whose jars
+// ship — `:bootstrap` (the boot jar) and `:gnomish-plugin-api` (the plugin
+// contract) — reads every license each resolved module declares, folds the
+// spelling variants onto one canonical name, and fails when a module declares
+// no license `config/allowed-licenses.json` accepts. A module declaring several
+// licenses passes when one is accepted (the SPDX meaning of a choice). Test-
+// and build-only dependencies are outside it by construction: no other
+// configuration is read.
+//
+// NOT part of `check` (design D2): the plugin supports neither the
+// configuration cache nor parallel project execution, both on in
+// gradle.properties, so the gate runs in its own CI workflow as
+// `./gradlew checkLicense --no-configuration-cache --no-parallel`.
+import com.github.jk1.license.filter.DependencyFilter
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.InventoryHtmlReportRenderer
+import com.github.jk1.license.render.ReportRenderer
+
+plugins {
+    id 'com.github.jk1.dependency-license-report'
+}
+
+licenseReport {
+    // The applying project comes FIRST: the plugin reads its own settings from the first
+    // listed project's extension. It holds no `runtimeClasspath`, so it adds no module.
+    projects = [project, project(':bootstrap'), project(':gnomish-plugin-api')] as Project[]
+    configurations = ['runtimeClasspath'] as String[]
+    // The DEFAULT bundle, whose canonical names the allowlist spells (D4).
+    filters = [new LicenseBundleNormalizer(createDefaultTransformationRules: true)] as DependencyFilter[]
+    // The full inventory the CI job uploads on every run (NFR-O2, D5).
+    renderers = [new InventoryHtmlReportRenderer('index.html', 'Gnomish Factory')] as ReportRenderer[]
+    // The one allowlist (single owner, design table): no other path is read.
+    allowedLicensesFile = layout.projectDirectory.file('config/allowed-licenses.json').asFile
+}

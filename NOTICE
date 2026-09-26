@@ -1,0 +1,18 @@
+Gnomish Factory
+Copyright 2026 The Gnomish Factory Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The binary distribution bundles third-party libraries unmodified; each keeps
+its own META-INF license and notice files inside its jar.
+
+The following bundled libraries are offered under a choice of licenses; this
+product takes the Eclipse Public License 2.0 option for each:
+
+  Logback
+    Used under EPL-2.0.
+    Source: https://github.com/qos-ch/logback
+
+  Jakarta Annotations
+    Used under EPL-2.0.
+    Source: https://github.com/jakartaee/common-annotations-api

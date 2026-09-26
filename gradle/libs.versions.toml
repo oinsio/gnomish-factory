@@ -32,6 +32,10 @@ dependency-analysis = "3.18.0"
 # contract (FR5, design D10 of split-into-modules). Report-only in this change;
 # change B flips it to a failing gate.
 japicmp-plugin = "0.4.6"
+# Dependency-license report and gate over the distributed modules' runtime
+# classpaths (FR4, design D1/D3 of add-project-license). CI-only: the plugin does
+# not support the configuration cache, so it stays out of `check` (D2).
+license-report-plugin = "3.1.4"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
 # design D7). 1.5.0 verified on Maven Central 2026-08-13; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
@@ -198,3 +202,4 @@ spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
 japicmp = { id = "me.champeau.gradle.japicmp", version.ref = "japicmp-plugin" }
+license-report = { id = "com.github.jk1.dependency-license-report", version.ref = "license-report-plugin" }

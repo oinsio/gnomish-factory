@@ -1,0 +1,78 @@
+# Contributor License Agreement check.
+# Implements FR10, NFR-S1, NFR-C1, UX2 of add-project-license (design D7;
+# policy: ADR 0009). A pull request from an account without a recorded
+# signature fails this check and gets one comment asking for the signing
+# sentence; replying with it records the signature in `signatures/cla.json`
+# on the `cla-signatures` branch and turns the check green on the same PR,
+# without a new push. One signature covers every later PR.
+#
+# `pull_request_target` runs with a write token in the context of the base
+# branch; that is the action's documented trigger. This workflow therefore
+# NEVER checks out or executes pull-request code: the action reads PR metadata
+# and comments through the API and writes only the signature file (NFR-S1).
+#
+# The `cla-signatures` branch must exist and stay unprotected: the action
+# writes the signature file through the contents API.
+name: CLA
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+# Exactly the three scopes D7 fixes (NFR-S1): record the signature file,
+# post the signing comment, set the commit status. No others.
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+# One queue per pull request (NFR-C1). Unlike the push-triggered workflows,
+# `github.ref` is the base branch for both triggers here, so the group is keyed
+# by the PR number instead — otherwise a comment on one PR would cancel the
+# check of another. Runs are queued, not cancelled, so a signing comment's run
+# is never cut off by a push that follows it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  cla:
+    name: CLA
+    # Every PR event runs; a comment runs only when it is `recheck` or contains
+    # the signing sentence, so ordinary discussion starts no run (NFR-C1).
+    # `contains` ignores case, as the action's own match does; the action then
+    # decides, accepting the sentence on one line with a period, a quote marker
+    # (`> `, from "Quote reply") or surrounding whitespace (UX2).
+    if: |
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        (github.event.comment.body == 'recheck' ||
+         contains(github.event.comment.body, 'I have read the CLA Document and I hereby sign the CLA')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # 30-min budget: kills a hung run well below GitHub's 6-hour default (NFR-C1)
+
+    steps:
+      # Pinned by full commit SHA, unlike the tag pins elsewhere (ci.yml): this is
+      # the one third-party action that runs with a write token, and a moved tag
+      # would run foreign code with it. Dependabot bumps the SHA and the comment.
+      - name: CLA Assistant
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-document: "https://github.com/oinsio/gnomish-factory/blob/main/CLA.md"
+          path-to-signatures: "signatures/cla.json"
+          branch: "cla-signatures"
+          # The repository owner's PRs need no signature; bots sign nothing.
+          allowlist: "oinsio,dependabot[bot],github-actions[bot]"
+          # No `custom-pr-sign-comment`: setting it switches the action from its
+          # tolerant pattern to exact equality with the whole comment, which
+          # rejects a quote reply without a word. The action appends the default
+          # sentence below this text, so the text does not repeat it (UX2).
+          custom-notsigned-prcomment: >
+            Thank you for your contribution! Before it can be merged, please sign the
+            [Contributor License Agreement](https://github.com/oinsio/gnomish-factory/blob/main/CLA.md)
+            by replying to this pull request with the sentence below. You sign once;
+            the signature covers every later pull request.

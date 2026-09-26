@@ -1,0 +1,36 @@
+// Dependency-license allowlist (FR5, NFR-R2, design D4 of add-project-license).
+//
+// This is the ONE source of accepted licenses for the license gate
+// (`./gradlew checkLicense --no-configuration-cache --no-parallel`, wired by
+// `license-gate-conventions`); the policy it implements is ADR 0009.
+//
+// Semantics: a module passes when AT LEAST ONE of the licenses it declares
+// matches a rule below. Maven POM <licenses> is a flat list that cannot say
+// "OR", so a dual-licensed module (Logback: EPL-2.0 or LGPL-2.1; Jakarta
+// Annotations: EPL-2.0 or GPL-2.0 with Classpath Exception) passes on its
+// permissive option; NOTICE records the option the project takes.
+//
+// Spelling: each rule is the canonical name the plugin's DEFAULT normalizer
+// bundle emits, not an SPDX identifier, so a spelling variant in a POM
+// ("The Apache Software License, Version 2.0") is never a violation (FR6).
+//
+// Deliberately absent: LGPL, GPL and AGPL in every version. LGPL is linkable,
+// but a fat jar blurs the separate-library boundary it relies on; a module
+// whose only licenses are copyleft fails the gate.
+//
+// Rules name licenses only. A rule scoped to one module or one version is an
+// exception: add it only with its reason in a comment beside it.
+{
+    "allowedLicenses": [
+        { "moduleLicense": "Apache License, Version 2.0" },
+        { "moduleLicense": "MIT License" },
+        { "moduleLicense": "The 2-Clause BSD License" },
+        { "moduleLicense": "The 3-Clause BSD License" },
+        { "moduleLicense": "Eclipse Public License - v 1.0" },
+        { "moduleLicense": "Eclipse Public License - v 2.0" },
+        { "moduleLicense": "Mozilla Public License, Version 2.0" },
+        { "moduleLicense": "COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL) Version 1.0" },
+        { "moduleLicense": "COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL) Version 1.1" },
+        { "moduleLicense": "GNU GENERAL PUBLIC LICENSE, Version 2 + Classpath Exception" }
+    ]
+}
