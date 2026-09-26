@@ -1,0 +1,17 @@
+// Distribution terms for a module whose jars are shipped (FR3, design D6 of
+// add-project-license). Applied by `:bootstrap` (the boot jar) and by
+// `published-api-conventions` (the plugin-contract jar).
+//
+// Every `Jar` task of the applying module carries the repository-root
+// `LICENSE` and `NOTICE` under `META-INF/`, byte for byte. This script is the
+// only place that names the root files as jar content: a hand-written
+// `metaInf` block elsewhere would be a second, unsynchronized owner of the
+// same rule. The license CI job compares the jar entries with the root files.
+def licenseFile = rootProject.layout.projectDirectory.file('LICENSE')
+def noticeFile = rootProject.layout.projectDirectory.file('NOTICE')
+
+tasks.withType(Jar).configureEach {
+    metaInf {
+        from licenseFile, noticeFile
+    }
+}

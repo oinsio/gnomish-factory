@@ -1,0 +1,55 @@
+# Plugin announcement form (FR14, UX4 of add-project-license, design D9).
+# The five field ids equal the columns of docs/community-plugins.md one to one
+# (M5): the maintainer copies the answers into a registry row as they stand.
+name: Plugin announcement
+description: Announce a third-party plugin for the community plugin registry.
+title: "Plugin announcement: "
+labels: ["plugin-announcement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for building a plugin for Gnomish Factory. The maintainer adds it to the
+        [community plugin registry](https://github.com/oinsio/gnomish-factory/blob/main/docs/community-plugins.md)
+        from this issue; you need no pull request.
+
+        Plugins are listed **as-is**. The project does not vet, review or endorse them, and a
+        listed plugin is not part of the Apache-licensed factory: it is distributed by its
+        maintainer under its own license.
+  - type: input
+    id: name
+    attributes:
+      label: Plugin name
+      description: The name operators will know the plugin by.
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link
+      description: Where the plugin's source or release lives.
+      placeholder: https://github.com/<owner>/<repository>
+    validations:
+      required: true
+  - type: input
+    id: adapts
+    attributes:
+      label: What it adapts
+      description: The tracker, check or other system the plugin connects the factory to.
+    validations:
+      required: true
+  - type: input
+    id: maintainer
+    attributes:
+      label: Maintainer
+      description: Who maintains the plugin (a GitHub handle or an organization).
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      description: The license the plugin is distributed under, as an SPDX identifier where one exists.
+      placeholder: Apache-2.0
+    validations:
+      required: true

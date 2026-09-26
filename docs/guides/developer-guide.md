@@ -2,7 +2,8 @@
 
 This guide is for a developer working on the factory itself: how the Gradle
 module tree is laid out, what `./gradlew check` enforces, and how the
-supply-chain gates (dependency locking, verification, the OSV scan) are operated.
+supply-chain gates (dependency locking, verification, the OSV scan, the license
+gate) are operated.
 The quick start — prerequisites and the one `check` command — is in the main
 [README](../../README.md#building); this document carries the detail behind it.
 
@@ -105,6 +106,22 @@ osv-scanner scan source --config=osv-scanner.toml -r ./   # brew install osv-sca
 
 `--config` is not optional: the scanner otherwise looks for a config next to each lockfile, and the lock state lives in module directories, so the repo-root allowlist would be ignored. For the same reason there is exactly one allowlist — a per-module `osv-scanner.toml` would be shadowed by the explicit flag. An entry there is accepted risk on a test- or buildscript-scope artifact only and carries an expiry date; anything on a production classpath is fixed by pinning a version in [gradle/libs.versions.toml](../../gradle/libs.versions.toml) instead.
 
+## The license gate
+
+<!-- implements FR12, NFR-R1 of add-project-license -->
+
+The dependency-license gate reads the `runtimeClasspath` of the two distributed modules (`:bootstrap` and `:gnomish-plugin-api`) and fails when a resolved module declares no license the one allowlist, [config/allowed-licenses.json](../../config/allowed-licenses.json), accepts. It runs in its own CI workflow, not in `check`: the license-report plugin supports neither the configuration cache nor parallel project execution, so both are switched off on the command line. Reproduce the CI verdict locally with the same command CI runs — the verdict depends only on the committed lock state, so it equals CI's:
+
+```bash
+./gradlew checkLicense --no-configuration-cache --no-parallel
+```
+
+The CI step runs the same invocation with the two distributed jars appended, `./gradlew checkLicense :bootstrap:bootJar :gnomish-plugin-api:jar --no-configuration-cache --no-parallel`, then compares each jar's `META-INF/LICENSE` and `META-INF/NOTICE` byte for byte with the root files. That comparison, and the presence check of the root files before it, is `scripts/check-distribution-terms.sh`; run `bash scripts/check-distribution-terms.sh identity bootstrap/build/libs gnomish-plugin-api/build/libs` after the build to reproduce it.
+
+The report lands in `build/reports/dependency-license/`: `index.html` is the full inventory (every module with its normalized licenses), and `dependencies-without-allowed-license.json` lists each failing module (empty on a green run); the job log prints the same coordinates and declared licenses. CI attaches the whole directory to every run as the `dependency-license-report` artifact.
+
+A violation means a module on a shipped classpath offers **no** accepted license. A module offering several licenses passes when one is accepted — that is how Logback (EPL-2.0 or LGPL-2.1) passes, with the option recorded in [NOTICE](../../NOTICE). LGPL, GPL and AGPL alone are never accepted; the reasons are in [ADR 0009](../adr/0009-project-license.md). To accept a new *permissive* license (ISC, 0BSD, Unicode), add one `moduleLicense` rule spelled exactly as the report's normalized name shows it, with a comment giving the reason; it needs no ADR amendment. A copyleft license, or a rule scoped to one module or version, is a policy change and goes through the ADR.
+
 ## CI
 
-CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, and Gitleaks on every push and pull request. **Secret scanning** and **Push protection** are enabled in the repository settings. The Gradle wrapper jar is validated by `setup-gradle`'s `validate-wrappers: true`.
+CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, Gitleaks, and the license gate (with the `LICENSE`/`NOTICE` presence and jar-identity checks, see above) on every push and pull request. The CLA check runs on every pull request and blocks an unsigned contributor until they sign ([CONTRIBUTING.md](../../CONTRIBUTING.md)). **Secret scanning** and **Push protection** are enabled in the repository settings. The Gradle wrapper jar is validated by `setup-gradle`'s `validate-wrappers: true`.

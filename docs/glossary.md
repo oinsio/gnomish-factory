@@ -556,6 +556,20 @@ trusted/task tier split, and the law-root rule.
   work the stop does, the phase is the fact that it is happening. *Never:*
   shutting-down flag.
 
+## Plugin contract
+
+- **Community plugin registry** — `docs/community-plugins.md`: the list of
+  third-party plugins built against `gnomish-plugin-api`, one row per plugin
+  (name, link, what it adapts, maintainer, license). Plugins are listed as-is:
+  the project neither vets nor endorses them, and each is distributed under its
+  own license, not the factory's. The maintainer adds a row from a plugin
+  announcement. *Not:* a marketplace or a dependency source — the factory never
+  fetches anything from it.
+- **Plugin announcement** — an issue opened from the plugin-announcement form
+  (`.github/ISSUE_TEMPLATE/plugin-announcement.yml`) asking for a row in the
+  community plugin registry; its five fields are the registry's columns. It
+  needs no pull request from the plugin author.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                       |
@@ -565,6 +579,7 @@ trusted/task tier split, and the law-root rule.
 | API          | application programming interface                                             |
 | cgroups      | Linux control groups — kernel mechanism for resource limits                   |
 | CI           | continuous integration                                                        |
+| CLA          | Contributor License Agreement (`CLA.md`, ADR 0009)                            |
 | CRI          | Container Runtime Interface (how Kubernetes drives containers on a node)      |
 | CVE          | Common Vulnerabilities and Exposures — public vulnerability identifier        |
 | DinD         | Docker-in-Docker                                                              |
@@ -580,6 +595,7 @@ trusted/task tier split, and the law-root rule.
 | PRD          | Product Requirements Document (a change's `proposal.md`)                      |
 | QEMU         | Quick Emulator — software virtualization backend, weaker isolation than vz    |
 | RCE          | remote code execution                                                         |
+| SPDX         | Software Package Data Exchange — the standard license identifiers             |
 | SSRF         | server-side request forgery                                                   |
 | TLS          | Transport Layer Security                                                      |
 | TOCTOU       | time-of-check to time-of-use — a race between a check and the acting on it    |

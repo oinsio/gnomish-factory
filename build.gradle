@@ -56,6 +56,8 @@ plugins {
     // file is under a 200-line cap that `ModuleBuildFileSpec` enforces, and the
     // bulk of build logic belongs in `build-logic` by FR6 of split-into-modules.
     id 'log-expectation-conventions'
+    // The dependency-license gate: CI-only, outside `check` (D2 of add-project-license).
+    id 'license-gate-conventions'
     // dependency-analysis is applied build-wide from settings.gradle (FR10,
     // design D8); only its configuration and `check` wiring live here.
 }

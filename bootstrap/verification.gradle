@@ -48,6 +48,12 @@ tasks.named('test') {
         exclude '**/build/**', '**/.git/**', '**/.gradle/**'
     }).withPropertyName('testSources')
 
+    // DistributionTermsScriptSpec drives the license job's shell checks and reads the workflow
+    // that calls them (FR1, FR3, FR7 of add-project-license), so both are inputs for the same
+    // reason: an edited script must re-run the spec.
+    inputs.files(rootProject.file('scripts/check-distribution-terms.sh'),
+            rootProject.file('.github/workflows/license-gate.yml')).withPropertyName('distributionChecks')
+
     // The Ollama E2E layer (task 11.1) needs a native local Ollama install and a logged-in
     // `claude` CLI, and the paid smoke layer (task 11.3) spends real money against the real
     // Anthropic backend by design. Both are excluded here and run only via their dedicated tasks

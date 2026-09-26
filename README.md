@@ -30,6 +30,7 @@ Built on a pure ports-and-adapters architecture (Java 25), the factory provides 
 - [Building](#building)
 - [Documentation](#documentation)
 - [Development process](#development-process)
+- [License](#license)
 
 ## How it works
 
@@ -130,7 +131,7 @@ java -jar build/libs/*.jar take --dir=/path/to/target-repo
 
 **Where gnomes execute**: by default each task runs in an ephemeral container box with an egress allowlist; host execution is the opt-in legacy mode. Configuration, image contract, and the threat model: [`docs/guides/operator-guide-sandbox.md`](docs/guides/operator-guide-sandbox.md) and [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md). The security implications of autonomous runs — who may set the `ready` label — are in [`docs/guides/operator-guide-autonomy-gate.md`](docs/guides/operator-guide-autonomy-gate.md); monitoring an unattended daemon is [`docs/guides/operator-guide-observability.md`](docs/guides/operator-guide-observability.md).
 
-Adapter authors implementing a new tracker should start from [`docs/guides/adapter-author-guide.md`](docs/guides/adapter-author-guide.md); the published plugin contract is [`gnomish-plugin-api`](gnomish-plugin-api/README.md). The project's ubiquitous language is defined in [`docs/glossary.md`](docs/glossary.md).
+Adapter authors implementing a new tracker should start from [`docs/guides/adapter-author-guide.md`](docs/guides/adapter-author-guide.md); the published plugin contract is [`gnomish-plugin-api`](gnomish-plugin-api/README.md); plugins built against it by others are listed in the [community plugin registry](docs/community-plugins.md). The project's ubiquitous language is defined in [`docs/glossary.md`](docs/glossary.md).
 
 ## Tech stack
 
@@ -169,7 +170,7 @@ One command answers "is my change OK?":
 
 It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. `./gradlew build` additionally produces the boot jar.
 
-Everything beyond the one command — per-module verification and mutation scoping, dependency locking and verification (`--write-locks --write-verification-metadata sha256`), the Dependabot flow, the supply-chain threat model, and reproducing the OSV vulnerability gate locally — is in [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md).
+Everything beyond the one command — per-module verification and mutation scoping, dependency locking and verification (`--write-locks --write-verification-metadata sha256`), the Dependabot flow, the supply-chain threat model, and reproducing the OSV vulnerability gate and the license gate locally — is in [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md).
 
 ## Documentation
 
@@ -190,7 +191,9 @@ The full map of the project's documentation, by the question it answers:
 | [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md)                                         | work on the factory itself: module map, build gates, dependency verification, OSV                 |
 | [`docs/guides/adapter-author-guide.md`](docs/guides/adapter-author-guide.md)                               | implement a new tracker adapter against the plugin contract                                       |
 | [`gnomish-plugin-api/README.md`](gnomish-plugin-api/README.md)                                             | see what the published plugin contract contains and how it is versioned                           |
+| [`docs/community-plugins.md`](docs/community-plugins.md)                                                   | find third-party plugins, listed as-is, or announce your own                                      |
 | [`docs/adr/`](docs/adr)                                                                                    | read the recorded architecture decisions (tech stack, claim-lease protocol)                       |
+| [`docs/adr/0009-project-license.md`](docs/adr/0009-project-license.md)                                     | understand the license, the dual-license rule, the license gate's scope, and the CLA              |
 | [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md)                                       | consult the sandbox threat model, threat by numbered threat                                       |
 | [`docs/examples/`](docs/examples)                                                                          | copy reference material: the board-bridge workflow, the sandbox image recipe                      |
 
@@ -199,3 +202,9 @@ The full map of the project's documentation, by the question it answers:
 The project itself is developed AI-first with [OpenSpec](openspec): `/opsx:propose → /opsx:apply → /opsx:archive`, with `/opsx:explore` for complex topics. Process rules — traceability, proposal format, stage description format, diagram conventions — live in [.claude/rules](.claude/rules).
 
 Documentation language is English. Diagrams are Mermaid.
+
+## License
+
+Gnomish Factory is licensed under the [Apache License 2.0](LICENSE). [`NOTICE`](NOTICE) carries the attribution that travels with it, including the license option taken for bundled dual-licensed libraries; both files ship inside every distributed jar. How to contribute, and the Contributor License Agreement that applies once pull requests open, is in [`CONTRIBUTING.md`](CONTRIBUTING.md). The reasoning is recorded in [ADR 0009](docs/adr/0009-project-license.md).
+
+The agent CLI a sandbox image installs is not part of the factory's distribution: the operator brings it under its vendor's terms. Plugins in the [community plugin registry](docs/community-plugins.md) are distributed by their maintainers under their own licenses.

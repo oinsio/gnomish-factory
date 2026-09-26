@@ -63,16 +63,22 @@ report directory as an artifact (NFR-O2). The same job holds the FR1 presence st
 (`test -f LICENSE -a -f NOTICE`) and the FR3 identity step — for each of the two jars and each
 of the two files, `unzip -p <jar> META-INF/<file> | cmp - <file>` — because they are
 distribution checks, not code checks, and belong with the distribution gate; a listing
-(`unzip -l`) would prove a name, not the bytes FR3 promises. *Rationale:* CLAUDE.md already
+(`unzip -l`) would prove a name, not the bytes FR3 promises. Both steps are one script,
+`scripts/check-distribution-terms.sh` (`presence`, `identity <jar-dir>...`), not inline YAML:
+CI only ever runs them against a healthy repository, so their red paths are driven by
+`DistributionTermsScriptSpec` in `:bootstrap`, which also pins that the workflow calls the
+script. *Rationale:* CLAUDE.md already
 keeps security scanning CI-only; a `check`-wired task that had to be run with two global
 flags would make every local `check` slower or fail. *Alternative rejected:* a `check`-wired
 task with the flags forced from the convention plugin — Gradle offers no per-task way to
 disable the configuration cache or parallel execution.
 
 **D3 — One convention plugin, `license-gate-conventions`, applied at the root project.** It
-applies the jk1 plugin to the root with `projects = [project(':bootstrap'),
+applies the jk1 plugin to the root with `projects = [project, project(':bootstrap'),
 project(':gnomish-plugin-api')]`, `configurations = ['runtimeClasspath']`, the normalizer, an
-inventory renderer, and `allowedLicensesFile = config/allowed-licenses.json`. The root
+inventory renderer, and `allowedLicensesFile = config/allowed-licenses.json`. The root project
+is listed first because the plugin reads its settings from the first listed project's
+extension; the root has no `runtimeClasspath`, so it adds no module to the gate. The root
 `build.gradle` gains exactly two lines: the `id` and one comment line pointing at D2.
 *Rationale:* the root build file is five lines under the 200-line cap and FR6 of
 `split-into-modules` keeps build logic in `build-logic`; a convention plugin is also what the
@@ -117,10 +123,12 @@ toward the 200-line cap. *Alternatives rejected:* per-module copies of the files
 
 **D7 — The CLA check is the `contributor-assistant/github-action`, signatures in-repo, in the
 shape the maintainer's `clear-progress` repository already runs.** It runs in
-`.github/workflows/cla.yml`, pinned to `v2.6.1`, on `pull_request_target` (`opened`,
-`synchronize`) and `issue_comment` (`created`), with a job `if:` that lets a comment through
-only when its body is `recheck` or the exact signing sentence — every other comment on every
-PR is skipped without a run. Signatures go to `signatures/cla.json` on a `cla-signatures`
+`.github/workflows/cla.yml`, pinned to the full commit SHA of `v2.6.1` (the one third-party
+action holding a write token, so a moved tag must not reach it; the other workflows keep
+their tag pins), on `pull_request_target` (`opened`, `synchronize`) and `issue_comment`
+(`created`), with a job `if:` that lets a comment through only when its body is `recheck` or
+contains the signing sentence (`contains` ignores case) — every other comment on every PR is
+skipped without a run. Signatures go to `signatures/cla.json` on a `cla-signatures`
 branch — an unprotected branch the human creates before the workflow is merged, because the
 action writes through the contents API and its documentation requires the branch to be
 unprotected. The workflow-level permissions are `contents: write`, `pull-requests: write` and
@@ -128,14 +136,22 @@ unprotected. The workflow-level permissions are `contents: write`, `pull-request
 posts the one signing comment, the third sets the check's commit status. Workflow level, not
 job level, is what `gitleaks.yml` and `osv-scan.yml` do; with one job the scope is the same.
 The action's README also lists `actions: write`; `clear-progress` runs without it, so it is
-omitted. The job carries `timeout-minutes: 30` and the concurrency group the other workflows
-use, never checks out PR code, and allowlists the repository owner (a maintainer PR must not
-ask its author to sign), `dependabot[bot]` and `github-actions[bot]`. The two comment texts
-are set explicitly: `custom-notsigned-prcomment` links `CLA.md` on `main` and quotes the one
-sentence to reply with; `custom-pr-sign-comment` is that sentence, `I have read the CLA
-Document and I hereby sign the CLA.` — so the contributor sees one comment with one action
-(UX2) and `CONTRIBUTING.md` can quote the same sentence. The agreement text is `CLA.md`,
-drafted from the Apache Individual CLA with the project name substituted and laid out in the
+omitted. The job carries `timeout-minutes: 30` and a concurrency group keyed by the pull
+request number (`${{ github.workflow }}-<PR number>`, `cancel-in-progress: false`) rather than
+the `${{ github.ref }}` group the other workflows use: on both triggers here `github.ref` is
+the base branch, so a shared group would let a comment on one PR cancel another PR's check,
+and runs queue instead of cancelling so a signing comment's run is never cut off by a later
+push. It never checks out PR code, and allowlists the repository owner (a maintainer PR must not
+ask its author to sign), `dependabot[bot]` and `github-actions[bot]`. Only
+`custom-notsigned-prcomment` is set: it links `CLA.md` on `main` and asks for the sentence the
+action appends below it, `I have read the CLA Document and I hereby sign the CLA`, so the
+contributor sees one comment with one action (UX2) and `CONTRIBUTING.md` can quote the same
+sentence. `custom-pr-sign-comment` is deliberately left unset: in `v2.6.1`
+(`src/pullrequest/signatureComment.ts`) setting it replaces the action's pattern — the
+sentence on a one-line comment, any case, any surrounding text on that line — with equality
+against the whole trimmed comment, which silently rejects a "Quote reply" (`> I have read…`)
+or a missing period. A comment holding other lines besides the sentence is still rejected.
+The agreement text is `CLA.md`, drafted from the Apache Individual CLA with the project name substituted and laid out in the
 seven-section shape of `clear-progress`'s agreement (definitions, copyright grant, patent
 grant, retention of rights, representations, no obligation, governing law, then the signing
 sentence); the licensing terms are not copied, since that agreement serves a noncommercial

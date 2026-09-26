@@ -30,6 +30,7 @@ dependencies {
     implementation marker(libs.plugins.errorprone)
     implementation marker(libs.plugins.pitest)
     implementation marker(libs.plugins.japicmp)
+    implementation marker(libs.plugins.license.report)
 }
 
 // --- Functional (TestKit) verification of the convention plugins ---
@@ -101,4 +102,13 @@ tasks.named('functionalTest') {
             .withPropertyName('japicmpWorkerRuntime')
             .withNormalizer(ClasspathNormalizer)
     systemProperty 'gnomish.gradleUserHome', gradle.gradleUserHomeDir.absolutePath
+}
+
+// FR8 of add-project-license: the license-gate scenarios run against the
+// repository's OWN allowlist, not a copy written for the test, so a rule the real
+// file drops or a canonical name the plugin's bundle renames turns them red.
+def allowedLicenses = layout.projectDirectory.file('../config/allowed-licenses.json')
+tasks.named('functionalTest') {
+    inputs.file(allowedLicenses).withPropertyName('allowedLicenses').withPathSensitivity(PathSensitivity.NONE)
+    systemProperty 'gnomish.allowedLicensesFile', allowedLicenses.asFile.absolutePath
 }

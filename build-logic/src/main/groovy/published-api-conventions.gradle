@@ -16,6 +16,9 @@ plugins {
     // add-functional-api-gate-test) so `build-logic`'s TestKit suite can drive
     // it on a miniature project.
     id 'api-compatibility-gate-conventions'
+    // The root LICENSE and NOTICE in every jar of the published module
+    // (FR3, design D6 of add-project-license).
+    id 'distribution-terms-conventions'
 }
 
 java {

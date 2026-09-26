@@ -10,6 +10,11 @@ guide names real classes it means them literally — you can navigate to them in
 `src/main/java/com/github/oinsio/gnomish/` for the exact code, but you do not
 need to in order to build your own adapter.
 
+When your adapter is ready, announce it through the
+[plugin-announcement issue form](https://github.com/oinsio/gnomish-factory/issues/new?template=plugin-announcement.yml)
+and it is listed in [`docs/community-plugins.md`](../community-plugins.md), the community
+plugin registry, under your own license.
+
 Two adapters ship today: `adapter/tracker/inmemory` (the executable reference,
 `InMemoryTracker`) and `adapter/tracker/github` (the production GitHub
 binding). Both live in `src/main/java/com/github/oinsio/gnomish/` alongside the

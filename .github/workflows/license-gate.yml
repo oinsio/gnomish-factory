@@ -1,0 +1,81 @@
+# Dependency-license gate and distribution-terms checks.
+# Implements FR7, FR1, FR3, NFR-S1, NFR-C1, NFR-O2 of add-project-license
+# (design D2; policy: ADR 0009). The job fails when:
+#   - `LICENSE` or `NOTICE` is missing from the repository root (FR1);
+#   - a module on the runtime classpath of a distributed module declares no
+#     license `config/allowed-licenses.json` accepts (FR4, FR5);
+#   - a built jar's `META-INF/LICENSE` or `META-INF/NOTICE` differs by one byte
+#     from the root file (FR3).
+#
+# Not part of `./gradlew check` (design D2): the license-report plugin supports
+# neither the configuration cache nor parallel project execution, both on in
+# gradle.properties, so the gate runs here with both switched off. The same
+# command reproduces the verdict locally (docs/guides/developer-guide.md,
+# "The license gate").
+name: License gate
+
+# Trigger pattern mirrors ci.yml: every push (FR7); pull_request only for fork
+# PRs, which get no push events here (NFR-C1: no double runs per commit).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Least-privilege token (NFR-S1): the gate only reads repository content.
+permissions:
+  contents: read
+
+# Cancel superseded in-flight runs for the same ref (NFR-C1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  license:
+    # Skip pull_request runs for same-repo branches — the push run covers them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # 30-min budget: kills a hung run well below GitHub's 6-hour default (NFR-C1)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Validate gradle-wrapper.jar against known checksums, as ci.yml does.
+          validate-wrappers: true
+
+      # FR1: the license and notice are present. Runs before the build so a
+      # missing file is the first and only failure the log shows. The script is
+      # shared with DistributionTermsScriptSpec, which drives its red paths.
+      - name: License and notice present
+        run: bash scripts/check-distribution-terms.sh presence
+
+      # FR4-FR6: the gate itself, plus the two distributed jars the identity
+      # step below inspects. A violation is printed by `checkLicense` with the
+      # module's coordinates and every license it declares (NFR-O1, UX1).
+      - name: Check dependency licenses and build the distributed jars
+        run: ./gradlew checkLicense :bootstrap:bootJar :gnomish-plugin-api:jar --no-configuration-cache --no-parallel
+
+      # FR3: each jar carries the root files byte for byte (`cmp`, not a listing),
+      # and each jar directory holds exactly one jar.
+      - name: Jars carry the root LICENSE and NOTICE
+        run: bash scripts/check-distribution-terms.sh identity bootstrap/build/libs gnomish-plugin-api/build/libs
+
+      # The full inventory on every run, the violation report when red
+      # (NFR-O1, NFR-O2, design D5). 14-day retention as in ci.yml (NFR-C1).
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-license-report
+          path: build/reports/dependency-license/
+          retention-days: 14
