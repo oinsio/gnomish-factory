@@ -2,29 +2,34 @@
 
 ## Why
 
-The repository has no license. Under copyright law that means "all rights reserved": nobody
-may legally run, copy, or build on the factory, and an adapter author who compiles against
-`gnomish-plugin-api` has no terms to rely on, even though that module's POM already promises
-Apache 2.0. The gap grows with every release and with the first external contributor, whose
-code would arrive under no agreement at all.
+Until 2026-09-26 the repository had no license. Under copyright law that means "all rights
+reserved": nobody may legally run, copy, or build on the factory, and an adapter author who
+compiles against `gnomish-plugin-api` has no terms to rely on, even though that module's POM
+already promises Apache 2.0. The `LICENSE` file landed that day (commit `Add Apache License
+2.0`); everything that makes the license real — the notice, the terms inside the shipped jars,
+the contributor agreement, the recorded posture — is still missing, and the gap grows with
+every release and with the first external contributor, whose code would arrive under no
+agreement at all.
 
 Adopting a license also creates an obligation the build does not yet enforce: the fat jar
-bundles ~40 third-party jars, and nothing today fails the build if a future dependency drags
-a copyleft license into that jar. The runtime inventory was audited on 2026-09-26 and is clean
-(every shipped library is Apache-2.0 or MIT, plus two dual-licensed EPL-2.0 libraries), so
-this is the moment to lock the posture in rather than to remediate it later.
+bundles roughly thirty third-party jars (27 artifacts on the runtime classpath today), and
+nothing fails the build if a future dependency drags a copyleft license into that jar. The
+runtime inventory was audited on 2026-09-26 and is clean (every shipped library is Apache-2.0
+or MIT, plus two dual-licensed EPL-2.0 libraries), so this is the moment to lock the posture
+in rather than to remediate it later.
 
 ## What Changes
 
 - **ADDED**: the project is licensed under the Apache License 2.0. The `LICENSE` file is
-  added by the human through GitHub; this change verifies its presence rather than creating
-  it.
+  already in the repository root; this change guards its presence in CI and never generates
+  or overwrites it.
 - **ADDED**: a `NOTICE` file at the repository root, minimal in the Apache Software
   Foundation sense — product name, the copyright line `Copyright 2026 The Gnomish Factory
   Authors`, the license statement, and the record of which option the project takes for its
   two dual-licensed dependencies.
 - **ADDED**: both distributed artifacts (the `:bootstrap` boot jar and the
-  `:gnomish-plugin-api` jar) carry `LICENSE` and `NOTICE` under `META-INF/`.
+  `:gnomish-plugin-api` jar) carry `LICENSE` and `NOTICE` under `META-INF/`, wired by one
+  build convention so there is one place that names the source files.
 - **ADDED**: a dependency-license gate in CI over the runtime classpath of the two
   distributed modules, driven by one allowlist file; a dependency with no allowed license
   fails the job.
@@ -37,7 +42,8 @@ this is the moment to lock the posture in rather than to remediate it later.
 - **ADDED**: a community plugin registry, `docs/community-plugins.md`, listing third-party
   plugins built against `gnomish-plugin-api` as-is, without vetting or endorsement. Authors
   announce a plugin through a GitHub issue form; the maintainer adds the entry, so no pull
-  request is needed from the author.
+  request is needed from the author. The terms *community plugin registry* and *plugin
+  announcement* enter the glossary.
 - **MODIFIED**: README gains a License section; the developer guide gains the local
   reproduction of the license gate beside the existing OSV section.
 - **MODIFIED**: `quality-gates` gains the license gate as a CI-enforced requirement.
@@ -79,14 +85,14 @@ this is the moment to lock the posture in rather than to remediate it later.
 - **NG2** — Licensing of test-only and build-only dependencies (Spock, WireMock, Jetty, JUnit,
   PIT, Error Prone, Spotless, japicmp). They are never shipped and stay outside the gate.
 - **NG3** — Replacing OSV-Scanner or changing the CVE gate. OSV-Scanner's own license mode
-  was evaluated and rejected for this purpose (design D1); the CVE gate is untouched.
+  was evaluated for this purpose and does not fit (the evidence is recorded in the design);
+  the CVE gate is untouched.
 - **NG4** — A hand-maintained list of every third-party dependency with versions. Such a list
   drifts with every Dependabot bump; a generated report is the only complete inventory.
 - **NG5** — Publishing `gnomish-plugin-api` to Maven Central. Out of scope; the change only
   makes the jar it would publish carry its terms.
-- **NG6** — Wiring the license gate into `./gradlew check`. The chosen plugin does not
-  support the configuration cache and needs `--no-parallel` on Gradle 9, both of which the
-  build enables (design D2).
+- **NG6** — Wiring the license gate into `./gradlew check`. The gate runs in its own CI job;
+  the build-shape constraint that forces this is recorded in the design (D2).
 
 ## Users & Scenarios
 
@@ -101,40 +107,43 @@ this is the moment to lock the posture in rather than to remediate it later.
   before anything ships.
 - **U4** — An external contributor opens a first pull request: the CLA check asks for one
   signature, records it, and stays green on every later PR from the same account.
+- **U5** — A maintainer reviewing a suspicious red license job reproduces the verdict locally
+  with one documented command and reads the same report CI produced.
 - **U6** — A plugin author has built a Jira tracker adapter against `gnomish-plugin-api` and
   wants operators to find it: they fill in the plugin-announcement issue form, the maintainer
   adds one row to the registry, and the entry carries the plugin's own license so an
   operator knows the factory's terms do not extend to it.
-- **U5** — A maintainer reviewing a suspicious red license job reproduces the verdict locally
-  with one documented command and reads the same report CI produced.
 
 ## Requirements
 
 ### Functional
 
-- **FR1** — The repository root SHALL contain `LICENSE` with the Apache License 2.0 text.
-  The human adds the file through GitHub; the change SHALL verify its presence (in the
-  license CI job) and SHALL NOT generate it.
+- **FR1** — The repository root SHALL contain `LICENSE` with the Apache License 2.0 text. The
+  file is present since 2026-09-26; the license CI job SHALL verify its presence on every
+  run, and no build task SHALL generate or overwrite it.
 - **FR2** — The repository root SHALL contain `NOTICE` holding exactly: the product name, the
   line `Copyright 2026 The Gnomish Factory Authors`, the Apache 2.0 statement, a statement
   that the boot jar bundles third-party jars unmodified with their own `META-INF` notices,
   and, for each dual-licensed bundled dependency (Logback, Jakarta Annotations), the option
   taken (EPL-2.0) and the URL of its source repository.
 - **FR3** — The `:bootstrap` boot jar and the `:gnomish-plugin-api` jar SHALL each contain
-  `META-INF/LICENSE` and `META-INF/NOTICE`, byte-identical to the repository-root files.
+  `META-INF/LICENSE` and `META-INF/NOTICE`, byte-identical to the repository-root files, and
+  the license CI job SHALL verify that identity by comparing contents, not by listing names.
 - **FR4** — The build SHALL provide a license gate that resolves the `runtimeClasspath` of
   `:bootstrap` and `:gnomish-plugin-api`, reads every declared license of every resolved
   module, and fails when a module declares no license that the allowlist accepts.
 - **FR5** — One allowlist file SHALL be the only source of accepted licenses. It SHALL accept
-  Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0/1.1 and
-  GPL-2.0 with Classpath Exception, and SHALL NOT list LGPL, GPL or AGPL in any version. A
-  module with several declared licenses SHALL pass when at least one is accepted.
+  the licenses known under the SPDX identifiers Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause,
+  EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0, CDDL-1.1 and GPL-2.0 with Classpath Exception, and
+  SHALL NOT accept LGPL, GPL or AGPL in any version. The identifiers name licenses; the
+  spelling the file uses is the design's choice (D4). A module with several declared licenses
+  SHALL pass when at least one is accepted.
 - **FR6** — The gate SHALL normalize license-name variants (`Apache 2`, `The Apache Software
   License, Version 2.0`, `Apache-2.0`) to one canonical name before matching, so a spelling
   difference is never a violation and never an exception entry.
 - **FR7** — A dedicated CI workflow SHALL run the gate on every push and on fork pull
-  requests, with the plugin's documented flags for this build shape, and SHALL run the FR1
-  and FR3 presence checks in the same job. It SHALL NOT be part of `./gradlew check`.
+  requests, with the invocation flags the design fixes for this build shape (D2), and SHALL
+  run the FR1 and FR3 checks in the same job. It SHALL NOT be part of `./gradlew check`.
 - **FR8** — The gate SHALL be covered by a functional build test that runs it against a
   miniature project with an offline Maven repository: a module declaring only LGPL fails,
   a module declaring `EPL-2.0` and `LGPL-2.1` passes, and a module declaring an Apache
@@ -150,6 +159,11 @@ this is the moment to lock the posture in rather than to remediate it later.
 - **FR10** — External contributions SHALL require a signed CLA, checked automatically on
   pull requests and recorded durably; `CONTRIBUTING.md` SHALL state the requirement, link the
   CLA text, and explain the one-time signature flow.
+- **FR11** — README SHALL gain a License section stating Apache 2.0, pointing at `NOTICE` and
+  `CONTRIBUTING.md`, and stating that the agent CLI a sandbox image installs is brought by
+  the operator under its vendor's terms.
+- **FR12** — The developer guide SHALL document how to reproduce the license gate locally with
+  the same verdict CI produces, beside the OSV section.
 - **FR13** — `CONTRIBUTING.md` SHALL state that pull requests are not accepted for now,
   that the CLA check nevertheless exists and will apply when they open, and that the two
   ways to contribute today are issues (bug reports, proposals) and plugin announcements
@@ -160,12 +174,8 @@ this is the moment to lock the posture in rather than to remediate it later.
   project lists plugins as-is and neither vets nor endorses them; and the instruction that a
   plugin is announced by opening an issue from the plugin-announcement form, whose fields
   match the row's columns. The maintainer adds the row; no pull request is needed from the
-  author. README and the adapter-author guide SHALL link the registry.
-- **FR11** — README SHALL gain a License section stating Apache 2.0, pointing at `NOTICE` and
-  `CONTRIBUTING.md`, and stating that the agent CLI a sandbox image installs is brought by
-  the operator under its vendor's terms.
-- **FR12** — The developer guide SHALL document how to reproduce the license gate locally with
-  the same verdict CI produces, beside the OSV section.
+  author. README and the adapter-author guide SHALL link the registry. The terms *community
+  plugin registry* and *plugin announcement* SHALL be defined in `docs/glossary.md`.
 
 ### Non-Functional Reliability
 
@@ -186,17 +196,18 @@ this is the moment to lock the posture in rather than to remediate it later.
 ### Non-Functional Security
 
 - **NFR-S1** — The license workflow SHALL run with a read-only token. The CLA check needs
-  write access to record signatures and to comment on pull requests; it SHALL run in its own
-  workflow with exactly those scopes and no others, and SHALL not check out or execute
-  pull-request code.
+  write access to record signatures, to comment on pull requests and to set the commit
+  status; it SHALL run in its own workflow with exactly the scopes the design fixes (D7) and
+  no others, and SHALL not check out or execute pull-request code.
 - **NFR-S2** — New build plugins SHALL enter through the version catalog and the committed
   lockfiles and verification metadata, so the existing OSV and dependency-verification gates
   cover them.
 
 ### Non-Functional Cost
 
-- **NFR-C1** — The license job SHALL not double-run per commit (same-repo PR runs skipped, as
-  the existing workflows do) and SHALL carry a timeout well below GitHub's default.
+- **NFR-C1** — The license job and the CLA job SHALL not double-run per commit (same-repo PR
+  runs skipped, as the existing workflows do) and SHALL carry the 30-minute per-job timeout
+  the `quality-gates` capability requires of every CI job.
 
 ## Operator Experience Criteria
 
@@ -204,11 +215,11 @@ this is the moment to lock the posture in rather than to remediate it later.
   licenses it declares; the maintainer does not open the HTML report to learn that.
 - **UX2** — A contributor sees the CLA request as one comment with one action; after
   signing, the check turns green on that PR without a new push.
+- **UX3** — README's License section is under ten lines; the legal detail lives in `NOTICE`,
+  `CONTRIBUTING.md` and the ADR.
 - **UX4** — A plugin author announces a plugin in one issue form with five fields and no
   git operation; `CONTRIBUTING.md` says in its first paragraph that PRs are closed, so
   nobody prepares one in vain.
-- **UX3** — README's License section is under ten lines; the legal detail lives in `NOTICE`,
-  `CONTRIBUTING.md` and the ADR.
 
 ## Success Metrics
 
@@ -216,14 +227,14 @@ this is the moment to lock the posture in rather than to remediate it later.
   (no `moduleName`-scoped rules), verified on the change's own CI run.
 - **M2** — The FR8 functional test fails the miniature project's LGPL-only module and passes
   its dual-licensed and spelling-variant modules; three scenarios, all green.
-- **M3** — Both built jars list `META-INF/LICENSE` and `META-INF/NOTICE`, asserted by the CI
-  job's presence step.
-- **M5** — The registry exists with its disclaimer and the issue form's fields equal the
-  registry's columns one to one; the first entry (the in-repo `gnomish-plugin-api:sample`
-  stand-in, or a real plugin) is added by the maintainer from a filled-in form, not by hand.
+- **M3** — Both built jars carry `META-INF/LICENSE` and `META-INF/NOTICE` whose bytes equal
+  the root files, asserted by the CI job's comparison step.
 - **M4** — A pull request from an account without a signature is blocked by the CLA check;
   one from a signed account is not (verified once, manually, on the first external PR or a
   test account).
+- **M5** — The registry exists with its disclaimer and the issue form's fields equal the
+  registry's columns one to one; the first entry (the in-repo `gnomish-plugin-api:sample`
+  stand-in, or a real plugin) is added by the maintainer from a filled-in form, not by hand.
 
 ## Open Questions
 
@@ -242,16 +253,25 @@ this is the moment to lock the posture in rather than to remediate it later.
 - New files: `NOTICE`, `CONTRIBUTING.md`, `CLA.md`, `docs/adr/0009-project-license.md`,
   `docs/community-plugins.md`, `.github/ISSUE_TEMPLATE/plugin-announcement.yml`,
   `config/allowed-licenses.json`, `.github/workflows/license-gate.yml`,
-  `.github/workflows/cla.yml`, one convention plugin in `build-logic` with its functional
-  test.
+  `.github/workflows/cla.yml`, two convention plugins in `build-logic`
+  (`license-gate-conventions`, `distribution-terms-conventions`) with the functional test
+  of the gate.
 - Modified: root `build.gradle` (applies the gate convention), `bootstrap/build.gradle`
-  (jar `META-INF` contents), `build-logic/src/main/groovy/published-api-conventions.gradle`
-  (same for the published jar), `gradle/libs.versions.toml`, `build-logic/build.gradle`
-  (plugin marker), lockfiles and `gradle/verification-metadata.xml`, `README.md`,
-  `docs/guides/developer-guide.md`, `docs/guides/adapter-author-guide.md` (registry link),
+  (applies the distribution-terms convention),
+  `build-logic/src/main/groovy/published-api-conventions.gradle` (same for the published
+  jar), `gradle/libs.versions.toml`, `build-logic/build.gradle` (plugin marker), lockfiles and
+  `gradle/verification-metadata.xml`, `README.md`, `docs/guides/developer-guide.md`,
+  `docs/guides/adapter-author-guide.md` (registry link), `docs/glossary.md` (two terms),
   `openspec/specs/quality-gates`.
+- Build-file budget: the root `build.gradle` (195 lines) and `bootstrap/build.gradle`
+  (189 lines) sit under the 200-line cap `ModuleBuildFileSpec` enforces; each gains one
+  `id` line and at most one comment line, and nothing else.
 - Assumption recorded: plugin announcements travel through issues, not pull requests,
   because pull requests are closed (FR13); if PRs open later, the registry may also accept
   them without changing its format.
+- Ordering with other active changes: `add-parameter-count-gate` also edits `build-logic`
+  and regenerates the lockfiles and `gradle/verification-metadata.xml`; whichever lands
+  second regenerates the lock state with the documented combined command after merging.
 - No production Java changes; no module edge changes; no runtime behavior changes.
-- Added by the human, outside the diff: `LICENSE`.
+- Repository settings the human performs outside the diff: the `cla-signatures` branch, the
+  `plugin-announcement` label, branch protection (tasks section 6).

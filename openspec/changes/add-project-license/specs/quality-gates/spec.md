@@ -11,9 +11,10 @@ The gate SHALL read every license each resolved module declares, normalize licen
 variants to one canonical name, and fail when a module declares no license the allowlist
 accepts. A module declaring several licenses SHALL pass when at least one is accepted.
 
-One repository file SHALL be the only source of accepted licenses. It SHALL accept
-Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0, CDDL-1.1
-and GPL-2.0 with Classpath Exception, and SHALL NOT accept LGPL, GPL or AGPL in any version.
+One repository file SHALL be the only source of accepted licenses. It SHALL accept the
+licenses known under the SPDX identifiers Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause,
+EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0, CDDL-1.1 and GPL-2.0 with Classpath Exception — spelled
+as the gate's normalizer names them — and SHALL NOT accept LGPL, GPL or AGPL in any version.
 Module-scoped exceptions SHALL not be needed for the shipped inventory; adding one SHALL
 state the reason beside it.
 
@@ -22,7 +23,11 @@ declares in the job log, SHALL attach the violation report to the run, and every
 attach the full generated license inventory of the distributed modules. The gate SHALL be
 covered by a functional build test over a miniature project with an offline repository. The
 project SHALL document one command that reproduces the CI verdict locally.
-<!-- implements FR4, FR5, FR6, FR7, FR8, FR12, NFR-R1, NFR-R2, NFR-O1, NFR-O2, NFR-C1, UX1 of add-project-license -->
+
+The gate's build plugin SHALL enter the build through the version catalog and the committed
+lockfiles and verification metadata, so the dependency-verification and OSV gates cover it
+like every other plugin.
+<!-- implements FR4, FR5, FR6, FR7, FR8, FR12, NFR-R1, NFR-R2, NFR-O1, NFR-O2, NFR-S2, NFR-C1, UX1 of add-project-license -->
 
 #### Scenario: Copyleft-only dependency fails CI
 - **WHEN** a resolved runtime module declares only LGPL-2.1 (or GPL, or AGPL)
@@ -51,6 +56,13 @@ project SHALL document one command that reproduces the CI verdict locally.
 - **THEN** a miniature module declaring only LGPL fails the gate
 - **AND** a miniature module declaring EPL-2.0 and LGPL-2.1 passes
 - **AND** a miniature module declaring an Apache spelling variant passes
+
+#### Scenario: The gate plugin is locked and verified
+- **WHEN** the gate's plugin version is bumped
+- **THEN** the bump lands in the version catalog, the buildscript lockfile and the
+  verification metadata in one diff
+- **AND** a plugin jar missing from the verification metadata fails the build before any
+  task of it runs
 
 #### Scenario: Local reproduction
 - **WHEN** a maintainer runs the documented command on the same lock state CI evaluated

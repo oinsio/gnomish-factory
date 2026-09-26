@@ -11,8 +11,9 @@ contributions arrive under.
 
 ### Requirement: The project is licensed under the Apache License 2.0
 The repository root SHALL contain a `LICENSE` file holding the Apache License, Version 2.0
-text. The published POM of the plugin contract SHALL declare the same license. The file is
-added by the human maintainer; the build SHALL verify its presence and SHALL NOT generate it.
+text. The published POM of the plugin contract SHALL declare the same license. The file was
+added by the maintainer on 2026-09-26; the license CI job SHALL verify its presence on every
+run, and no build task SHALL generate or overwrite it.
 <!-- implements FR1, G1 of add-project-license -->
 
 #### Scenario: License file present
@@ -47,7 +48,10 @@ versions.
 
 ### Requirement: Every distributed artifact carries the license and notice
 Each distributed artifact — the factory boot jar and the plugin-contract jar — SHALL contain
-`META-INF/LICENSE` and `META-INF/NOTICE`, byte-identical to the repository-root files.
+`META-INF/LICENSE` and `META-INF/NOTICE`, byte-identical to the repository-root files. One
+build convention SHALL be the only place that names the root files as jar content, and the
+license CI job SHALL verify the identity by comparing the bytes of every entry with its root
+file, not by listing entry names.
 <!-- implements FR3, G1, G2 of add-project-license -->
 
 #### Scenario: Boot jar carries the terms
@@ -59,6 +63,11 @@ Each distributed artifact — the factory boot jar and the plugin-contract jar �
 - **WHEN** the plugin-contract jar is built
 - **THEN** it contains `META-INF/LICENSE` and `META-INF/NOTICE`
 - **AND** their content equals the root `LICENSE` and `NOTICE`
+
+#### Scenario: A jar entry drifts from the root file
+- **WHEN** a built jar's `META-INF/NOTICE` or `META-INF/LICENSE` differs by one byte from the
+  root file
+- **THEN** the license CI job fails naming the jar and the entry
 
 #### Scenario: Bundled libraries keep their own notices
 - **WHEN** the factory boot jar is inspected
@@ -88,8 +97,9 @@ with one action. A signature SHALL be recorded durably and SHALL satisfy the che
 later pull request from the same account without a new push. `CONTRIBUTING.md` SHALL state
 the requirement, link the agreement text, and describe the one-time flow. The check SHALL
 run without executing pull-request code and with write access limited to recording the
-signature and commenting.
-<!-- implements FR10, G4, NFR-S1, UX2 of add-project-license -->
+signature, commenting, and setting the commit status; its job SHALL carry the 30-minute
+timeout the `quality-gates` capability requires of every CI job.
+<!-- implements FR10, G4, NFR-S1, NFR-C1, UX2 of add-project-license -->
 
 #### Scenario: First pull request from an unsigned account
 - **WHEN** an account without a recorded signature opens a pull request
@@ -122,7 +132,8 @@ name, link, what tracker or check it adapts, maintainer, declared license — a 
 plugins are listed as-is and are neither vetted nor endorsed by the project, and the
 instruction to announce a plugin through the plugin-announcement issue form, whose fields
 SHALL equal the registry's columns. The maintainer adds the row; the author needs no pull
-request. README and the adapter-author guide SHALL link the registry.
+request. README and the adapter-author guide SHALL link the registry. The terms *community
+plugin registry* and *plugin announcement* SHALL be defined in `docs/glossary.md`.
 <!-- implements FR14, UX4, M5 of add-project-license -->
 
 #### Scenario: Plugin author announces a plugin
@@ -140,6 +151,11 @@ request. README and the adapter-author guide SHALL link the registry.
 #### Scenario: Registry is reachable
 - **WHEN** a reader is in README or in the adapter-author guide
 - **THEN** a link leads to the registry
+
+#### Scenario: The terms are in the glossary
+- **WHEN** a reader looks up "community plugin registry" or "plugin announcement" in
+  `docs/glossary.md`
+- **THEN** each has an entry naming the document or issue form it refers to
 
 ### Requirement: README states the license and the operator's own tooling terms
 The README SHALL contain a License section of at most ten lines stating the Apache License
