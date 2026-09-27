@@ -25,7 +25,32 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
  */
 final class TakeOutcomeDispatch {
 
-    private TakeOutcomeDispatch() {}
+    private final TerminalWriteRetry retry;
+    private final ParkTransition park;
+    private final AbortFuse abortFuse;
+    private final FinishTransition finish;
+
+    /**
+     * The run's four terminal transitions, one of which each outcome takes (design D7 of
+     * collapse-composition-roots: the fixed part of the dispatch held as fields, the outcome and
+     * the run it belongs to as the per-call job).
+     *
+     * @param retry the bounded retry policy for the tracker's terminal write; never null
+     * @param park the park's branch-side steps (FR10 of harden-task-branch-contract): the outcome
+     *     commit and its delivery fence as the durable intent, the pending-marker clear as the
+     *     receipt
+     * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
+     *     when the outcome is {@code Aborted}; never null
+     * @param finish the completion's branch-side steps (FR10 of harden-task-branch-contract): the
+     *     {@code Completed} outcome commit as the durable intent, and the cleanup commit plus
+     *     workspace disposal as the destructive tail behind the confirmed finish
+     */
+    TakeOutcomeDispatch(TerminalWriteRetry retry, ParkTransition park, AbortFuse abortFuse, FinishTransition finish) {
+        this.retry = retry;
+        this.park = park;
+        this.abortFuse = abortFuse;
+        this.finish = finish;
+    }
 
     /**
      * Dispatches {@code outcome} to its terminal handler and returns the {@link TakeResult} it
@@ -36,26 +61,9 @@ final class TakeOutcomeDispatch {
      * @param branchName the task's branch name, for {@code Completed}/{@code Paused} reporting
      * @param order the take order the run executed: the tracker the terminal write is made
      *     through, the task's identity and this instance's identity; never null
-     * @param retry the bounded retry policy for the tracker's terminal write; never null
-     * @param park the park's branch-side steps (FR10 of harden-task-branch-contract): the outcome
-     *     commit and its delivery fence as the durable intent, the pending-marker clear as the
-     *     receipt
-     * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
-     *     when {@code outcome} is {@code Aborted}; never null
-     * @param finish the completion's branch-side steps (FR10 of harden-task-branch-contract): the
-     *     {@code Completed} outcome commit as the durable intent, and the cleanup commit plus
-     *     workspace disposal as the destructive tail behind the confirmed finish
      * @return the {@link TakeResult} the terminal outcome maps to
      */
-    static TakeResult dispatch(
-            TaskOutcome outcome,
-            TaskContext context,
-            String branchName,
-            TakeOrder order,
-            TerminalWriteRetry retry,
-            ParkTransition park,
-            AbortFuse abortFuse,
-            FinishTransition finish) {
+    TakeResult dispatch(TaskOutcome outcome, TaskContext context, String branchName, TakeOrder order) {
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = order.tracker().fetchTask(order.ref()).abortFacts();

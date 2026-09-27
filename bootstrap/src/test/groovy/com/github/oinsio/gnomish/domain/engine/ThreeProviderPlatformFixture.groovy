@@ -77,7 +77,7 @@ class ThreeProviderPlatformFixture {
     }
 
     /**
-     * The check client the composition root builds (see {@code CheckProviderWiring.externalCheckClient}):
+     * The check client the composition root builds (see {@code CheckEquipment.externalCheckClient}):
      * the discovered registry, the operator subsections passed through the real startup gate, and
      * the production dispatching composite — no provider stood in for.
      */

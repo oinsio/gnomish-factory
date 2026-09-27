@@ -80,7 +80,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def trackerConfig = new TrackerConfig('github', 3, Duration.ofMinutes(5), 3, 7, [:] as Map)
 
         when:
-        def automaton = ServeAssembly.feedAutomaton(testProperties(), SERVE_PROPERTIES, clock, trackerConfig,
+        def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, clock).feedAutomaton(trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
@@ -100,8 +100,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
 
         when:
-        def janitor = ServeAssembly.worktreeJanitor(new ServeArguments(CLONE_DIR, null, false),
-                WORKTREES_ROOT, SERVE_PROPERTIES, new SlotLedger(1), git)
+        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, null).worktreeJanitor(
+                new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, new SlotLedger(1), git)
 
         then:
         1 * worktrees.environmentDisposal(CLONE_DIR, WORKTREES_ROOT) >> Stub(TaskEnvironmentDisposal)
@@ -121,9 +121,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                         new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         when:
-        def tick = ServeAssembly.sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
-                SERVE_PROPERTIES,
                 SandboxLifecyclePass.NONE,
                 livenessOracle,
                 tickLog,
@@ -155,9 +154,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 Duration.ofDays(7), Clock.systemUTC(), 20)
 
         when:
-        def tick = ServeAssembly.sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
-                SERVE_PROPERTIES,
                 pass,
                 livenessOracle,
                 realTickLog,

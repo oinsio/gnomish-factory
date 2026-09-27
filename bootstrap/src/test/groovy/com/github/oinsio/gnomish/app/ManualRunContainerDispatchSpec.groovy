@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.BooleanSupplier
 import org.springframework.boot.DefaultApplicationArguments
@@ -18,7 +16,7 @@ import spock.lang.TempDir
  * package-private test seam, and each dispatched runner is stopped by its own early usage
  * refusal right after its observable start (banner / branch lookup).
  */
-class ManualRunContainerDispatchSpec extends Specification implements AppAssemblyFixture, BareGitRepoFixture {
+class ManualRunContainerDispatchSpec extends Specification implements AppAssemblyFixture, ManualRunPipelineFixture {
 
     @TempDir
     Path projectRoot
@@ -40,43 +38,12 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 { true } as BooleanSupplier)
     }
 
-    private void write(String relative, String text) {
-        Path target = projectRoot.resolve('.gnomish').resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
-
-    private void writeOneStagePipeline() {
-        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
-        write('pipeline.yaml', 'stages:\n  - build\n')
-        write('stages/build/stage.yaml', '''\
-purpose: build the thing
-executor:
-  type: agent-cli
-  model: some-model
-instructions: stages/build/instructions.md
-verify:
-  - type: builtin
-    name: files_exist
-    params:
-      files: []
-advancement: auto
-''')
-        write('stages/build/instructions.md', 'build it\n')
-    }
-
-    private void makeProjectRootAGitClone() {
-        gitOutput(projectRoot, 'init')
-        Files.writeString(projectRoot.resolve('README.md'), 'seed\n')
-        commitAll(projectRoot)
-    }
-
     // D13, FR14: a fresh git-mode run under container bindings dispatches to
     // ContainerGitModeRunner — its banner prints, and its own duplicate-branch refusal escapes.
     def "run() dispatches a fresh container-bound git run to ContainerGitModeRunner"() {
         given: 'the task branch already exists, so the container runner refuses after its banner'
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         gitOutput(projectRoot, 'branch', 'gnomish/ct-dup', 'HEAD')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
@@ -105,8 +72,8 @@ advancement: auto
     // branch lookup runs and its own "nothing to resume" refusal escapes.
     def "run() dispatches a container-bound --resume to ContainerResumeRunner"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--resume=absent-task')

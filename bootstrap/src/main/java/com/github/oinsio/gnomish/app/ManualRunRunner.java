@@ -77,7 +77,11 @@ public final class ManualRunRunner implements ApplicationRunner {
     private final GitVersionCheck gitVersionCheck;
 
     private final SubcommandDispatch subcommandDispatch;
-    private final ManualRunDrive drive;
+    /**
+     * Package-private: {@code ManualRunRunnerSpec} reads {@code drive.assembly.hostGitPush} to
+     * assert the in-place assembly carries no mid-round push decoration.
+     */
+    final ManualRunDrive drive;
     /** The console owner bound to standard error; see {@link ManualRunConfiguration#errorConsoleIO}. */
     private final ConsoleIO errorConsole;
 

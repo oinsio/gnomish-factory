@@ -5,16 +5,23 @@ import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.ObservedSandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
+import com.github.oinsio.gnomish.app.serve.DirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
+import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
+import com.github.oinsio.gnomish.app.serve.IdleTiming;
 import com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageClosedOutage;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGates;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
@@ -26,19 +33,74 @@ import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.Objects;
 import java.util.Random;
+import java.util.function.Consumer;
 
 /**
  * The leaf builders {@link ServeRuntimeAssembly} composes into the {@code serve} daemon runtime,
- * split out so both stay within the file-size limit (process-invariants.md) and so the specs can
- * drive each builder in isolation. Holds no state of its own.
+ * over the daemon's fixed equipment — the factory and serve properties and the engine clock —
+ * which every builder that reads it takes from these fields rather than as a parameter per call
+ * (design D7 of collapse-composition-roots, Fowler's <em>Combine Functions into Class</em>). Each
+ * builder takes only its per-call job, and a builder fed from the {@link BoundTracker} takes
+ * exactly the members it uses. Split from {@link ServeRuntimeAssembly} so the specs can drive each
+ * builder in isolation.
  *
- * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve.
+ * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve; D7 of collapse-composition-roots.
  */
 final class ServeAssembly {
 
-    private ServeAssembly() {}
+    private final FactoryProperties factoryProperties;
+    private final ServeProperties serveProperties;
+    private final com.github.oinsio.gnomish.domain.engine.port.Clock feedClock;
+
+    /** The engine clock is the one the feed, the slot ledger and the tracker-health decorator read. */
+    ServeAssembly(
+            FactoryProperties factoryProperties,
+            ServeProperties serveProperties,
+            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock) {
+        this.factoryProperties = factoryProperties;
+        this.serveProperties = serveProperties;
+        this.feedClock = feedClock;
+    }
+
+    /** FR8, D12 of add-serve-observability: the health decorator every downstream caller shares. */
+    TrackerHealthTracker trackerHealth(Tracker liveTracker) {
+        return new TrackerHealthTracker(liveTracker, feedClock);
+    }
+
+    /** FR13: the one slot ledger the feed, the slot runner and the janitor share. */
+    SlotLedger slotLedger(int effectiveSlots, DirtyNotifier dirtyNotifier) {
+        return new SlotLedger(effectiveSlots, feedClock, dirtyNotifier);
+    }
+
+    /**
+     * FR14, NFR-R3 of add-base-ref-resolution: the one gate the slot runner opens and the feed
+     * consults; {@code onTransition} and {@code ledgerSink} are the snapshot and ledger hooks.
+     */
+    RemoteOutageGate remoteOutageGate(
+            BaseRefGit baseRefs, Path cloneDir, Runnable onTransition, Consumer<RemoteOutageClosedOutage> ledgerSink) {
+        return RemoteOutageGates.system(
+                baseRefs,
+                cloneDir,
+                serveProperties.idlePollInterval(),
+                serveProperties.remoteProbeIntervalCap(),
+                serveProperties.remoteSustainedOpenThreshold(),
+                onTransition,
+                ledgerSink);
+    }
+
+    /** FR1, FR4, FR7, FR9, FR12 of add-serve-observability: the snapshot writer and ledger. */
+    ObservabilityWiring observability(
+            InstanceId instanceId,
+            Path homeDir,
+            ForwardingDirtyNotifier dirtyNotifier,
+            Clock clock,
+            SnapshotSources sources) {
+        return ObservabilityAssembly.assemble(
+                factoryProperties, serveProperties, instanceId, homeDir, dirtyNotifier, clock, sources);
+    }
 
     /**
      * FR13: the one slot runner every slot shares, over the daemon's one {@code wiring} — so the
@@ -57,16 +119,13 @@ final class ServeAssembly {
         return new TakeSlotRunner(wiring, run, tracker, instanceId);
     }
 
-    static FeedAutomaton feedAutomaton(
-            FactoryProperties factoryProperties,
-            ServeProperties serveProperties,
-            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
+    FeedAutomaton feedAutomaton(
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
             SlotLedger slotLedger,
             TakeSlotRunner slotRunner,
-            com.github.oinsio.gnomish.app.serve.DirtyNotifier dirtyNotifier,
+            DirtyNotifier dirtyNotifier,
             RemoteOutageGate remoteOutageGate) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         return new FeedAutomaton(
@@ -76,11 +135,12 @@ final class ServeAssembly {
                 slotRunner,
                 new ThreadSleeper(),
                 feedClock,
-                trackerProperties.abortBackoffBase(),
-                trackerProperties.abortBackoffCap(),
-                serveProperties.idlePollInterval(),
+                new IdleTiming(
+                        serveProperties.idlePollInterval(),
+                        trackerProperties.abortBackoffBase(),
+                        trackerProperties.abortBackoffCap(),
+                        new Random()),
                 trackerConfig.wipLimit(),
-                new Random(),
                 dirtyNotifier,
                 remoteOutageGate);
     }
@@ -90,11 +150,7 @@ final class ServeAssembly {
      * claimLossFlag} with the {@link FeedAutomaton}/{@link TakeSlotRunner}, so flagging a slot's
      * claim here reacts at the SAME round-boundary check every other claim-loss reaches.
      */
-    static ServeShutdown shutdown(
-            SlotLedger slotLedger,
-            ClaimLossFlag claimLossFlag,
-            ServeProperties serveProperties,
-            StandingReaper standingReaper) {
+    ServeShutdown shutdown(SlotLedger slotLedger, ClaimLossFlag claimLossFlag, StandingReaper standingReaper) {
         return new ServeShutdown(
                 slotLedger, claimLossFlag, serveProperties.sigtermGrace(), new RealProcessTreeKiller(), standingReaper);
     }
@@ -105,12 +161,8 @@ final class ServeAssembly {
      * are read fresh from {@code slotLedger} every tick, so a task claimed after the janitor starts
      * is still protected.
      */
-    static WorktreeJanitor worktreeJanitor(
-            ServeArguments serveArguments,
-            Path worktreesRoot,
-            ServeProperties serveProperties,
-            SlotLedger slotLedger,
-            TaskGit git) {
+    WorktreeJanitor worktreeJanitor(
+            ServeArguments serveArguments, Path worktreesRoot, SlotLedger slotLedger, TaskGit git) {
         var disposal = git.worktrees().environmentDisposal(serveArguments.dir(), worktreesRoot);
         return new WorktreeJanitor(
                 worktreesRoot,
@@ -124,21 +176,17 @@ final class ServeAssembly {
 
     /**
      * FR6, NFR-P1, design D7 of add-serve-sandbox-lifecycle: the sweep-lifecycle tick, its own
-     * virtual thread beside the worktree janitor's — disjoint object populations, disjoint
-     * cleaners. {@code sandboxLifecyclePass} is {@link SandboxLifecyclePass#NONE} on a host-only
-     * install (no {@code factory.sandbox.image} configured), so the tick still runs but is a no-op
-     * every cadence.
+     * virtual thread beside the worktree janitor's. {@code sandboxLifecyclePass} is {@link
+     * SandboxLifecyclePass#NONE} on a host-only install, so the tick runs but is a no-op.
      *
      * <p>NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle: the daemon — and only the daemon — brackets
      * each pass as an observed tick, so the snapshot's {@code vitals.sweep} and the ledger's sweep
      * lines both come from the same evaluation the scheduler already runs. A host-only install is
-     * deliberately left UNobserved: its tick has no sandbox to sweep, so an all-zero vital and a
-     * ledger line every cadence would report on a subsystem that does not exist on that host —
-     * "no sweep data yet" is the honest reading there.
+     * deliberately left UNobserved: an all-zero vital would report on a subsystem that does not
+     * exist on that host.
      */
-    static SandboxLifecycleTick sandboxLifecycleTick(
+    SandboxLifecycleTick sandboxLifecycleTick(
             ServeArguments serveArguments,
-            ServeProperties serveProperties,
             SandboxLifecyclePass sandboxLifecyclePass,
             LivenessOracle livenessOracle,
             SweepTickLog sweepTickLog,

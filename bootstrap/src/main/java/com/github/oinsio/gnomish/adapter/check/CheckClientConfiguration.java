@@ -93,8 +93,12 @@ public class CheckClientConfiguration {
      * Fails startup on any located subsection problem, listing them all (NFR-R1). Aggregating
      * rather than throwing at the first is the point of the validators returning {@link ConfigError}
      * data: an operator fixes every provider in one pass.
+     *
+     * <p>Public (rather than package-private) so {@code domain.engine}'s {@code
+     * ThreeProviderPlatformFixture} test fixture can drive the same validation the bean above wires,
+     * without duplicating it — a cross-package testing seam, not a production caller.
      */
-    static void requireValidSubsections(
+    public static void requireValidSubsections(
             Map<String, Map<String, Object>> configured,
             Map<String, CheckClientFactory> registry,
             ConnectionProfiles profiles) {

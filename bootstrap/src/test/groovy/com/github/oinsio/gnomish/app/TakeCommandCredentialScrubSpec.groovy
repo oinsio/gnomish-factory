@@ -3,9 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -13,15 +11,11 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -42,7 +36,7 @@ import spock.lang.TempDir
  *
  * <p>Implements NFR-S1, D17 of add-tracker-port.
  */
-class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -156,19 +150,6 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                 }
     }
 
-    private TakeCommand newCommand(FactoryProperties factoryProperties, Map<String, TrackerAdapterFactory> registry) {
-        TakeCommandFactory.of(
-                newAssembly(factoryProperties),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                registry,
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
-    }
-
     // NFR-S1, D17: a fresh claim actually spawns the agent-cli stage executor's subprocess
     // (InteractiveMode.NONE, no console fallback) — the strongest available proof that the
     // declared credential never reaches the gnome, since this drives the real launcher.
@@ -185,7 +166,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
-        def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringCredential()])
+        def command = newTakeCommand(factoryProperties, worktreesRoot, [github: fakeFactoryDeclaringCredential()])
 
         when:
         command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))
@@ -217,7 +198,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
-        def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringNoCredential()])
+        def command = newTakeCommand(factoryProperties, worktreesRoot, [github: fakeFactoryDeclaringNoCredential()])
 
         when:
         command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))
