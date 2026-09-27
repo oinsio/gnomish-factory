@@ -12,7 +12,7 @@ import spock.lang.Specification
 /**
  * {@link TakeCommandSupport} (task 5.13): direct unit coverage of the startup sandbox-lifecycle
  * sweep {@link TakeCommandSupport#sweepSandboxLifecycle} and of the pipeline load's invalid arm. Tracker-adapter resolution moved to
- * {@link TrackerResolutionSpec} alongside the class it now covers, {@link TrackerResolution}.
+ * {@link TrackerWiringSpec} alongside the class it now covers, {@link TrackerWiring}.
  *
  * <p>Implements FR9, FR17 of add-tracker-port.
  */

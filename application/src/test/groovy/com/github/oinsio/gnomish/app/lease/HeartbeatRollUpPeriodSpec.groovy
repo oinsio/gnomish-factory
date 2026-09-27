@@ -16,7 +16,7 @@ class HeartbeatRollUpPeriodSpec extends Specification {
 
     def "FR4: the roll-up period outlives the beat interval it watches"() {
         expect:
-        InstanceHeartbeat.rollUpFor(interval) == expected
+        new BeatTiming(interval, interval).rollUp() == expected
 
         where:
         interval || expected
@@ -34,10 +34,10 @@ class HeartbeatRollUpPeriodSpec extends Specification {
         def sixBeatsIsExactlyDefault = RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL.dividedBy(6)
 
         expect:
-        InstanceHeartbeat.rollUpFor(sixBeatsIsExactlyDefault) == RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
+        new BeatTiming(sixBeatsIsExactlyDefault, sixBeatsIsExactlyDefault).rollUp() == RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
 
         and:
-        InstanceHeartbeat.rollUpFor(sixBeatsIsExactlyDefault.plusSeconds(1)) >
+        new BeatTiming(sixBeatsIsExactlyDefault.plusSeconds(1), sixBeatsIsExactlyDefault.plusSeconds(1)).rollUp() >
                 RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
     }
 }

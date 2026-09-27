@@ -127,31 +127,27 @@ tracker:
 
     /** A production {@link TakeCommand} (real beat sleeper + monotonic time): its beat thread just parks for real. */
     private TakeCommand productionCommand(FactoryProperties factoryProperties) {
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     /** Instance B's {@link TakeCommand}: the standing reaper's own sleeper and its monotonic clock
      * are both controllable, independent of B's beat sleeper (fix-reaper-idle-liveness FR5). */
     private TakeCommand steppableCommand(FactoryProperties factoryProperties) {
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(sleeper)
                 .withReaperSleeper(reaperSleeper)

@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
@@ -40,13 +42,23 @@ final class ContainerSupportFixture {
     }
 
     private static ContainerSupportFactory forOwnership(OwnershipMode ownershipMode, ClaimEpochSource epochs) {
-        { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, definition, List<String> credentialEnvVarsToScrub ->
-            // The check providers' credential declarations are resolved by the composition root and
-            // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
-            // provider, so the declared set is empty.
-            ContainerRunSupport.create(
-            cloneDir, taskId, segments, sandbox, factory,
-            List.<String> of(), credentialEnvVarsToScrub, ownershipMode, epochs)
-        } as ContainerSupportFactory
+        // The check providers' credential declarations are resolved by the composition root and
+        // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
+        // provider, so the declared set and the registry are empty.
+        new ContainerRunSupportFactory([], [:], ownershipMode, epochs)
+    }
+
+    /**
+     * One run's real container support, built directly rather than through a runner — for the
+     * lifecycle specs that drive the bundle's own environments. No check provider is configured
+     * unless {@code checkCredentialEnvVars} names one; the pipeline declares no check, so it
+     * contributes none either. {@code epochs} is the caller's to choose, as for {@link #real}: a
+     * spec that never claims says so by passing {@code ClaimEpochSource.NONE} itself.
+     */
+    static ContainerRunSupport direct(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
+            FactoryProperties factory, OwnershipMode ownershipMode, ClaimEpochSource epochs,
+            List<String> checkCredentialEnvVars = []) {
+        (ContainerRunSupport) new ContainerRunSupportFactory(checkCredentialEnvVars, [:], ownershipMode, epochs)
+        .create(cloneDir, taskId, segments, sandbox, factory, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
     }
 }

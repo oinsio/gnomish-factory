@@ -7,13 +7,14 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 
 /**
- * The test-seam collaborators {@link TakeCommandFactory} defaults for production wiring and
- * individual specs override selectively: the beat {@link Sleeper} (task 6.1), the standing
+ * The test-seam collaborators {@link TakeCommand} takes, defaulted for production wiring and
+ * overridden selectively by individual specs: the beat {@link Sleeper} (task 6.1), the standing
  * reaper's OWN {@link Sleeper} (fix-reaper-idle-liveness FR5), the reaper's {@link MonotonicTime}
  * (task 6.6), the {@link TakeoverConfirmation} (task 6.2), and the {@link ServeProperties} used for
  * batch mode's concurrency limit N (task 6.2 of add-factory-serve, FR2). Replaces the former
- * telescoping {@code of(...)} overloads on {@link TakeCommandFactory} one parameter object at a
- * time: start from {@link #DEFAULTS} and layer on only the seams a given spec cares about.
+ * telescoping {@code of(...)} overloads of the command's factory, which design D7 of
+ * collapse-composition-roots removed: start from {@link #DEFAULTS} and layer on only the seams a
+ * given spec cares about.
  *
  * <p>{@code reaperSleeper} defaults independently of {@code heartbeatSleeper} rather than mirroring
  * it; this is harmless both for the production {@code ThreadSleeper} (stateless, reentrant) and for

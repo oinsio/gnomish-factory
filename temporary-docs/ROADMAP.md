@@ -9,22 +9,12 @@ no active change covers, and work that lives outside the factory's code.
 
 ## Engine gaps (candidate changes)
 
-### 1. Non-interactive `external` checks — `add-external-check-adapter`
-
-The engine polls `external` checks through a port (`PollStatus`), but
-the only adapter is interactive: a human answers the poll. `serve` and
-batch modes are unconditionally non-interactive, so a pipeline with an
-`external` check (CI on the task branch, SonarQube) cannot run
-autonomously. Needs a real polling adapter (GitHub Checks API on the
-task branch) and, eventually, check submission (currently deferred —
-the engine relies on the branch-push trigger only).
-
 ### 2. Delivery PR — `add-delivery-pr`
 
-A delivered task today is a pushed branch plus issue comments/labels.
-The README prescribes squash-merging gnome PRs, but nothing creates the
-PR. Either the factory opens a PR on the delivered outcome, or the
-manual step is documented as deliberate.
+Opening the pull request can already be a pipeline stage: the `deliver`
+stage of `gf-tests` (see `docs/reference-pipelines.md`) opens or updates
+it and checks the published body. Open question: keep this in pipelines,
+or move it into the factory as a built-in step after delivery.
 
 ### 3. `api` executor — `add-api-executor`
 
@@ -36,18 +26,12 @@ agent CLI.
 
 ### 4. Packaging and service operation — `add-factory-packaging`
 
-There is no launcher script — only the boot jar. Real `serve` operation
-needs packaging (factory Docker image / systemd unit / launchd) and a
+The launcher and release archive come with `add-release-pipeline`; a factory
+Docker image is its NG2. Real `serve` operation still needs a service
+wrapper (factory Docker image / systemd unit / launchd) and a
 deployment story for the always-on companions: guard, gateway, depot
 (compose recipes are promised by their changes, but operating them is
 its own surface).
-
-### 5. Daemon observability
-
-Per ADR 0001 there is no web/actuator — logs and tracker reports only.
-A daemon running for days has no answer to "is it alive, how deep is
-the queue, what was spent overnight" short of reading logs. Minimal
-monitoring/alerting is not yet designed.
 
 ### 6. Additional trackers
 
@@ -58,34 +42,23 @@ picture.
 ### 8. Ограничители на запуск стадии/задачи и аналитика
 
 1. В токенах
-2. В деньгах
-3. В попытках
-4. Может ещё как-то (надо продумать)
+2. Может ещё как-то (надо продумать)
 
 ### 9. Сделать формирователь контекста для AI агента
 
-1. Задача
-2. Описание задачи
-3. Промты, входные файлы
-4. Выходной формат
-5. Результаты предыдущих попыток
-6. Правила
-7. Может что-то ещё (надо продумать)
-
-### 10. Возможность ветвления и циклов
-
-1. Внутри stage (?)
-2. На уровне pipeline (?)
+1. Выходной формат
+2. Может что-то ещё (надо продумать)
 
 ## Work outside the factory's code
 
 ### 7. Reference pipelines — the largest item
 
 The factory is an engine; the target project's `.gnomish/` content
-(stages, `instructions.md`, `acceptance.md`, judge criteria) does not
-exist yet. No reference stage library ("typical Java project pipeline")
-has been written, and gnome output quality hinges on prompt quality and
-verifiable acceptance criteria. This is iterative, empirical work
+(stages, `instructions.md`, `acceptance.md`, judge criteria) lives
+outside it. One reference exists (`gf-tests`, Java/Gradle/Spock with
+OpenSpec); more stacks are to come, collected in
+`docs/reference-pipelines.md`. Gnome output quality hinges on prompt
+quality and verifiable acceptance criteria. This is iterative, empirical work
 against real runs.
 
 ### 8. Task-authoring discipline

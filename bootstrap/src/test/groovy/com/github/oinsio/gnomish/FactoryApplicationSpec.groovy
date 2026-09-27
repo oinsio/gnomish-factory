@@ -17,6 +17,11 @@ import spock.lang.Specification
  * exchange. Process-level exit-code verification is deliberately out of
  * unit-gate scope (design D10).
  * Implements FR2, FR3 of add-project-skeleton.
+ *
+ * <p>NFR-R1, UX1 of collapse-composition-roots: this context-start spec, unedited by that change,
+ * is the witness that the collapsed composition roots still assemble a context that boots the same
+ * commands; the rest of the suite passing unedited carries the behavior-preservation half. The
+ * bean inventory itself (NFR-R2) is pinned by {@code ApplicationBeanInventorySpec}.
  */
 @SpringBootTest(classes = FactoryApplication)
 class FactoryApplicationSpec extends Specification {

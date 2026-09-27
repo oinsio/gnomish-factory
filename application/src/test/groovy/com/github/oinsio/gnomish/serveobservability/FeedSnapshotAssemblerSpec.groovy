@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
 import com.github.oinsio.gnomish.app.serve.FeedState
 import com.github.oinsio.gnomish.app.serve.FeedView
 import com.github.oinsio.gnomish.app.serve.SlotLedger
@@ -55,7 +56,7 @@ class FeedSnapshotAssemblerSpec extends Specification {
                 -> []
             }] as Tracker
         SlotRunner runner = { TaskRef ref -> } as SlotRunner
-        def automaton = new FeedAutomaton(
+        def automaton = FeedAutomatonFixture.feedAutomaton(
                 tracker, InstanceId.generate('gnome'), new SlotLedger(1), runner, sleeper, clock,
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 

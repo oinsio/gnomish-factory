@@ -57,9 +57,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
         new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
-                [github: factory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 console)
     }
 

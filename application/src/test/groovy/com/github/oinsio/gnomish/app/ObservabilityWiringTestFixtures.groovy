@@ -17,11 +17,8 @@ import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
-import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
-import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 
 import java.nio.file.Path
@@ -67,21 +64,12 @@ class ObservabilityWiringTestFixtures {
                 0)
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, instanceName, clock)
-        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
+        def ledgerWriters = new LedgerWriters(appender, new SlotLedger(1), instance, clock)
         if (startSnapshotWriter) {
             snapshotWriter.start()
         }
-        def wiring = new ObservabilityWiring(
-                lifecycleTracker,
-                snapshotWriter,
-                new LifecycleLedgerWriter(appender, instance, clock),
-                taskOutcomeLedgerWriter,
-                new SweepLedgerWriter(appender, instance, clock),
-                new RemoteOutageLedgerWriter(appender, instance),
-                appender,
-                instance,
-                clock)
+        def wiring = new ObservabilityWiring(lifecycleTracker, snapshotWriter, ledgerWriters, clock)
         return new Built(wiring: wiring, snapshotFile: snapshotFile,
-        taskOutcomeLedgerWriter: taskOutcomeLedgerWriter)
+        taskOutcomeLedgerWriter: ledgerWriters.taskOutcome())
     }
 }

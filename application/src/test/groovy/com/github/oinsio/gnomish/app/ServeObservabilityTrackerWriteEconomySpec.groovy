@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -174,7 +175,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         def bareTracker = new RecordingTracker()
         def bareClock = new VirtualClock(Instant.parse('2026-01-01T00:00:00Z'))
         def bareLedger = new SlotLedger(1, bareClock, DirtyNotifier.NOOP)
-        def bareAutomaton = new FeedAutomaton(bareTracker, INSTANCE, bareLedger, bareSlotRunner(bareTracker),
+        def bareAutomaton = FeedAutomatonFixture.feedAutomaton(bareTracker, INSTANCE, bareLedger, bareSlotRunner(bareTracker),
                 new BudgetedVirtualSleeper(bareClock), bareClock, BASE, CAP, IDLE, WIP_LIMIT, new Random(1), DirtyNotifier.NOOP)
 
         and: 'the observed task 5.1 shape: TrackerHealthTracker (D12), a live dirty notifier, and the taskOutcome ledger write point'
@@ -193,7 +194,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
                 new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, INSTANCE_NAME, ledgerClock)
         def ledgerWriter = new TaskOutcomeLedgerWriter(observedLedger, appender, INSTANCE_INFO, ledgerClock)
         def accumulator = new RunSummaryAccumulator()
-        def observedAutomaton = new FeedAutomaton(healthTracker, INSTANCE, observedLedger,
+        def observedAutomaton = FeedAutomatonFixture.feedAutomaton(healthTracker, INSTANCE, observedLedger,
                 observedSlotRunner(healthTracker, ledgerWriter, accumulator),
                 new BudgetedVirtualSleeper(observedClock), observedClock, BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 

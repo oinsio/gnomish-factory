@@ -196,6 +196,7 @@ The full map of the project's documentation, by the question it answers:
 | [`docs/adr/0009-project-license.md`](docs/adr/0009-project-license.md)                                     | understand the license, the dual-license rule, the license gate's scope, and the CLA              |
 | [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md)                                       | consult the sandbox threat model, threat by numbered threat                                       |
 | [`docs/examples/`](docs/examples)                                                                          | copy reference material: the board-bridge workflow, the sandbox image recipe                      |
+| [`docs/reference-pipelines.md`](docs/reference-pipelines.md)                                               | find a working `.gnomish/` pipeline for your stack to start from, or list your own                |
 
 ## Development process
 

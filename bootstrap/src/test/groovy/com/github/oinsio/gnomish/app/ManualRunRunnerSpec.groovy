@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -40,7 +39,7 @@ import spock.lang.TempDir
  * branch and worktree, prints the UX1 banner upfront, and runs the pipeline against the worktree
  * — proven here end to end against a local bare-repo clone (task 4.4).
  */
-class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, ManualRunPipelineFixture {
 
     @TempDir
     Path projectRoot
@@ -58,36 +57,11 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
         newManualRunRunner(worktreesRoot, homeDir)
     }
 
-    private void write(String relative, String text) {
-        Path target = projectRoot.resolve('.gnomish').resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
-
-    private void writeOneStagePipeline() {
-        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
-        write('pipeline.yaml', 'stages:\n  - build\n')
-        write('stages/build/stage.yaml', '''\
-purpose: build the thing
-executor:
-  type: agent-cli
-  model: some-model
-instructions: stages/build/instructions.md
-verify:
-  - type: builtin
-    name: files_exist
-    params:
-      files: []
-advancement: auto
-''')
-        write('stages/build/instructions.md', 'build it\n')
-    }
-
     // D10: the starting stage's own attemptLimit (7), not the pipeline default (3)
     private void writeOneStagePipelineWithStageAttemptLimitOverride() {
-        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
-        write('pipeline.yaml', 'stages:\n  - build\n')
-        write('stages/build/stage.yaml', '''\
+        write(projectRoot, 'config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
+        write(projectRoot, 'pipeline.yaml', 'stages:\n  - build\n')
+        write(projectRoot, 'stages/build/stage.yaml', '''\
 purpose: build the thing
 executor:
   type: agent-cli
@@ -102,18 +76,7 @@ advancement: auto
 autonomy:
   attemptLimit: 7
 ''')
-        write('stages/build/instructions.md', 'build it\n')
-    }
-
-    /**
-     * Turns {@code projectRoot} into a real, non-bare git clone with one commit — the {@code
-     * --dir} git mode needs (FR7): {@code TaskBranchCreator} branches off {@code HEAD}, which
-     * requires at least one commit to resolve.
-     */
-    private void makeProjectRootAGitClone() {
-        assert gitExitCode(projectRoot, 'init') == 0
-        Files.writeString(projectRoot.resolve('README.md'), 'seed\n')
-        commitAll(projectRoot, 'init')
+        write(projectRoot, 'stages/build/instructions.md', 'build it\n')
     }
 
     // FR12: no relevant flag present -> no-op, untouched no-args behavior
@@ -161,7 +124,7 @@ autonomy:
         // fails the listing rather than printing "no tasks", and an uninitialized directory is
         // exactly such a refusal — which would make this routing spec red for the wrong reason.
         given:
-        makeProjectRootAGitClone()
+        makeProjectRootAGitClone(projectRoot)
         def runner = newRunner()
         def args = new DefaultApplicationArguments('status', "--dir=${projectRoot}".toString())
 
@@ -272,9 +235,9 @@ autonomy:
     // FR1, FR12: PipelineLoadFailedException's message is also printed to stderr before rethrow
     def "run() prints the PipelineLoadFailedException message to stderr before rethrowing"() {
         given: 'a present but invalid .gnomish/ tree - a stage referencing a missing instructions file'
-        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
-        write('pipeline.yaml', 'stages:\n  - plan\n')
-        write('stages/plan/stage.yaml', '''\
+        write(projectRoot, 'config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
+        write(projectRoot, 'pipeline.yaml', 'stages:\n  - plan\n')
+        write(projectRoot, 'stages/plan/stage.yaml', '''\
 purpose: plan the work
 executor:
   type: agent-cli
@@ -325,7 +288,7 @@ advancement: auto
     // FR13, NFR-R1, UX3: EOF at the very first prompt prints "Input exhausted" to stderr, no stack trace
     def "run() prints an input-exhausted message to stderr when stdin hits EOF immediately"() {
         given:
-        writeOneStagePipeline()
+        writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalErr = System.err
         System.in = new ByteArrayInputStream(new byte[0])
@@ -388,7 +351,7 @@ advancement: auto
     // FR7, UX4: --mode in-place prints the honest in-memory reminder before the pipeline runs
     def "run() prints the in-place mode reminder before running the pipeline"() {
         given:
-        writeOneStagePipeline()
+        writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
@@ -440,15 +403,15 @@ advancement: auto
                 new BindingProperties('host', [:]), git)
 
         then: 'the shared assembly in-place assembles from still decorates nothing'
-        runner.assembly.hostGitPush.apply(source).is(source)
+        runner.drive.assembly.hostGitPush.apply(source).is(source)
     }
 
     // FR6, FR7, UX1: --mode git (the default) prints the branch/worktree banner upfront, before
     // the pipeline runs, and never prints the in-place reminder
     def "run() prints the branch and worktree banner before the pipeline runs in git mode"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
@@ -490,8 +453,8 @@ advancement: auto
     // untracked/modified files
     def "run() in git mode never mutates the --dir clone's working copy"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         def cloneStatusBefore = gitOutput(projectRoot, 'status', '--porcelain')
         def originalIn = System.in
         def originalOut = System.out
@@ -522,8 +485,8 @@ advancement: auto
     // (FR15) removed .gnomish-task/ from it
     def "run() removes the worktree on a completed git-mode task and the branch history stays intact"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
@@ -555,8 +518,8 @@ advancement: auto
     // family), not silently reused — resuming into an existing branch is FR8's job
     def "run() throws UsageException in git mode when the task branch already exists"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         assert gitExitCode(projectRoot, 'branch', 'gnomish/manual-test-git-dup', 'HEAD') == 0
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
@@ -574,8 +537,8 @@ advancement: auto
     // FR7, design D7: an unresolved --base is a usage error, not a resumable condition
     def "run() throws UsageException in git mode when --base does not resolve"() {
         given:
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
@@ -612,8 +575,8 @@ advancement: auto
     // is constructed internally by ManualRunRunner, not injected).
     def "run() with --resume dispatches to GitResumeRunner and drives the task to completion"() {
         given: 'a git task with one persisted round but no recorded outcome — the process died mid-visit'
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         bootstrapGitTask('manual-test-resume')
 
         and: 'stdin/stdout wired for the resumed run: a bare Enter drives one more round to completion'
@@ -649,8 +612,8 @@ advancement: auto
     // fallback (PIT: VoidMethodCallMutator removed the println).
     def "run() prints the UnsupportedStateFileVersionException message to stderr before rethrowing"() {
         given: 'a git task whose task.json carries an unsupported version'
-        makeProjectRootAGitClone()
-        writeOneStagePipeline()
+        makeProjectRootAGitClone(projectRoot)
+        writeOneStagePipeline(projectRoot)
         bootstrapGitTask('manual-test-badversion')
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-badversion')
         def taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
@@ -682,7 +645,7 @@ advancement: auto
     // FR1, FR2, FR9: a minimal one-stage pipeline runs end to end to Completed via scripted stdin
     def "run() drives a minimal one-stage pipeline to completion via real stdin"() {
         given:
-        writeOneStagePipeline()
+        writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))

@@ -94,9 +94,7 @@ tracker:
         def boardCommand = new BoardCommand(
                 Clock.systemUTC(),
                 testProperties(instanceName: INSTANCE_NAME),
-                [github: factory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 LiveConsoleIO.onStdout())
         def runner = newRunner(boardCommand)
         def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())

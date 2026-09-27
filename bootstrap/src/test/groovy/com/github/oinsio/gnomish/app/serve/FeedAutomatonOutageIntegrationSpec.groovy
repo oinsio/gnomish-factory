@@ -113,7 +113,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
         def slotRunner = { TaskRef ref -> claimed.add(ref) } as SlotRunner
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
-        def automaton = new FeedAutomaton(
+        def automaton = FeedAutomatonFixture.feedAutomaton(
                 tracker, INSTANCE, ledger, slotRunner, sleeper, clock,
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 
@@ -161,7 +161,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
         def ledger = new SlotLedger(1)
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
-        def automaton = new FeedAutomaton(
+        def automaton = FeedAutomatonFixture.feedAutomaton(
                 tracker, INSTANCE, ledger, { TaskRef ref -> } as SlotRunner, sleeper, clock,
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 

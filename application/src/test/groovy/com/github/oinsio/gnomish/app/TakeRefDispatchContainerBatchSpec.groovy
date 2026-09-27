@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
@@ -78,7 +79,8 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
             Map<String, TaskRepository> repositories, RunAssembly assembly, TakeHeartbeat heartbeat) {
         new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, WORKTREES_ROOT, containerTakeSupport(repositories),
                 heartbeat.tenure()), testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
+                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
@@ -89,7 +91,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         ]))
         TakeRefDispatch.run(dispatcher(repositories, assembly, heartbeat),
                 new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-                completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, factory,
+                new BoundTracker(completingPipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),
                 SERVE_PROPERTIES, LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
     }
 

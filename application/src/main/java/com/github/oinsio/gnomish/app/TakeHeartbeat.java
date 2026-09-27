@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.lease.BeatTiming;
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
@@ -183,22 +184,21 @@ record TakeHeartbeat(
             Sleeper reaperSleeper,
             MonotonicTime monotonicTime,
             HeartbeatStateListener stateListener) {
-        Duration interval = config.heartbeatInterval();
         // FR13 of harden-task-branch-contract: the reaper's reassignment deadline and the holder's
         // own lost-detection deadline come from LeaseThresholds, which is where their required
         // order is stated and tested — never re-derived here.
+        BeatTiming timing = LeaseThresholds.beatTiming(config);
         Duration ttl = LeaseThresholds.reassignment(config);
-        Duration lostDetection = LeaseThresholds.lostDetection(config);
         Duration windowGrace = LeaseThresholds.windowGrace(config);
         var progress = new HeartbeatProgress();
         var flag = new ClaimLossFlag();
         var staleness = new StalenessMemory(monotonicTime, ttl, windowGrace);
         var listing = new CachedOpenTaskListing();
         var reaper = new Reaper(tracker, staleness, listing);
-        var heartbeat = new InstanceHeartbeat(
-                tracker, progress, sleeper, new SystemClock(), interval, flag, stateListener, lostDetection);
-        var standingReaper =
-                new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot, new SystemClock());
+        var heartbeat =
+                new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), timing, flag, stateListener);
+        var standingReaper = new StandingReaper(
+                reaper, reaperSleeper, timing.interval(), heartbeat::liveClaimsSnapshot, new SystemClock());
         var livenessOracle = new LivenessOracle(listing, staleness);
         return new TakeHeartbeat(heartbeat, progress, flag, standingReaper, livenessOracle);
     }

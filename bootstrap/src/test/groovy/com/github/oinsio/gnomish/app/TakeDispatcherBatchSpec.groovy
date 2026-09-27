@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
@@ -131,7 +132,13 @@ tracker:
                 new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD), [],
                 ContainerTakeSupport.hostOnly(), noopHeartbeat().tenure(),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
-        new TakeDispatcher(wiring, testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation)
+        new TakeDispatcher(wiring, testProps(), Clock.systemUTC(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), confirmation)
+    }
+
+    /** What the batch invocation bound: the spec's pipeline, tracker and pass-through adapter. */
+    private BoundTracker bound(Tracker tracker) {
+        new BoundTracker(pipeline(), new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                new TrackerConfig('github', ABORT_THRESHOLD), passthroughFactory(), tracker, INSTANCE)
     }
 
     private static TakeHeartbeat noopHeartbeat() {
@@ -187,7 +194,7 @@ tracker:
 
         when:
         def outcomes = dispatcher.runBatch(
-                batchArgs(refs), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker, INSTANCE, passthroughFactory(), 3)
+                batchArgs(refs), bound(tracker), 3)
 
         then: 'every ref is present, in order'
         outcomes*.ref() == refs
@@ -215,8 +222,7 @@ tracker:
 
         when:
         def outcomes = dispatcher.runBatch(
-                batchArgs([WORKING_REF.id()]), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker,
-                INSTANCE, passthroughFactory(), 2)
+                batchArgs([WORKING_REF.id()]), bound(tracker), 2)
 
         then:
         outcomes[0].result() instanceof TakeResult.Skipped
@@ -236,8 +242,7 @@ tracker:
 
         when:
         def outcomes = dispatcher.runBatch(
-                batchArgs([WORKING_REF.id()], true), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD),
-                tracker, INSTANCE, passthroughFactory(), 2)
+                batchArgs([WORKING_REF.id()], true), bound(tracker), 2)
 
         then: 'no observable claim version, so removeStaleClaim is skipped and the ordinary claim decides'
         0 * tracker.removeStaleClaim(*_)

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.lease;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
@@ -84,10 +83,11 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     }
 
     /**
-     * Equivalent to the {@link HeartbeatStateListener}-taking constructor with the lost-detection
-     * threshold defaulted to {@code interval} — the shape every caller that predates self-fencing
-     * keeps. Production wiring supplies the threshold explicitly, derived from the same config the
-     * reaper's TTL is (see {@code TakeHeartbeat}), so the two stay in their required order.
+     * Equivalent to the {@link BeatTiming}-taking constructor with the lost-detection threshold
+     * defaulted to {@code interval} — the shape every caller that predates self-fencing keeps.
+     * Production wiring supplies the timing whole, derived by {@link LeaseThresholds#beatTiming}
+     * from the same config the reaper's TTL is (see {@code TakeHeartbeat}), so the two stay in their
+     * required order.
      */
     public InstanceHeartbeat(
             Tracker tracker,
@@ -97,7 +97,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             Duration interval,
             ClaimLostSink claimLostSink,
             HeartbeatStateListener stateListener) {
-        this(tracker, progress, sleeper, clock, interval, claimLostSink, stateListener, interval);
+        this(tracker, progress, sleeper, clock, new BeatTiming(interval, interval), claimLostSink, stateListener);
     }
 
     /**
@@ -107,61 +107,37 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
      * @param progress the engine-event-fed progress source for the payload
      * @param sleeper the interval sleeper (virtual under test)
      * @param clock the source of the {@code alive-at} instant
-     * @param interval the beat interval (design D8 default 5 min)
+     * @param timing the beat interval (design D8 default 5 min) and how far a claim's last
+     *     confirmed beat may fall behind before the holder stops writing at its next boundary
+     *     (FR13); in production the threshold is strictly shorter than the reaper's reassignment
+     *     threshold, which is what leaves the holder a grace window to recover in
      * @param claimLostSink the seam a lost claim is surfaced through
      * @param stateListener woken after every {@link #state()} transition (FR7, design D4); {@link
      *     HeartbeatStateListener#IGNORE} absent a writer to wake
-     * @param lostDetection how far a claim's last confirmed beat may fall behind before the holder
-     *     stops writing at its next boundary (FR13); strictly shorter than the reaper's
-     *     reassignment threshold, which is what leaves the holder a grace window to recover in
      */
     public InstanceHeartbeat(
             Tracker tracker,
             HeartbeatProgress progress,
             Sleeper sleeper,
             Clock clock,
-            Duration interval,
+            BeatTiming timing,
             ClaimLostSink claimLostSink,
-            HeartbeatStateListener stateListener,
-            Duration lostDetection) {
-        this.lostDetection = lostDetection;
+            HeartbeatStateListener stateListener) {
+        this.lostDetection = timing.lostDetection();
         // The edge-logging owner for the two streaks this thread can run: each claim's beat
         // failures (namespaced by HeartbeatBeater) and the tick itself failing. Built here rather
         // than injected because it is log-plane only — it decides how a repeated failure is
         // *said*, never what the beat does — and the constructor is already at the parameter
         // limit (process-invariants.md). FR4 of harden-logging-observability.
-        RepeatSuppressor suppressor = new RepeatSuppressor(java.time.Clock.systemUTC(), rollUpFor(interval));
+        RepeatSuppressor suppressor = new RepeatSuppressor(java.time.Clock.systemUTC(), timing.rollUp());
         this.tickLog = new HeartbeatTickLog(suppressor);
         this.beater = new HeartbeatBeater(tracker, progress, clock, suppressor);
         this.sleeper = sleeper;
-        this.interval = interval;
+        this.interval = timing.interval();
         this.claimLostSink = claimLostSink;
         this.clock = clock;
         this.stateListener = stateListener;
         this.lastTickAt = clock.now();
-    }
-
-    /**
-     * The quiet period between roll-ups for a loop that ticks every {@code interval}. A roll-up
-     * period equal to the loop's own tick is no suppression at all — every repeat would qualify —
-     * and the beat interval's own default (design D8) is exactly the suppressor's default, so the
-     * period is derived from the loop rather than taken from the catalog: at most one reminder per
-     * six beats, and never more often than {@link RepeatSuppressor#DEFAULT_ROLL_UP_INTERVAL}.
-     */
-    // Package-private so the derivation is asserted directly; the suppressor it feeds is built in
-    // the constructor and never exposed.
-    //
-    // @DoNotMutate: provably equivalent mutant. The two arms of the comparison return equal
-    //     durations at the boundary — when six beats are exactly the default, `>` and `>=` both
-    //     yield the default's own value — so no covering test can distinguish the boundary
-    //     mutation (testing.md, "provably equivalent mutant"). HeartbeatRollUpPeriodSpec covers
-    //     the method on both sides of the boundary and on the boundary itself.
-    @DoNotMutate
-    static Duration rollUpFor(Duration interval) {
-        Duration sixBeats = interval.multipliedBy(6);
-        return sixBeats.compareTo(RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL) > 0
-                ? sixBeats
-                : RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL;
     }
 
     /**

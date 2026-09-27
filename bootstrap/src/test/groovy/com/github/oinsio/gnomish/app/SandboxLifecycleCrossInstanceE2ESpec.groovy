@@ -102,8 +102,8 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofHours(24))
         def project = cloneWithOrigin('cross-instance-project')
         taskId = "CTN-SIBLING-${System.nanoTime() % 100000}"
-        def support = ContainerRunSupport.create(project, taskId, segments(), tinyAges,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+        def support = ContainerSupportFixture.direct(project, taskId, segments(), tinyAges,
+                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         // These specs point origin at an unreachable host on purpose — the URL is what project
         // identity is derived from, and nothing here pushes. The branch's own first push is
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone

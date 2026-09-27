@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
@@ -10,7 +8,6 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
@@ -20,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
+import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +27,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Holds the per-run collaborators {@link ManualRunRunner} needs once a {@link TaskContext} and
- * initial {@link TaskState} are known: the shared {@link DialogConsole} inputs, the check
- * runners, and the pipeline/sandbox properties (design D10). The actual port/console assembly is
+ * initial {@link TaskState} are known: the shared {@link DialogConsole} inputs, the {@link
+ * CheckEquipment}, and the pipeline/sandbox properties (design D10). The actual port/console assembly is
  * delegated to {@link RunAssembler}, extracted for file size. Exactly one {@link
  * com.github.oinsio.gnomish.status.StatusSnapshotHolder} and one {@link DialogConsole} are built
  * per {@link #assemble} call (design D1); the default {@link
@@ -69,10 +67,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     final ConsoleIO errorConsole;
 
-    final FilesExistCheckRunner filesExistCheckRunner;
-    final ShellCommandCheckRunner shellCommandCheckRunner;
-    final Map<String, CheckClientFactory> checkClientRegistry;
-    final SecretsProvider secretsProvider;
+    final CheckEquipment checks;
     final SystemClock systemClock;
     final ThreadSleeper threadSleeper;
     final FactoryProperties factoryProperties;
@@ -86,68 +81,50 @@ public final class ManualRunAssembly implements RunAssembly {
     // reads a task tier by binding, so it stays unattached and bindTaskTier is never reached.
     final @Nullable PipelineSource pipelineSource;
 
-    private ManualRunAssembly(
-            SystemConsoleIO systemConsoleIO,
-            ConsoleIO errorConsole,
-            FilesExistCheckRunner filesExistCheckRunner,
-            ShellCommandCheckRunner shellCommandCheckRunner,
-            Map<String, CheckClientFactory> checkClientRegistry,
-            SecretsProvider secretsProvider,
-            SystemClock systemClock,
-            ThreadSleeper threadSleeper,
-            FactoryProperties factoryProperties,
-            SandboxProperties sandboxProperties,
-            @Nullable EngineEventListener extraListener,
-            @Nullable SandboxRunPieces sandbox,
-            UnaryOperator<RoundEnvironmentSource> hostGitPush,
-            @Nullable PipelineSource pipelineSource) {
-        this.systemConsoleIO = systemConsoleIO;
-        this.errorConsole = errorConsole;
-        this.filesExistCheckRunner = filesExistCheckRunner;
-        this.shellCommandCheckRunner = shellCommandCheckRunner;
-        this.checkClientRegistry = checkClientRegistry;
-        this.secretsProvider = secretsProvider;
-        this.systemClock = systemClock;
-        this.threadSleeper = threadSleeper;
-        this.factoryProperties = factoryProperties;
-        this.sandboxProperties = sandboxProperties;
-        this.extraListener = extraListener;
-        this.sandbox = sandbox;
-        this.hostGitPush = hostGitPush;
-        this.pipelineSource = pipelineSource;
-    }
-
     /**
-     * The dominant construction: no extra engine listener and no sandbox pieces (the plain
-     * manual-run and git paths). Delegates to the canonical constructor with both {@code null},
-     * so every existing call site is unaffected by the take run's added seam or by sandbox mode.
+     * The dominant construction: no extra engine listener, no sandbox pieces, no host-git
+     * decoration and no pipeline source (the plain manual-run and git paths); every wither below
+     * derives its copy from one of these.
      */
     ManualRunAssembly(
             SystemConsoleIO systemConsoleIO,
             ConsoleIO errorConsole,
-            FilesExistCheckRunner filesExistCheckRunner,
-            ShellCommandCheckRunner shellCommandCheckRunner,
-            Map<String, CheckClientFactory> checkClientRegistry,
-            SecretsProvider secretsProvider,
+            CheckEquipment checks,
             SystemClock systemClock,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
-        this(
-                systemConsoleIO,
-                errorConsole,
-                filesExistCheckRunner,
-                shellCommandCheckRunner,
-                checkClientRegistry,
-                secretsProvider,
-                systemClock,
-                threadSleeper,
-                factoryProperties,
-                sandboxProperties,
-                null,
-                null,
-                UnaryOperator.identity(),
-                null);
+        this.systemConsoleIO = systemConsoleIO;
+        this.errorConsole = errorConsole;
+        this.checks = checks;
+        this.systemClock = systemClock;
+        this.threadSleeper = threadSleeper;
+        this.factoryProperties = factoryProperties;
+        this.sandboxProperties = sandboxProperties;
+        this.extraListener = null;
+        this.sandbox = null;
+        this.hostGitPush = UnaryOperator.identity();
+        this.pipelineSource = null;
+    }
+
+    /** Copy construction: {@code base}'s collaborators carried over, the four optional seams supplied. */
+    private ManualRunAssembly(
+            ManualRunAssembly base,
+            @Nullable EngineEventListener extraListener,
+            @Nullable SandboxRunPieces sandbox,
+            UnaryOperator<RoundEnvironmentSource> hostGitPush,
+            @Nullable PipelineSource pipelineSource) {
+        this.systemConsoleIO = base.systemConsoleIO;
+        this.errorConsole = base.errorConsole;
+        this.checks = base.checks;
+        this.systemClock = base.systemClock;
+        this.threadSleeper = base.threadSleeper;
+        this.factoryProperties = base.factoryProperties;
+        this.sandboxProperties = base.sandboxProperties;
+        this.extraListener = extraListener;
+        this.sandbox = sandbox;
+        this.hostGitPush = hostGitPush;
+        this.pipelineSource = pipelineSource;
     }
 
     /**
@@ -159,30 +136,27 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withExtraListener(EngineEventListener listener) {
-        return copyWith(listener, sandbox, hostGitPush, pipelineSource);
+        return new ManualRunAssembly(this, listener, sandbox, hostGitPush, pipelineSource);
     }
 
-    /** Shared copy construction: collaborators carried over, the four optional seams supplied. */
-    private ManualRunAssembly copyWith(
-            @Nullable EngineEventListener listener,
-            @Nullable SandboxRunPieces pieces,
-            UnaryOperator<RoundEnvironmentSource> decoration,
-            @Nullable PipelineSource source) {
-        return new ManualRunAssembly(
-                systemConsoleIO,
-                errorConsole,
-                filesExistCheckRunner,
-                shellCommandCheckRunner,
-                checkClientRegistry,
-                secretsProvider,
-                systemClock,
-                threadSleeper,
-                factoryProperties,
-                sandboxProperties,
-                listener,
-                pieces,
-                decoration,
-                source);
+    /**
+     * Returns the copy every manual path runs on — in-place, git, container, and both resumes —
+     * which also carries a fresh {@link SummaryAccumulatorListener} (FR3, design D3 of
+     * harden-logging-observability). A manual run has no terminal {@code TakeResult} to map, so the
+     * engine's own run bookend is where its summary comes from, which is one seam rather than five
+     * entry points each remembering. The tracker-driven subcommands ({@code take}, {@code serve})
+     * get the plain assembly: they emit the canonical summary from their terminal result, and a
+     * run-level listener doing it too would state the same outcome twice.
+     *
+     * <p>The one place that derivation is spelled: both beans that hold a manual-run copy ({@link
+     * ManualRunConfiguration#manualRunners}, {@link ManualRunConfiguration#manualRunDrive}) take it
+     * from here. Each gets its own listener instance; one invocation runs one path, so exactly one
+     * of them ever observes a run.
+     *
+     * @return a new assembly identical but for the added summary listener; never null
+     */
+    ManualRunAssembly withRunSummary() {
+        return withExtraListener(new SummaryAccumulatorListener());
     }
 
     /**
@@ -198,7 +172,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withSandbox(SandboxRunPieces pieces) {
-        return copyWith(extraListener, pieces, hostGitPush, pipelineSource);
+        return new ManualRunAssembly(this, extraListener, pieces, hostGitPush, pipelineSource);
     }
 
     /**
@@ -213,7 +187,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration) {
-        return copyWith(extraListener, sandbox, decoration, pipelineSource);
+        return new ManualRunAssembly(this, extraListener, sandbox, decoration, pipelineSource);
     }
 
     /**
@@ -225,7 +199,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withPipelineSource(PipelineSource source) {
-        return copyWith(extraListener, sandbox, hostGitPush, source);
+        return new ManualRunAssembly(this, extraListener, sandbox, hostGitPush, source);
     }
 
     /**
@@ -274,13 +248,12 @@ public final class ManualRunAssembly implements RunAssembly {
 
     /**
      * Selects and pin-guards the run's {@link ExternalCheckClient}. Delegated to {@link
-     * CheckProviderWiring#externalCheckClient}; package-private testing seam: specs inject a
-     * {@code registry} of hand-built providers over a fake secrets provider.
+     * CheckEquipment#externalCheckClient}; package-private testing seam: specs inject a {@code
+     * registry} of hand-built providers over a fake secrets provider.
      */
     ExternalCheckClient externalCheckClient(
             DialogConsole console, LawBinding lawBinding, Map<String, CheckClientFactory> registry) {
-        return CheckProviderWiring.externalCheckClient(
-                this, console, RunLaw.open(lawBinding), registry, CheckRunContext.none());
+        return checks.externalCheckClient(console, RunLaw.open(lawBinding), CheckRunContext.none(), registry);
     }
 
     /**

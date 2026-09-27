@@ -75,7 +75,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
                 INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
         def trackerValidatorRegistry = TrackerValidatorStub.acceptingGithubSource()
         def boardCommand = new BoardCommand(
-                clock, factoryProperties, [github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry,
+                clock, factoryProperties, new TrackerWiring([github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry),
                 liveConsole())
 
         and: 'the board CLI\'s default readyLimit (50), stood in for as the dashboard\'s own choice too'

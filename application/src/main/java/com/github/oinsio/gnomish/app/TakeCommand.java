@@ -2,24 +2,15 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
-import com.github.oinsio.gnomish.app.take.AbortFuse;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.status.MdcEventListener;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Clock;
-import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -35,7 +26,7 @@ import org.springframework.boot.ApplicationArguments;
  * TakeExitCodeException} — never a direct {@code System.exit} (project convention).
  *
  * <p>Pipeline load, the FR17 no-{@code tracker:}-section refusal, and tracker-adapter resolution are
- * delegated to {@link TakeCommandSupport}; tracker-adapter resolution to {@link TrackerResolution};
+ * delegated to {@link TakeCommandSupport}; tracker-adapter resolution to {@link TrackerWiring};
  * the explicit/bare dispatch to {@link TakeDispatcher} — all
  * split out for file size. A live {@link Tracker} and the {@link TakeHeartbeat} over it are resolved
  * per invocation, never as Spring {@code @Bean}s (which tracker adapter is active depends on the
@@ -44,9 +35,6 @@ import org.springframework.boot.ApplicationArguments;
  * around dispatch, so it runs for the whole invocation regardless of how it ends (fix-reaper-idle-
  * liveness FR1, FR5).
  *
- * <p>Not a Spring {@code @Component}: {@code ManualRunRunner} constructs it imperatively (via {@link
- * TakeCommandFactory}), exactly like {@link GitModeRunner}/{@link GitResumeRunner}.
- *
  * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port.
  */
 final class TakeCommand {
@@ -54,91 +42,50 @@ final class TakeCommand {
     private static final Logger log = LoggerFactory.getLogger(TakeCommand.class);
 
     private final TakeArgumentsParser argumentsParser = new TakeArgumentsParser();
-    private final RunAssembly assembly;
+    private final SlotWiringFactory slotWiringFactory;
     private final TaskGit git;
-    private final Path worktreesRoot;
-    private final String taskIdMdcKey;
     private final FactoryProperties factoryProperties;
     private final Clock clock;
-    private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
-    private final SecretsProvider secretsProvider;
-    private final PipelineSource pipelineSource;
-    private final Sleeper heartbeatSleeper;
-    private final Sleeper reaperSleeper;
-    private final MonotonicTime heartbeatMonotonicTime;
-    private final TakeoverConfirmation takeoverConfirmation;
-    private final ServeProperties serveProperties;
+    private final TrackerWiring trackerWiring;
+    private final TakeCommandSeams seams;
     private final SandboxLifecyclePass sandboxLifecyclePass;
-    private final ContainerTakeSupport containerTakeSupport;
 
     /**
-     * The canonical construction; {@link TakeCommandFactory} supplies the {@code heartbeatSleeper}
-     * (task 6.1), {@code reaperSleeper} (fix-reaper-idle-liveness FR5), {@code
-     * heartbeatMonotonicTime} (task 6.6), {@code takeoverConfirmation} (task 6.2), and {@code
-     * serveProperties} (task 6.2) test seams, defaulting them to production values for the {@code
-     * ManualRunRunner} wiring.
+     * The canonical construction; production wiring passes {@link TakeCommandSeams#DEFAULTS} with
+     * the installation's own {@link ServeProperties}, a spec layers on the seams it overrides.
      *
-     * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
+     * @param slotWiringFactory builds the invocation's one {@link SlotWiring} once the tracker is
+     *     bound — the equipment {@code take} shares with {@code serve} (design D9 of
+     *     collapse-composition-roots)
      * @param git the task-branch git port shared with the manual-run path; never null
-     * @param worktreesRoot the root directory under which per-task worktrees are created; never null
-     * @param taskIdMdcKey the MDC key set once a resume bootstrap succeeds; never null
      * @param factoryProperties supplies the instance-name half of the minted {@link InstanceId} and
      *     the abort-backoff base/cap defaults (design D5, D6, D10); never null
-     * @param clock supplies "now" for bare-mode backoff and the abort timestamp; never null
-     * @param trackerAdapterRegistry known tracker adapter factories, keyed by {@code tracker.type}
-     * @param secretsProvider the seam the resolved adapter reads its credentials through, handed to
-     *     the factory per call rather than captured in it (FR2, design D2 of add-plugin-architecture)
-     * @param pipelineSource where the definition is read from — at startup by binding from the
-     *     refreshed default branch, per claim by binding from the task's law commit (FR13 of
-     *     add-base-ref-resolution); its configured realization also rejects a malformed {@code
-     *     tracker.<type>} at load time (FR17)
-     * @param heartbeatSleeper the beat-interval sleeper injected into the per-invocation heartbeat (FR1)
-     * @param reaperSleeper the standing reaper's OWN interval sleeper, independent of {@code
-     *     heartbeatSleeper} so a test can drive the two threads' ticks separately (fix-reaper-idle-
-     *     liveness FR5); production wiring passes the same sleeper for both, which is harmless
-     * @param heartbeatMonotonicTime the monotonic time the per-invocation reaper's TTL is measured on
-     *     (FR4, M2)
-     * @param takeoverConfirmation the pre-claim {@code Working}-takeover confirmation seam (FR6, D9)
-     * @param serveProperties supplies batch mode's concurrency limit N ({@code factory.serve.slots}
-     *     — FR2 of add-factory-serve: "the N limit applies to batch and serve", no separate batch
-     *     flag); never null
+     * @param clock supplies "now" for bare-mode backoff and takeover; never null
+     * @param trackerWiring the one owner of the adapter registry, the credential seam and the
+     *     definition source (design D2 of collapse-composition-roots): binds the startup law from the
+     *     refreshed default branch and resolves the invocation's tracker
+     * @param seams the heartbeat and reaper sleepers (FR1; fix-reaper-idle-liveness FR5), the
+     *     reaper's monotonic time (FR4, M2), the takeover confirmation (FR6, D9) and batch mode's
+     *     {@link ServeProperties} (FR2 of add-factory-serve: "the N limit applies to batch and
+     *     serve")
      * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
      *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
-     * @param containerTakeSupport the container-mode take support carried in the invocation's {@link SlotWiring}
      */
     TakeCommand(
-            RunAssembly assembly,
+            SlotWiringFactory slotWiringFactory,
             TaskGit git,
-            Path worktreesRoot,
-            String taskIdMdcKey,
             FactoryProperties factoryProperties,
             Clock clock,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            SecretsProvider secretsProvider,
-            PipelineSource pipelineSource,
-            Sleeper heartbeatSleeper,
-            Sleeper reaperSleeper,
-            MonotonicTime heartbeatMonotonicTime,
-            TakeoverConfirmation takeoverConfirmation,
-            ServeProperties serveProperties,
-            SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport) {
-        this.sandboxLifecyclePass = sandboxLifecyclePass;
-        this.containerTakeSupport = containerTakeSupport;
-        this.assembly = assembly;
+            TrackerWiring trackerWiring,
+            TakeCommandSeams seams,
+            SandboxLifecyclePass sandboxLifecyclePass) {
+        this.slotWiringFactory = slotWiringFactory;
         this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.taskIdMdcKey = taskIdMdcKey;
         this.factoryProperties = factoryProperties;
         this.clock = clock;
-        this.trackerAdapterRegistry = trackerAdapterRegistry;
-        this.secretsProvider = secretsProvider;
-        this.pipelineSource = pipelineSource;
-        this.heartbeatSleeper = heartbeatSleeper;
-        this.reaperSleeper = reaperSleeper;
-        this.heartbeatMonotonicTime = heartbeatMonotonicTime;
-        this.takeoverConfirmation = takeoverConfirmation;
-        this.serveProperties = serveProperties;
+        this.trackerWiring = trackerWiring;
+        this.seams = seams;
+        this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
 
     /**
@@ -160,85 +107,67 @@ final class TakeCommand {
             TakeArguments takeArguments = argumentsParser.parse(args);
             // FR13, D14/D15 of add-base-ref-resolution: the definition comes from the refreshed
             // default branch of origin, read from git objects — never from the clone's checkout.
-            TrustedTierStartup.StartupLaw startupLaw = TrustedTierStartup.bind(
-                    takeArguments.dir(), git.baseRefs(), pipelineSource, trackerAdapterRegistry);
+            TrustedTierStartup.StartupLaw startupLaw =
+                    trackerWiring.bindStartupLaw(takeArguments.dir(), git.baseRefs());
             PipelineDefinition definition = startupLaw.definition();
             // FR13, D15 of add-base-ref-resolution: bound once here, threaded to every fresh
             // claim this invocation makes — never re-read per claim.
             TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
             InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-            TrackerAdapterFactory factory = TrackerResolution.resolveFactory(trackerConfig, trackerAdapterRegistry);
+            TrackerAdapterFactory factory = trackerWiring.resolveFactory(trackerConfig);
             // FR4, design D2 of fix-claim-epoch-fence: the one funnel a claiming command resolves
             // through — the adapter stamps from the bundle's book and the decorator fills the same
             // book, so no assembly can stamp one record and record another.
-            Tracker tracker = TrackerResolution.resolveTracker(
-                    factory, trackerConfig, secretsProvider, instanceId.value(), git.epochs());
-            List<String> credentialEnvVarsToScrub = factory.credentialEnvVars(trackerConfig);
+            Tracker tracker = trackerWiring.resolveTracker(factory, trackerConfig, instanceId, git.epochs());
+            // FR8, design D8 of collapse-composition-roots: what this invocation bound, as one value
+            // from here to the last relay of the dispatch chain.
+            var bound = new BoundTracker(definition, trustedBase, trackerConfig, factory, tracker, instanceId);
 
             // Task 6.1 of add-claim-heartbeat (FR1): the instance heartbeat is built once per
             // invocation over this run's tracker and beat/TTL config; its progress listener is fanned
             // into the engine run's listener composite and its lifecycle is driven at the claim choke
             // point (TakeClaimAndWork#dispatchAfterClaim).
             TakeHeartbeat heartbeat = TakeHeartbeat.forRun(
-                    tracker, trackerConfig, heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime);
-            // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs on its own thread for the
-            // whole invocation, independent of the heartbeat tick, so a stale-claim sweep is not
-            // starved by a stuck or slow beat; it is stopped exactly once, however the run ends
-            // (normal completion, TakeExitCodeException, or any other exception).
-            heartbeat.standingReaper().start();
+                    tracker,
+                    trackerConfig,
+                    seams.heartbeatSleeper(),
+                    seams.reaperSleeper(),
+                    seams.heartbeatMonotonicTime());
+            // The take side's one slot wiring (design "Where a SlotWiring is built" of
+            // introduce-slot-wiring; built by the factory of design D9 of collapse-composition-roots):
+            // built once per invocation, as soon as the heartbeat exists, and shared by explicit,
+            // bare and batch mode. One abort handler for the invocation — it is a stateless record
+            // over the tracker and clock, and the tracker is the same for every ref. Built before the
+            // reaper starts, so its MDC key is in hand for the finally that clears it.
+            SlotWiring wiring = slotWiringFactory.slotWiring(bound, git, heartbeat);
             try {
-                // FR6, NFR-O4 of add-serve-sandbox-lifecycle: one startup sweep pass before
-                // dispatch, sharing the heartbeat's own liveness oracle (no second tracker
-                // listing, NFR-C2). Inside the try: the reaper is already running, so a pass that
-                // throws (a Docker outage aborts it, NFR-R1) must still stop the reaper thread —
-                // and must never fail the take, since the sweep is hygiene, not the task.
-                TakeCommandSupport.sweepSandboxLifecycle(
-                        sandboxLifecyclePass,
-                        takeArguments.dir(),
-                        heartbeat.livenessOracle().evaluate(),
-                        log);
-                // The source the startup definition came from is what every fresh claim reads its
-                // task tier through (FR13 of add-base-ref-resolution): one registry, two reads.
-                RunAssembly takeAssembly =
-                        assembly.withExtraListener(heartbeat.progress()).withPipelineSource(pipelineSource);
-                // The take side's one slot wiring (design "Where a SlotWiring is built" of
-                // introduce-slot-wiring): built once per invocation, as soon as the heartbeat and
-                // the augmented assembly exist, and shared by explicit, bare and batch mode. One
-                // abort handler for the invocation — it is a stateless record over the tracker and
-                // clock, and the tracker is the same for every ref.
-                var wiring = new SlotWiring(
-                        takeAssembly,
-                        git,
-                        worktreesRoot,
-                        taskIdMdcKey,
-                        new AbortFuse(new AbortHandler(tracker, clock), trackerConfig.abortThreshold()),
-                        credentialEnvVarsToScrub,
-                        containerTakeSupport,
-                        heartbeat.tenure(),
-                        trustedBase);
-                var dispatcher = new TakeDispatcher(
-                        wiring,
-                        factoryProperties,
-                        clock,
-                        trackerAdapterRegistry,
-                        secretsProvider,
-                        takeoverConfirmation);
-                TakeRefDispatch.run(
-                        dispatcher,
-                        takeArguments,
-                        definition,
-                        trackerConfig,
-                        tracker,
-                        instanceId,
-                        factory,
-                        serveProperties,
-                        log);
+                // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs on its own thread for
+                // the whole invocation, independent of the heartbeat tick, so a stale-claim sweep is
+                // not starved by a stuck or slow beat; it is stopped exactly once, however the run
+                // ends (normal completion, TakeExitCodeException, or any other exception).
+                heartbeat.standingReaper().start();
+                try {
+                    // FR6, NFR-O4 of add-serve-sandbox-lifecycle: one startup sweep pass before
+                    // dispatch, sharing the heartbeat's own liveness oracle (no second tracker
+                    // listing, NFR-C2). Inside the try: the reaper is already running, so a pass that
+                    // throws (a Docker outage aborts it, NFR-R1) must still stop the reaper thread —
+                    // and must never fail the take, since the sweep is hygiene, not the task.
+                    TakeCommandSupport.sweepSandboxLifecycle(
+                            sandboxLifecyclePass,
+                            takeArguments.dir(),
+                            heartbeat.livenessOracle().evaluate(),
+                            log);
+                    var dispatcher = new TakeDispatcher(
+                            wiring, factoryProperties, clock, trackerWiring, seams.takeoverConfirmation());
+                    TakeRefDispatch.run(dispatcher, takeArguments, bound, seams.serveProperties(), log);
+                } finally {
+                    heartbeat.standingReaper().stop();
+                }
             } finally {
-                heartbeat.standingReaper().stop();
+                MDC.remove(wiring.taskIdMdcKey());
             }
         } finally {
-            MDC.remove(taskIdMdcKey);
             // FR8: backstop — an abort thrown out of the engine skips TaskFinished, so the
             // stage/attempt keys are cleared here alongside taskId.
             MdcEventListener.clearAttemptScope();

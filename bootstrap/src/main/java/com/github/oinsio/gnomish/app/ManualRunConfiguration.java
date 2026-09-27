@@ -22,10 +22,12 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Random;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -33,11 +35,12 @@ import org.springframework.context.annotation.Primary;
 /**
  * Assembles every {@code gnomish run} collaborator that needs no per-invocation data — the
  * context-independent half of {@link com.github.oinsio.gnomish.domain.engine.EnginePorts}'s bean
- * graph (design D10). The remaining collaborators (the interactive adapters, the status snapshot
- * pipeline, {@code EnginePorts} itself) depend on the {@link
+ * graph (design D10), and the manual-run drive assembled from it (design D6 of
+ * collapse-composition-roots). The remaining collaborators (the interactive adapters, the status
+ * snapshot pipeline, {@code EnginePorts} itself) depend on the {@link
  * com.github.oinsio.gnomish.domain.engine.TaskContext} synthesized from {@code --task}/{@code
  * --task-file} at runtime and cannot be known at Spring context-refresh time; {@link
- * ManualRunRunner} builds those imperatively once that context exists, using the beans here as
+ * ManualRunAssembly} builds those imperatively once that context exists, using the beans here as
  * building blocks.
  *
  * <p>{@link Random} and {@link Clock} beans are the two collaborators {@link
@@ -208,6 +211,108 @@ public class ManualRunConfiguration {
         return new SystemConsoleIO(System.in, System.err);
     }
 
+    /**
+     * The context-independent run assembly (design D3 of collapse-composition-roots): built once
+     * here from its ingredients, so {@link ManualRunRunner} takes the assembly rather than
+     * re-listing what it is made of. The runner derives its listener-carrying copy from this one
+     * with {@code withExtraListener}; the plain instance is what {@code take} and {@code serve}
+     * receive.
+     */
+    @Bean
+    public ManualRunAssembly manualRunAssembly(
+            SystemConsoleIO systemConsoleIO,
+            @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO,
+            CheckEquipment checkEquipment,
+            SystemClock systemClock,
+            ThreadSleeper threadSleeper,
+            FactoryProperties factoryProperties,
+            SandboxProperties sandboxProperties) {
+        return new ManualRunAssembly(
+                systemConsoleIO,
+                errorConsoleIO,
+                checkEquipment,
+                systemClock,
+                threadSleeper,
+                factoryProperties,
+                sandboxProperties);
+    }
+
+    /**
+     * The installation's check equipment (design D11 and the {@code CheckEquipment} row of
+     * collapse-composition-roots): the two built-in check runners, the discovered check-client
+     * registry and the credential seam, which every run's check ports are built from.
+     */
+    @Bean
+    public CheckEquipment checkEquipment(
+            FilesExistCheckRunner filesExistCheckRunner,
+            ShellCommandCheckRunner shellCommandCheckRunner,
+            Map<String, CheckClientFactory> checkClientRegistry,
+            SecretsProvider secretsProvider,
+            FactoryProperties factoryProperties) {
+        return new CheckEquipment(
+                filesExistCheckRunner,
+                shellCommandCheckRunner,
+                checkClientRegistry,
+                secretsProvider,
+                factoryProperties);
+    }
+
+    /**
+     * The manual runners (design D6, D11 of collapse-composition-roots): {@code gnomish run}'s four
+     * git-mode control flows over the summary-carrying assembly, with the host-or-container choice
+     * they make over {@link ContainerSupports#plan}. The container pair gets {@code run}'s own
+     * {@code manual} support.
+     */
+    @Bean
+    ManualRunners manualRunners(
+            ManualRunAssembly manualRunAssembly,
+            TaskGit git,
+            FactoryPaths paths,
+            SandboxProperties sandboxProperties,
+            FactoryProperties factoryProperties,
+            ContainerSupports containerSupports,
+            SystemConsoleIO systemConsoleIO) {
+        ManualRunAssembly assembly = manualRunAssembly.withRunSummary();
+        ContainerSupportFactory containerSupport = containerSupports.manualSupport();
+        return new ManualRunners(
+                new GitModeRunner(assembly, git, paths.worktreesRoot(), systemConsoleIO),
+                new GitResumeRunner(assembly, git, paths.worktreesRoot(), ManualRunRunner.TASK_ID_KEY),
+                new ContainerGitModeRunner(
+                        assembly, git, sandboxProperties, factoryProperties, containerSupport, systemConsoleIO),
+                new ContainerResumeRunner(
+                        assembly,
+                        git,
+                        sandboxProperties,
+                        factoryProperties,
+                        ManualRunRunner.TASK_ID_KEY,
+                        containerSupport),
+                containerSupports);
+    }
+
+    /**
+     * The manual-run drive (design D6 of collapse-composition-roots): parse, load and dispatch one
+     * {@code gnomish run} invocation, holding every collaborator it uses; the in-place flow runs on
+     * the summary-carrying assembly, the git-mode flows on {@link #manualRunners}.
+     */
+    @Bean
+    ManualRunDrive manualRunDrive(
+            RunArgumentsParser runArgumentsParser,
+            PipelineStartup pipelineStartup,
+            AdHocTaskSynthesizer adHocTaskSynthesizer,
+            ManualRunAssembly manualRunAssembly,
+            InMemoryAttemptPersistence attemptPersistence,
+            SystemConsoleIO systemConsoleIO,
+            ManualRunners manualRunners) {
+        return new ManualRunDrive(
+                runArgumentsParser,
+                pipelineStartup,
+                adHocTaskSynthesizer,
+                manualRunAssembly.withRunSummary(),
+                attemptPersistence,
+                systemConsoleIO,
+                manualRunners);
+    }
+
     @Bean
     public Clock javaTimeClock() {
         return Clock.systemUTC();
@@ -224,23 +329,14 @@ public class ManualRunConfiguration {
     }
 
     /**
-     * The root directory under which per-task git worktrees are materialized (FR6 of
-     * add-git-workflow, design D6): {@code ~/.gnomish/worktrees}, outside any project clone, so
-     * one factory instance can serve several projects without littering any of them.
+     * The installation directories (FR3, FR5, design D4 of collapse-composition-roots): the
+     * per-task worktree root ({@code ~/.gnomish/worktrees}, FR6 of add-git-workflow, design D6) and
+     * the home directory {@code serve}'s observability files resolve against (task 5.1, FR9, design
+     * D2 of add-serve-observability) — one bean with two named accessors, replacing the two bare
+     * {@code Path} beans every consumer used to tell apart by parameter name.
      */
     @Bean
-    public Path worktreesRoot() {
-        return Path.of(System.getProperty("user.home"), ".gnomish", "worktrees");
-    }
-
-    /**
-     * The user's home directory, injected rather than read inline by {@code serve}'s wiring (task
-     * 5.1 of add-serve-observability) so {@link ObservabilityAssembly} — and its callers' tests —
-     * can substitute a temp directory instead of touching the real {@code ~/.gnomish/serve/}
-     * (FR9, design D2).
-     */
-    @Bean
-    public Path homeDir() {
-        return Path.of(System.getProperty("user.home"));
+    public FactoryPaths factoryPaths() {
+        return FactoryPaths.underHome(Path.of(System.getProperty("user.home")));
     }
 }

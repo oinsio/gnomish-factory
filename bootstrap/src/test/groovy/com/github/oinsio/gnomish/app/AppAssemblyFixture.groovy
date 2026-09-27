@@ -27,9 +27,11 @@ import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
+import java.util.function.BooleanSupplier
 import org.springframework.boot.DefaultApplicationArguments
 
 /**
@@ -78,10 +80,12 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 // The error console the composition root binds to System.err; a spec capturing the
                 // run's output reads `output` above, and the terminal error paths stay on stderr.
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                new EnvFileSecretsProvider(),
+                new CheckEquipment(
+                        new FilesExistCheckRunner(),
+                        new ShellCommandCheckRunner(),
+                        [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
+                        new EnvFileSecretsProvider(),
+                        factoryProperties),
                 new SystemClock(),
                 new ThreadSleeper(),
                 factoryProperties,
@@ -114,7 +118,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
     }
 
     /**
-     * Builds a fresh {@link ManualRunRunner} from its standard 21-collaborator
+     * Builds a fresh {@link ManualRunRunner} from its standard collaborator
      * set, shared by every composition-root spec that constructs the runner
      * directly rather than through {@link #newAssembly}. {@code
      * sandboxProperties} and {@code bindingProperties} are the two arguments
@@ -141,8 +145,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             // tell the runner's own git bundle apart from the identity default supply their own.
             TaskGit git = TaskGitFixture.real(),
             FactoryProperties factoryProperties = testProperties(),
-            BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, [:],
-            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), LiveConsoleIO.onStdout()),
+            BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
             // The tracker registry the dispatch hands `take`/`serve`; empty for the host git-mode
             // specs, which never reach a tracker.
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry = [:],
@@ -150,39 +153,84 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             // The default reads the developer's real git, as production does; a spec proving the
             // refusal hands in a check over a fake git (GitVersionFloorSpec).
             GitVersionCheck gitVersionCheck = new GitVersionCheck(new GitProcessRunner())) {
-        new ManualRunRunner(
+        buildManualRunRunner(worktreesRoot, homeDir, sandboxProperties, bindingProperties, git, factoryProperties,
+                boardCommand, trackerAdapterRegistry, gitVersionCheck, DockerRuntimeProbe.&dockerAvailable as BooleanSupplier)
+    }
+
+    /**
+     * As {@link #newManualRunRunner} with every default, over a scripted container prerequisite
+     * probe (D13 of add-sandbox-core) — the runner a daemon-free container dispatch spec drives,
+     * through the test constructor of {@link ContainerSupports} rather than a field write.
+     */
+    ManualRunRunner newManualRunRunnerProbing(Path worktreesRoot, Path homeDir, SandboxProperties sandboxProperties,
+            BindingProperties bindingProperties, BooleanSupplier dockerProbe) {
+        def factoryProperties = testProperties()
+        buildManualRunRunner(worktreesRoot, homeDir, sandboxProperties, bindingProperties, TaskGitFixture.real(),
+                factoryProperties,
+                new BoardCommand(Clock.systemUTC(), factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
+                [:], new GitVersionCheck(new GitProcessRunner()), dockerProbe)
+    }
+
+    private ManualRunRunner buildManualRunRunner(Path worktreesRoot, Path homeDir, SandboxProperties sandboxProperties,
+            BindingProperties bindingProperties, TaskGit git, FactoryProperties factoryProperties, BoardCommand boardCommand,
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry, GitVersionCheck gitVersionCheck,
+            BooleanSupplier dockerProbe) {
+        def paths = new FactoryPaths(worktreesRoot, homeDir)
+        def console = new SystemConsoleIO(System.in, System.out)
+        // The error console the composition root binds to System.err (FR6 of
+        // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
+        def errorConsole = LiveConsoleIO.onStderr()
+        def checkClientRegistry = [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
+        def systemClock = new SystemClock()
+        // The assembly the context's manualRunAssembly bean builds (design D3 of
+        // collapse-composition-roots): the same instances the runner itself receives below.
+        def assembly = new ManualRunAssembly(
+                console,
+                errorConsole,
+                new CheckEquipment(
+                        new FilesExistCheckRunner(),
+                        new ShellCommandCheckRunner(),
+                        checkClientRegistry,
+                        MapSecretsProvider.NONE,
+                        factoryProperties),
+                systemClock,
+                new ThreadSleeper(),
+                factoryProperties,
+                sandboxProperties)
+        // The graph the context assembles (design D6, D11 of collapse-composition-roots), built
+        // through the production bean methods themselves so the fixture cannot drift from them.
+        def manualRun = new ManualRunConfiguration()
+        def commands = new TrackerCommandConfiguration()
+        def containerSupports = new ContainerSupports(checkClientRegistry, factoryProperties, sandboxProperties,
+                bindingProperties, DiscoveredBindings.real(), git, dockerProbe)
+        def trackerWiring = new TrackerWiring(trackerAdapterRegistry, MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())
+        def serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null)
+        def javaTimeClock = Clock.systemUTC()
+        def sandboxLifecyclePass = commands.sandboxLifecyclePass(sandboxProperties, factoryProperties, javaTimeClock)
+        def slotWiringFactory = commands.slotWiringFactory(assembly, paths, javaTimeClock, containerSupports, trackerWiring)
+        def reportCommands = new ReportCommands(
+                new StatusCommand(TaskGitFixture.realClaimless(), paths, LiveConsoleIO.onStdout()),
+                new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout()),
+                boardCommand,
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), paths, factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())))
+        def dispatch = commands.subcommandDispatch(
+                reportCommands,
+                commands.takeCommand(slotWiringFactory, git, factoryProperties, javaTimeClock, trackerWiring,
+                serveProperties, sandboxLifecyclePass),
+                commands.serveCommand(
+                        commands.serveRuntimeAssembly(slotWiringFactory,
+                        commands.serveAssembly(factoryProperties, serveProperties, systemClock), git, paths, javaTimeClock,
+                        sandboxLifecyclePass, sandboxProperties),
+                        git, factoryProperties, serveProperties, trackerWiring, errorConsole))
+        def drive = manualRun.manualRunDrive(
                 new RunArgumentsParser(),
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
                 new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                // The error console the composition root binds to System.err (FR6 of
-                // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
-                LiveConsoleIO.onStderr(),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
+                assembly,
                 new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProperties,
-                sandboxProperties,
-                bindingProperties,
-                DiscoveredBindings.real(),
-                git,
-                worktreesRoot,
-                homeDir,
-                new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, LiveConsoleIO.onStdout()),
-                new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout()),
-                boardCommand,
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, factoryProperties, [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource()),
-                Clock.systemUTC(),
-                trackerAdapterRegistry,
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null, null, null),
-                gitVersionCheck)
+                console,
+                manualRun.manualRunners(assembly, git, paths, sandboxProperties, factoryProperties, containerSupports, console))
+        new ManualRunRunner(gitVersionCheck, dispatch, drive, errorConsole)
     }
 
     /**

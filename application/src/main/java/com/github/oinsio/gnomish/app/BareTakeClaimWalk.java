@@ -69,10 +69,9 @@ record BareTakeClaimWalk(
                 // has just filled, so it reports no free slot out of one — the identical fact the
                 // feed states about its own ledger, not a placeholder.
                 AnchorLog.claimAcquired(candidate.ref().id(), 0, 1);
-                // One of the three places a take order is assembled (design single-owner table of
-                // introduce-take-order): the claimed task exists only from this fetch on.
-                var order = new TakeOrder(run, tracker.fetchTask(candidate.ref()), tracker, instanceId);
-                return claimAndWork.dispatchAfterClaim(order);
+                // The order for an already-claimed task is assembled by its one owner (FR6 of
+                // collapse-composition-roots), shared with the serve slot runner.
+                return claimAndWork.workClaimed(run, candidate.ref(), tracker, instanceId);
             }
             // Held: another instance won the race for this entry between the feed read and this
             // claim attempt — fall through to the next eligible candidate (see class javadoc).

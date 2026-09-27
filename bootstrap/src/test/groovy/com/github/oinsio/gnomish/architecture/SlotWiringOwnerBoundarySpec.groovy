@@ -9,9 +9,10 @@ import spock.lang.Specification
  * second owner the parameter types cannot see.
  *
  * <ul>
- *   <li>{@code SlotWiring} — built at the two assembly points, once per {@code take} invocation
- *       and once per {@code serve} daemon, each right after its run's heartbeat and augmented
- *       assembly exist. A third site would assemble the wiring from members that are not the run's.
+ *   <li>{@code SlotWiring} — built only by {@code SlotWiringFactory.slotWiring} (design D9 of
+ *       collapse-composition-roots), which {@code take} calls once per invocation and {@code serve}
+ *       once per daemon, each right after its run's heartbeat exists. A second site would assemble
+ *       the wiring from members that are not the run's.
  *   <li>{@code RemoteOutageSignalingBaseRefGit} — built only by {@code RemoteOutageGates.signaling}.
  *       The record is package-private, but {@code TakeSlotRunner} shares its package, so the
  *       slot re-decorating its own git (the old way D6 removed) would still compile.
@@ -31,8 +32,7 @@ class SlotWiringOwnerBoundarySpec extends Specification {
     /** Constructed type → the production files allowed to construct it. */
     private static final Map<String, List<String>> OWNERS = [
         'SlotWiring': [
-            APP + 'TakeCommand.java',
-            APP + 'ServeRuntimeAssembly.java',
+            APP + 'SlotWiringFactory.java',
         ],
         'RemoteOutageSignalingBaseRefGit': [
             APP + 'serve/RemoteOutageGates.java',

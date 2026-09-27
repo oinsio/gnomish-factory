@@ -97,19 +97,16 @@ tracker:
 
     private ServeCommand newCommand() {
         def properties = FakeAgentSupport.propertiesFor('plain-round')
-        new ServeCommand(
+        ServeCommands.of(
                 newAssembly(properties),
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
+                new FactoryPaths(worktreesRoot, homeDir),
                 'taskId',
                 properties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
-                [github: fakeFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())
     }

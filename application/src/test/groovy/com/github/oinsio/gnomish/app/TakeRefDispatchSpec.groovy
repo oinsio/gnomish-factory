@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -59,14 +60,16 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
         new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, WORKTREES_ROOT, ContainerTakeSupport.hostOnly(),
                 heartbeat.tenure()), testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
+                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
         TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
                 new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-                pipeline(), TRACKER_CONFIG, tracker, INSTANCE, factory, SERVE_PROPERTIES, LOG)
+                new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),
+                SERVE_PROPERTIES, LOG)
     }
 
     // FR10: no refs means BARE mode — the queue is read and one task is walked for. An empty queue

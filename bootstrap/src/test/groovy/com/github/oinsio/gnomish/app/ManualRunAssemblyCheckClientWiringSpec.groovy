@@ -109,11 +109,13 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                githubRegistry(), { name ->
-                    resolved << name; Optional.of('tok')
-                } as SecretsProvider,
+                new CheckEquipment(
+                        new FilesExistCheckRunner(),
+                        new ShellCommandCheckRunner(),
+                        githubRegistry(), { name ->
+                            resolved << name; Optional.of('tok')
+                        } as SecretsProvider,
+                        githubCheckProperties()),
                 new SystemClock(),
                 new ThreadSleeper(),
                 githubCheckProperties(),
@@ -141,10 +143,12 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                githubRegistry(),
-                new EnvFileSecretsProvider(),
+                new CheckEquipment(
+                        new FilesExistCheckRunner(),
+                        new ShellCommandCheckRunner(),
+                        githubRegistry(),
+                        new EnvFileSecretsProvider(),
+                        githubCheckProperties()),
                 new SystemClock(),
                 new ThreadSleeper(),
                 githubCheckProperties(),

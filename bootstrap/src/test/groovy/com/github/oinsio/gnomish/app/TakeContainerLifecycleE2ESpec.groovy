@@ -126,16 +126,14 @@ tracker:
 
     private TakeCommand newCommand(FactoryProperties factoryProperties, TrackerAdapterFactory trackerFactory) {
         def git = TaskGitFixture.real()
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 git,
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 SandboxLifecyclePass.NONE,
                 containerTakeSupport(factoryProperties, git.epochs()))
     }

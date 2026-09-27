@@ -108,16 +108,14 @@ tracker:
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     def "ready -> claim -> work -> delivered with a final report, told end to end by the tracker's own thread"() {

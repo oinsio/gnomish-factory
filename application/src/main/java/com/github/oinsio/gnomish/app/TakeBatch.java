@@ -1,12 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -115,26 +111,11 @@ final class TakeBatch {
      *     slot or for in-flight refs to finish
      */
     static List<TakeBatchOutcome> dispatch(
-            TakeDispatcher dispatcher,
-            TakeArguments takeArguments,
-            PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            Tracker tracker,
-            InstanceId instanceId,
-            TrackerAdapterFactory factory,
-            int slots)
+            TakeDispatcher dispatcher, TakeArguments takeArguments, BoundTracker bound, int slots)
             throws InterruptedException {
         return run(takeArguments.refs(), slots, rawRef -> {
             try {
-                return dispatcher.runOneRef(
-                        takeArguments,
-                        rawRef,
-                        definition,
-                        trackerConfig,
-                        tracker,
-                        instanceId,
-                        factory,
-                        TakeoverConfirmation.UNAVAILABLE);
+                return dispatcher.runOneRef(takeArguments, rawRef, bound, TakeoverConfirmation.UNAVAILABLE);
             } finally {
                 // FR8: the whole context map, not the three keys by name. Each ref runs on its own
                 // dedicated virtual thread (this class's run loop) whose entire context belongs to

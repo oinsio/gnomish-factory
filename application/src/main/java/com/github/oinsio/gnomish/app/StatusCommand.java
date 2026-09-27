@@ -59,12 +59,12 @@ final class StatusCommand {
     private final StatusReportJsonMapper jsonMapper = new StatusReportJsonMapper();
     private final TaskListRenderer taskListRenderer = new TaskListRenderer();
     private final BranchShapeReportRenderer shapeRenderer = new BranchShapeReportRenderer();
-    private final Path worktreesRoot;
+    private final FactoryPaths paths;
     private final ConsoleIO console;
 
-    StatusCommand(TaskGit git, Path worktreesRoot, ConsoleIO console) {
+    StatusCommand(TaskGit git, FactoryPaths paths, ConsoleIO console) {
         this.git = git;
-        this.worktreesRoot = worktreesRoot;
+        this.paths = paths;
         this.console = console;
     }
 
@@ -132,7 +132,7 @@ final class StatusCommand {
     }
 
     private void printFound(Path dir, String taskId, StatusReport report, boolean json) {
-        Path worktree = TaskWorktreePath.resolve(worktreesRoot, dir, taskId);
+        Path worktree = TaskWorktreePath.resolve(paths.worktreesRoot(), dir, taskId);
         if (json) {
             console.printMachine(jsonMapper.serialize(report) + ConsoleIO.LINE_END);
         } else {

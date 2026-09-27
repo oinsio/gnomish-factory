@@ -25,8 +25,8 @@ import java.util.List;
  * Builds the {@link Run} for one {@link ManualRunAssembly#assemble} call: the console, the event
  * listeners, the child-environment allowlist and the engine ports. Two responsibilities it does
  * not own live beside it — {@link RunLaw} opens and freezes the law and builds its pin guard, and
- * {@link CheckProviderWiring} derives what the configured check providers contribute — so this
- * class wires, and asks.
+ * {@link CheckEquipment} builds the run's check ports and derives what the configured check
+ * providers contribute — so this class wires, and asks.
  *
  * <p>Implements FR7, FR10, NFR-O1, UX1, D6, D10 of add-agent-executor; D10 of add-manual-run; FR7
  * of add-git-workflow; FR11 of add-claim-heartbeat; FR16, FR26, D14 of add-sandbox-core.
@@ -98,26 +98,14 @@ final class RunAssembler {
         // credential name in passthrough fails the run at assembly time.
         var childEnv = ChildEnvAllowlist.of(
                 assembly.sandboxProperties.envPassthrough(),
-                CheckProviderWiring.credentialNames(assembly, definition, credentialEnvVarsToScrub));
+                assembly.checks.credentialNames(definition, credentialEnvVarsToScrub));
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
-        var builtinRunner = sandbox == null
-                ? assembly.filesExistCheckRunner
-                : assembly.filesExistCheckRunner.withAttemptReader(sandbox.attemptReader());
-        var commandRunner = assembly.shellCommandCheckRunner.withChildEnv(childEnv);
-        if (sandbox != null) {
-            commandRunner = commandRunner.withEnvironments(sandbox.checkEnvironments());
-        }
         var ports = new EnginePorts(
                 ExecutorAdapterSelector.stageExecutor(console, interactiveMode, holder, assembly, childEnv, law),
-                builtinRunner,
-                commandRunner,
-                CheckProviderWiring.externalCheckClient(
-                        assembly,
-                        console,
-                        runLaw,
-                        assembly.checkClientRegistry,
-                        RunCheckRunContext.of(context, holder)),
+                assembly.checks.builtinRunner(sandbox),
+                assembly.checks.commandRunner(childEnv, sandbox),
+                assembly.checks.externalCheckClient(console, runLaw, RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
                         console,
                         interactiveMode,

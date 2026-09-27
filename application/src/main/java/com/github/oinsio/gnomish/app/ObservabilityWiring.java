@@ -3,10 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
-import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
-import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
@@ -19,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The daemon-lifetime observability handle {@link ServeCommand}/{@link ServeShutdownWiring} drive
  * (task 5.1, FR1, FR4, FR12): bundles everything {@link ObservabilityAssembly#assemble} built —
  * the {@link SnapshotWriter}, the {@link LifecycleStateTracker} both the writer's supplier and
- * the ledger's {@code lifecycle} lines read from, and the ledger writers — behind a small, ordered
+ * the ledger's {@code lifecycle} lines read from, and the instance's {@link LedgerWriters} — behind a small, ordered
  * set of lifecycle methods, so neither caller needs to know the construction-order dance {@link
  * ObservabilityAssembly} performed to get here.
  *
@@ -35,44 +32,29 @@ final class ObservabilityWiring {
 
     private final LifecycleStateTracker lifecycleTracker;
     private final SnapshotWriter snapshotWriter;
-    private final LifecycleLedgerWriter lifecycleLedgerWriter;
-    private final TaskOutcomeLedgerWriter taskOutcomeLedgerWriter;
-    private final SweepLedgerWriter sweepLedgerWriter;
-    private final RemoteOutageLedgerWriter remoteOutageLedgerWriter;
-    private final RotatingLedgerAppender ledgerAppender;
-    private final InstanceInfo instance;
+    private final LedgerWriters ledgerWriters;
     private final Clock clock;
     private final AtomicBoolean stopped = new AtomicBoolean();
 
     ObservabilityWiring(
             LifecycleStateTracker lifecycleTracker,
             SnapshotWriter snapshotWriter,
-            LifecycleLedgerWriter lifecycleLedgerWriter,
-            TaskOutcomeLedgerWriter taskOutcomeLedgerWriter,
-            SweepLedgerWriter sweepLedgerWriter,
-            RemoteOutageLedgerWriter remoteOutageLedgerWriter,
-            RotatingLedgerAppender ledgerAppender,
-            InstanceInfo instance,
+            LedgerWriters ledgerWriters,
             Clock clock) {
         this.lifecycleTracker = lifecycleTracker;
         this.snapshotWriter = snapshotWriter;
-        this.lifecycleLedgerWriter = lifecycleLedgerWriter;
-        this.taskOutcomeLedgerWriter = taskOutcomeLedgerWriter;
-        this.sweepLedgerWriter = sweepLedgerWriter;
-        this.remoteOutageLedgerWriter = remoteOutageLedgerWriter;
-        this.ledgerAppender = ledgerAppender;
-        this.instance = instance;
+        this.ledgerWriters = ledgerWriters;
         this.clock = clock;
     }
 
     /** The {@code taskOutcome} write point every slot attaches to (FR11); never null. */
     TaskOutcomeLedgerWriter taskOutcomeLedgerWriter() {
-        return taskOutcomeLedgerWriter;
+        return ledgerWriters.taskOutcome();
     }
 
     /** The sweep's ledger write point, both its verdict and its tick sink (NFR-O2); never null. */
     SweepLedgerWriter sweepLedgerWriter() {
-        return sweepLedgerWriter;
+        return ledgerWriters.sweep();
     }
 
     /**
@@ -81,13 +63,13 @@ final class ObservabilityWiring {
      * wiring exists (NFR-O1, NFR-O3 of add-base-ref-resolution); never null.
      */
     RemoteOutageLedgerWriter remoteOutageLedgerWriter() {
-        return remoteOutageLedgerWriter;
+        return ledgerWriters.remoteOutage();
     }
 
     /** Starts the snapshot writer thread and records the {@code started} ledger line (FR1, FR12). */
     void start() {
         snapshotWriter.start();
-        lifecycleLedgerWriter.writeStarted();
+        ledgerWriters.lifecycle().writeStarted();
     }
 
     /** Moves the daemon to {@code draining}: finishing in-flight tasks, claiming no new ones (FR4). */
@@ -114,13 +96,13 @@ final class ObservabilityWiring {
             return;
         }
         lifecycleTracker.stop(reason, clock.instant());
-        lifecycleLedgerWriter.writeStopped(reason);
+        ledgerWriters.lifecycle().writeStopped(reason);
         snapshotWriter.stopAfterFinalWrite();
     }
 
     /** A fresh drain-run {@code runSummary} writer over this instance's shared ledger appender (FR13). */
     RunSummaryLedgerWriter newRunSummaryLedgerWriter() {
-        return new RunSummaryLedgerWriter(ledgerAppender, instance, clock);
+        return ledgerWriters.newRunSummary();
     }
 
     /** The current instant on this wiring's clock — the drain run's {@code startedAt} (FR13). */

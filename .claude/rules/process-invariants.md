@@ -50,6 +50,16 @@ prefer distinct value types or a parameter object. A mechanical build gate for t
 should land together with the refactoring that brings existing offenders under it — turning
 it on earlier just paints the build red.
 
+**Composition sites take facades, not parameter objects** (`docs/adr/0010-facade-over-parameter-object.md`).
+A parameter object fits a group that recurs across signatures of code that *uses* it; the
+argument list of a root, an assembly or a command constructor recurs nowhere, so bundling it
+hides the responsibility count without reducing it. Before extracting a facade there, answer
+the ADR's three questions in the change's single-owner table — used together, a method beyond
+accessors, a name the reader already has — and record a rejection when one fails. A consumer
+that needs part of a facade takes a role interface the facade implements, never members read
+back out through accessors; a facade carrying a credential seam exposes no accessor for it,
+and the seam's reach (the files declaring it) is pinned by an architecture spec.
+
 ## Immutable after construction
 
 An object is fully initialized by its constructor: no `init()`, `start()`-before-use without

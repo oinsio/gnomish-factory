@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
@@ -92,7 +93,8 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
                 store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
                 slotWiring(assembly, git, tracker, worktreesRoot, ContainerTakeSupport.hostOnly(), heartbeat.tenure()),
-                testProperties(), FIXED_CLOCK, ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE,
+                testProperties(), FIXED_CLOCK,
+                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 TakeoverConfirmation.UNAVAILABLE)
     }
 
@@ -100,8 +102,8 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
         TakeRefDispatch.run(dispatcher(assemblyRunning(new ScriptedExecutor([completedRound()])), heartbeat),
         new TakeArguments(cloneDir, refs, RunArguments.InteractiveMode.NONE, null, false, false),
-        completingPipeline(), TRACKER_CONFIG, tracker, INSTANCE, Stub(TrackerAdapterFactory),
-        SERVE_PROPERTIES, LOG)
+        new BoundTracker(completingPipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, Stub(TrackerAdapterFactory), tracker,
+        INSTANCE), SERVE_PROPERTIES, LOG)
     }
 
     /** The rendered {@code wall=} field of the one captured summary line. */

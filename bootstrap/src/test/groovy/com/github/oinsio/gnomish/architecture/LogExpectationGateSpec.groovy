@@ -32,6 +32,9 @@ import spock.lang.Specification
  * become the build's verdict (its fabricated lines carry no code, the row kind the verdict skips),
  * and no invented {@code GFnnn} literal at all — {@link LogContractGateSpec} pins {@code GF999} as
  * the code no test source names. Where a code is needed it comes from the catalog.
+ *
+ * <p>NFR-O1 of collapse-composition-roots: the gate this spec backs passing with no expectation file
+ * edited is that change's evidence that log lines, MDC keys and event codes did not move.
  */
 class LogExpectationGateSpec extends Specification {
 

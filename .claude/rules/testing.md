@@ -52,6 +52,18 @@ The bar, checked per class and never as a blanket:
 
 Because the exclusion is class-level, a class holding both arid construction and one genuinely assertable method is *not* exempted — write the spec instead.
 
+An **assembly object** is the standing member of this category: a class that was once a
+static helper "extracted for file size", taking its origin's fields as parameters, and was
+turned back into an instance holding them (the fields-into-parameters clause of
+`process-invariants.md`; ADR 0010, "An assembly object gets no spec of its own"). It carries
+no decision, so a spec written for it can only restate the constructor calls it makes. It
+gets no spec; it is exercised through the effect on the real flow (`ServeRuntimeWiringSpec`
+is the model) and listed here with that suite named. Precedent: `ServeRuntimeAssembly`
+(`collapse-composition-roots`, design D7). An instance that came out of the same refactoring
+but gained a decision of its own (`ContainerRunSupportFactory` merges three credential sources
+in `create`; `ServeAssembly` keeps its effect-asserting specs) is not an assembly object: it
+stays in the mutation scope with its spec.
+
 ### Per-class exemptions (`excludedClasses`, integration-covered)
 
 The second accepted reason to list a class: its behavior is already covered, scenario by scenario, by a suite that legitimately lives in a **different module** — so per-module mutation scoping reports it as uncovered while the coverage genuinely exists. Duplicating that suite one module down, over hand-built stand-ins for collaborators it drives for real, produces a weaker test of the same behavior and two places to keep in step.

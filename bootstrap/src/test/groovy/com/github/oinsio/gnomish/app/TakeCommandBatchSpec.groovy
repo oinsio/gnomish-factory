@@ -7,19 +7,13 @@ import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -36,7 +30,7 @@ import spock.lang.Timeout
  * Implements FR2, FR3, NFR-O2, UX3, D7 of add-factory-serve.
  */
 @Timeout(30)
-class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     private static final String INSTANCE_NAME = 'gnomish-factory'
 
@@ -90,17 +84,7 @@ tracker:
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry, ServeProperties serveProperties) {
-        TakeCommandFactory.of(
-                newAssembly(testProps()),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                testProps(),
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                registry,
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
-                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+        newTakeCommand(testProps(), worktreesRoot, registry, TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
     }
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref

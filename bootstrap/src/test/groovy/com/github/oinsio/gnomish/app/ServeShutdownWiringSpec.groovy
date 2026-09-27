@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
 import com.github.oinsio.gnomish.app.serve.RecordingKiller
@@ -52,12 +53,8 @@ import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
-import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
-import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter
-import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.status.TaskSummary
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -143,7 +140,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
     private FeedAutomaton newAutomaton(TakeSlotRunner slotRunner) {
-        new FeedAutomaton(
+        FeedAutomatonFixture.feedAutomaton(
                 tracker, INSTANCE, new SlotLedger(1), slotRunner,
                 { Duration d -> } as Sleeper, new SystemClock(), Duration.ofMillis(1), Duration.ofMillis(1),
                 Duration.ofMillis(1), 1, new Random(0))
@@ -218,19 +215,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(tempDir.resolve("placeholder${suffix}"), new LedgerJsonMapper()),
                 tempDir, ledgerPrefix, clock)
-        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
-        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
         snapshotWriter.start()
         new ObservabilityWiring(
-                lifecycleTracker,
-                snapshotWriter,
-                lifecycleLedgerWriter,
-                taskOutcomeLedgerWriter,
-                new SweepLedgerWriter(appender, instance, clock),
-                new RemoteOutageLedgerWriter(appender, instance),
-                appender,
-                instance,
-                clock)
+                lifecycleTracker, snapshotWriter, new LedgerWriters(appender, new SlotLedger(1), instance, clock), clock)
     }
 
     private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {

@@ -95,19 +95,16 @@ advancement: auto
             Map<String, TrackerAdapterFactory> registry,
             FeedAutomatonStarter starter,
             ServeProperties serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null)) {
-        new ServeCommand(
+        ServeCommands.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
+                new FactoryPaths(worktreesRoot, homeDir),
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
                 Clock.systemUTC(),
                 new SystemClock(),
-                registry,
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring(registry, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }
 

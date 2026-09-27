@@ -67,7 +67,7 @@ final class TakeWorkRouter {
 
     /**
      * FR1, FR14 of add-serve-sandbox-lifecycle/add-sandbox-core: the same fail-closed,
-     * container-by-default selector {@code ManualRunDrive#driveGit} uses for {@code run} — a fresh
+     * container-by-default selector {@code ManualRunners#run} uses for {@code run} — a fresh
      * claim is refused, not silently routed to host, when the operator's bindings resolve to
      * container without its prerequisites (image + reachable Docker).
      */
