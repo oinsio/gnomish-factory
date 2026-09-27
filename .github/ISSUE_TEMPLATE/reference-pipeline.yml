@@ -1,0 +1,114 @@
+# Reference pipeline announcement form, the twin of plugin-announcement.yml.
+# The eight input field ids equal the columns of docs/reference-pipelines.md one to one
+# (tested-on is the "tested on" column): the maintainer copies the answers into a row as
+# they stand. The two text areas feed the pipeline's entry below the table.
+name: Reference pipeline
+description: Announce a public repository whose .gnomish/ pipeline others can start from.
+title: "Reference pipeline: "
+labels: ["reference-pipeline"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for sharing a pipeline. The maintainer adds it to
+        [reference pipelines](https://github.com/oinsio/gnomish-factory/blob/main/docs/reference-pipelines.md)
+        from this issue; you need no pull request. The same form updates an entry that is
+        already listed: give its current name and fill in what changed.
+
+        Pipelines are listed **as-is**. The project does not vet or endorse them, and a listed
+        pipeline is not part of the Apache-licensed factory: it is distributed under the
+        license of its own repository.
+  - type: input
+    id: name
+    attributes:
+      label: Pipeline name
+      description: Usually the repository's name.
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link
+      description: The public repository holding the `.gnomish/` tree.
+      placeholder: https://github.com/<owner>/<repository>
+    validations:
+      required: true
+  - type: input
+    id: stack
+    attributes:
+      label: Stack
+      description: Languages, build tool and test framework the pipeline is written for.
+      placeholder: Java 25, Gradle 9, Spock 2
+    validations:
+      required: true
+  - type: input
+    id: stages
+    attributes:
+      label: Stages
+      description: The stage names from `.gnomish/pipeline.yaml`, in order.
+      placeholder: specify, implement, deliver
+    validations:
+      required: true
+  - type: dropdown
+    id: maturity
+    attributes:
+      label: Maturity
+      description: >-
+        The level defined in docs/reference-pipelines.md, "Maturity levels". Claim only what
+        the evidence below shows.
+      options:
+        - sketch
+        - runs
+        - hardened
+    validations:
+      required: true
+  - type: input
+    id: tested-on
+    attributes:
+      label: Tested on
+      description: The factory build the pipeline was run on — a release version or a commit.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: maintainer
+    attributes:
+      label: Maintainer
+      description: Who maintains the pipeline (a GitHub handle or an organization).
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      description: >-
+        The license of the repository, as an SPDX identifier where one exists. Without a
+        license nobody may copy the files.
+      placeholder: Apache-2.0
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence for the maturity level
+      description: >-
+        For `runs`, a link to a task that went through every stage (its pull request or task
+        branch). For `hardened`, where the known failure modes are written down.
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: What it is good for, and its limitations
+      description: >-
+        What is worth copying from it, and what does not work yet (binding, missing sandbox
+        image, scale). This becomes the pipeline's entry below the table.
+    validations:
+      required: true
+  - type: checkboxes
+    id: no-secrets
+    attributes:
+      label: Secrets
+      options:
+        - label: The repository commits no token or credential; the pipeline reads them from files outside the clone or from the environment.
+          required: true

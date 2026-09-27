@@ -226,6 +226,14 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   not be obtained (network, 5xx); never burns an attempt.
 - **Advancement** — what happens after a stage verifies: `auto` (proceed) or
   `manual` (park at a checkpoint until a human returns the task).
+- **Reference pipeline** — a public repository whose `.gnomish/` tree is a
+  working pipeline for one technology stack, listed in
+  `docs/reference-pipelines.md` with a maturity level (`sketch`, `runs`,
+  `hardened`) and the factory build it was tested on. Listed as-is, under its
+  own repository's license. The maintainer adds an entry from an issue opened
+  with the reference-pipeline form
+  (`.github/ISSUE_TEMPLATE/reference-pipeline.yml`). *Not:* a reference file —
+  nothing in the factory's build compares against it.
 - **Reference file** — an approved sample committed for equivalence tests
   (e.g. `status-report-v1.reference.json`). *Never:* golden.
 

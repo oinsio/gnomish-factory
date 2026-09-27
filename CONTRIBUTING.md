@@ -1,11 +1,19 @@
 # Contributing to Gnomish Factory
 
-Pull requests are not accepted for now. You can contribute today in two ways: open an
-[issue](https://github.com/oinsio/gnomish-factory/issues) with a bug report or a proposal, or
-announce a plugin you built through the
-[plugin-announcement issue form](https://github.com/oinsio/gnomish-factory/issues/new?template=plugin-announcement.yml),
-which lists it in the [community plugin registry](docs/community-plugins.md). A Contributor
-License Agreement check already exists and will apply to every pull request once they open.
+Pull requests are not accepted for now. You can contribute today in three ways:
+
+- open an [issue](https://github.com/oinsio/gnomish-factory/issues) with a bug report or a
+  proposal;
+- announce a plugin you built through the
+  [plugin-announcement issue form](https://github.com/oinsio/gnomish-factory/issues/new?template=plugin-announcement.yml),
+  which lists it in the [community plugin registry](docs/community-plugins.md);
+- announce a reference pipeline — a public repository whose `.gnomish/` configuration runs the
+  factory for some stack — through the
+  [reference-pipeline issue form](https://github.com/oinsio/gnomish-factory/issues/new?template=reference-pipeline.yml),
+  which lists it in [reference pipelines](docs/reference-pipelines.md).
+
+A Contributor License Agreement check already exists and will apply to every pull request once
+they open.
 
 ## Contributor License Agreement (CLA)
 
