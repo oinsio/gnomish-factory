@@ -32,7 +32,7 @@ final class ServeCommands {
                 paths,
                 clock,
                 sandboxLifecyclePass,
-                containerTakeSupport)
+                containerTakeSupport.sandboxProperties())
         new ServeCommand(runtimeAssembly, git, factoryProperties, serveProperties, trackerWiring, starter, errorConsole)
     }
 }

@@ -80,15 +80,9 @@ public class TrackerCommandConfiguration {
             FactoryPaths paths,
             Clock javaTimeClock,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerSupports containerSupports) {
+            SandboxProperties sandboxProperties) {
         return new ServeRuntimeAssembly(
-                slotWiringFactory,
-                serveAssembly,
-                git,
-                paths,
-                javaTimeClock,
-                sandboxLifecyclePass,
-                containerSupports.takeSupport());
+                slotWiringFactory, serveAssembly, git, paths, javaTimeClock, sandboxLifecyclePass, sandboxProperties);
     }
 
     /**

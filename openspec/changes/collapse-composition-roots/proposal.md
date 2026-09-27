@@ -94,9 +94,11 @@ today tells apart only by parameter name.
 ### Functional
 
 - **FR1** — Every site in the design's cluster table takes seven parameters or fewer.
-- **FR2** — `ManualRunRunner` takes a `ManualRunAssembly`, not the ten ingredients that
-  assembly is built from; the three ingredients it held only for the assembly leave its
-  constructor, and it reads none of the other seven back through the assembly.
+- **FR2** — `ManualRunAssembly` is built once, by the `manualRunAssembly` bean, from its ten
+  ingredients; no consumer takes those ingredients to rebuild it, and none reads the other
+  seven back through the assembly. (Amended 2026-09-27: the original wording — "`ManualRunRunner`
+  takes a `ManualRunAssembly`" — was overtaken by FR7 / design D6, which moved the assembly out
+  of the runner into the beans that build `ManualRunDrive` and `ManualRunners`.)
 - **FR3** — `worktreesRoot` and `homeDir` reach their consumers through one value with
   distinct accessors, so no call site can transpose them.
 - **FR4** — Every facade type added by this change carries at least one method beyond its
@@ -129,7 +131,11 @@ today tells apart only by parameter name.
   `TrackerWiring`, `FactoryPaths`, `ContainerSupports`, and — design D6, widened 2026-09-27 by
   D11 — `ManualRunDrive`, `ManualRunners`, `CheckEquipment`, `SubcommandDispatch`, `TakeCommand`,
   `ServeCommand`, `ServeRuntimeAssembly`, `SlotWiringFactory`, and — amended 2026-09-27 when
-  task 3.6 found D11's count wrong — `ServeAssembly` and `SandboxLifecyclePass`).
+  task 3.6 found D11's count wrong — `ServeAssembly` and `SandboxLifecyclePass`). Amended
+  2026-09-27 when the inventory was pinned: the context also gains `manualRunAssembly` (D3, D6)
+  and the `TrackerCommandConfiguration` class itself, and the `worktreesRoot` / `homeDir` beans
+  are replaced by `factoryPaths` (FR3, task 1.2) — the one sanctioned loss.
+  `ApplicationBeanInventorySpec` pins the whole first-party inventory by bean name.
 
 ### Non-Functional — Observability
 

@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import java.time.Clock;
 
@@ -38,7 +39,7 @@ final class ServeRuntimeAssembly {
     private final FactoryPaths paths;
     private final Clock clock;
     private final SandboxLifecyclePass sandboxLifecyclePass;
-    private final ContainerTakeSupport containerTakeSupport;
+    private final SandboxProperties sandboxProperties;
 
     /**
      * @param slotWiringFactory builds the daemon's one slot wiring, the equipment {@code serve}
@@ -49,7 +50,8 @@ final class ServeRuntimeAssembly {
      * @param clock supplies "now" for the sweep tick log and the observability wiring
      * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam; {@link SandboxLifecyclePass#NONE}
      *     on a host-only install
-     * @param containerTakeSupport supplies the sandbox reap age the sweep vital is measured against
+     * @param sandboxProperties supplies the sandbox reap age the sweep vital is measured against —
+     *     the installation's one settings bean, the same the sweep-lifecycle pass is built from
      */
     ServeRuntimeAssembly(
             SlotWiringFactory slotWiringFactory,
@@ -58,14 +60,14 @@ final class ServeRuntimeAssembly {
             FactoryPaths paths,
             Clock clock,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport) {
+            SandboxProperties sandboxProperties) {
         this.slotWiringFactory = slotWiringFactory;
         this.builders = builders;
         this.git = git;
         this.paths = paths;
         this.clock = clock;
         this.sandboxLifecyclePass = sandboxLifecyclePass;
-        this.containerTakeSupport = containerTakeSupport;
+        this.sandboxProperties = sandboxProperties;
     }
 
     /**
@@ -128,8 +130,8 @@ final class ServeRuntimeAssembly {
         // threshold every kept environment's remaining margin is measured against comes from the
         // SAME SandboxProperties the sweep policy itself was built from, so the dashboard's
         // time-to-reap can never disagree with the reaper's own decision.
-        SweepTickLog sweepTickLog = new SweepTickLog(
-                containerTakeSupport.sandboxProperties().keptReapAge(), clock, SweepVital.MAX_KEPT_INVENTORY);
+        SweepTickLog sweepTickLog =
+                new SweepTickLog(sandboxProperties.keptReapAge(), clock, SweepVital.MAX_KEPT_INVENTORY);
         // FR1, FR4, FR7, FR9, FR12 of add-serve-observability (task 5.1, task 2.5).
         ObservabilityWiring observability = builders.observability(
                 served.instanceId(),

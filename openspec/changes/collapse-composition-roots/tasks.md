@@ -144,8 +144,8 @@
       static — D7's last sentence); that
       `grep -rn "credentialEnvVars(trackerConfig)" application/src/main bootstrap/src/main`
       returns only the record's method; that
-      `grep -n "bound.tracker()\|BoundTracker " application/src/main/java/com/github/oinsio/gnomish/app/ServeCommand.java`
-      returns only the construction and the `assemble` hand-off; that the record constructs
+      `grep -n "new BoundTracker(\|\bbound\.tracker()" application/src/main/java/com/github/oinsio/gnomish/app/ServeCommand.java`
+      returns one line, the construction handed to `assemble` (pattern corrected 2026-09-27); that the record constructs
       nothing; and that the dispatch and batch specs pass with no expectation edited.
       *Done 2026-09-27:* see the design's "Applied, section 3" note on `BoundTracker`. `runOneRef`
       8 → 4, `TakeBatch.dispatch` 8 → 4, `TakeRefDispatch.run` 9 → 5, all static. The first grep

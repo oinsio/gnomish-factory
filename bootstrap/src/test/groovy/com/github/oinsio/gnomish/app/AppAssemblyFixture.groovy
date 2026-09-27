@@ -220,7 +220,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 commands.serveCommand(
                         commands.serveRuntimeAssembly(slotWiringFactory,
                         commands.serveAssembly(factoryProperties, serveProperties, systemClock), git, paths, javaTimeClock,
-                        sandboxLifecyclePass, containerSupports),
+                        sandboxLifecyclePass, sandboxProperties),
                         git, factoryProperties, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(
                 new RunArgumentsParser(),

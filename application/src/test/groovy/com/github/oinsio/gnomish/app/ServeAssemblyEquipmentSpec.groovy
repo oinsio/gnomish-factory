@@ -20,7 +20,6 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
-import spock.util.concurrent.PollingConditions
 
 /**
  * {@link ServeAssembly}'s builders over the daemon's fixed equipment (design D7 of
@@ -91,9 +90,8 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
 
         then:
         def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(NOW, ZoneOffset.UTC))
-        new PollingConditions(timeout: 2).eventually {
-            assert Files.exists(ledgerFile)
-        }
+        // The append is synchronous (LedgerAppender writes, flushes and closes before returning).
+        Files.exists(ledgerFile)
 
         cleanup:
         slotLedger.release(ref)
