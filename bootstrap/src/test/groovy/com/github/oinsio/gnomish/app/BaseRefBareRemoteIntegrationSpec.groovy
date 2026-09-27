@@ -88,16 +88,16 @@ advancement: auto
 
     private TakeCommand newCommand() {
         def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: new FixedTrackerAdapterFactory({ tracker })],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: new FixedTrackerAdapterFactory({
+                        tracker
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private void seedReady(TaskRef ref, TaskDesignators designators = TaskDesignators.none()) {

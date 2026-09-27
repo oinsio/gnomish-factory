@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -10,9 +9,6 @@ import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.util.Random;
 
 /**
  * The {@code serve} feed loop: the four-state automaton (design D1) that decides, cycle by cycle,
@@ -57,85 +53,21 @@ public final class FeedAutomaton {
     private final FeedViewTracker viewTracker;
 
     /**
-     * The plain feed automaton without an observability {@link DirtyNotifier}. Key params: {@code
-     * backoffBase}/{@code backoffCap} the abort-backoff bounds (design D10 of add-tracker-port);
-     * {@code idlePollInterval} the shared Idle poll interval (FR5); {@code wipLimit} the WIP limit W
-     * (FR6); {@code random} the head-zone pick and idle jitter source (seeded = deterministic).
-     */
-    public FeedAutomaton(
-            Tracker tracker,
-            InstanceId instanceId,
-            SlotLedger slotLedger,
-            SlotRunner slotRunner,
-            Sleeper sleeper,
-            Clock clock,
-            Duration backoffBase,
-            Duration backoffCap,
-            Duration idlePollInterval,
-            int wipLimit,
-            Random random) {
-        this(
-                tracker,
-                instanceId,
-                slotLedger,
-                slotRunner,
-                sleeper,
-                clock,
-                backoffBase,
-                backoffCap,
-                idlePollInterval,
-                wipLimit,
-                random,
-                DirtyNotifier.NOOP);
-    }
-
-    /**
-     * As the eleven-arg constructor plus a {@link DirtyNotifier} (FR1, design D4), forwarded to
-     * {@link FeedViewTracker} and woken on every actual feed-state transition. Wires a
-     * {@link RemoteOutageGate} that starts closed and is never opened by anything reachable from
-     * this constructor (no {@link com.github.oinsio.gnomish.app.take.TakeResult.InfrastructureUnavailable}
-     * signal is threaded through it) — the harmless default for every caller that does not care
-     * about task 7.3's gate; {@link #FeedAutomaton(Tracker, InstanceId, SlotLedger, SlotRunner,
-     * Sleeper, Clock, Duration, Duration, Duration, int, Random, DirtyNotifier, RemoteOutageGate)}
-     * is the one the {@code serve} composition root uses.
+     * The feed automaton the {@code serve} composition root builds — the only constructor (D5 of
+     * collapse-composition-roots: the two defaulting ones moved to {@code FeedAutomatonFixture} in
+     * {@code :test-fixtures}). Its {@link RemoteOutageGate} is the one the feed consults before
+     * every claim (FR14, NFR-R3 of add-base-ref-resolution), the SAME instance a slot's {@code
+     * TakeSlotRunner} opens on an {@code InfrastructureUnavailable} result.
      *
-     * @param dirtyNotifier woken on a feed-state transition; {@link DirtyNotifier#NOOP} absent a writer
-     */
-    public FeedAutomaton(
-            Tracker tracker,
-            InstanceId instanceId,
-            SlotLedger slotLedger,
-            SlotRunner slotRunner,
-            Sleeper sleeper,
-            Clock clock,
-            Duration backoffBase,
-            Duration backoffCap,
-            Duration idlePollInterval,
-            int wipLimit,
-            Random random,
-            DirtyNotifier dirtyNotifier) {
-        this(
-                tracker,
-                instanceId,
-                slotLedger,
-                slotRunner,
-                sleeper,
-                clock,
-                backoffBase,
-                backoffCap,
-                idlePollInterval,
-                wipLimit,
-                random,
-                dirtyNotifier,
-                RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of("."), idlePollInterval));
-    }
-
-    /**
-     * As the twelve-arg constructor plus the {@link RemoteOutageGate} the feed consults before
-     * every claim (FR14, NFR-R3 of add-base-ref-resolution) — the {@code serve} composition root's
-     * own constructor, sharing the SAME gate instance a slot's {@code TakeSlotRunner} opens on an
-     * {@code InfrastructureUnavailable} result.
+     * <p>Ten parameters, three over the limit: the constructor is a composition root inside the
+     * class (it builds the cycle, its resilience and the view tracker), a responsibility finding
+     * recorded for {@code split-feed-automaton-composition} rather than hidden behind a facade.
      *
+     * @param idleTiming the Idle interval and jitter, and the backoff bounds and random source the
+     *     feed's selection grades against
+     * @param wipLimit the WIP limit W (FR6)
+     * @param dirtyNotifier woken on a feed-state transition (FR1 of add-serve-observability, design
+     *     D4); {@link DirtyNotifier#NOOP} absent a writer
      * @param remoteOutageGate the remote outage gate this feed's {@link FeedCycle} consults and
      *     advances every cycle; never null
      */
@@ -146,18 +78,15 @@ public final class FeedAutomaton {
             SlotRunner slotRunner,
             Sleeper sleeper,
             Clock clock,
-            Duration backoffBase,
-            Duration backoffCap,
-            Duration idlePollInterval,
+            IdleTiming idleTiming,
             int wipLimit,
-            Random random,
             DirtyNotifier dirtyNotifier,
             RemoteOutageGate remoteOutageGate) {
         this.slotLedger = slotLedger;
         this.sleeper = sleeper;
         this.clock = clock;
         this.wipLimit = wipLimit;
-        this.idleTiming = new IdleTiming(idlePollInterval, backoffBase, backoffCap, random);
+        this.idleTiming = idleTiming;
         // NFR-R3: the outage backoff reuses the Idle state's jittered interval, not a separate policy.
         // FR4: the retry's own edge logging runs on real time — the suppressor is log-plane only,
         //     never a source of behavior, so it does not join the injected-time contract the
@@ -168,7 +97,7 @@ public final class FeedAutomaton {
                 new FeedTracker(tracker, instanceId),
                 slotLedger,
                 slotRunner,
-                new FeedSelection(backoffBase, backoffCap, wipLimit, random),
+                idleTiming.selection(wipLimit),
                 stateLogger,
                 resilience);
         // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.

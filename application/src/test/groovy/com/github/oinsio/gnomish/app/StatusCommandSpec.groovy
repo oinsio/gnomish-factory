@@ -39,11 +39,11 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole())
+        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole())
     }
 
     private StatusCommand newCommand(ScriptedConsoleIO console) {
-        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, console)
+        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), console)
     }
 
     def "FR13: text render of a found task prints the status block"() {

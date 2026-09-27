@@ -94,15 +94,13 @@ tracker:
 
     /** Builds a fresh {@link TakeCommand}, positioned at {@code now} (design D10's backoff clock). */
     TakeCommand newCommand(Instant now) {
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties()),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties(),
                 Clock.fixed(now, ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 }

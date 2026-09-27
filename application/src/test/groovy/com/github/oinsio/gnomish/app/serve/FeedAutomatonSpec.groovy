@@ -56,7 +56,7 @@ class FeedAutomatonSpec extends Specification {
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, SlotRunner runner, Random random, int wipLimit = WIP_LIMIT) {
-        new FeedAutomaton(tracker, INSTANCE, ledger, runner, sleeper, clock, BASE, CAP, IDLE, wipLimit, random)
+        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, runner, sleeper, clock, BASE, CAP, IDLE, wipLimit, random)
     }
 
     // Non-termination guard: drain() and repeated step() park forever in SlotLedger's unbounded
@@ -256,7 +256,7 @@ class FeedAutomatonSpec extends Specification {
             // A fresh single-slot ledger per seed: sharing one across the five step() calls would
             // park the second call forever in acquire() under a permit-leaking mutant.
             def localSleeper = new VirtualSleeper(new VirtualClock())
-            def a = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), capturing([]), localSleeper, clock, BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
+            def a = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), capturing([]), localSleeper, clock, BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
             a.step()
             def slept = localSleeper.slept.first()
             slept.toNanos() >= IDLE.toNanos() && slept.toNanos() <= (IDLE.toNanos() * 1.2) as long

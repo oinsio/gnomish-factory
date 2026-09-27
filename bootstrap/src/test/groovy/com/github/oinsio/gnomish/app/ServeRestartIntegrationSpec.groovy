@@ -81,19 +81,16 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
 
     def "a restarted serve never adopts the previous life's claims, and the standing reaper alone returns both to circulation (FR12, UX1)"() {
         given: 'a fresh serve daemon, its own instance id, over the seeded tracker — ready queue empty'
-        def command = new ServeCommand(
+        def command = ServeCommands.of(
                 newAssembly(testProperties(instanceName: 'gnomish-factory')),
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
+                new FactoryPaths(worktreesRoot, homeDir),
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
                 new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
-                [github: fakeFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
+                new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), { FeedAutomaton automaton ->
                     automaton.run()
                 } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())

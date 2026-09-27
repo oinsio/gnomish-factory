@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SlotLedger
@@ -58,7 +59,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
     private static final String INSTANCE_NAME = 'gnomish-observability-test'
 
     private static FeedAutomaton newAutomaton(SlotLedger slotLedger, Tracker tracker, InstanceId instanceId, DirtyNotifier notifier) {
-        new FeedAutomaton(
+        FeedAutomatonFixture.feedAutomaton(
                 tracker,
                 instanceId,
                 slotLedger,
@@ -129,21 +130,22 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 instanceId,
                 homeDir,
                 dirtyNotifier,
-                slotLedger,
-                3,
-                automaton,
-                trackerHealth,
-                new HeartbeatProgress(),
-                newHeartbeat(tracker, engineClock),
-                newStandingReaper(engineClock),
-                newWorktreeJanitor(engineClock),
-                new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock,
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(
-                        BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
+                new SnapshotSources(
+                        automaton,
+                        slotLedger,
+                        3,
+                        new HeartbeatProgress(),
+                        trackerHealth,
+                        newHeartbeat(tracker, engineClock),
+                        newStandingReaper(engineClock),
+                        newWorktreeJanitor(engineClock),
+                        new SweepTickLog(Duration.ofDays(7), clock, 20),
+                        // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                        //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                        //     stamp a transition this spec never drives.
+                        RemoteOutageGates.system(
+                                BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30))))
 
         then: 'a genuine, non-null wiring is returned'
         observability != null
@@ -205,21 +207,22 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 instanceId,
                 homeDir,
                 dirtyNotifier,
-                slotLedger,
-                1,
-                automaton,
-                trackerHealth,
-                new HeartbeatProgress(),
-                newHeartbeat(tracker, engineClock),
-                newStandingReaper(engineClock),
-                newWorktreeJanitor(engineClock),
-                new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock,
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(
-                        BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
+                new SnapshotSources(
+                        automaton,
+                        slotLedger,
+                        1,
+                        new HeartbeatProgress(),
+                        trackerHealth,
+                        newHeartbeat(tracker, engineClock),
+                        newStandingReaper(engineClock),
+                        newWorktreeJanitor(engineClock),
+                        new SweepTickLog(Duration.ofDays(7), clock, 20),
+                        // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                        //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                        //     stamp a transition this spec never drives.
+                        RemoteOutageGates.system(
+                                BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30))))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 

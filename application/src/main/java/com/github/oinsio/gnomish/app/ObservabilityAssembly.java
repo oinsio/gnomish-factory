@@ -2,46 +2,29 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
-import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
-import com.github.oinsio.gnomish.serveobservability.FeedSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
-import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
-import com.github.oinsio.gnomish.serveobservability.RemoteHealthAssembler;
-import com.github.oinsio.gnomish.serveobservability.SlotEntryAssembler;
-import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
-import com.github.oinsio.gnomish.serveobservability.Snapshot;
-import com.github.oinsio.gnomish.serveobservability.TrackerHealthAssembler;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender;
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
-import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
-import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
-import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.List;
 
 /**
  * Builds the observability writer + appender + ledger writers {@link ServeCommand} starts beside
@@ -79,25 +62,13 @@ final class ObservabilityAssembly {
      *     never the path (FR9); never null
      * @param homeDir the user's home directory the observability files live under (FR9, design
      *     D2); injected (not read inline) so tests can substitute a temp directory; never null
-     * @param dirtyNotifier the caller's {@link ForwardingDirtyNotifier}, already handed to {@code
-     *     slotLedger}/{@code automaton} at their own construction; {@link
+     * @param dirtyNotifier the caller's {@link ForwardingDirtyNotifier}, already handed to the
+     *     slot ledger and the feed automaton at their own construction; {@link
      *     ForwardingDirtyNotifier#bind} is called here once the real writer exists
-     * @param slotLedger the shared slot registry; never null
-     * @param slotCapacity the configured slot count N — the snapshot's {@code slots.capacity}
-     * @param automaton the assembled feed automaton whose {@link FeedAutomaton#view()} feeds the
-     *     snapshot's {@code feed} section; never null
-     * @param trackerHealth the shared tracker-port health decorator (FR8, D12); never null
-     * @param progress the shared durable-progress hook enriching slot entries (FR6, D11); never
-     *     null
-     * @param heartbeat the shared instance heartbeat feeding {@code vitals.heartbeat} (FR7); never
-     *     null
-     * @param standingReaper the standing reaper feeding {@code vitals.reaper} (FR7); never null
-     * @param worktreeJanitor the worktree janitor feeding {@code vitals.janitor} (FR7); never null
-     * @param sweepTickLog the sandbox-lifecycle sweep's per-tick record feeding {@code
-     *     vitals.sweep} (NFR-O1 of add-serve-sandbox-lifecycle); never null
      * @param clock the wall-clock time source for every write point; never null
-     * @param remoteOutageGate the shared remote outage gate feeding the snapshot's {@code remote}
-     *     section (NFR-O3, UX6 of add-base-ref-resolution); never null
+     * @param sources the live collaborators every snapshot is read from (design D2 of
+     *     collapse-composition-roots); its slot ledger also backs the task-outcome ledger writer;
+     *     never null
      * @return the daemon-lifetime observability handle; never null
      */
     static ObservabilityWiring assemble(
@@ -106,17 +77,8 @@ final class ObservabilityAssembly {
             InstanceId instanceId,
             Path homeDir,
             ForwardingDirtyNotifier dirtyNotifier,
-            SlotLedger slotLedger,
-            int slotCapacity,
-            FeedAutomaton automaton,
-            TrackerHealthTracker trackerHealth,
-            HeartbeatProgress progress,
-            InstanceHeartbeat heartbeat,
-            StandingReaper standingReaper,
-            WorktreeJanitor worktreeJanitor,
-            SweepTickLog sweepTickLog,
             Clock clock,
-            RemoteOutageGate remoteOutageGate) {
+            SnapshotSources sources) {
         String instanceName = factoryProperties.instanceName();
         InstanceInfo instance = new InstanceInfo(instanceId.value(), resolveHost(), resolveFactoryVersion());
         Instant startedAt = clock.instant();
@@ -124,21 +86,7 @@ final class ObservabilityAssembly {
 
         SnapshotWriter writer = new SnapshotWriter(
                 ObservabilityPaths.snapshotFile(homeDir, instanceName),
-                () -> assembleSnapshot(
-                        instance,
-                        lifecycleTracker,
-                        automaton,
-                        slotLedger,
-                        slotCapacity,
-                        progress,
-                        trackerHealth,
-                        heartbeat,
-                        standingReaper,
-                        worktreeJanitor,
-                        sweepTickLog,
-                        serveProperties.sandboxSweepInterval(),
-                        startedAt,
-                        remoteOutageGate),
+                () -> sources.snapshot(instance, lifecycleTracker, startedAt, serveProperties.sandboxSweepInterval()),
                 new SnapshotJsonMapper(),
                 serveProperties.snapshotInterval(),
                 clock,
@@ -151,54 +99,12 @@ final class ObservabilityAssembly {
                 ObservabilityPaths.ledgerFile(homeDir, instanceName, LocalDate.ofInstant(startedAt, ZoneOffset.UTC));
         RotatingLedgerAppender ledgerAppender = new RotatingLedgerAppender(
                 new LedgerAppender(initialLedgerFile, new LedgerJsonMapper()), homeDir, instanceName, clock);
-        LifecycleLedgerWriter lifecycleLedgerWriter = new LifecycleLedgerWriter(ledgerAppender, instance, clock);
-        TaskOutcomeLedgerWriter taskOutcomeLedgerWriter =
-                new TaskOutcomeLedgerWriter(slotLedger, ledgerAppender, instance, clock);
-        // NFR-O2 of add-serve-sandbox-lifecycle: the sweep's own lines share this instance's
-        // appender, so they rotate and are retained exactly like every other ledger line.
-        SweepLedgerWriter sweepLedgerWriter = new SweepLedgerWriter(ledgerAppender, instance, clock);
-        // NFR-O1, NFR-O3 of add-base-ref-resolution: same appender, same rotation/retention.
-        RemoteOutageLedgerWriter remoteOutageLedgerWriter = new RemoteOutageLedgerWriter(ledgerAppender, instance);
+        // NFR-O2 of add-serve-sandbox-lifecycle; NFR-O1, NFR-O3 of add-base-ref-resolution: every
+        // write point shares this instance's appender, so each line rotates and is retained exactly
+        // like every other ledger line.
+        LedgerWriters ledgerWriters = new LedgerWriters(ledgerAppender, sources.slotLedger(), instance, clock);
 
-        return new ObservabilityWiring(
-                lifecycleTracker,
-                writer,
-                lifecycleLedgerWriter,
-                taskOutcomeLedgerWriter,
-                sweepLedgerWriter,
-                remoteOutageLedgerWriter,
-                ledgerAppender,
-                instance,
-                clock);
-    }
-
-    private static Snapshot assembleSnapshot(
-            InstanceInfo instance,
-            LifecycleStateTracker lifecycleTracker,
-            FeedAutomaton automaton,
-            SlotLedger slotLedger,
-            int slotCapacity,
-            HeartbeatProgress progress,
-            TrackerHealthTracker trackerHealth,
-            InstanceHeartbeat heartbeat,
-            StandingReaper standingReaper,
-            WorktreeJanitor worktreeJanitor,
-            SweepTickLog sweepTickLog,
-            Duration sweepInterval,
-            Instant startedAt,
-            RemoteOutageGate remoteOutageGate) {
-        return new Snapshot(
-                1,
-                startedAt, // overwritten by SnapshotWriter#withSelfDescription on every actual write
-                0,
-                instance,
-                LifecycleSnapshotAssembler.assemble(lifecycleTracker),
-                FeedSnapshotAssembler.assemble(automaton),
-                new SlotsSnapshot(slotCapacity, SlotEntryAssembler.assemble(slotLedger, progress)),
-                VitalsSnapshotAssembler.assemble(
-                        heartbeat, standingReaper, worktreeJanitor, sweepTickLog, sweepInterval),
-                TrackerHealthAssembler.assemble(trackerHealth),
-                RemoteHealthAssembler.assemble(List.of(remoteOutageGate)));
+        return new ObservabilityWiring(lifecycleTracker, writer, ledgerWriters, clock);
     }
 
     // task 6.3 documented exception: the try branch (returning the real hostname) is exercised

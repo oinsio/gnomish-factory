@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.app.RunOrder;
 import com.github.oinsio.gnomish.app.SlotWiring;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
 import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
-import com.github.oinsio.gnomish.app.TakeOrder;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -23,7 +22,7 @@ import org.slf4j.MDC;
 /**
  * The real {@link SlotRunner}: given only an already-claimed {@link TaskRef} (task 4.2's seam),
  * fetches the {@link TrackerTask} and runs it through the exact same take cycle a single explicit
- * {@code take <ref>} would — {@link TakeClaimAndWork#dispatchAfterClaim} — so escalation,
+ * {@code take <ref>} would — {@link TakeClaimAndWork#workClaimed} — so escalation,
  * abort, and revocation behave identically to a single {@code take} of that task (FR1, M2: "slot
  * body unchanged").
  *
@@ -37,7 +36,7 @@ import org.slf4j.MDC;
  * thread-local, setting the {@code taskId} key inside {@link #run(TaskRef)} tags only that slot's
  * own logs, cleared in a {@code finally} even though these threads are never reused.
  *
- * <p><b>Exception boundary (deliberate).</b> {@link TakeClaimAndWork#dispatchAfterClaim} already
+ * <p><b>Exception boundary (deliberate).</b> {@link TakeClaimAndWork#workClaimed} already
  * funnels ordinary {@code RuntimeException}s through its own crash-abort protocol, rethrowing only
  * {@code UsageException} unchanged — but a slot must never let anything escape {@link
  * #run(TaskRef)}: {@link FeedAutomaton} installs no uncaught-exception handler on its virtual
@@ -137,10 +136,9 @@ public final class TakeSlotRunner implements SlotRunner {
         MDC.put(taskIdMdcKey, claimed.id());
         long startedNanos = System.nanoTime();
         try {
-            // One of the three places a take order is assembled (design single-owner table of
-            // introduce-take-order): the claimed task exists only from this fetch on.
-            var order = new TakeOrder(run, tracker.fetchTask(claimed), tracker, instanceId);
-            TakeResult result = claimAndWork.dispatchAfterClaim(order);
+            // The order for an already-claimed task is assembled by its one owner (FR6 of
+            // collapse-composition-roots), shared with bare take's claim walk.
+            TakeResult result = claimAndWork.workClaimed(run, claimed, tracker, instanceId);
             outcomeLog.detail(claimed, result);
             if (drainReport != null) {
                 drainReport.record(claimed, result);

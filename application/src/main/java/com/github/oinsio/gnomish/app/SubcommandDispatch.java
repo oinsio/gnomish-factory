@@ -5,16 +5,16 @@ import java.io.IOException;
 import org.springframework.boot.ApplicationArguments;
 
 /**
- * Routes {@link ManualRunRunner#run} to {@link StatusCommand}, {@link UsageCommand}, {@link
- * TakeCommand}, {@link ServeCommand}, {@link BoardCommand}, or {@link DashboardCommand} when the
+ * Routes {@code ManualRunRunner#run} to the {@link ReportCommands} ({@code status}/{@code
+ * usage}/{@code board}/{@code dashboard}), {@link TakeCommand} or {@link ServeCommand} when the
  * invocation's subcommand (design {@link Subcommand#parse}) is {@code status}/{@code usage}/{@code
  * take}/{@code serve}/{@code board}/{@code dashboard} (FR13, FR14 of add-git-workflow; FR9 of
  * add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command; FR1 of
  * add-dashboard-page); a {@code run} subcommand —
- * explicit or implicit — is left for {@link ManualRunRunner}'s own flow. {@code take}/{@code
+ * explicit or implicit — is left for {@code ManualRunRunner}'s own flow. {@code take}/{@code
  * serve} are dispatched here rather than treated as {@code run} variants (unlike how {@code
  * status}/{@code usage} always were): each has an entirely separate flag set and must never fall
- * into {@link RunArgumentsParser}. Split out of {@link ManualRunRunner} purely to keep that class
+ * into {@link RunArgumentsParser}. Split out of {@code ManualRunRunner} purely to keep that class
  * within the project's file-size target (`.claude/rules/process-invariants.md`).
  *
  * <p>Unlike {@link TakeCommand#run}, {@link ServeCommand#run} does not always throw: a real {@code
@@ -26,13 +26,7 @@ import org.springframework.boot.ApplicationArguments;
  * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve;
  * FR1 of add-board-command; FR1 of add-dashboard-page.
  */
-record SubcommandDispatch(
-        StatusCommand statusCommand,
-        UsageCommand usageCommand,
-        TakeCommand takeCommand,
-        ServeCommand serveCommand,
-        BoardCommand boardCommand,
-        DashboardCommand dashboardCommand) {
+record SubcommandDispatch(ReportCommands reportCommands, TakeCommand takeCommand, ServeCommand serveCommand) {
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
@@ -46,20 +40,7 @@ record SubcommandDispatch(
      */
     boolean dispatchNonRun(ApplicationArguments args) throws IOException, InterruptedException {
         Subcommand subcommand = Subcommand.parse(args);
-        if (subcommand == Subcommand.STATUS) {
-            statusCommand.run(args);
-            return true;
-        }
-        if (subcommand == Subcommand.BOARD) {
-            boardCommand.run(args);
-            return true;
-        }
-        if (subcommand == Subcommand.DASHBOARD) {
-            dashboardCommand.run(args);
-            return true;
-        }
-        if (subcommand == Subcommand.USAGE) {
-            usageCommand.run(args);
+        if (reportCommands.run(subcommand, args)) {
             return true;
         }
         if (subcommand == Subcommand.TAKE) {

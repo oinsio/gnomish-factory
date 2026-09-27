@@ -31,20 +31,18 @@ pitest {
     // the construction itself, never the coverage of the graph being constructed.
     excludedClasses = [
         'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
-        // Builds a TakeCommand, defaulting the seams; driven by :bootstrap's TakeCommandSpec.
-        'com.github.oinsio.gnomish.app.TakeCommandFactory',
         // The five `with*` copies of the seam parameter object; driven by :bootstrap's
         // TakeCommandStandingReaperWiringSpec / TakeCommandBatchSpec / TakeHeartbeatLifecycleSpecBase,
         // each of which overrides one seam and asserts the resulting take run's behavior.
         'com.github.oinsio.gnomish.app.TakeCommandSeams',
-        // Builds the take + serve commands and bundles them with the pre-built ones; driven by
-        // :bootstrap's SubcommandDispatchSpec (routing) and ManualRunRunner's own specs.
-        'com.github.oinsio.gnomish.app.SubcommandDispatchFactory',
         // Wires the resume chain behind a TakeClaimAndWork; driven by :bootstrap's TakeBareAutoSpec
         // and TakeSlotRunnerSpec, which run the whole claim-and-resume flow through it.
         'com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory',
-        // Straight-line assembly of the serve runtime over ServeAssembly's leaf builders; driven by
-        // :bootstrap's ServeRuntimeWiringSpec, which proves each wiring by its effect on a real drain.
+        // Straight-line assembly of the serve runtime over ServeAssembly's leaf builders — an
+        // assembly object (design D7 of collapse-composition-roots), built once with the command's
+        // fixed equipment, whose assemble takes only the per-invocation job; driven by :bootstrap's
+        // ServeRuntimeWiringSpec, which proves each wiring by its effect on a real drain, and
+        // ServeShutdownWiringSpec, which drives the assembled runtime through every shutdown path.
         'com.github.oinsio.gnomish.app.ServeRuntimeAssembly',
 
         // Integration-covered exemptions (task 8.7 of split-into-modules, design D13(c); the bar is

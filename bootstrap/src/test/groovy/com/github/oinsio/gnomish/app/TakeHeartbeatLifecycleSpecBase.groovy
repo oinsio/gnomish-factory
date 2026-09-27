@@ -108,16 +108,14 @@ tracker:
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
-        TakeCommandFactory.of(
+        TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(sleeper)
                 .withReaperSleeper(reaperSleeper), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())

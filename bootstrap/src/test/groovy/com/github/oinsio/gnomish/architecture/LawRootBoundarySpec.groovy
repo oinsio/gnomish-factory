@@ -37,13 +37,15 @@ class LawRootBoundarySpec extends Specification {
      *
      * <ul>
      *   <li>{@code LawBinding} — the law root itself, the one owner of the rule (D12);</li>
-     *   <li>{@code ObservabilityPaths}, {@code ManualRunConfiguration} — the operator's
-     *       {@code ~/.gnomish} <em>home</em> directory (serve state, worktrees root), which is a
-     *       different directory that happens to share a name and is no law root at all.</li>
+     *   <li>{@code ObservabilityPaths}, {@code FactoryPaths} — the operator's {@code ~/.gnomish}
+     *       <em>home</em> directory (serve state, worktrees root; {@code FactoryPaths} took the
+     *       worktrees root over from {@code ManualRunConfiguration} in design D4 of
+     *       collapse-composition-roots), which is a different directory that happens to share a
+     *       name and is no law root at all.</li>
      * </ul>
      */
     private static final List<String> LAW_ROOT_SPELLINGS = [
-        'ManualRunConfiguration.java',
+        'FactoryPaths.java',
         'LawBinding.java',
         'ObservabilityPaths.java',
     ]

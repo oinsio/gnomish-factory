@@ -42,6 +42,16 @@ today tells apart only by parameter name.
 - **MODIFIED**: the order for an already-claimed task is assembled and dispatched in one
   place, `TakeClaimAndWork.workClaimed`, instead of being spelled identically by the bare
   take walk and the serve slot runner (handed over by `introduce-slot-wiring`).
+- **MODIFIED** (2026-09-26 architecture review, design D6): the manual-run assembly and the
+  subcommand dispatch leave `ManualRunRunner`'s constructor body for `@Bean` methods of
+  `ManualRunConfiguration`; the runner takes the assembled `SubcommandDispatch` and
+  `ManualRunDrive` and composes nothing itself.
+- **MODIFIED** (design D7): the static assembly helpers extracted for file size that take
+  their origin class's fields as parameters (`ServeRuntimeAssembly`, `ServeAssembly`,
+  `SubcommandDispatchFactory`, `TakeCommandFactory`, `TakeRefDispatch`, `TakeBatch`,
+  `ContainerRunSupportFactory`) become instances holding that equipment as fields.
+- **ADDED** (design D8): `BoundTracker`, the one value carrying what an invocation binds
+  once the tracker is provisioned, from the command to the last relay of the dispatch chain.
 - No behavior change, no spec requirement changed, no new module edge.
 
 ## Goals
@@ -94,6 +104,15 @@ today tells apart only by parameter name.
 - **FR5** — Where a facade replaces beans Spring resolved by parameter name, a bean
   producing the facade exists and the context starts with the same graph — including every
   `@Component` that Spring fed from the replaced beans, not only the composition roots.
+- **FR7** — `ManualRunRunner` composes nothing: it takes seven or fewer already-assembled
+  values (the git version check, the subcommand dispatch, the manual-run drive, the error
+  console), and `ManualRunDrive` reads no field of the runner — every collaborator it uses
+  is its own.
+- **FR8** — The values one invocation binds after the tracker is provisioned (the pipeline
+  definition, the trusted base tier, the tracker config, the adapter factory, the live
+  tracker, the instance id) travel as one value, `BoundTracker`, from the command that binds
+  them to the last relay of the dispatch chain; its membership is closed by the rule in its
+  javadoc and it constructs no collaborator.
 - **FR6** — A `TakeOrder` for a task the caller has already claimed is assembled and
   dispatched by one owner, `TakeClaimAndWork.workClaimed(RunOrder, TaskRef)`, used by the
   bare take walk and the serve slot runner; the explicit-ref path, which builds its order
@@ -104,8 +123,13 @@ today tells apart only by parameter name.
 
 - **NFR-R1** — Behavior-preserving: the existing suite passes with no spec expectation
   edited. A red spec stops the task.
-- **NFR-R2** — The Spring context assembles identically: the context-start spec passes
-  unedited, and no bean gains, loses or changes identity.
+- **NFR-R2** — The Spring context assembles identically for every bean that exists today:
+  the context-start spec passes unedited, no existing bean loses or changes identity, and
+  the context gains only the beans the design's single-owner table names (`ReportCommands`,
+  `TrackerWiring`, `FactoryPaths`, `ContainerSupports`, and — design D6, widened 2026-09-27 by
+  D11 — `ManualRunDrive`, `ManualRunners`, `CheckEquipment`, `SubcommandDispatch`, `TakeCommand`,
+  `ServeCommand`, `ServeRuntimeAssembly`, `SlotWiringFactory`, and — amended 2026-09-27 when
+  task 3.6 found D11's count wrong — `ServeAssembly` and `SandboxLifecyclePass`).
 
 ### Non-Functional — Observability
 
@@ -125,11 +149,15 @@ today tells apart only by parameter name.
 
 ## Success Metrics
 
-- **M1** — Composition-root and assembly sites over the limit: 22 before, 0 after.
+- **M1** — Composition-root and assembly sites over the limit: 22 before, 1 after — the
+  `FeedAutomaton` constructor, which design D5 records as a responsibility problem and names
+  for a follow-up change rather than a facade invented to hit the number (amended
+  2026-09-26: the D5 hypothesis was refuted at the count level, see Q1).
 - **M2** — Facades added that carry only accessors: 0 (FR4).
 - **M3** — Spring context spec and the full suite pass with zero expectation edits.
-- **M4** — Parameter-limit violations remaining in `src/main` after this change: 10, all of
-  them the NG1 set, named by file and line for `add-parameter-count-gate`.
+- **M4** — Parameter-limit violations remaining in `src/main` after this change: 11 — the
+  ten of the NG1 set plus the one `FeedAutomaton` constructor (M1), each named by file and
+  line for `add-parameter-count-gate`, which absorbs the eleventh into its own input list.
 
 ## Open Questions
 
@@ -137,7 +165,13 @@ today tells apart only by parameter name.
   one constructor plus a test seam, or does the class need splitting by responsibility
   first? Proposed answer: inspect during the change; if no behavioral cluster exists, this
   is an SRP problem and the honest outcome is a recorded finding plus a follow-up change,
-  not a facade invented to hit a number.
+  not a facade invented to hit a number. *Measured 2026-09-26 (architecture review):*
+  taking `IdleTiming` as a parameter replaces four of the thirteen, but `FeedSelection` is
+  built from the same three, and `wipLimit`, the sleeper, the clock and the two notifiers
+  stay — one constructor at ten, not seven. The constructor is a composition root inside the
+  class (it builds `FeedCycle`, `FeedResilience`, `FeedViewTracker`), so the expected outcome
+  is now the second branch: one constructor, the two defaulting constructors moved to a test
+  fixture, the finding recorded, and the split named for a follow-up (design D5, task 4.2).
 
 ## Impact
 
@@ -157,9 +191,20 @@ today tells apart only by parameter name.
   (NFR-R1): "no expectation edited" is the criterion, not "unedited".
 - **Declared sync pairs touched**: none expected — the composition roots are single
   implementations. Confirmed by the design's Sync surfaces decision.
-- **Spring**: one wiring point changes shape (FR3, FR5).
+- **Spring**: three wiring points change shape — the `FactoryPaths` bean (FR3, FR5), and
+  the two beans that take the assembly out of `ManualRunRunner` (FR7, design D6).
 - **Glossary**: any facade that names a new domain concept gets an entry in the same
-  change, per `process-invariants.md`.
+  change, per `process-invariants.md` — at least **bound tracker** (FR8) and **container
+  supports** (design D10); `SlotWiringFactory` names no new concept (the slot wiring is
+  already defined).
+- **Testing strategy**: the assembly objects of design D7 get no spec of their own — such
+  a spec asserts "method calls method"; they are exercised through the effect on the real
+  flow (`ServeRuntimeWiringSpec` is the model) and listed in their module's `pitest
+  { excludedClasses }` with the covering suite named, the arid-wiring category `testing.md`
+  already defines.
+- **Durable records**: ADR 0010 gains two paragraphs (an abstract factory with one return
+  type as a legitimate facade shape, named as a factory; a membership rule for a context
+  object), and `testing.md` the assembly-object note above (task 5.6).
 - **Depends on**: `introduce-slot-wiring` — several of these sites shrink there first, and
   their residual shape is this change's starting point.
 - **Sequenced before**: `add-claim-return` (edits `TakeClaimAndWork`, the owner of FR6's

@@ -131,13 +131,10 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
 
     // Unlike ContainerSupportFixture.real() (deliberately OwnershipMode.MANUAL, for run-mode
     // specs), this spec's zombie must be `tracked` — the mode a liveness-verdict-driven sweep
-    // actually governs — mirroring the composition root's own take/serve support lambda
-    // (ManualRunRunner).
+    // actually governs — mirroring the composition root's own take/serve support
+    // (ContainerSupports.takeSupport()).
     private static ContainerSupportFactory trackedContainerSupport() {
-        { cloneDir, id, segments, sandboxProps, factoryProps, definition, creds ->
-            ContainerRunSupport.create(
-            cloneDir, id, segments, sandboxProps, factoryProps, List.<String> of(), creds, OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        } as ContainerSupportFactory
+        new ContainerRunSupportFactory([], [:], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
     }
 
     def "sweep stops a zombie box (never disposes it), and a later resume salvages the surviving volume"() {

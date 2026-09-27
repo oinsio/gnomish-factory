@@ -59,19 +59,16 @@ trait ServeObservabilityFixture {
             Path worktreesRoot,
             Path homeDir,
             TrackerAdapterFactory trackerFactory) {
-        new ServeCommand(
+        ServeCommands.of(
                 assembly,
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
+                new FactoryPaths(worktreesRoot, homeDir),
                 'taskId',
                 factoryProperties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())
     }

@@ -30,6 +30,14 @@ terms) live in `.claude/rules/process-invariants.md`.
   or it goes stale (ADR 0002).
 - **Beat** — one heartbeat: a PATCH to the instance's own claim comment,
   carrying human-readable progress.
+- **Beat timing** — the two durations one heartbeat runs on: the beat
+  interval and the lost-detection threshold, how far the claim's last
+  confirmed beat may fall behind before its holder stops writing. The
+  threshold is a multiple of the interval and means nothing without it, so
+  the two travel as one value that refuses a threshold shorter than the
+  interval. Type: `BeatTiming`, derived from configuration in one place,
+  `LeaseThresholds.beatTiming`. *Not:* the reaper's stale-claim TTL, which
+  an observer measures on another instance's claim.
 - **Stale claim** — a claim whose version stayed unchanged for a TTL measured
   on the observer's own clock; eligible for takeover. *Not:* judged by
   comparing timestamps across instances.
@@ -100,6 +108,16 @@ terms) live in `.claude/rules/process-invariants.md`.
   held as fields by the components that use it. *Not:* the order, and not a
   composition root's argument list — it is built only after the tracker is
   provisioned.
+- **Bound tracker** — what one `take` or `serve` invocation has bound once its
+  tracker is provisioned: the pipeline definition, the trusted base tier, the
+  tracker configuration, the adapter factory, the live tracker (in `serve`,
+  the health-wrapped one) and this instance's identity. Type: `BoundTracker`.
+  Membership rule: a member exists only once the tracker is provisioned and
+  stays fixed for the whole invocation; it constructs no collaborator. It sits
+  between the other two values: unlike the **take order** it holds no fetched
+  task, so it exists before any task is claimed; unlike the **slot wiring** it
+  is not equipment — it is what the wiring and the dispatch chain are built
+  over. *Not:* the order, and not the slot wiring.
 - **Claim tenure** — as a type, the liveness view of one tenure (one holding
   of a claim, identified by its **claim epoch**): the claim beat that keeps the
   claim alive and the claim-loss flag the beat sets when the claim is lost.
@@ -401,6 +419,14 @@ trusted/task tier split, and the law-root rule.
   or by age alone. *Not:* **Ownership asymmetry** of Sandbox above, which is
   about who may bind or loosen a sandbox adapter, not about Docker object
   cleanup.
+- **Container supports** — the installation's container-mode equipment (the
+  check providers, the factory, sandbox and binding settings, the discovered
+  adapter bindings, the Docker probe and the process's claim-epoch book) and
+  the constructions made from it: the container support for `gnomish run`,
+  stamping `manual`, and for `take` / `serve`, stamping `tracked` — the same
+  construction differing only in the **ownership mode** — plus a manual run's
+  execution-mode plan. Type: `ContainerSupports`. *Not:* one run's container
+  support (`ContainerRunSupport`), which it builds.
 - **Project identity** — the label scoping a sweep to its own project: a
   stable digest of the clone's **normalized** `origin` remote URL, or an
   explicit operator override. Normalization removes the URL's userinfo,

@@ -43,7 +43,7 @@ class ServeAssemblySpec extends Specification {
                 } as Supplier, new SystemClock())
 
         when:
-        def shutdown = ServeAssembly.shutdown(slotLedger, claimLossFlag, serveProperties, standingReaper)
+        def shutdown = new ServeAssembly(null, serveProperties, null).shutdown(slotLedger, claimLossFlag, standingReaper)
 
         then: 'a genuine, non-null ServeShutdown is returned, wired over the SAME standing reaper'
         shutdown != null

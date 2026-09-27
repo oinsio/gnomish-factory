@@ -30,15 +30,14 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
     Path homeDir
 
     private ManualRunRunner newContainerRunner() {
-        def runner = newManualRunRunner(
+        newManualRunRunnerProbing(
                 worktreesRoot,
                 homeDir,
                 new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null),
                 // Container by default (D13): no explicit binding, image configured.
-                new BindingProperties(null, [:]))
-        // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
-        runner.@dockerProbe = { true } as BooleanSupplier
-        runner
+                new BindingProperties(null, [:]),
+                // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
+                { true } as BooleanSupplier)
     }
 
     private void write(String relative, String text) {

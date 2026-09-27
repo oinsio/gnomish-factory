@@ -35,6 +35,10 @@ entirely package-private. The stock check cannot be the gate; a project check ca
 - **MODIFIED**: the last ten signatures over the limit — the `sandbox/docker` container
   environment builders, the two agent round executions, `GithubMarkerJson` and
   `PipelineModelBuilder.mapAndValidate` — come under it.
+- **MODIFIED** (added 2026-09-27, handed over by `collapse-composition-roots`): an eleventh
+  site, the `FeedAutomaton` constructor (10 parameters), which that change left over the limit
+  as a recorded responsibility finding rather than a facade invented to hit the number; how it
+  comes under the limit is Q2.
 - **MODIFIED**: `process-invariants.md`'s parameter-count section states the exemptions,
   names the gate as the enforcement mechanism, and drops the "should land" placeholder.
 - No behavior change; no runtime dependency added (the check runs at compile time only).
@@ -91,7 +95,8 @@ entirely package-private. The stock check cannot be the gate; a project check ca
 - **FR5** — The gate is wired once, for every module, by the shared convention plugin — no
   module declares it.
 - **FR6** — The last ten signatures over the limit come under it in this change, so the
-  gate switches on with zero suppressions (G1, NG5).
+  gate switches on with zero suppressions (G1, NG5); the eleventh, the `FeedAutomaton`
+  constructor, is under the limit before the gate is wired, by the route Q2 decides.
 - **FR7** — `process-invariants.md`'s parameter-count section names the limit, the two
   exemptions, the suppression form and the gate, replacing the "should land" sentence.
 
@@ -135,6 +140,15 @@ entirely package-private. The stock check cannot be the gate; a project check ca
   answer: yes to the shared head; the pair question is decided in design.md against that
   rule's preference order, and whichever way it goes, it is recorded rather than left
   silent.
+- **Q2** (added 2026-09-27) — Does the eleventh site, the `FeedAutomaton` constructor, come
+  under the limit in this change, or does this change depend on
+  `split-feed-automaton-composition`, the follow-up `collapse-composition-roots` named for it?
+  The constructor is a composition root inside the class — it builds `FeedTracker`,
+  `FeedOutageRetry`, `FeedResilience`, `FeedCycle` and `FeedViewTracker` from its parameters —
+  so the fix is a split (the automaton takes its cycle and view tracker built), not a grouping;
+  a parameter object over its ten would be the argument bag this family of changes refuses.
+  Proposed answer: depend on the follow-up. Either way, design.md and tasks.md are updated
+  through `/opsx:update` before `/opsx:apply` (they still name ten sites).
 
 ## Impact
 
@@ -143,6 +157,15 @@ entirely package-private. The stock check cannot be the gate; a project check ca
   it (`introduce-take-order` task 0.2); correct these figures through
   `/opsx:update` if the fresh count differs, rather than reporting against a stale
   number.
+  *Re-taken 2026-09-27 at the end of `collapse-composition-roots` (its task 5.2):* **11**
+  signatures over the limit in `src/main` — `ExecutorRoundExecution.java:49` run (8),
+  `JudgeRoundExecution.java:48` run (8), `GithubMarkerJson.java:61` ctor (8),
+  `PipelineModelBuilder.java:50` mapAndValidate (8), `ContainerEnvironmentBuilder.java:22`
+  build (10), `ContainerEnvironments.java:64` forTask (11) and `:106` ctor (11),
+  `ContainerMaterializer.java:42` reattach (9) and `:74` create (10),
+  `ContainerTaskExecutionEnvironment.java:83` ctor (11), and
+  `application/.../app/serve/FeedAutomaton.java:74` ctor (10). Several line numbers in
+  tasks.md predate this scan and move with it.
 - **Modules**: `build-logic` (the gate and its functional test), every module through the
   shared convention plugin, plus the ten signatures in `sandbox/docker`, `adapters/agent`,
   `adapters/github` and `adapters`.
@@ -150,4 +173,5 @@ entirely package-private. The stock check cannot be the gate; a project check ca
 - **Build**: one compile-time artifact on the Error Prone processor path; dependency
   lockfiles regenerated. No runtime dependency, no change to any published API.
 - **Depends on**: `collapse-composition-roots` — the gate cannot be switched on until its
-  twenty-two sites are gone, and this change owns only the last ten.
+  twenty-two sites are gone, and this change owns the last ten plus the `FeedAutomaton`
+  constructor that change left as its one residual (Q2).

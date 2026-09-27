@@ -19,8 +19,8 @@ import org.slf4j.Logger;
  * no-{@code tracker:}-section refusal. The startup load of {@code take} and {@code serve} moved
  * to {@link TrustedTierStartup} (FR13 of add-base-ref-resolution). Resolving a live {@link
  * com.github.oinsio.gnomish.app.port.tracker.Tracker} from the {@link TrackerAdapterFactory}
- * registry moved to {@link TrackerResolution}, split out purely to keep this class within the
- * project's file-size target (`.claude/rules/process-invariants.md`).
+ * registry is {@link TrackerWiring}'s, the one owner of that registry and the credential seam
+ * (design D2 of collapse-composition-roots).
  *
  * <p>Implements FR17 of add-tracker-port.
  */

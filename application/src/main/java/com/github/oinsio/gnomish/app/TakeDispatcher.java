@@ -1,13 +1,9 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
@@ -15,7 +11,6 @@ import com.github.oinsio.gnomish.status.WallTime;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import org.slf4j.MDC;
@@ -25,7 +20,8 @@ import org.slf4j.MDC;
  * {@link TakeCommand} for file size. Holds the per-invocation-invariant collaborators — among them
  * the invocation's one {@link SlotWiring}, shared by explicit, bare and batch mode as the heartbeat
  * inside it already is (D2 of introduce-slot-wiring); each dispatch method takes only the
- * run-specific values ({@link Tracker}, definition, tracker config) built by {@link TakeCommand#run}.
+ * run-specific values — the {@link BoundTracker} {@link TakeCommand#run} bound, which it uses whole
+ * (design D8 of collapse-composition-roots), and derives its {@link RunOrder} from.
  *
  * <p>Implements FR9, FR10, D8, D15, D16 of add-tracker-port; FR4 of introduce-slot-wiring.
  */
@@ -33,20 +29,11 @@ record TakeDispatcher(
         SlotWiring wiring,
         FactoryProperties factoryProperties,
         Clock clock,
-        Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-        SecretsProvider secretsProvider,
+        RefResolution refs,
         TakeoverConfirmation takeoverConfirmation) {
 
-    TakeResult runExplicit(
-            TakeArguments takeArguments,
-            String rawRef,
-            PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            Tracker tracker,
-            InstanceId instanceId,
-            TrackerAdapterFactory factory) {
-        return runOneRef(
-                takeArguments, rawRef, definition, trackerConfig, tracker, instanceId, factory, takeoverConfirmation);
+    TakeResult runExplicit(TakeArguments takeArguments, String rawRef, BoundTracker bound) {
+        return runOneRef(takeArguments, rawRef, bound, takeoverConfirmation);
     }
 
     /**
@@ -56,37 +43,33 @@ record TakeDispatcher(
      * <p>Implements FR9 of add-tracker-port; FR3, FR4 of add-factory-serve.
      */
     TakeResult runOneRef(
-            TakeArguments takeArguments,
-            String rawRef,
-            PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            Tracker tracker,
-            InstanceId instanceId,
-            TrackerAdapterFactory factory,
-            TakeoverConfirmation confirmation) {
+            TakeArguments takeArguments, String rawRef, BoundTracker bound, TakeoverConfirmation confirmation) {
+        TrackerConfig trackerConfig = bound.trackerConfig();
         // NFR-O1: the canonical ref is known as soon as short-ref expansion resolves it, before
         // fetchTask/dispose ever run — so every explicit-mode disposition outcome, including a
         // refusal (AwaitingHuman/Working/Finished/Gone in TakeDisposition, none of which reach any
         // deeper resume/fresh-claim MDC-setting code), is logged under the correct taskId.
-        TaskRef ref = TakeRefResolution.resolve(rawRef, trackerConfig, trackerAdapterRegistry);
+        TaskRef ref = refs.resolveRef(rawRef, trackerConfig);
         MDC.put(wiring.taskIdMdcKey(), ref.id());
         // FR9, design D8: a full canonical id naming a repo the adapter cannot reconcile to the
         // configured binding (GitHub: neither the configured repo nor a rename predecessor of it)
         // is refused here — before fetchTask ever touches the foreign repo — as exit 15 (Skipped),
         // never silently acted on. Adapters whose refs carry no repo binding return empty.
-        Optional<String> foreignRefusal = factory.refuseForeignRef(secretsProvider, trackerConfig, ref);
+        Optional<String> foreignRefusal = refs.refuseForeignRef(bound.factory(), trackerConfig, ref);
         if (foreignRefusal.isPresent()) {
             return new TakeResult.Skipped(UntrustedText.factory(foreignRefusal.get()));
         }
-        // One of the three places a take order is assembled (design single-owner table of
-        // introduce-take-order), and the explicit-mode place a TakeArguments becomes a run order.
+        // The one take order built before its claim — TakeDisposition claims or takes over
+        // afterwards, so it cannot go through TakeClaimAndWork#workClaimed, the owner of every
+        // already-claimed order (FR6 of collapse-composition-roots) — and the explicit-mode place
+        // a TakeArguments becomes a run order.
         var run = new RunOrder(
                 takeArguments.dir(),
                 takeArguments.base(),
-                definition,
+                bound.definition(),
                 takeArguments.interactiveMode(),
                 takeArguments.discardWork());
-        var order = new TakeOrder(run, tracker.fetchTask(ref), tracker, instanceId);
+        var order = new TakeOrder(run, bound.tracker().fetchTask(ref), bound.tracker(), bound.instanceId());
         var disposition = new TakeDisposition(wiring, takeArguments.takeover(), confirmation, clock);
         long startedNanos = System.nanoTime();
         TakeResult result = disposition.dispose(order);
@@ -94,26 +77,21 @@ record TakeDispatcher(
         return result;
     }
 
-    TakeResult runBare(
-            TakeArguments takeArguments,
-            PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            Tracker tracker,
-            InstanceId instanceId) {
+    TakeResult runBare(TakeArguments takeArguments, BoundTracker bound) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         var bareAuto = new TakeBareAuto(
                 wiring,
                 trackerProperties.abortBackoffBase(),
                 trackerProperties.abortBackoffCap(),
                 clock,
-                trackerConfig.wipLimit(),
+                bound.trackerConfig().wipLimit(),
                 new Random());
         // The bare-mode place a TakeArguments becomes a run order (D1 of introduce-take-order). The
         // parser refuses --base on bare take, and a bare take has always salvaged — --discard-work
         // is not passed on here, exactly as before this order existed.
-        var run = new RunOrder(takeArguments.dir(), null, definition, takeArguments.interactiveMode(), false);
+        var run = new RunOrder(takeArguments.dir(), null, bound.definition(), takeArguments.interactiveMode(), false);
         long startedNanos = System.nanoTime();
-        TakeResult result = bareAuto.run(run, tracker, instanceId);
+        TakeResult result = bareAuto.run(run, bound.tracker(), bound.instanceId());
         summarize(result, startedNanos);
         return result;
     }
@@ -148,15 +126,8 @@ record TakeDispatcher(
      * @param slots the concurrency limit N (design D3's {@code factory.serve.slots}); positive
      * @throws InterruptedException if interrupted while waiting for a free slot or an in-flight ref
      */
-    List<TakeBatchOutcome> runBatch(
-            TakeArguments takeArguments,
-            PipelineDefinition definition,
-            TrackerConfig trackerConfig,
-            Tracker tracker,
-            InstanceId instanceId,
-            TrackerAdapterFactory factory,
-            int slots)
+    List<TakeBatchOutcome> runBatch(TakeArguments takeArguments, BoundTracker bound, int slots)
             throws InterruptedException {
-        return TakeBatch.dispatch(this, takeArguments, definition, trackerConfig, tracker, instanceId, factory, slots);
+        return TakeBatch.dispatch(this, takeArguments, bound, slots);
     }
 }

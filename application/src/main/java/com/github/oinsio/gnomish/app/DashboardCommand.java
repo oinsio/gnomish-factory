@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.board.BoardComposition;
@@ -18,7 +16,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Map;
 import java.util.function.Supplier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
@@ -48,27 +45,21 @@ final class DashboardCommand {
     private final DashboardRenderCycle renderCycle = new DashboardRenderCycle();
     private final Clock clock;
     private final Sleeper sleeper;
-    private final Path homeDir;
+    private final FactoryPaths paths;
     private final FactoryProperties factoryProperties;
-    private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
-    private final SecretsProvider secretsProvider;
-    private final PipelineSource pipelineSource;
+    private final TrackerWiring trackerWiring;
 
     DashboardCommand(
             Clock javaTimeClock,
             Sleeper sleeper,
-            Path homeDir,
+            FactoryPaths paths,
             FactoryProperties factoryProperties,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            SecretsProvider secretsProvider,
-            PipelineSource pipelineSource) {
+            TrackerWiring trackerWiring) {
         this.clock = javaTimeClock;
         this.sleeper = sleeper;
-        this.homeDir = homeDir;
+        this.paths = paths;
         this.factoryProperties = factoryProperties;
-        this.trackerAdapterRegistry = trackerAdapterRegistry;
-        this.secretsProvider = secretsProvider;
-        this.pipelineSource = pipelineSource;
+        this.trackerWiring = trackerWiring;
     }
 
     /**
@@ -81,18 +72,19 @@ final class DashboardCommand {
      */
     void run(ApplicationArguments args) throws IOException {
         DashboardArguments dashboardArguments = argumentsParser.parse(args);
-        TrackerResolution.ReadOnlyTrackerResolution resolution = TrackerResolution.resolveReadOnlyTrackerFromDir(
-                dashboardArguments.dir(), pipelineSource, factoryProperties, trackerAdapterRegistry, secretsProvider);
+        TrackerWiring.ReadOnlyTrackerResolution resolution =
+                trackerWiring.resolveReadOnly(dashboardArguments.dir(), factoryProperties);
         TrackerConfig trackerConfig = resolution.trackerConfig();
         String instanceName = factoryProperties.instanceName();
         Path outputFile = dashboardArguments.out() != null
                 ? dashboardArguments.out()
-                : ObservabilityPaths.directory(homeDir, instanceName).resolve(DEFAULT_FILE_NAME);
+                : ObservabilityPaths.directory(paths.homeDir(), instanceName).resolve(DEFAULT_FILE_NAME);
         Supplier<BoardModel> boardFetch = () -> BoardComposition.compose(
                 resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, BOARD_READY_LIMIT);
 
         if (dashboardArguments.watch()) {
-            new DashboardWatchLoop(renderCycle, sleeper, clock).run(homeDir, instanceName, outputFile, boardFetch);
+            new DashboardWatchLoop(renderCycle, sleeper, clock)
+                    .run(paths.homeDir(), instanceName, outputFile, boardFetch);
             return;
         }
         renderOnce(instanceName, outputFile, boardFetch);
@@ -101,7 +93,7 @@ final class DashboardCommand {
     private void renderOnce(String instanceName, Path outputFile, Supplier<BoardModel> boardFetch) throws IOException {
         Instant now = clock.instant();
         BoardSectionView boardView = new DashboardBoardCache().refresh(boardFetch, now);
-        String html = renderCycle.render(homeDir, instanceName, boardView, now, null);
+        String html = renderCycle.render(paths.homeDir(), instanceName, boardView, now, null);
         AtomicFileWriter.write(outputFile, html);
     }
 }

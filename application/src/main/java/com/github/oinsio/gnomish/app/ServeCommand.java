@@ -7,12 +7,9 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
@@ -22,8 +19,6 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -55,8 +50,7 @@ import org.springframework.boot.ApplicationArguments;
  * builds (FR1, FR4, FR9, FR12 of add-serve-observability) — snapshot writer + ledger appender,
  * started beside the worktree janitor and stopped by {@link ServeShutdownWiring}, which also
  * drives either the drain path (FR10, NFR-O2, M3) or the forever loop (FR11, design D9) — see its
- * Javadoc for the full sequence. Not a Spring {@code @Component}: {@code ManualRunRunner}
- * constructs it imperatively, exactly like {@link TakeCommand}.
+ * Javadoc for the full sequence.
  *
  * <p>Implements FR2, FR4, FR10, FR11, FR12, FR13, NFR-O2, M3, D3, D7, D9 of add-factory-serve.
  * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability.
@@ -66,64 +60,37 @@ final class ServeCommand {
     private static final Logger log = LoggerFactory.getLogger(ServeCommand.class);
 
     private final ServeArgumentsParser argumentsParser = new ServeArgumentsParser();
-    private final RunAssembly assembly;
+    private final ServeRuntimeAssembly runtimeAssembly;
     private final TaskGit git;
-    private final Path worktreesRoot;
-    private final Path homeDir;
-    private final String taskIdMdcKey;
     private final FactoryProperties factoryProperties;
     private final ServeProperties serveProperties;
-    private final Clock clock;
-    private final com.github.oinsio.gnomish.domain.engine.port.Clock feedClock;
-    private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
-    private final SecretsProvider secretsProvider;
-    private final PipelineSource pipelineSource;
+    private final TrackerWiring trackerWiring;
     private final FeedAutomatonStarter starter;
-    private final SandboxLifecyclePass sandboxLifecyclePass;
-    private final ContainerTakeSupport containerTakeSupport;
     private final ConsoleIO errorConsole;
     /**
+     * @param runtimeAssembly assembles the daemon runtime once the tracker is bound, over the
+     *     command's fixed equipment (design D7 of collapse-composition-roots)
      * @param errorConsole the console owner bound to {@code stderr} (FR5, FR6 of
      *     harden-untrusted-text-sinks): the two startup-failure sentences go out on its human
      *     path, since each carries a message from a tracker or a git remote
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
-     * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam (task 4.1 of
-     *     add-serve-sandbox-lifecycle); {@link SandboxLifecyclePass#NONE} on a host-only install
      */
     ServeCommand(
-            RunAssembly assembly,
+            ServeRuntimeAssembly runtimeAssembly,
             TaskGit git,
-            Path worktreesRoot,
-            Path homeDir,
-            String taskIdMdcKey,
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            Clock clock,
-            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            SecretsProvider secretsProvider,
-            PipelineSource pipelineSource,
+            TrackerWiring trackerWiring,
             FeedAutomatonStarter starter,
-            SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport,
             ConsoleIO errorConsole) {
-        this.containerTakeSupport = containerTakeSupport;
-        this.errorConsole = errorConsole;
-        this.assembly = assembly;
+        this.runtimeAssembly = runtimeAssembly;
         this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.homeDir = homeDir;
-        this.taskIdMdcKey = taskIdMdcKey;
         this.factoryProperties = factoryProperties;
         this.serveProperties = serveProperties;
-        this.clock = clock;
-        this.feedClock = feedClock;
-        this.trackerAdapterRegistry = trackerAdapterRegistry;
-        this.secretsProvider = secretsProvider;
-        this.pipelineSource = pipelineSource;
+        this.trackerWiring = trackerWiring;
         this.starter = starter;
-        this.sandboxLifecyclePass = sandboxLifecyclePass;
+        this.errorConsole = errorConsole;
     }
 
     /**
@@ -150,33 +117,18 @@ final class ServeCommand {
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         int effectiveSlots = serveArguments.slots() != null ? serveArguments.slots() : serveProperties.slots();
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        TrackerAdapterFactory factory = TrackerResolution.resolveFactory(trackerConfig, trackerAdapterRegistry);
+        TrackerAdapterFactory factory = trackerWiring.resolveFactory(trackerConfig);
 
         // FR12, D7: the startup smoke test stays here (the command owns the exit-code failure);
-        // ServeAssembly.runtime wires everything else off the live tracker (process-invariants.md).
+        // the runtime assembly wires everything else off the live tracker (process-invariants.md).
         Tracker liveTracker = provisionTracker(factory, trackerConfig, instanceId);
-        ServeRuntime runtime = ServeRuntimeAssembly.assemble(
+        // FR8, design D8 of collapse-composition-roots: what this invocation bound, handed to the
+        // runtime assembly whole — which derives the one bound tracker below it over the
+        // health-wrapped tracker, so the raw one reaches nothing further.
+        ServeRuntime runtime = runtimeAssembly.assemble(
                 serveArguments,
-                worktreesRoot,
-                homeDir,
-                taskIdMdcKey,
-                definition,
-                trackerConfig,
-                factory,
-                liveTracker,
-                instanceId,
-                effectiveSlots,
-                // The source the startup definition came from is what every slot's fresh claim
-                // reads its task tier through (FR13 of add-base-ref-resolution).
-                assembly.withPipelineSource(pipelineSource),
-                git,
-                factoryProperties,
-                serveProperties,
-                clock,
-                feedClock,
-                sandboxLifecyclePass,
-                containerTakeSupport,
-                trustedBase);
+                new BoundTracker(definition, trustedBase, trackerConfig, factory, liveTracker, instanceId),
+                effectiveSlots);
 
         // FR2 of harden-logging-observability: the start anchor names the configuration the daemon
         // actually resolved — flags, properties and defaults already folded together — so a
@@ -213,7 +165,7 @@ final class ServeCommand {
      */
     private TrustedTierStartup.StartupLaw bindStartupLaw(Path dir) throws IOException {
         try {
-            return TrustedTierStartup.bind(dir, git.baseRefs(), pipelineSource, trackerAdapterRegistry);
+            return trackerWiring.bindStartupLaw(dir, git.baseRefs());
         } catch (DefaultBranchUnboundException unbound) {
             // throwable-not-subject: TrustedTierStartup logged the one ERROR of this failure; the
             //     console line is the operator's copy of its sentence.
@@ -224,15 +176,14 @@ final class ServeCommand {
 
     /**
      * FR12, design D7: the startup label-provisioning smoke test — the same {@link
-     * TrackerResolution#resolveTracker} funnel {@link TakeCommand} resolves through (FR4, design D2
+     * TrackerWiring#resolveTracker} funnel {@link TakeCommand} resolves through (FR4, design D2
      * of fix-claim-epoch-fence), so an unreachable repo or bad token surfaces here, before any task
      * is claimed, and every slot's claim lands in the same tenure record its writers stamp from.
      */
     private Tracker provisionTracker(
             TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId instanceId) {
         try {
-            return TrackerResolution.resolveTracker(
-                    factory, trackerConfig, secretsProvider, instanceId.value(), git.epochs());
+            return trackerWiring.resolveTracker(factory, trackerConfig, instanceId, git.epochs());
         } catch (RuntimeException startupFailure) {
             // The operator's console gets the plain sentence; the log file gets the same failure
             // with its stack and cause chain (FR2, FR7 of harden-logging-observability). Until now

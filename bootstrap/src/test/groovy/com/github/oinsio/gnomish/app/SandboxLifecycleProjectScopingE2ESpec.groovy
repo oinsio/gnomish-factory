@@ -100,8 +100,8 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
 
     private String materializeRunningBox(Path cloneDir, String taskId, SandboxProperties sandboxProps, OwnershipMode mode) {
         taskIds << taskId
-        def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], mode, ClaimEpochSource.NONE)
+        def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(), sandboxProps,
+                new FactoryProperties(null, null, null, null, null), mode, ClaimEpochSource.NONE)
         // These specs point origin at an unreachable host on purpose — the URL is what project
         // identity is derived from, and nothing here pushes. The branch's own first push is
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone

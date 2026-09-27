@@ -41,6 +41,18 @@ public final class LeaseThresholds {
     }
 
     /**
+     * The instance heartbeat's timing: the configured beat interval and the {@link #lostDetection}
+     * threshold derived from the same config — the one place the pair is built, so the heartbeat
+     * receives them already in their required order (design D12 of collapse-composition-roots).
+     *
+     * @param config the resolved tracker config carrying the beat interval and TTL multiplier
+     * @return the heartbeat's beat timing
+     */
+    public static BeatTiming beatTiming(TrackerConfig config) {
+        return new BeatTiming(config.heartbeatInterval(), lostDetection(config));
+    }
+
+    /**
      * How long a claim version may stand unchanged before a reaper returns the task to {@code
      * Ready} — the TTL the staleness memory measures.
      *

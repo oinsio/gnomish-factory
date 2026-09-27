@@ -65,7 +65,7 @@ public class TrackerAdapterConfiguration {
     public Map<String, TrackerAdapterFactory> trackerAdapterRegistry() {
         // FR4, design D2 of fix-claim-epoch-fence: the registry stays raw. Keeping the tenure
         // record current is the claiming command's own step, taken through
-        // TrackerResolution.resolveTracker over the book its TaskGit bundle carries — a bean that
+        // TrackerWiring.resolveTracker over the book its TaskGit bundle carries — a bean that
         // wrapped the whole registry held only for assemblies that went through the bean, which
         // every hand-built end-to-end fixture does not.
         return ProviderDiscoveryReport.reported(PORT, TrackerAdapterDiscovery.discover());

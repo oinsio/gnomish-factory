@@ -52,7 +52,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when:
@@ -70,7 +70,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when: 'a second cycle lands back in the same Idle-empty state as construction'
@@ -80,14 +80,14 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
         0 * notifier.markDirty()
     }
 
-    def "the eleven-arg constructor defaults to a no-op notifier"() {
+    def "the notifier-less construction defaults to a no-op notifier"() {
         given:
         Tracker tracker = [listReady: { int limit ->
                 []
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1))
 
         expect:

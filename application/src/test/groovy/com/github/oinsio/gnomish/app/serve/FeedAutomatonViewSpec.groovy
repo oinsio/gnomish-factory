@@ -46,7 +46,7 @@ class FeedAutomatonViewSpec extends Specification {
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, int wipLimit = WIP_LIMIT) {
-        new FeedAutomaton(tracker, INSTANCE, ledger, noop(), sleeper, clock, BASE, CAP, IDLE, wipLimit, new FixedRandom())
+        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, noop(), sleeper, clock, BASE, CAP, IDLE, wipLimit, new FixedRandom())
     }
 
     def "before any cycle runs, the view reports an idle state at construction time"() {

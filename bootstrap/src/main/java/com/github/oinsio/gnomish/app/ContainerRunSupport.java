@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
@@ -31,7 +30,6 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
-import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
@@ -78,7 +76,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
      * Canonical wiring over an already-built environments seam. Package-private (not {@code
      * private}) so daemon-free specs can inject a {@link ContainerEnvironments} over a scripted
      * fake docker CLI — the same seam discipline as {@code ContainerEnvironments}'s own
-     * package-private constructor; production always goes through {@link #create}.
+     * package-private constructor; production always goes through {@link ContainerRunSupportFactory#create}.
      */
     ContainerRunSupport(
             GitProcessRunner runner,
@@ -119,34 +117,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
      */
     private Optional<DenialCursor> currentDenialPosition() {
         return lease.currentIfLeased().flatMap(TaskExecutionEnvironment::denialCursor);
-    }
-
-    /**
-     * Builds the run's container support. Delegated to {@link ContainerRunSupportFactory} for file
-     * size. {@code checkCredentialEnvVars} is the union the configured check providers declared
-     * through the SPI (FR17, design D11 of add-plugin-architecture) — the composition root resolves
-     * it once and hands it down, so nothing here names a vendor credential constant.
-     */
-    static ContainerRunSupport create(
-            Path cloneDir,
-            String taskId,
-            List<Segment> segments,
-            SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
-            List<String> checkCredentialEnvVars,
-            List<String> credentialEnvVarsToScrub,
-            com.github.oinsio.gnomish.sandbox.environment.OwnershipMode ownershipMode,
-            ClaimEpochSource epochs) {
-        return ContainerRunSupportFactory.create(
-                cloneDir,
-                taskId,
-                segments,
-                sandboxProperties,
-                factoryProperties,
-                checkCredentialEnvVars,
-                credentialEnvVarsToScrub,
-                ownershipMode,
-                epochs);
     }
 
     /** The strict sandboxed persistence with the best-effort post-round push (FR5, FR21, FR22). */

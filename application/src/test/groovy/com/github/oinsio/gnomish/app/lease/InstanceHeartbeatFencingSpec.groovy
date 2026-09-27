@@ -48,8 +48,8 @@ class InstanceHeartbeatFencingSpec extends Specification {
     }
 
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
-    tracker, new HeartbeatProgress(), new BlockingSleeper(), clock, INTERVAL,
-    sink, HeartbeatStateListener.IGNORE, LOST_DETECTION)
+    tracker, new HeartbeatProgress(), new BlockingSleeper(), clock, new BeatTiming(INTERVAL, LOST_DETECTION),
+    sink, HeartbeatStateListener.IGNORE)
 
     def cleanup() {
         hb.unregister(A)

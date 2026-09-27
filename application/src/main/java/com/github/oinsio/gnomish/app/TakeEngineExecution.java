@@ -177,7 +177,7 @@ record TakeEngineExecution(
                 });
 
         var retry = TerminalWriteRetry.system();
-        return TakeOutcomeDispatch.dispatch(
-                outcome, context, bootstrap.branchName(), order, retry, park, abortFuse, finish);
+        return new TakeOutcomeDispatch(retry, park, abortFuse, finish)
+                .dispatch(outcome, context, bootstrap.branchName(), order);
     }
 }

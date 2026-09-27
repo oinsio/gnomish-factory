@@ -2,8 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
-import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.board.BoardComposition;
@@ -12,7 +10,6 @@ import com.github.oinsio.gnomish.board.json.BoardJsonMapper;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
 import java.time.Clock;
-import java.util.Map;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
 
@@ -39,23 +36,14 @@ final class BoardCommand {
     private final BoardJsonMapper jsonMapper = new BoardJsonMapper();
     private final Clock clock;
     private final FactoryProperties factoryProperties;
-    private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
-    private final SecretsProvider secretsProvider;
-    private final PipelineSource pipelineSource;
+    private final TrackerWiring trackerWiring;
     private final ConsoleIO console;
 
     BoardCommand(
-            Clock javaTimeClock,
-            FactoryProperties factoryProperties,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            SecretsProvider secretsProvider,
-            PipelineSource pipelineSource,
-            ConsoleIO console) {
+            Clock javaTimeClock, FactoryProperties factoryProperties, TrackerWiring trackerWiring, ConsoleIO console) {
         this.clock = javaTimeClock;
         this.factoryProperties = factoryProperties;
-        this.trackerAdapterRegistry = trackerAdapterRegistry;
-        this.secretsProvider = secretsProvider;
-        this.pipelineSource = pipelineSource;
+        this.trackerWiring = trackerWiring;
         this.console = console;
     }
 
@@ -68,8 +56,8 @@ final class BoardCommand {
      */
     void run(ApplicationArguments args) throws IOException {
         BoardArguments boardArguments = argumentsParser.parse(args);
-        TrackerResolution.ReadOnlyTrackerResolution resolution = TrackerResolution.resolveReadOnlyTrackerFromDir(
-                boardArguments.dir(), pipelineSource, factoryProperties, trackerAdapterRegistry, secretsProvider);
+        TrackerWiring.ReadOnlyTrackerResolution resolution =
+                trackerWiring.resolveReadOnly(boardArguments.dir(), factoryProperties);
         TrackerConfig trackerConfig = resolution.trackerConfig();
 
         BoardModel model = BoardComposition.compose(

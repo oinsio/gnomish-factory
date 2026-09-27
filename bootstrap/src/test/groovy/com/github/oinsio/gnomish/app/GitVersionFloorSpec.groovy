@@ -62,8 +62,7 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(git),
                 properties,
-                new BoardCommand(Clock.systemUTC(), properties, [:], MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(), LiveConsoleIO.onStdout()),
+                new BoardCommand(Clock.systemUTC(), properties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
                 [github: fakeFactory(tracker)],
                 new GitVersionCheck(git))
 

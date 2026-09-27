@@ -35,7 +35,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole())
+        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole())
     }
 
     /** Records exactly one round commit and, deliberately, never calls {@code recordOutcome} —

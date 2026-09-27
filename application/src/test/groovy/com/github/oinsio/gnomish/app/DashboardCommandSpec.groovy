@@ -55,11 +55,9 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         new DashboardCommand(
                 Clock.fixed(Instant.parse('2026-08-06T00:00:00Z'), ZoneOffset.UTC),
                 sleeper,
-                homeDir,
+                FactoryPathsFixture.homeAt(homeDir),
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
-                [github: new RecordingTrackerAdapterFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                new TrackerWiring([github: new RecordingTrackerAdapterFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
     }
 
     def "defaults the output path to dashboard.html in the instance's observability directory"() {

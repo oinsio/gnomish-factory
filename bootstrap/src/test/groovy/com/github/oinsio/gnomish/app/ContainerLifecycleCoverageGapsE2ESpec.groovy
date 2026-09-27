@@ -155,8 +155,8 @@ advancement: auto
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md', [], new AutonomyLimits(3),
                 AdvancementMode.AUTO)
-        def support = ContainerRunSupport.create(cloneDir, taskId, segments(stage), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+        def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(stage), sandboxProps,
+                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(

@@ -27,7 +27,7 @@ import spock.lang.Timeout
  *
  * <p>The take path has this assertion twice already ({@code TakeLifecycleEscalateResumeSpecBase},
  * {@code TakeLifecycleCrashReapReclaimSpecBase}), but {@code ServeCommand.provisionTracker} is a
- * SECOND call site of the claiming funnel {@code TrackerResolution.resolveTracker}, wired from its
+ * SECOND call site of the claiming funnel {@code TrackerWiring.resolveTracker}, wired from its
  * own bundle ({@code git.epochs()}). Nothing in the take specs reaches that line: a serve that
  * resolved its tracker over a book its git writers do not read would record every claim into a
  * record nobody stamps from, leaving unstamped commits and a green build. This spec is what fails
@@ -72,19 +72,16 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
 
     private ServeCommand newCommand() {
         def properties = FakeAgentSupport.propertiesFor('plain-round')
-        new ServeCommand(
+        ServeCommands.of(
                 newAssembly(properties),
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
+                new FactoryPaths(worktreesRoot, homeDir),
                 'taskId',
                 properties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
-                [github: claimWatcher],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
+                new TrackerWiring([github: claimWatcher], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())
     }

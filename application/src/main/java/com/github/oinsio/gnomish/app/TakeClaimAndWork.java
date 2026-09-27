@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
@@ -27,13 +28,15 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * and the claim lifecycle around it, holding the slot's equipment as fields built once from the
  * {@link SlotWiring} rather than receiving it on every call (D2 of introduce-slot-wiring).
  *
- * <p>The class and {@link #dispatchAfterClaim} are {@code public} — the only members widened
- * beyond this package's usual package-private convention (see the sibling {@code Take*} claim/
- * resume helpers) — so {@code com.github.oinsio.gnomish.app.serve.TakeSlotRunner} (task 4.3 of
- * add-factory-serve) can invoke the identical "already-claimed, dispatch the take cycle" sequence
- * a {@code serve} slot needs, without duplicating this logic or relocating scheduler code out of
- * its established {@code app.serve} package. {@link #claimAndWork} stays package-private: no
- * caller outside {@code app} claims fresh itself.
+ * <p>The class and {@link #workClaimed} are {@code public} — the only members widened beyond this
+ * package's usual package-private convention (see the sibling {@code Take*} claim/resume helpers) —
+ * so {@code com.github.oinsio.gnomish.app.serve.TakeSlotRunner} (task 4.3 of add-factory-serve)
+ * can invoke the identical "already-claimed, dispatch the take cycle" sequence a {@code serve} slot
+ * needs, without duplicating this logic or relocating scheduler code out of its established {@code
+ * app.serve} package. {@link #workClaimed} is the one entry that turns a claimed ref into its
+ * order (FR6 of collapse-composition-roots); {@link #claimAndWork} and {@link #dispatchAfterClaim}
+ * stay package-private: no caller outside {@code app} claims fresh itself or holds an order built
+ * elsewhere.
  *
  * <p>This class owns the claim, heartbeat and crash-abort lifecycle only; WHERE the work runs —
  * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, an instance this
@@ -74,6 +77,26 @@ public final class TakeClaimAndWork {
             return refuseHeld(otherInstance);
         }
         return dispatchAfterClaim(order);
+    }
+
+    /**
+     * Fetches the task this caller has already claimed, builds its order and dispatches it
+     * through {@link #dispatchAfterClaim} — the one place a {@link TakeOrder} is assembled for an
+     * already-claimed task (FR6 of collapse-composition-roots), shared by bare take's claim walk
+     * and the serve slot runner. The claimed task exists only from this fetch on, so the fetch is
+     * part of the sequence rather than the caller's. Setting the MDC key, the claim anchor log and
+     * the task summary stay with the callers: those differ by mode.
+     *
+     * <p>Implements FR6 of collapse-composition-roots.
+     *
+     * @param run the invocation's run order
+     * @param claimed the ref this caller holds a successful claim on
+     * @param tracker the tracker the claim was taken through
+     * @param instanceId this factory instance's identity
+     * @return the terminal result of the dispatched take cycle
+     */
+    public TakeResult workClaimed(RunOrder run, TaskRef claimed, Tracker tracker, InstanceId instanceId) {
+        return dispatchAfterClaim(new TakeOrder(run, tracker.fetchTask(claimed), tracker, instanceId));
     }
 
     /**
@@ -123,7 +146,7 @@ public final class TakeClaimAndWork {
      * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat; FR1
      * of add-factory-serve; FR15 of harden-task-branch-contract.
      */
-    public TakeResult dispatchAfterClaim(TakeOrder order) {
+    TakeResult dispatchAfterClaim(TakeOrder order) {
         TaskRef ref = order.ref();
         heartbeat.register(ref);
         try {
