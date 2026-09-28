@@ -11,6 +11,7 @@ import com.google.errorprone.bugpatterns.BugChecker.MethodTreeMatcher;
 import com.google.errorprone.matchers.Description;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.MethodTree;
+import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import java.util.Optional;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.ElementKind;
@@ -32,7 +33,9 @@ import javax.lang.model.element.ExecutableElement;
  * the annotated element — the local and anonymous classes declared inside it included — and
  * never lets the check see the annotation, so a blank reason could not be reported. The
  * {@code suppressionAnnotations} set is therefore empty, which also leaves
- * {@code @SuppressWarnings} inert for this check: no bulk form of exemption exists.
+ * {@code @SuppressWarnings} inert for this check: no bulk form of exemption exists. An annotation
+ * on a declaration that would pass without it is reported as unnecessary, so a signature shrunk
+ * under the limit cannot leave a stale entry in the list of exceptions.
  *
  * <p>Implements FR1, FR2, FR3, FR4 and NFR-O1 of add-parameter-count-gate (design D1, D3, D5).
  */
@@ -50,23 +53,29 @@ public final class ParameterCountLimit extends BugChecker implements MethodTreeM
     @Override
     public Description matchMethod(MethodTree tree, VisitorState state) {
         var symbol = ASTHelpers.getSymbol(tree);
+        int count = tree.getParameters().size();
+        boolean violates = violatesLimit(symbol, count, state);
         var reason = exemptionReason(symbol);
         if (reason.isPresent()) {
-            return reason.get().isBlank()
-                    ? buildDescription(tree).setMessage(blankReasonMessage()).build()
-                    : Description.NO_MATCH;
+            if (reason.get().isBlank()) {
+                return buildDescription(tree).setMessage(blankReasonMessage()).build();
+            }
+            return violates
+                    ? Description.NO_MATCH
+                    : buildDescription(tree).setMessage(unnecessaryExemptionMessage()).build();
         }
-        int count = tree.getParameters().size();
+        return violates ? buildDescription(tree).setMessage(overLimitMessage(count)).build() : Description.NO_MATCH;
+    }
+
+    /** Whether the declaration fails the limit when judged without its exemption annotation. */
+    private static boolean violatesLimit(MethodSymbol symbol, int count, VisitorState state) {
         if (count <= LIMIT) {
-            return Description.NO_MATCH;
+            return false;
         }
         if (symbol.isConstructor() && symbol.owner.getKind() == ElementKind.RECORD) {
-            return Description.NO_MATCH;
+            return false;
         }
-        if (!ASTHelpers.findSuperMethods(symbol, state.getTypes()).isEmpty()) {
-            return Description.NO_MATCH;
-        }
-        return buildDescription(tree).setMessage(overLimitMessage(count)).build();
+        return ASTHelpers.findSuperMethods(symbol, state.getTypes()).isEmpty();
     }
 
     /** The {@code reason} of the declaration's own exemption annotation, if it carries one. */
@@ -96,5 +105,12 @@ public final class ParameterCountLimit extends BugChecker implements MethodTreeM
     static String blankReasonMessage() {
         return "@ParameterLimitExemption needs a non-blank reason: the reason on the declaration is the"
                 + " only record of why this signature is exempt from the " + LIMIT + "-parameter limit.";
+    }
+
+    static String unnecessaryExemptionMessage() {
+        return "@ParameterLimitExemption is unnecessary: this declaration passes the " + LIMIT + "-parameter"
+                + " limit without it (it is within the limit, or a record constructor or an override, which"
+                + " are exempt by construction). Remove it, so the annotations stay the complete list of the"
+                + " gate's real exceptions.";
     }
 }

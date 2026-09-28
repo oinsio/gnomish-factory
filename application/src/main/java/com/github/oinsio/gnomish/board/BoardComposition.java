@@ -58,7 +58,6 @@ public final class BoardComposition {
                 new EligibilityInputs(
                         trackerProperties.abortBackoffBase(),
                         trackerProperties.abortBackoffCap(),
-                        now,
                         open.size(),
                         trackerConfig.wipLimit()));
     }

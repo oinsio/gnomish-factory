@@ -19,9 +19,9 @@ import org.jspecify.annotations.Nullable;
  * now.
  *
  * <p>This class is pure logic — like {@link BackoffPolicy} and {@code
- * FeedPolicy}, it takes the backoff shape, the evaluation instant, the
- * open-front count and the WIP limit as one explicit {@link
- * EligibilityInputs} value rather than reading configuration or the tracker
+ * FeedPolicy}, it takes the backoff shape, the open-front count and the
+ * WIP limit as one explicit {@link EligibilityInputs} value, and the
+ * evaluation instant beside it, rather than reading configuration or the tracker
  * itself; resolving those values is the caller's job.
  *
  * <p>Implements FR2 of add-board-command; FR6 of add-parameter-count-gate.
@@ -34,15 +34,16 @@ final class EligibilityPolicy {
      * Resolves {@code task}'s eligibility reason in feed precedence order.
      *
      * @param task the ready task to evaluate; never null
-     * @param inputs the backoff shape, evaluation instant, open-front count
-     *     and WIP limit to judge {@code task} against; never null
+     * @param inputs the backoff shape, open-front count and WIP limit to
+     *     judge {@code task} against; never null
+     * @param now the instant to evaluate backoff at; never null
      * @return the reason the feed would not claim {@code task} now, or
      *     {@code null} when it would
      */
-    static @Nullable EligibilityReason resolve(ReadyTask task, EligibilityInputs inputs) {
+    static @Nullable EligibilityReason resolve(ReadyTask task, EligibilityInputs inputs, Instant now) {
         Duration base = inputs.base();
         Duration cap = inputs.cap();
-        if (BackoffPolicy.isBackedOff(task.abortFacts(), base, cap, inputs.now())) {
+        if (BackoffPolicy.isBackedOff(task.abortFacts(), base, cap, now)) {
             Instant lastAbortAt = Objects.requireNonNull(
                     task.abortFacts().lastAbortAt(),
                     "isBackedOff true implies a positive count and a recorded lastAbortAt");

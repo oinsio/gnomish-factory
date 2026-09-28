@@ -141,6 +141,13 @@
       `grep -rn "requireImage\|factory.sandbox.image must be set" sandbox/docker/src/main` →
       `TaskContainerSettings.java` only (lines 14, 29, 35, 37). `ContainerEnvironmentBuilder` is
       listed in `:sandbox:docker`'s `pitest { excludedClasses }` naming the two suites.
+      *Revised 2026-09-28 (audit):* the exclusion was removed — the builder computes the
+      `scrubsCredential` probe, so it fails the arid-wiring bar (D11); `:sandbox:docker` PIT
+      600/600 with its four mutants killed by `ContainerEnvironmentsSeamSpec`.
+      *Also changed, outside D11's table:* `ContainerRunSupportFactory` (bootstrap) turned from a
+      `final class` into a `record` keeping its explicit `create` — the record-method shape D8 names
+      as the hcoles/pitest#1285 risk; `:bootstrap` PIT ran it without a RUN_ERROR (`create` KILLED,
+      868/868), so it stays in the mutation scope as ADR 0010 requires.
 - [x] 2.4 Bring `GithubMarkerJson` ctor:62 and `PipelineModelBuilder.mapAndValidate:50`
       under the limit (D12): move the eight fields into `record GithubMarkerFields` (components
       only; `@JsonInclude(NON_NULL)`, `@JsonPropertyOrder` and `@JsonProperty` per component, no
@@ -229,15 +236,16 @@
       the mutation scope. A second run showed one TIMED_OUT on the untouched `IdleTiming.selection`,
       killed on the runs before and after (a load transient, not a gap). Sweep output: empty.
 - [x] 2.7 Bring `BoardModel.build:130` under the limit (D8): add `record EligibilityInputs(
-      Duration base, Duration cap, Instant now, int openFrontCount, int wipLimit)` in `board`,
-      taken by `BoardModel.build` (5) and `EligibilityPolicy.resolve` (2); update
+      Duration base, Duration cap, int openFrontCount, int wipLimit)` in `board`,
+      taken by `BoardModel.build` (5) and `EligibilityPolicy.resolve` (3, with `generatedAt`); update
       `BoardComposition:53` (production) and the three test callers of the nine-parameter form
       — `BoardReferenceFixture`, `BoardModelEligibilitySpec`, `BoardJsonMapperSpec` — at the call
       site only; the four-parameter `build` overload is untouched. Verify `:application:check`
       passes with no expectation edited.
-      *Report:* `record EligibilityInputs(base, cap, now, openFrontCount, wipLimit)` added in
+      *Report:* `record EligibilityInputs(base, cap, openFrontCount, wipLimit)` added in
       `board` (components only, no validation — NullAway owns the non-null contract);
-      `BoardModel.build` at five parameters, `EligibilityPolicy.resolve` at two, the
+      `BoardModel.build` at five parameters, `EligibilityPolicy.resolve` at three — `now` left the
+      record after review: every caller passed `generatedAt` for it, so `build` now does (D8), the
       four-parameter `build` overload untouched and building its defaults into the record.
       `BoardComposition` and the three test callers (`BoardReferenceFixture`,
       `BoardModelEligibilitySpec`, `BoardJsonMapperSpec`) edited at the call site only.

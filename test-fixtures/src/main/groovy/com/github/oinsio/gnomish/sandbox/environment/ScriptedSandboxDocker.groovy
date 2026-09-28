@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
-import java.time.Duration
 import java.time.Instant
 
 /**
@@ -86,7 +85,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         sandbox,
                         new BoxTiming({
                             -> Instant.now()
-                        } as Clock, { d -> } as Sleeper, Duration.ofMinutes(5)),
+                        } as Clock, { d -> } as Sleeper, DockerCli.DEFAULT_COMMAND_TIMEOUT),
                         ChildEnvAllowlist.none(),
                         guardRoot,
                         new ObjectOwnership(mode, projectId)))

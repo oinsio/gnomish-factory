@@ -121,6 +121,31 @@ class ParameterCountLimitSpec extends Specification {
         reason << ['', '   ']
     }
 
+    def 'FR4: an exemption on a declaration the gate would pass anyway fails, so the annotations stay the list of real exceptions'() {
+        expect:
+        helper.addSourceLines('Shape.java',
+                'interface Shape {',
+                '  // BUG: Diagnostic contains: 8 parameters',
+                "  void m(${params(8)});",
+                '}').addSourceLines('Test.java',
+                EXEMPTION,
+                'class Test implements Shape {',
+                '  @ParameterLimitExemption(reason = "the signature was shrunk since")',
+                '  // BUG: Diagnostic contains: @ParameterLimitExemption is unnecessary: this declaration passes the 7-parameter limit without it',
+                "  void small(${params(7)}) {}",
+                '  @ParameterLimitExemption(reason = "an override does not choose its signature")',
+                '  // BUG: Diagnostic contains: @ParameterLimitExemption is unnecessary',
+                "  @Override public void m(${params(8)}) {}",
+                '}').addSourceLines('Rec.java',
+                EXEMPTION,
+                "record Rec(${params(8)}) {",
+                '  @ParameterLimitExemption(reason = "a record is its own parameter object")',
+                '  // BUG: Diagnostic contains: @ParameterLimitExemption is unnecessary',
+                "  Rec(${params(8)}) { this.p1 = p1; this.p2 = p2; this.p3 = p3; this.p4 = p4;"
+                        + ' this.p5 = p5; this.p6 = p6; this.p7 = p7; this.p8 = p8; }',
+                '}').doTest()
+    }
+
     def 'FR4: the exemption covers its own declaration only, not the classes declared inside it'() {
         expect:
         helper.addSourceLines('Test.java',

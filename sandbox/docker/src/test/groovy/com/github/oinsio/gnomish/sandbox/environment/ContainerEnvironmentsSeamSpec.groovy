@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import java.nio.file.Path
-import java.time.Duration
 import spock.lang.Specification
 
 /**
@@ -25,7 +24,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         when: 'the production construction path runs'
         def seam = ContainerEnvironments.forTask(
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), ChildEnvAllowlist.none(),
+                timing, ChildEnvAllowlist.none(),
                 Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
 
         then: 'the seam is real and carries the round key it was built for'
@@ -42,7 +41,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         and:
         new ContainerEnvironments(docker, KEY, new ContainerEnvironmentBuilder(
                         docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                        new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), ChildEnvAllowlist.none(),
+                        timing, ChildEnvAllowlist.none(),
                         Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')))
                 .ownershipMode() == OwnershipMode.MANUAL
     }

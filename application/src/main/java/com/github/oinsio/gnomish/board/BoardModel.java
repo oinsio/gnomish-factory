@@ -94,11 +94,7 @@ public record BoardModel(
                 truncated,
                 generatedAt,
                 new EligibilityInputs(
-                        BackoffPolicy.DEFAULT_BASE,
-                        BackoffPolicy.DEFAULT_CAP,
-                        generatedAt,
-                        open.size(),
-                        Integer.MAX_VALUE));
+                        BackoffPolicy.DEFAULT_BASE, BackoffPolicy.DEFAULT_CAP, open.size(), Integer.MAX_VALUE));
     }
 
     /**
@@ -115,10 +111,11 @@ public record BoardModel(
      * @param open the {@code listOpen} result, in adapter order; never null
      * @param truncated whether the ready window was capped at the requested
      *     limit; passed through unchanged
-     * @param generatedAt the observation instant; never null
-     * @param eligibility the backoff shape, evaluation instant, open-front
-     *     count and WIP limit every ready row is judged against, resolved
-     *     exactly as the take feed resolves them; never null
+     * @param generatedAt the observation instant, and the instant every
+     *     ready row's backoff is evaluated at; never null
+     * @param eligibility the backoff shape, open-front count and WIP limit
+     *     every ready row is judged against, resolved exactly as the take
+     *     feed resolves them; never null
      * @return the assembled model
      */
     public static BoardModel build(
@@ -129,7 +126,7 @@ public record BoardModel(
             EligibilityInputs eligibility) {
         List<ReadyRow> readyRows = new ArrayList<>(ready.size());
         for (ReadyTask task : ready) {
-            EligibilityReason reason = EligibilityPolicy.resolve(task, eligibility);
+            EligibilityReason reason = EligibilityPolicy.resolve(task, eligibility, generatedAt);
             readyRows.add(new ReadyRow(task.ref(), task.title(), task.returned(), reason));
         }
 

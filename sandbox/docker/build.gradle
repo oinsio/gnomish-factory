@@ -137,18 +137,3 @@ layering {
         ':untrustedtext',
     ]
 }
-
-// Per-class exemption, arid-wiring category (`.claude/rules/testing.md`; design D11 of
-// add-parameter-count-gate): `ContainerEnvironmentBuilder` is an assembly object — it was a
-// static recipe "extracted for file size" re-listing `ContainerEnvironments`' fields, turned
-// back into an instance holding them. Its `build(key)` carries no decision (no conditional,
-// no loop, no computed value): every mutation is a nulled construction or a removed hand-off,
-// so a spec written for it could only restate the constructor calls it makes. It is exercised
-// through the effect on the real flow: `ContainerEnvironmentsSeamSpec` (the seam's
-// construction, ownership and credential-scrub probe) and
-// `ContainerTaskExecutionEnvironmentUnitSpec` (every environment the builder wires).
-pitest {
-    excludedClasses = [
-        'com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentBuilder',
-    ]
-}

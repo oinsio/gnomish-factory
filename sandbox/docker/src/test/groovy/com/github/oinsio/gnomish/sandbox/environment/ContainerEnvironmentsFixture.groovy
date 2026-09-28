@@ -23,11 +23,13 @@ trait ContainerEnvironmentsFixture {
     Clock clock = { -> Instant.now() } as Clock
     ContainerHarvest harvester = { String container, String branch -> } as ContainerHarvest
     Sleeper sleeper = { Duration d -> } as Sleeper
+    // The docker-command bound is the production default: no scripted command here ever waits on it.
+    BoxTiming timing = new BoxTiming(clock, sleeper, DockerCli.DEFAULT_COMMAND_TIMEOUT)
 
     ContainerEnvironments environments(String key, ChildEnvAllowlist allowlist = ChildEnvAllowlist.none()) {
         new ContainerEnvironments(docker, key, new ContainerEnvironmentBuilder(
                         docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                        new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), allowlist, Path.of('/factory/guard-config'),
+                        timing, allowlist, Path.of('/factory/guard-config'),
                         new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')))
     }
 }

@@ -56,7 +56,7 @@ module configures the check and none can opt out; the only production Java outsi
 check's own build, which cannot apply the convention that would put the check on its own
 processor path. The wiring is pinned by `ParameterCountGateFunctionalSpec` in `build-logic`,
 the semantics by `ParameterCountLimitSpec` beside the check
-(provenance: `add-parameter-count-gate`).
+(provenance: `add-parameter-count-gate`, FR7).
 
 **Two exemptions, decided from the syntax tree, never from a list:**
 
@@ -76,7 +76,8 @@ with a non-blank reason written on the declaration it excuses. There is no bulk 
 annotation targets methods and constructors only, the check ignores `@SuppressWarnings`, and no
 allowlist file exists — so a grep for the annotation's name is the complete, current list of
 the gate's exceptions with their justifications. The reason is the record of why this
-signature cannot take a parameter object; a blank one is reported like an eighth parameter. If
+signature cannot take a parameter object; a blank one is reported like an eighth parameter, and
+so is an annotation on a declaration that would pass without it, so the list cannot go stale. If
 exemptions ever accumulate past a handful, revisit the limit in a change rather than grow the
 list.
 

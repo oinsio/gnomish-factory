@@ -137,8 +137,9 @@ terms) live in `.claude/rules/process-invariants.md`.
   *Not:* the automaton itself, which runs the feed cycle.
 - **Eligibility inputs** — the values the feed evaluates one ready task
   against when deciding whether it would claim it now: the backoff shape
-  (base and cap), the instant to measure it at, the open-front count and the
-  WIP limit. Resolved once per invocation and handed whole to the board's
+  (base and cap), the open-front count and the WIP limit. Backoff is measured
+  at the board's own observation instant, which is not part of the inputs.
+  Resolved once per invocation and handed whole to the board's
   model and the eligibility policy, so the board answers exactly as the take
   feed would. Type: `EligibilityInputs`. *Not:* the task's own facts (abort
   count, last abort) — those are what the inputs are evaluated against.

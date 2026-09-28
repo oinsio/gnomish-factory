@@ -16,10 +16,10 @@ import java.util.Map;
  * <p>An instance constructed once with the equipment every role shares (design D11 of
  * add-parameter-count-gate — the fields-not-parameters shape of {@code process-invariants.md});
  * {@link #build} takes only the per-call job, the role key. It is a relay for the timing and the
- * git link: each is taken whole and its members handed on to the leaves that use them. It carries
- * no decision, so it is an assembly object in the sense of {@code testing.md}: exercised through
- * {@code ContainerEnvironmentsSeamSpec} and {@code ContainerTaskExecutionEnvironmentUnitSpec},
- * and listed in this module's {@code pitest.excludedClasses}.
+ * git link: each is taken whole and its members handed on to the leaves that use them. It is not
+ * an assembly object in the sense of {@code testing.md}: {@link #scrubsCredential} computes the
+ * allowlist probe {@link ContainerEnvironments} delegates to, so the class stays in the mutation
+ * scope, its mutants killed by {@code ContainerEnvironmentsSeamSpec}.
  *
  * <p>Implements FR6 of add-parameter-count-gate.
  */
