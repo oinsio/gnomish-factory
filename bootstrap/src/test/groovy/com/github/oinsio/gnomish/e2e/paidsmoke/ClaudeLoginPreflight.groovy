@@ -6,12 +6,13 @@ import com.github.oinsio.gnomish.adapter.agent.TimestampedEvent
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
-import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import groovy.transform.CompileStatic
+
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-
 /**
  * Fail-fast precondition for the paid smoke task (task 11.3, M4, D11): «is `claude` logged in and
  * able to bill a real round?» rather than the Ollama layer's weaker «does the binary resolve on
@@ -28,7 +29,12 @@ import java.time.Duration
  * specific, actionable reason — never a hang, never a bare stack trace.
  *
  * <p>Implements M4, D11, Q1 of add-agent-executor; FR4, FR24 of add-sandbox-core.
+ *
+ * <p>Statically compiled: the paid layer runs only by hand, so a production signature it calls
+ * must break {@code compileTestGroovy} under {@code check}, not the next paid run
+ * (task 6.2 of fix-operator-blockers).
  */
+@CompileStatic
 final class ClaudeLoginPreflight {
 
     private static final Duration PREFLIGHT_TIMEOUT = Duration.ofSeconds(30)
@@ -95,8 +101,8 @@ final class ClaudeLoginPreflight {
             this.reason = reason
         }
 
-        static Result success(String sessionId) {
-            new Result(true, "preflight round succeeded (session ${sessionId})")
+        static Result success(UntrustedText sessionId) {
+            new Result(true, "preflight round succeeded (session ${sessionId.forLog()})")
         }
 
         static Result failure(String reason) {

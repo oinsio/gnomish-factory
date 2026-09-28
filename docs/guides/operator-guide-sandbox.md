@@ -150,6 +150,58 @@ by routing around the dependency instead of asking. If a toolchain variable is
 load-bearing, pass it through before the first run rather than diagnosing the
 workaround afterwards.
 
+## Agent authentication in the box
+
+<!-- implements FR9, UX1, UX3, NFR-S3 of fix-operator-blockers -->
+
+The agent CLI inside the box logs in with a credential from the factory's own
+environment. Set one of these where the factory process starts, and allow the
+provider host:
+
+```bash
+# once, on a machine where you are logged in to Claude: prints a long-lived token
+claude setup-token
+
+# in the factory's environment (a subscription token, or an API key instead)
+export CLAUDE_CODE_OAUTH_TOKEN=...   # from `claude setup-token`
+# export ANTHROPIC_API_KEY=...       # pay-as-you-go API key
+```
+
+```properties
+factory.sandbox.egress-allowlist=api.anthropic.com
+```
+
+That is the whole setup. `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY`
+travel through the factory's AI seam, beside `ANTHROPIC_BASE_URL`,
+`ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL`: each is read live from the
+factory environment at exec time and set on every agent round and judge vote
+when present, in container and host mode alike. They need **no**
+`factory.sandbox.env-passthrough` entry, and they never reach a `command`
+check or any other exec — a build script or test run by a check cannot read
+them.
+
+Listing one of them in `env-passthrough` as well still works, but widens its
+reach deliberately: passthrough names reach every process, command checks
+included. Remove such an entry once the seam carries the token.
+
+Without the provider host on the allowlist, the round cannot reach the
+provider and ends without a result; the `egress denial:` line of
+`gnomish status` names `api.anthropic.com`.
+A gateway or a local model server set through `ANTHROPIC_BASE_URL` needs its
+own host on the list instead.
+
+The agent CLI is launched as the stock `claude` binary: the factory itself
+passes the permission mode each role needs (file edits auto-approved inside
+the working copy for the executor; everything outside the read-only tool set
+denied without a prompt for the judge) and excludes every MCP server. No
+image-side script and no per-binding `factory.agent-cli-binary` is needed to
+make a round edit files.
+
+One threat note: auto-approved edits cover every file under the working copy,
+`.claude/settings.json` included, which the agent CLI reads as project
+settings. Isolating the CLI from settings files in the working copy is not
+done yet; treat a change to that file in a gnome's diff as a finding.
+
 ## Egress allowlist maintenance
 
 The allowlist is default-deny and operator-owned; a repo may *ask* for

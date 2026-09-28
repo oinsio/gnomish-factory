@@ -60,7 +60,8 @@ final class JudgeRoundExecution {
         FactoryProperties factoryProperties = equipment.factoryProperties();
         Clock clock = equipment.clock();
         var invocationFlags = AgentInvocationOptions.renderForJudge(check.model(), check.settings());
-        List<String> command = AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), invocationFlags);
+        List<String> command = AgentCommandLine.fromRenderedFlags(
+                AgentRole.JUDGE, factoryProperties.agentCliBinary(), invocationFlags);
 
         ExecHandle launched;
         try {

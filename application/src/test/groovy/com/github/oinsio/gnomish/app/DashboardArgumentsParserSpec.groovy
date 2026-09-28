@@ -18,7 +18,7 @@ class DashboardArgumentsParserSpec extends Specification implements ApplicationA
         def parsed = parser.parse(args('dashboard'))
 
         then:
-        parsed.dir() == Path.of('.')
+        parsed.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
         parsed.out() == null
         !parsed.watch()
     }

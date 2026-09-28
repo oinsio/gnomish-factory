@@ -29,10 +29,10 @@ import spock.lang.TempDir
 
 /**
  * FR1, FR2, FR9, FR12, UX3, D10 of add-manual-run: the {@code gnomish run} ApplicationRunner
- * entrypoint. No relevant flag present is a no-op, preserving FactoryApplication's untouched
- * no-args behavior (task 7.12 verifies that boundary at the full-context level next); with at
- * least one relevant flag, the runner drives argument parsing, pipeline load, ad-hoc task
- * synthesis, and the outcome loop in order.
+ * entrypoint. Only the empty command line is a no-op, preserving FactoryApplication's untouched
+ * no-args behavior (task 7.12 verifies that boundary at the full-context level next); every other
+ * command line reaches the parser (FR8 of fix-operator-blockers), and the runner drives argument
+ * parsing, pipeline load, ad-hoc task synthesis, and the outcome loop in order.
  *
  * <p>FR6, FR7, UX1, UX4, design D8 of add-git-workflow: {@code --mode=in-place} prints the
  * in-memory reminder before the pipeline runs; {@code --mode=git} (the default) creates the task
@@ -79,8 +79,9 @@ autonomy:
         write(projectRoot, 'stages/build/instructions.md', 'build it\n')
     }
 
-    // FR12: no relevant flag present -> no-op, untouched no-args behavior
-    def "run() does nothing when no gnomish-run flag is present"() {
+    // FR12 of add-manual-run; FR8 of fix-operator-blockers: only the empty command line a Spring
+    // test context starts with is the no-op
+    def "run() does nothing when the command line is empty"() {
         given:
         def runner = newRunner()
         def args = new DefaultApplicationArguments()
@@ -92,30 +93,42 @@ autonomy:
         noExceptionThrown()
     }
 
-    // FR12, FR13, FR14: an unrelated Boot-style flag alongside the 'run' subcommand is still a no-op
-    def "run() does nothing when only unrelated arguments are present"() {
+    // FR8 of fix-operator-blockers: a non-empty run command line always reaches the parser, so a
+    // run with no task is the parser's usage error, not a silent exit 0
+    def "run() without a task is a usage error for #argv"() {
         given:
         def runner = newRunner()
-        def args = new DefaultApplicationArguments('run', '--debug')
+        def args = new DefaultApplicationArguments(argv as String[])
 
         when:
         runner.run(args)
 
         then:
-        noExceptionThrown()
+        def e = thrown(UsageException)
+        e.message.contains('exactly one of --task or --task-file is required')
+
+        where:
+        argv << [['run'], ['run', '--debug']]
     }
 
-    // FR13, FR14: an explicit 'run' subcommand token behaves exactly like no subcommand
-    def "run() treats an explicit 'run' subcommand token like the implicit default"() {
+    // FR8 of fix-operator-blockers: a mistyped option is rejected by name, never skipped by the
+    // entrypoint because it named no known flag
+    def "run() rejects the unknown option #option of #argv"() {
         given:
         def runner = newRunner()
-        def args = new DefaultApplicationArguments('run')
+        def args = new DefaultApplicationArguments(argv as String[])
 
         when:
         runner.run(args)
 
         then:
-        noExceptionThrown()
+        def e = thrown(UsageException)
+        e.message.startsWith("unknown option ${option} for 'gnomish run'")
+
+        where:
+        argv | option
+        ['run', '--tsk=x'] | '--tsk'
+        ['--dirr=.'] | '--dirr'
     }
 
     // FR13: the 'status' subcommand routes to StatusCommand, not the run flow

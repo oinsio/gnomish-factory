@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.springframework.boot.ApplicationArguments;
 
 /**
@@ -18,6 +20,10 @@ final class BoardArgumentsParser {
     private static final String JSON = "json";
     private static final String LIMIT = "limit";
     private static final int DEFAULT_LIMIT = 50;
+    private static final String BOARD_TOKEN = "board";
+
+    /** Every option {@code board} accepts (FR8 of fix-operator-blockers). */
+    private static final List<String> ACCEPTED = List.of(DIR, JSON, LIMIT);
 
     /**
      * @param args the raw application arguments, including the leading {@code board} token
@@ -25,15 +31,11 @@ final class BoardArgumentsParser {
      * @throws UsageException if {@code --limit} is given but is not a positive integer
      */
     BoardArguments parse(ApplicationArguments args) {
-        Path dir = parseDir(args);
+        ArgumentsParsingSupport.rejectUnknownOptions(args, BOARD_TOKEN, ACCEPTED, Map.of());
+        Path dir = ArgumentsParsingSupport.projectDir(args);
         boolean json = args.containsOption(JSON);
         int limit = parseLimit(args);
         return new BoardArguments(dir, json, limit);
-    }
-
-    private Path parseDir(ApplicationArguments args) {
-        String value = ArgumentsParsingSupport.singleValue(args, DIR);
-        return value == null ? Path.of(".") : Path.of(value);
     }
 
     private int parseLimit(ApplicationArguments args) {

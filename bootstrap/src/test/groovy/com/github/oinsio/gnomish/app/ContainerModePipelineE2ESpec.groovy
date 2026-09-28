@@ -39,7 +39,8 @@ import spock.lang.Timeout
  * <p>Docker- and guard-image-gated: skips cleanly with no daemon or no
  * pullable mitmproxy image.
  *
- * <p>Implements M2, FR3, FR5, FR21, FR25 of add-sandbox-core.
+ * <p>Implements M2, FR3, FR5, FR21, FR25 of add-sandbox-core; M1 of fix-operator-blockers
+ * (container mode).
  */
 @Timeout(value = 420, unit = TimeUnit.SECONDS)
 @IgnoreIf(
@@ -70,6 +71,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         cloneDir = initWorkingRepo(tempDir, 'container-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        Files.writeString(cloneDir.resolve('.gnomish/acceptance.md'), '- output.txt exists\n')
         commitAll(cloneDir)
         originUrl = gitea.createRepository("container-pipeline-${System.nanoTime()}")
         addRemote(cloneDir, 'origin', originUrl)
@@ -96,6 +98,24 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
+    }
+
+    private static final String JUDGE_MODEL = 'claude-fake-judge-1'
+
+    /** One executor round and one judge vote, and nothing else that could fail the stage. */
+    private static StageDefinition judgedStage() {
+        new StageDefinition(
+                'work', 'purpose', [], [],
+                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
+                'instructions.md',
+                (List<VerifyCheck>) [
+                    new VerifyCheck.Judge('acceptance.md', JUDGE_MODEL, [:], 1)
+                ],
+                new AutonomyLimits(1), AdvancementMode.AUTO)
+    }
+
+    private static boolean carriesPair(List<String> argv, String flag, String value) {
+        (0..<argv.size() - 1).any { argv[it] == flag && argv[it + 1] == value }
     }
 
     // M2: clone into the box, round in the box, harvest, verification against the attempt
@@ -144,5 +164,45 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
         and: 'the task environment is disposed: no container, volume, or network object remains'
         ContainerE2eDocker.taskObjects(taskId).isEmpty()
+    }
+
+    // M1, FR1–FR3 of fix-operator-blockers (container mode): the executor round's argv is read
+    // back from the snapshot commit it was harvested into; the judge vote, whose fresh box is gone
+    // by the time the run returns, checks its own argv in the box and passes only when it carries
+    // dontAsk and the MCP exclusion (FakeAgentSandboxImage.ensureBuiltCheckingArgv).
+    def "M1: in container mode the executor round and the judge vote launch with their permission mode and the MCP exclusion"() {
+        given: 'a container-mode runner over the argv-checking fake agent, one attempt allowed'
+        def image = FakeAgentSandboxImage.ensureBuiltCheckingArgv(JUDGE_MODEL)
+        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.ARGV_CHECKING_BINARY)
+        def git = TaskGitFixture.real()
+        def runner = new ContainerGitModeRunner(
+                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                LiveConsoleIO.onStdout())
+        def segments = [
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [judgedStage()])
+        ]
+
+        when:
+        runner.run(new RunOrder(cloneDir, null, new PipelineDefinition('1', new AutonomyLimits(1), [judgedStage()]),
+        RunArguments.InteractiveMode.NONE, false),
+        segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
+        List.<Decision> of()), TaskState.atStageStart('work'))
+
+        then: 'the executor round captured exactly one argv, harvested with the snapshot — never an empty file'
+        def branch = "gnomish/${taskId}"
+        def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
+                '^gnomish: snapshot work#0$')
+        def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.EXECUTOR_ARGV_CAPTURE}")
+                .readLines()
+        captured.count('---') == 1
+        def executorArgv = captured - ['---']
+        carriesPair(executorArgv, '--permission-mode', 'acceptEdits')
+        executorArgv.contains('--strict-mcp-config')
+        !executorArgv.contains('bypassPermissions')
+
+        and: 'the judge vote passed, which the in-box check allows only for dontAsk with the MCP exclusion'
+        def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
+        !tipTree.contains('.gnomish-task/')
     }
 }

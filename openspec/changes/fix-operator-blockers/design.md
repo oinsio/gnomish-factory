@@ -2,7 +2,7 @@
 
 ## Context
 
-Driven by FR1–FR12 of the proposal; the defects and their evidence are in
+Driven by FR1–FR13 of the proposal; the defects and their evidence are in
 proposal.md, "Why". Current state that shapes the approach:
 
 - The agent argv is assembled in two steps inside `adapters/agent`:
@@ -26,6 +26,14 @@ proposal.md, "Why". Current state that shapes the approach:
   `usage` refuse an absent `--dir` with a usage error; the other five default
   it to `Path.of(".")`. `ArgumentsParsingSupport` already holds the shared
   flag helpers.
+- The relative path does its damage in `gitobjects`: `GitExec` launches git
+  with `directory(gitDir)` and also passes `--git-dir=<gitDir>`, so a relative
+  `./.git` resolves inside itself (proposal Q2, reproduced in task 1.1).
+  `CommitBuilder` hands its temporary index to the same process as
+  `GIT_INDEX_FILE`, a path git also resolves against that working directory.
+  `GitExec` is a record built only by `GitObjects.open`; the production
+  callers are `LawSources.gitObjectsOf` and `ContainerRunSupport`, both fed
+  from `--dir`.
 - The installed CLI (2.1.283) offers `--permission-mode` with
   `acceptEdits | auto | bypassPermissions | manual | dontAsk | plan`,
   `--strict-mcp-config`, and a print-mode `--permission-prompts none` switch
@@ -116,13 +124,36 @@ every subcommand lists as accepted. Each parser declares its accepted set as
 one constant. `take` and `serve` keep their existing specific
 refusals of run-only flags (`--task`, `--resume`, ...): those names stay
 "known" so the specific message wins over the generic one.
+
+The entrypoint is a consumer too. `ManualRunRunner` (`:bootstrap`) decides
+whether to call `RunArgumentsParser` at all, and today it does so from its
+own `RUN_FLAGS` list — a second copy of the parser's accepted set — treating
+a `run` command line with none of those flags as the FR12 no-op of
+add-manual-run. That is the hole the 2026-09-28 review found: `gnomish run
+--tsk=x`, `gnomish --dirr=.` and `gnomish run --debug` never reach the parser
+and exit 0 having done nothing, while `ManualRunRunnerSpec` pins the
+`run --debug` no-op as correct. The no-op exists for one reason only — a
+`@SpringBootTest` context boots `FactoryApplication` with no arguments and
+the runner must not drive a pipeline — so its criterion becomes exactly that:
+`args.getSourceArgs().length == 0`. Every non-empty `run` command line goes to
+the parser, which rejects an unknown option (FR8) or a missing task (UX1 of
+add-manual-run) before anything else; `RUN_FLAGS` is deleted with the
+`run --debug` no-op scenario, which turns into the usage error it always
+should have been.
 *Rationale:* seven parsers each doing `Path.of` is how a relative path got
 through; one helper and one data-driven spec over every `Subcommand` make a
-new subcommand that skips the check fail the build.
+new subcommand that skips the check fail the build. A parser-level contract
+cannot see a gate in front of the parser, so the entrypoint contract is
+driven through `ManualRunRunner`, and the raw-option reads are pinned by a
+source scan over both modules that share the `app` package — the task 5.4
+sweep was run over `application` only and missed the `bootstrap` copy.
 *Alternatives rejected:* switching to a CLI-parsing library (a new dependency
 and a rewrite of seven parsers for two rules); validating in each command
 after parsing (the check would run after some commands already started work —
-NFR-R1).
+NFR-R1); keeping the entrypoint out of test contexts with a profile or
+`@ConditionalOnProperty` instead of the empty-arguments criterion (seven
+context specs and `ManualRunConfigurationSpec` need the runner bean present,
+and the empty command line is the only form they ever start with).
 
 **D6 — Documentation is the fix for three findings.**
 The sandbox guide gains an "Agent authentication in the box" section and the
@@ -212,6 +243,27 @@ breach); letting the reaper rethrow to `StandingReaper.loop`, whose
 `stopping` check would swallow it (fixes the reaper only, and ties quietness
 to one caller's loop).
 
+**D10 — The git-objects library refuses a relative path; it does not resolve one.**
+`GitExec`'s compact constructor rejects a `gitDir` that is not absolute, and
+`CommitBuilder`'s constructor a `tempDir` that is not, each with an
+`IllegalArgumentException` naming the path (FR13). The argument owner of D5
+stays the only place that turns an operator's directory into an absolute
+path; the library only refuses the form it cannot use, so the signature of
+`GitObjects.open` stops being an escape hatch (`implementation.md`, item 3)
+without becoming a second resolver.
+*Rationale:* the failure is a property of the library's own launch shape
+(working directory = git dir), not of any one caller, so it is guarded where
+that shape lives; a caller added later that skips the parsers fails at once
+and names the path, instead of reporting "not a git repository" for a clone
+that is one.
+*Alternatives rejected:* `toAbsolutePath()` inside `GitExec` (correct today,
+but a second owner of path resolution that would resolve against whatever
+the JVM's working directory is, silently); dropping `directory(gitDir)`
+(changes how git discovers configuration for every call the library makes —
+outside an operator-blockers change); checking in `GitObjects.open` only
+(the record's constructor is the one site no future factory method can
+bypass).
+
 ### Sync surfaces
 
 Sync surfaces: none — host and container mode already share one argv
@@ -228,14 +280,15 @@ behaviour to drift, so no marker and no extracted helper.
 
 ### Single-owner mechanisms
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|-------|--------------|-----------|-----------------|-------------|
-| `AgentRole` + `AgentCommandLine` (adapters/agent) | permission-mode and MCP-exclusion flags (`AgentRole` enum → argv tokens) | `ExecutorRoundExecution`, `JudgeRoundExecution` | the role-less `AgentInvocationOptions.render` is deleted; `fromRenderedFlags(binary, flags)` gains the required `AgentRole` parameter | parameter type: no argv without a role; `AgentCommandLineSpec` asserts both tokens for every `AgentRole.values()` |
-| `AgentAiSeam` | agent provider variables (`Map<String,String>`, names from `NAMES`) | `ExecutorRoundExecution`, `JudgeRoundExecution` | none survives: no other production source names the two credential variables | `AgentAiSeamSpec` iterates `NAMES`; `AgentCredentialSeamBoundarySpec` in `:bootstrap` (the module that owns source scans, `ClaimlessGitBoundarySpec` precedent) asserts that no production file under `adapters/` or `sandbox/` other than `AgentAiSeam` spells `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, and that the scan reached both trees |
-| `ArgumentsParsingSupport.projectDir` / `requiredProjectDir` | the project directory (`Path`, always absolute and normalized) | `RunArgumentsParser`, `TakeArgumentsParser`, `ServeArgumentsParser`, `BoardArgumentsParser`, `DashboardArgumentsParser` (optional form); `StatusArgumentsParser`, `UsageArgumentsParser` (required form) | each parser's own `Path.of(value)` / `Path.of(".")` for `--dir` is deleted; the two "is required" checks move into `requiredProjectDir` | the `dir` component of every `*Arguments` record rejects a non-absolute path in its compact constructor; `CliArgumentsContractSpec` iterates `Subcommand.values()` |
-| `ArgumentsParsingSupport.rejectUnknownOptions` | the usage error (`UsageException`) | the same seven parsers | none: no parser rejects unknown options today | `CliArgumentsContractSpec` feeds an unknown option to every `Subcommand` |
-| `GithubHttpClient.doSend` | "this call was cancelled" (`GithubCallInterruptedException`) | `GithubHttpClient.send` (rethrows unwrapped), `GithubRetryConfig`'s predicate (never retries it), `GithubTransport` (does not translate it), `GithubClaimLease` (skips the best-effort delete), `GithubWorkflowRunPoll` (lets it propagate, no `CannotVerify`) | the `InterruptedException` → `GithubHttpUncheckedIOException` wrapping in `onInterrupted` is deleted | parameter type: the new class is not a `GithubHttpException`, so no existing catch matches it; `GithubHttpClientSpec` asserts one request and the type; `GithubWorkflowRunPollSpec` asserts the propagation |
-| the calling thread's interrupt (set by the adapter, per the `tracker-port` requirement) | "the failure is the stop" (`boolean`) | `Reaper.reapOnce`, `FinishedDecline.declineObserved`, `TrackerHealthTracker.call`, `HeartbeatBeater.beat`; `FeedOutageRetry` already complies | each site's unconditional WARN / bookkeeping in its `catch (RuntimeException)` | no mechanical gate: a `catch (RuntimeException)` that should read the interrupt cannot be told apart by a scan. Each consumer's spec carries an interrupt-set row and a control row, and `StandingReaperResilienceSpec` pins the whole stop on a real thread; the task 8.3 sweep records every other catch of a tracker call |
+| Owner                                                                                   | Value (type)                                                                 | Consumers                                                                                                                                                                                                                                                                                                                       | Old way removed                                                                                                                                                                                                                     | Enforced by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+|-----------------------------------------------------------------------------------------|------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `AgentRole` + `AgentCommandLine` (adapters/agent)                                       | permission-mode and MCP-exclusion flags (`AgentRole` enum → argv tokens)     | `ExecutorRoundExecution`, `JudgeRoundExecution`                                                                                                                                                                                                                                                                                 | the role-less `AgentInvocationOptions.render` is deleted; `fromRenderedFlags(binary, flags)` gains the required `AgentRole` parameter                                                                                               | parameter type: no argv without a role; `AgentCommandLineSpec` asserts both tokens for every `AgentRole.values()`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `AgentAiSeam`                                                                           | agent provider variables (`Map<String,String>`, names from `NAMES`)          | `ExecutorRoundExecution`, `JudgeRoundExecution`                                                                                                                                                                                                                                                                                 | none survives: no other production source names the two credential variables                                                                                                                                                        | `AgentAiSeamSpec` iterates `NAMES`; `AgentCredentialSeamBoundarySpec` in `:bootstrap` (the module that owns source scans, `ClaimlessGitBoundarySpec` precedent) asserts that no production file under `adapters/` or `sandbox/` other than `AgentAiSeam` spells `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, and that the scan reached both trees                                                                                                                                                                                                                                                                                                    |
+| `ArgumentsParsingSupport.projectDir` / `requiredProjectDir`                             | the project directory (`Path`, always absolute and normalized)               | `RunArgumentsParser`, `TakeArgumentsParser`, `ServeArgumentsParser`, `BoardArgumentsParser`, `DashboardArgumentsParser` (optional form); `StatusArgumentsParser`, `UsageArgumentsParser` (required form)                                                                                                                        | each parser's own `Path.of(value)` / `Path.of(".")` for `--dir` is deleted; the two "is required" checks move into `requiredProjectDir`                                                                                             | the `dir` component of every `*Arguments` record rejects a non-absolute path in its compact constructor; `CliArgumentsContractSpec` iterates `Subcommand.values()`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `GitExec` compact constructor, `CommitBuilder` constructor (gitobjects)                 | "this path is absolute" for the git dir and the temporary-index dir (`Path`) | `GitObjects.open` (the only builder of `GitExec` and `CommitBuilder`), reached from `LawSources.gitObjectsOf` and `ContainerRunSupport`                                                                                                                                                                                         | none to remove: no caller absolutizes today; both production callers receive an absolute path once D5 lands                                                                                                                         | the constructors throw on a relative path; a `gitobjects` spec pins both refusals, and `ManualRunRunnerSpec` runs git mode from a relative `--dir` end to end (task 5.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `ArgumentsParsingSupport.rejectUnknownOptions`                                          | the usage error (`UsageException`)                                           | the same seven parsers; `ManualRunRunner` (`:bootstrap`), which must hand every non-empty `run` command line to `RunArgumentsParser`                                                                                                                                                                                            | none in the parsers: no parser rejects unknown options today. In the entrypoint: `ManualRunRunner.RUN_FLAGS` and its `noneMatch(args::containsOption)` gate are deleted; the FR12 no-op keeps only the empty-command-line criterion | `CliArgumentsContractSpec` feeds an unknown option to every `Subcommand` at the parser; `CliEntrypointContractSpec` (`:bootstrap`) drives an unknown option for every `Subcommand` through `ManualRunRunner.run` and asserts the usage error, plus the empty-command-line no-op; `RawOptionReadBoundarySpec` (`:bootstrap`, `ClaimlessGitBoundarySpec` precedent) scans production sources of both `application` and `bootstrap` and allows `containsOption` / `getOptionNames` only in the seven `*ArgumentsParser` files, `ArgumentsParsingSupport`, `GitFlagsValidator` and `InteractiveModeParser`, asserting the scan reached every allowlisted file |
+| `GithubHttpClient.doSend`                                                               | "this call was cancelled" (`GithubCallInterruptedException`)                 | `GithubHttpClient.send` (rethrows unwrapped), `GithubRetryConfig`'s predicate (never retries it), `GithubTransport` (does not translate it), `GithubClaimLease` (skips the best-effort delete), `GithubWorkflowRunPoll` (lets it propagate, no `CannotVerify`)                                                                  | the `InterruptedException` → `GithubHttpUncheckedIOException` wrapping in `onInterrupted` is deleted                                                                                                                                | parameter type: the new class is not a `GithubHttpException`, so no existing catch matches it; `GithubHttpClientSpec` asserts one request and the type; `GithubWorkflowRunPollSpec` asserts the propagation                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| the calling thread's interrupt (set by the adapter, per the `tracker-port` requirement) | "the failure is the stop" (`boolean`)                                        | `Reaper.reapOnce` (the sweep listing, and the per-task repair — found by the task 8.3 sweep: same reaper thread, same WARN shape; an interrupted repair ends the sweep without re-arming the latch), `FinishedDecline.declineObserved`, `TrackerHealthTracker.call`, `HeartbeatBeater.beat`; `FeedOutageRetry` already complies | each site's unconditional WARN / bookkeeping in its `catch (RuntimeException)`                                                                                                                                                      | no mechanical gate: a `catch (RuntimeException)` that should read the interrupt cannot be told apart by a scan. Each consumer's spec carries an interrupt-set row and a control row, and `StandingReaperResilienceSpec` pins the whole stop on a real thread; the task 8.3 sweep records every other catch of a tracker call                                                                                                                                                                                                                                                                                                                              |
 
 The directory stays a `Path` rather than a new value type: `add-project-registry`
 replaces "a directory" with "a registered project resolved from a directory",
@@ -258,12 +311,19 @@ record-level absoluteness check is the enforcement until then.
   that runs the real CLI) asserts a round edits a file; the fake agent ignores
   flags, so unit and E2E layers cannot catch it.
 - [The argv capture reads nothing in container mode] → the fake agent's
-  `GNOMISH_FAKE_CAPTURE_ARGV` hook exists in `fake-agent.sh` but no spec uses
-  it today, and inside the box a path on the host filesystem is not a path in
-  the box. The container E2E spec (`ContainerModePipelineE2ESpec` in
-  `:bootstrap`) points the variable at a file under the bind-mounted working
-  copy and reads it back on the host after the round; a spec whose capture
-  file stays empty fails, it does not pass vacuously.
+  `GNOMISH_FAKE_CAPTURE_ARGV` hook exists in `fake-agent.sh` but no spec used
+  it, and inside the box a path on the host filesystem is not a path in the
+  box. The box's working copy is a Docker volume, not a bind mount, and a
+  judge vote runs in a fresh box disposed before the run returns, so the two
+  roles are read back through two channels in `ContainerModePipelineE2ESpec`
+  (`:bootstrap`): the executor round captures its argv into a file in its
+  working copy, which is harvested into the snapshot commit and read back
+  with git; the judge vote runs an in-box wrapper that checks its own argv and
+  returns a passing verdict only for `dontAsk` with `--strict-mcp-config`,
+  otherwise a failing verdict quoting the argv — with one attempt allowed, a
+  wrong judge argv fails the run. Neither can pass vacuously: an empty
+  executor capture fails the feature, and the judge's check is what lets the
+  stage pass.
 - [Rebase with `remove-interactive-console` and `make-run-headless`, which
   edit `ServeArgumentsParser` (`--interactive` goes) and `RunArgumentsParser`
   (`--decision` arrives)] → whichever lands second updates the accepted-option

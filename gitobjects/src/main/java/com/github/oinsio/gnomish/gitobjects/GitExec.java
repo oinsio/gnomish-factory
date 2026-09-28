@@ -36,12 +36,29 @@ import org.jspecify.annotations.Nullable;
  * bound-subprocess-commands classifies that as a broken machine, not a condition to engineer
  * around — the same acceptance that keeps {@link #await} unbounded.
  *
- * <p>Implements FR25 of add-sandbox-core; FR13, FR9 of bound-subprocess-commands.
+ * <p>{@code gitDir} must be absolute: git is launched with it as its working directory
+ * <em>and</em> handed it as {@code --git-dir}, so a relative {@code ./.git} would resolve inside
+ * itself. The compact constructor refuses it rather than resolving it — turning an operator's
+ * directory into an absolute path is the argument owner's job, not a second one here (design D10
+ * of fix-operator-blockers).
+ *
+ * <p>Implements FR25 of add-sandbox-core; FR13, FR9 of bound-subprocess-commands; FR13 of
+ * fix-operator-blockers.
  */
 record GitExec(Path gitDir, String gitBinary) {
 
     /** Stateless and thread-safe: one instance serves every command this library runs. */
     private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor();
+
+    /**
+     * @throws IllegalArgumentException naming {@code gitDir} if it is not absolute (FR13 of
+     *     fix-operator-blockers)
+     */
+    GitExec {
+        if (!gitDir.isAbsolute()) {
+            throw new IllegalArgumentException("git dir must be an absolute path: " + gitDir);
+        }
+    }
 
     @SuppressWarnings("ArrayRecordComponent") // captured output bytes, consumed once by the caller
     record Result(int exitCode, byte[] stdout, String stderr, boolean truncated) {

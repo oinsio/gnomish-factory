@@ -57,13 +57,13 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
     private def assemble(TaskState initialState) {
         newAssembly().assemble(
-                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 initialState,
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any binding suffices.
-                LawBinding.workingTree(Path.of('.')))
+                LawBinding.workingTree(Path.of('').toAbsolutePath()))
     }
 
     private static FactoryProperties githubCheckProperties() {
@@ -91,7 +91,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
         def console = assembly.dialogConsole(context('task-1'), TaskState.atStageStart('build'))
 
         when:
-        def client = assembly.externalCheckClient(console, LawBinding.workingTree(Path.of('.')), githubRegistry())
+        def client = assembly.externalCheckClient(console, LawBinding.workingTree(Path.of('').toAbsolutePath()), githubRegistry())
 
         then:
         client instanceof PinCheckedExternalCheckClient
@@ -123,12 +123,12 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
         when:
         assembly.assemble(
-                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
                 [],
-                LawBinding.workingTree(Path.of('.')))
+                LawBinding.workingTree(Path.of('').toAbsolutePath()))
 
         then:
         resolved.isEmpty()
@@ -158,12 +158,12 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
         when:
         assembly.assemble(
-                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
                 [],
-                LawBinding.workingTree(Path.of('.')))
+                LawBinding.workingTree(Path.of('').toAbsolutePath()))
 
         then:
         def e = thrown(IllegalArgumentException)

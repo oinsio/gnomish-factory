@@ -50,13 +50,13 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
     private def assemble(TaskState initialState, EngineEventListener extraListener = null) {
         def assembly = extraListener == null ? newAssembly() : newAssembly().withExtraListener(extraListener)
         assembly.assemble(
-                new RunOrder(Path.of('.'), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
                 context('task-1'),
                 initialState,
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any binding suffices.
-                LawBinding.workingTree(Path.of('.')))
+                LawBinding.workingTree(Path.of('').toAbsolutePath()))
     }
 
     // FR10, D6: the holder is seeded with the STARTING stage's own attempt limit when the position

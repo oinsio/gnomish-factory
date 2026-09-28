@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
 
@@ -24,6 +26,7 @@ import org.springframework.boot.ApplicationArguments;
  */
 final class ServeArgumentsParser {
 
+    private static final String SERVE_TOKEN = "serve";
     private static final String DIR = "dir";
     private static final String SLOTS = "slots";
     private static final String DRAIN = "drain";
@@ -42,14 +45,22 @@ final class ServeArgumentsParser {
             "interactive");
 
     /**
+     * Every option {@code serve} knows (FR8 of fix-operator-blockers): its own flags plus {@link
+     * #REJECTED_FLAGS}, which stay known so their specific refusal wins over the generic one.
+     */
+    private static final List<String> ACCEPTED =
+            Stream.concat(Stream.of(DIR, SLOTS, DRAIN), REJECTED_FLAGS.stream()).toList();
+
+    /**
      * @param args the raw application arguments, including the leading {@code serve} token
      * @return the validated flags
      * @throws UsageException if a rejected flag is present, or {@code --slots} is given but is
      *     not a positive integer
      */
     ServeArguments parse(ApplicationArguments args) {
+        ArgumentsParsingSupport.rejectUnknownOptions(args, SERVE_TOKEN, ACCEPTED, Map.of());
         rejectInapplicableFlags(args);
-        Path dir = parseDir(args);
+        Path dir = ArgumentsParsingSupport.projectDir(args);
         Integer slots = parseSlots(args);
         boolean drain = args.containsOption(DRAIN);
         return new ServeArguments(dir, slots, drain);
@@ -62,11 +73,6 @@ final class ServeArgumentsParser {
                         + " single-task flags, no --mode/--resume, and is unconditionally non-interactive");
             }
         }
-    }
-
-    private Path parseDir(ApplicationArguments args) {
-        String value = ArgumentsParsingSupport.singleValue(args, DIR);
-        return value == null ? Path.of(".") : Path.of(value);
     }
 
     private @Nullable Integer parseSlots(ApplicationArguments args) {

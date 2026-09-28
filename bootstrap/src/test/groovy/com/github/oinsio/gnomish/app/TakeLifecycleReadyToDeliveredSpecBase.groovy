@@ -42,17 +42,20 @@ import spock.lang.TempDir
  * <p>The second M3 lifecycle (escalate -> human decision -> resume, including resume by a
  * different instance) is out of scope for this spec — see task 6.2.
  *
- * <p>Implements FR1, FR3, FR18, M3, UX4 of add-tracker-port.
+ * <p>Implements FR1, FR3, FR18, M3, UX4 of add-tracker-port; M1 of fix-operator-blockers (host mode).
  */
 abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
+
+    private static final String JUDGE_MODEL = 'claude-fake-judge-1'
 
     @TempDir
     Path tempDir
 
     Path projectDir
     Path worktreesRoot
+    Path argvCapture
     Tracker tracker
     TrackerAdapterFactory trackerFactory
 
@@ -74,14 +77,22 @@ abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification imple
         // resolves `instructions:` against the same `.gnomish/` root the loader validates it
         // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
+        Files.writeString(projectDir.resolve('.gnomish/stages/build/acceptance.md'), '- output.txt exists\n')
+        // One judge check, so a run launches both roles — an executor round and a judge vote —
+        // through one fake binary (M1 of fix-operator-blockers).
+        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), """\
 purpose: build it
 executor:
   type: agent-cli
   model: claude-fake-main-1
 instructions: stages/build/instructions.md
+verify:
+  - type: judge
+    criteriaFile: stages/build/acceptance.md
+    model: ${JUDGE_MODEL}
+    votes: 1
 advancement: auto
-''')
+""")
         // tracker.type is 'github' purely to satisfy TrackerSeamValidator's registered-type
         // check (this fixture passes TrackerValidatorStub.acceptingGithub() as the validator
         // registry, so 'github' is a known-but-permissive type — content isn't under test here) —
@@ -105,6 +116,15 @@ tracker:
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
+        argvCapture = tempDir.resolve('fake-agent-argv.txt')
+    }
+
+    private FactoryProperties fakeAgent() {
+        FakeAgentSupport.propertiesCapturingArgv('plain-round', JUDGE_MODEL, 'judge-verdict-pass', argvCapture)
+    }
+
+    protected static boolean carriesPair(List<String> argv, String flag, String value) {
+        (0..<argv.size() - 1).any { argv[it] == flag && argv[it + 1] == value }
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
@@ -120,8 +140,7 @@ tracker:
 
     def "ready -> claim -> work -> delivered with a final report, told end to end by the tracker's own thread"() {
         given: 'a Ready task seeded directly in a real tracker, and a fake-agent-backed stage'
-        def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')
-        def command = newCommand(factoryProperties)
+        def command = newCommand(fakeAgent())
 
         when: 'take is run against the seeded ref in explicit mode'
         command.run(args('take', 'PROJ-1', "--dir=$projectDir"))
@@ -148,5 +167,32 @@ tracker:
         entries[0].contains('claimed by')
         entries[1].startsWith('PROGRESS:')
         entries[2].startsWith('FINISH:')
+    }
+
+    // M1, FR1–FR3 of fix-operator-blockers (host mode): read back the argv each role was really
+    // launched with, through the fake agent's capture hook — not a renderer in isolation.
+    def "M1: in host mode the executor round and the judge vote launch with their permission mode and the MCP exclusion"() {
+        when: 'one task runs through an executor round and a judge vote'
+        newCommand(fakeAgent()).run(args('take', 'PROJ-1', "--dir=$projectDir"))
+
+        then:
+        def ex = thrown(TakeExitCodeException)
+        ex.exitCode() == 0
+
+        and: 'the capture holds exactly one executor round and one judge vote — never an empty file'
+        def invocations = FakeAgentSupport.capturedInvocations(argvCapture)
+        def judgeVotes = invocations.findAll {
+            carriesPair(it, '--model', JUDGE_MODEL)
+        }
+        def executorRounds = invocations - judgeVotes
+        executorRounds.size() == 1
+        judgeVotes.size() == 1
+
+        and: 'each role carries its own mode and the MCP exclusion, and never the mode that skips every check'
+        carriesPair(executorRounds[0], '--permission-mode', 'acceptEdits')
+        executorRounds[0].contains('--strict-mcp-config')
+        carriesPair(judgeVotes[0], '--permission-mode', 'dontAsk')
+        judgeVotes[0].contains('--strict-mcp-config')
+        !invocations.flatten().contains('bypassPermissions')
     }
 }

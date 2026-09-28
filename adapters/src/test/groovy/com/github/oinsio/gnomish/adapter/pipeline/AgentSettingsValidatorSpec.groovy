@@ -55,6 +55,28 @@ class AgentSettingsValidatorSpec extends Specification {
         ]
     }
 
+    // FR4 of fix-operator-blockers: the permission mode and the MCP exclusion are adapter
+    // policy fixed per role; a manifest that tries to set either fails startup, on the executor
+    // and on a judge check alike (scenario "Manifest cannot set the permission mode").
+    def "FR4: a stage cannot set the permission mode or the MCP configuration through settings (#key)"() {
+        given:
+        def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [judgeCheck([(key): value])])
+
+        expect:
+        AgentSettingsValidator.validate(pipeline(stage)) == [
+            new ConfigError('stages/build/stage.yaml', "executor.settings.${key}",
+            "unrecognized settings key '${key}'"),
+            new ConfigError('stages/build/stage.yaml', "verify[0].settings.${key}",
+            "unrecognized settings key '${key}'")
+        ]
+
+        where:
+        key | value
+        'permissionMode' | 'bypassPermissions'
+        'strictMcpConfig' | false
+        'mcpConfig' | '.mcp.json'
+    }
+
     def "a malformed value on an agent-cli executor yields exactly its located error"() {
         given:
         def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [])

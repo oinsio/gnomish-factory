@@ -29,7 +29,11 @@ defects are still live:
   ignored; only an undocumented `default-binding` spelling binds.
 - **A relative `--dir` breaks git mode**, and **an unknown flag is silently
   swallowed** (`gnomish status --task=<id>` quietly shows the overview), so a
-  typo looks like success.
+  typo looks like success. The relative path fails deep below the parser: the
+  git-objects library launches git with the git dir as its working directory
+  and passes the same path as `--git-dir`, so `./.git` is read as
+  `./.git/.git`, the checkout resolves to no commit, and `run --dir=.` refuses
+  with "not a git repository".
 - **Three serve observability sinks rely on call order for visibility.** The
   slot runner receives its ledger writer and, under `--drain`, its drain
   report and run-summary accumulator after construction, into plain fields
@@ -69,6 +73,9 @@ reverse-engineers two wrapper scripts is not a release.
 - **ADDED**: one argument owner for every subcommand resolves `--dir` to an
   absolute path at parse time and rejects an option the subcommand does not
   accept, naming it and listing what is accepted.
+- **MODIFIED** (code invariant): the git-objects library refuses a relative
+  git dir or temp dir when it is opened, so no caller that bypasses the
+  argument owner can hand git a path it resolves against the wrong directory.
 - **MODIFIED** (code invariant): the slot runner's three post-construction
   fields are safely published, independent of start-up order.
 - **MODIFIED** (docs): the sandbox guide and the reference image README gain
@@ -185,6 +192,12 @@ reverse-engineers two wrapper scripts is not a release.
   usage error naming the option and listing the accepted ones; Spring property
   options (dotted names such as `--factory.*`, `--spring.*`, `--logging.*`)
   and Spring Boot's own `--debug` / `--trace` switches SHALL pass through.
+  The rule holds at the entrypoint, not only in the parsers: every non-empty
+  command line SHALL reach its subcommand's parser, so `gnomish run --tsk=x`,
+  a bare `gnomish --dirr=.` and a `gnomish run` with no task are usage errors
+  (exit code 2), never a silent success. Only an empty command line — the
+  form a Spring test context starts with — remains the no-op FR12 of
+  add-manual-run reserved for it.
 - **FR9**: the sandbox guide and the reference image README SHALL state how the
   agent CLI authenticates in the box (token variables, the provider host on the
   egress allowlist, subscription token via `claude setup-token`); the guides
@@ -208,6 +221,10 @@ reverse-engineers two wrapper scripts is not a release.
   no WARN or ERROR line, no stack trace, no outage bookkeeping (forgotten
   observation windows, a listing-failed signal, a failure count), and no
   further tracker call from that loop.
+- **FR13**: the git-objects library SHALL refuse, when it is opened, a git
+  directory or a temporary-index directory that is not an absolute path, with
+  an error naming the path; a relative path SHALL never reach a git process
+  whose working directory differs from the factory's.
 
 ### Non-Functional
 
@@ -250,7 +267,10 @@ reverse-engineers two wrapper scripts is not a release.
   dontAsk` and `--strict-mcp-config` in 100% of judge votes, in host and
   container mode.
 - **M2**: all 7 subcommand parsers reject an unknown option and absolutize a
-  relative `--dir` (one data-driven spec over every parser).
+  relative `--dir` (one data-driven spec over every parser), and the
+  entrypoint delivers an unknown option to the parser for all 7 subcommands
+  (one data-driven spec over every subcommand driven through the entrypoint,
+  not the parser).
 - **M3**: on the operator stand, the `claude-gnome` wrapper is deleted, the
   `agent-cli-binary` and default-binding workarounds are removed from the
   launcher, and one task completes in host mode and one in container mode.
@@ -263,13 +283,24 @@ reverse-engineers two wrapper scripts is not a release.
 
 ## Open Questions
 
-- **Q1**: does the judge's `dontAsk` mode also deny tools that need no
-  permission (sub-agents, scheduling)? Verified against the pinned CLI in the
-  paid smoke layer; if not, the deny list stays out of scope (NG2) and is
-  recorded as a follow-up.
-- **Q2**: is there a reproducible root cause for the relative `--dir` failure
-  beyond "the path is relative"? The fix at the argument owner holds either
-  way; the reproduction spec (task 1) records what actually failed.
+- **Q1** (answered 2026-09-28, task 6.2): does the judge's `dontAsk` mode also
+  deny tools that need no permission (sub-agents, scheduling)? No. On CLI
+  2.1.283 a judge vote invited to delegate started a sub-agent (`Agent` tool
+  call, no permission denial recorded) in every paid run, and one run also
+  showed a `Bash` call with no recorded denial, most likely the sub-agent's.
+  The hard deny list stays out of scope (NG2) and is a follow-up. The same
+  runs showed the judge round finishing without waiting for an answer, and a
+  duplicated `--permission-mode` honouring the last value — the factory's
+  flag wins over a leftover wrapper's leading one.
+- **Q2** (resolved 2026-09-28, task 1.1): is there a reproducible root cause
+  for the relative `--dir` failure beyond "the path is relative"? Yes.
+  Reproduced with the packaged jar: `run --dir=.` in git mode refuses with
+  "cannot start a git-mode task in .: it is not a git repository". `GitExec`
+  launches git with `gitDir` as the process's working directory and also
+  passes `--git-dir=<gitDir>`; a relative `./.git` is therefore resolved inside
+  itself, `HEAD` peels to nothing, and `ManualRunLawBinding` refuses. The same
+  holds for the temporary index, which reaches git as `GIT_INDEX_FILE`. FR7
+  closes the operator's path; FR13 closes the library's.
 
 ## Impact
 
@@ -284,6 +315,8 @@ reverse-engineers two wrapper scripts is not a release.
   invariant of `process-invariants.md`, not operator-visible behavior.
 - `application`: `ArgumentsParsingSupport` and the seven `*ArgumentsParser`
   classes.
+- `gitobjects`: `GitExec` and `CommitBuilder` refuse a relative path at
+  construction (FR13); their specs.
 - `adapters/github`: `GithubHttpClient`, a new cancellation exception in the
   shared HTTP core, `GithubWorkflowRunPoll` (lets it propagate), their specs.
 - `application`: `Reaper`, `FinishedDecline`, `HeartbeatBeater`;

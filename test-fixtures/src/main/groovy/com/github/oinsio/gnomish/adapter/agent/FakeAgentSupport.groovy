@@ -66,6 +66,63 @@ final class FakeAgentSupport {
     }
 
     /**
+     * A wrapper that plays {@code judgeScenario} when the invocation's {@code --model} is
+     * {@code judgeModel} and {@code executorScenario} otherwise, and appends every invocation's
+     * argv to {@code argvCapture} through the fake's {@code GNOMISH_FAKE_CAPTURE_ARGV} hook — the
+     * shape an E2E spec needs to drive an executor round and a judge vote through one binary and
+     * then read back what each actually launched with (M1 of fix-operator-blockers). The wrapper
+     * sets both variables itself, so neither depends on the child-environment allowlist.
+     *
+     * @param executorScenario the scenario an executor round plays
+     * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
+     * @param judgeScenario the scenario a judge vote plays
+     * @param argvCapture the host file every invocation's argv is appended to
+     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the generated wrapper
+     */
+    static FactoryProperties propertiesCapturingArgv(
+            String executorScenario, String judgeModel, String judgeScenario, Path argvCapture) {
+        def wrapper = File.createTempFile('fake-agent-routing-wrapper', '.sh')
+        wrapper.text = """\
+#!/bin/sh
+scenario='${executorScenario}'
+previous=''
+for arg in "\$@"; do
+    if [ "\$previous" = '--model' ] && [ "\$arg" = '${judgeModel}' ]; then
+        scenario='${judgeScenario}'
+    fi
+    previous="\$arg"
+done
+export GNOMISH_FAKE_SCENARIO="\$scenario"
+export GNOMISH_FAKE_CAPTURE_ARGV='${argvCapture.toAbsolutePath()}'
+exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
+"""
+        wrapper.setExecutable(true)
+        wrapper.deleteOnExit()
+        new FactoryProperties('factory-01', wrapper.absolutePath, [], null, null)
+    }
+
+    /**
+     * Splits a {@code GNOMISH_FAKE_CAPTURE_ARGV} file into one argv per invocation, in launch
+     * order (the fake terminates each invocation's block with a {@code ---} line).
+     *
+     * @param argvCapture the capture file
+     * @return one argument list per captured invocation; empty when nothing was captured
+     */
+    static List<List<String>> capturedInvocations(Path argvCapture) {
+        List<List<String>> invocations = []
+        List<String> current = []
+        argvCapture.toFile().readLines('UTF-8').each { String line ->
+            if (line == '---') {
+                invocations << current
+                current = []
+            } else {
+                current << line
+            }
+        }
+        invocations
+    }
+
+    /**
      * The {@code TaskContext} every fake-agent-driven spec builds for its round: a
      * fixed task id and untrusted-tracker title/body, no prior decisions.
      */

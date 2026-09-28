@@ -65,7 +65,8 @@ final class ExecutorRoundExecution {
         var executor = stage.executor();
         var invocationFlags = AgentInvocationOptions.renderForExecutor(
                 executor.model(), executor.settings(), round.decisionFilePath());
-        List<String> command = AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), invocationFlags);
+        List<String> command = AgentCommandLine.fromRenderedFlags(
+                AgentRole.EXECUTOR, factoryProperties.agentCliBinary(), invocationFlags);
 
         // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
         // decision-file path — the only variables beyond base and passthrough a round sees.

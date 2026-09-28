@@ -25,6 +25,14 @@ tasks.named('test') {
     // against a `jar:` URI. Same idiom as `referenceDumpDir` in `:adapters`.
     systemProperty 'fakeAgentDir', rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath
 
+    // The agent credentials reach a round through the AI seam, which reads the factory process's
+    // real environment and offers no injection point (FR5, NFR-S3 of fix-operator-blockers). A
+    // container spec therefore gets them here, as placeholders no real CLI would accept:
+    // ContainerModeAgentCredentialE2ESpec asserts they are in effect before it reads them back
+    // from the box. Every fake agent in this module ignores them.
+    environment 'CLAUDE_CODE_OAUTH_TOKEN', 'placeholder-oauth-token-not-a-credential'
+    environment 'ANTHROPIC_API_KEY', 'placeholder-api-key-not-a-credential'
+
     // `SecretsPortBoundarySpec` walks every module's build metadata asserting no credential name
     // reaches it (NFR-S1, task 5.5), and `ModuleBuildFileSpec` measures those same files against
     // the project's size cap (FR6, M2, task 9.2). The whole-tree gates live in this module because
@@ -100,6 +108,7 @@ pitest {
         'com.github.oinsio.gnomish.app.ContainerModePipelineE2ESpec',
         'com.github.oinsio.gnomish.app.ContainerModeIsolationE2ESpec',
         'com.github.oinsio.gnomish.app.ContainerModeResumeE2ESpec',
+        'com.github.oinsio.gnomish.app.ContainerModeAgentCredentialE2ESpec',
         // Same family, added for add-serve-sandbox-lifecycle (task 8.3): each drives a real Docker
         // daemon (and, where noted, a real Gitea remote) per scenario/mutant, which is minutes of
         // real container lifecycle per mutant rather than milliseconds — the "hangs on real I/O"
@@ -157,11 +166,15 @@ tasks.register('paidSmokeTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
-    // The committed reference dumps moved to `:adapters` with the stream-json parser (task 5.1);
+    // PaidSmokePermissionModeSpec (task 6.2 of fix-operator-blockers) drives a real `gnomish run`
+    // through the packaged jar, the same way ollamaE2eTest does.
+    dependsOn tasks.named('bootJar')
+    systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+    // The committed reference dumps live in `:adapters:agent` beside the stream-json parser;
     // this layer records into them, so it resolves the on-disk source resource directory there
     // (not a build/resources copy) — the same on-disk-vs-copy distinction e2e.jarPath draws for
     // the bootJar artifact.
-    systemProperty 'referenceDumpDir', rootProject.file('adapters/src/test/resources/stream-json-reference').absolutePath
+    systemProperty 'referenceDumpDir', rootProject.file('adapters/agent/src/test/resources/stream-json-reference').absolutePath
     // Test tasks fork a separate JVM, so a `-D` on the Gradle command line never reaches it on its
     // own — this project property (`-PpaidSmoke.claudeBinary=...`) is explicitly forwarded as the
     // forked JVM's system property of the same name, the seam PaidSmokeReferenceDumpSpec/

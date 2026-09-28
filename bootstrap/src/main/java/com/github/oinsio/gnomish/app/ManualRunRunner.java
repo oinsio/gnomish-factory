@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.status.MdcEventListener;
 import java.io.IOException;
-import java.util.List;
 import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,11 +17,13 @@ import org.springframework.stereotype.Component;
  * The whole-CLI entrypoint (design D10): runs on the {@code ApplicationRunner} thread Spring Boot
  * calls after context refresh. {@link SubcommandDispatch} first tries {@code status}/{@code
  * usage}/{@code take} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port) — a bare {@code
- * gnomish take} is never confused with a bare {@code gnomish run} no-op, since the leading
- * positional token settles the subcommand before {@link #RUN_FLAGS} is ever consulted. For
- * {@code run} — explicit or implicit — with none of its flags present, this runner no-ops (FR12);
- * otherwise {@link ManualRunDrive} drives the full pipeline: parse → load {@code .gnomish/} →
- * dispatch by {@code --resume} presence, then by {@link RunArguments#mode()}.
+ * gnomish take} is never confused with {@code gnomish run}, since the leading positional token
+ * settles the subcommand. Only an empty command line — the form a Spring test context boots
+ * {@code FactoryApplication} with — is a no-op (FR12); every other {@code run} command line,
+ * explicit or implicit, goes to {@link ManualRunDrive}, whose parser rejects an unknown option or
+ * a missing task before anything else (FR8 of fix-operator-blockers, design D5), and which then
+ * drives the full pipeline: parse → load {@code .gnomish/} → dispatch by {@code --resume}
+ * presence, then by {@link RunArguments#mode()}.
  *
  * <p>The runner composes nothing (FR7, design D6 of collapse-composition-roots): the subcommand
  * dispatch and the manual-run drive arrive assembled from {@link ManualRunConfiguration} and
@@ -30,7 +31,8 @@ import org.springframework.stereotype.Component;
  * RunExceptionReporting}; the {@code taskId} MDC key is cleared in {@code finally}.
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
- * FR14, UX1-UX4, design D8, D9 of add-git-workflow; FR7 of collapse-composition-roots.
+ * FR14, UX1-UX4, design D8, D9 of add-git-workflow; FR7 of collapse-composition-roots; FR8 of
+ * fix-operator-blockers.
  */
 // Null-marked explicitly (JSpecify): this module carries no package-info, and the application
 // module's one does not reach this source root, so without the class-level marker the
@@ -40,18 +42,6 @@ import org.springframework.stereotype.Component;
 public final class ManualRunRunner implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ManualRunRunner.class);
-
-    private static final List<String> RUN_FLAGS = List.of(
-            "dir",
-            "task",
-            "task-file",
-            "task-id",
-            "from-stage",
-            "interactive",
-            "mode",
-            "base",
-            "resume",
-            "discard-work");
 
     /**
      * The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2).
@@ -96,7 +86,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         this.errorConsole = errorConsoleIO;
     }
 
-    /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */
+    /** Empty command line → no-op (FR12); otherwise dispatches or drives the run (see class javadoc). */
     @Override
     public void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
@@ -106,8 +96,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                         // subcommand dispatches, so run, take and serve all pass through it and
                         // no transfer, claim or tracker write precedes a refusal.
                         gitVersionCheck.verify();
-                        if (subcommandDispatch.dispatchNonRun(args)
-                                || RUN_FLAGS.stream().noneMatch(args::containsOption)) {
+                        if (subcommandDispatch.dispatchNonRun(args) || args.getSourceArgs().length == 0) {
                             return;
                         }
                         drive.drive(args);

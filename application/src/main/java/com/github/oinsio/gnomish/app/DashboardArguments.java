@@ -9,9 +9,15 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR1, FR7 of add-dashboard-page.
  *
- * @param dir the target project directory (the {@code --dir} value); defaults to {@code .}
+ * @param dir the target project directory (the {@code --dir} value, or the working directory),
+ *     absolute and normalized (FR7 of fix-operator-blockers)
  * @param out the explicit output path (the {@code --out} value), or {@code null} to use the
  *     default instance-directory path (design D8)
  * @param watch whether {@code --watch} was given (FR7)
  */
-record DashboardArguments(Path dir, @Nullable Path out, boolean watch) {}
+record DashboardArguments(Path dir, @Nullable Path out, boolean watch) {
+
+    DashboardArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
+}

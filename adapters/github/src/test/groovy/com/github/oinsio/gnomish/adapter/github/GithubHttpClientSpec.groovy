@@ -3,10 +3,14 @@ package com.github.oinsio.gnomish.adapter.github
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
+import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
+import java.net.http.HttpRequest
 import spock.lang.Specification
 
 /**
@@ -16,7 +20,11 @@ import spock.lang.Specification
  * Resilience4j policy while a plain 4xx business response is returned as-is,
  * never retried.
  *
- * Implements NFR-R2, NFR-S1 of add-tracker-port.
+ * <p>An interrupt of the calling thread is none of those (FR11, NFR-R3 of fix-operator-blockers):
+ * it is the stop of that thread, so the client sends nothing more, keeps the interrupt set and
+ * fails with a cancellation that no transport-failure handler matches.
+ *
+ * Implements NFR-R2, NFR-S1 of add-tracker-port; FR11, NFR-R3 of fix-operator-blockers.
  */
 class GithubHttpClientSpec extends Specification {
 
@@ -142,5 +150,47 @@ class GithubHttpClientSpec extends Specification {
 
         then:
         thrown(GithubHttpException)
+    }
+
+    // FR11, NFR-R3 of fix-operator-blockers: the interrupt arrives while GitHub has not answered —
+    //     the stop of the calling thread, not a network fault to retry or to report as one.
+    def "an interrupt mid-request is a cancellation: one request, its own failure, the interrupt kept"() {
+        given:
+        wireMock.stubFor(post(urlEqualTo('/slow'))
+                .willReturn(aResponse().withStatus(200).withFixedDelay(30_000)))
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def outcome = InterruptMidRequest.run(wireMock, postRequestedFor(urlEqualTo('/slow'))) {
+            client.send(client.newRequest('/slow').POST(HttpRequest.BodyPublishers.noBody()))
+        }
+
+        then: 'the failure is the cancellation, which no transport-failure handler matches'
+        outcome.failure instanceof GithubCallInterruptedException
+        !(outcome.failure instanceof GithubHttpException)
+        !outcome.failure.message.contains('after retries')
+
+        and: 'the caller reads the stop from its own thread'
+        outcome.interruptSet
+
+        and: 'no retry was spent on it'
+        wireMock.verify(1, postRequestedFor(urlEqualTo('/slow')))
+    }
+
+    // FR11 of fix-operator-blockers, control row: a connection reset on a thread nobody
+    //     interrupted is a transport failure and keeps the whole retry budget.
+    def "a connection reset on an uninterrupted thread keeps its retries"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/reset'))
+                .willReturn(aResponse().withFault(CONNECTION_RESET_BY_PEER)))
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/reset'))
+
+        then:
+        thrown(GithubHttpException)
+        wireMock.verify(4, getRequestedFor(urlEqualTo('/reset')))
+        !Thread.currentThread().isInterrupted()
     }
 }

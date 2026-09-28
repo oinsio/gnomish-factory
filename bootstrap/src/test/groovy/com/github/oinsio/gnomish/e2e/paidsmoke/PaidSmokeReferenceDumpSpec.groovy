@@ -1,15 +1,12 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
-import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * The paid smoke task's substance (task 11.3, M4, D11's "(3b) Paid smoke"): drives real {@code
  * claude -p --output-format stream-json --verbose} rounds through the {@code
@@ -51,8 +48,7 @@ class PaidSmokeReferenceDumpSpec extends Specification {
     @TempDir
     Path workspaceRoot
 
-    private final FactoryProperties factoryProperties =
-    new FactoryProperties('paid-smoke', System.getProperty('paidSmoke.claudeBinary', 'claude'), List.of(), null, null)
+    private final String claudeBinary = System.getProperty('paidSmoke.claudeBinary', 'claude')
 
     private final SystemClock clock = new SystemClock()
 
@@ -114,7 +110,7 @@ class PaidSmokeReferenceDumpSpec extends Specification {
      */
     private boolean recordScenario(String fixtureName, String scenarioLabel, String prompt) {
         ExecHandle launched = PaidSmokeAgentLauncher.launch(
-                factoryProperties.agentCliBinary(), workspaceRoot, clock, prompt)
+                claudeBinary, workspaceRoot, clock, prompt)
 
         List<String> rawLines
         try (BufferedReader reader = new BufferedReader(

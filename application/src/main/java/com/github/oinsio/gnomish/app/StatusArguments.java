@@ -10,9 +10,14 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR13, FR6 of add-git-workflow.
  *
- * @param dir the target project clone directory (the {@code --dir} value); unresolved, not
- *     checked for existence here
+ * @param dir the target project clone directory (the {@code --dir} value), absolute and
+ *     normalized (FR7 of fix-operator-blockers); not checked for existence here
  * @param task the task id to inspect, or {@code null} for list mode
  * @param json whether {@code --json} was given; selects JSON rendering over text
  */
-record StatusArguments(Path dir, @Nullable String task, boolean json) {}
+record StatusArguments(Path dir, @Nullable String task, boolean json) {
+
+    StatusArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
+}

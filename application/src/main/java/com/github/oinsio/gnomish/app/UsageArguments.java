@@ -9,9 +9,14 @@ import java.nio.file.Path;
  *
  * <p>Implements FR14 of add-git-workflow.
  *
- * @param dir the target project clone directory (the {@code --dir} value); unresolved, not
- *     checked for existence here
+ * @param dir the target project clone directory (the {@code --dir} value), absolute and
+ *     normalized (FR7 of fix-operator-blockers); not checked for existence here
  * @param task the task id to reconstruct usage for
  * @param json whether {@code --json} was given; selects JSON rendering over text
  */
-record UsageArguments(Path dir, String task, boolean json) {}
+record UsageArguments(Path dir, String task, boolean json) {
+
+    UsageArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
+}

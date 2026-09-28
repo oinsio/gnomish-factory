@@ -17,7 +17,7 @@ class BoardArgumentsParserSpec extends Specification implements ApplicationArgum
         def parsed = parser.parse(args('board'))
 
         then:
-        parsed.dir() == Path.of('.')
+        parsed.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
         !parsed.json()
         parsed.limit() == 50
     }

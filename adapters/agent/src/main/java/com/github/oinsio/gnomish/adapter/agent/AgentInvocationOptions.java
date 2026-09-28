@@ -13,14 +13,16 @@ import org.jspecify.annotations.Nullable;
  * settings} map into the CLI invocation flags {@link AgentCommandLine}
  * inserts after the {@code -p} token (design D7): {@code --model} always,
  * then {@code --allowedTools}/{@code --disallowedTools}/{@code --max-turns}
- * when the corresponding settings key is present.
+ * when the corresponding settings key is present. Each role has its own renderer
+ * — there is deliberately no role-less one, since {@link AgentCommandLine} requires the
+ * {@link AgentRole} whose permission mode the round launches in (design D1 of
+ * fix-operator-blockers).
  *
  * <p>Both {@link com.github.oinsio.gnomish.domain.pipeline.StageDefinition.Executor}
  * and {@link com.github.oinsio.gnomish.domain.pipeline.VerifyCheck.Judge} carry
  * the same {@code (model, settings)} shape with no shared interface, so this
  * renderer takes the two plain values directly rather than depending on
- * either record — one method serves both call sites (an executor round and a
- * judge round).
+ * either record.
  *
  * <p>{@code settings} is the opaque, already-validated map load-pipeline-config
  * hands the domain (plain JDK types only — String/Number/Boolean/List/Map);
@@ -32,7 +34,7 @@ import org.jspecify.annotations.Nullable;
  * deliberately never rendered here: it is not a CLI flag at all, but
  * engine/adapter-side process timeout enforcement (task 4.5).
  *
- * <p>Implements FR11, FR12, NFR-S1, D7 of add-agent-executor.
+ * <p>Implements FR11, FR12, NFR-S1, D7 of add-agent-executor; FR1, FR2 of fix-operator-blockers.
  */
 public final class AgentInvocationOptions {
 
@@ -61,28 +63,8 @@ public final class AgentInvocationOptions {
     private AgentInvocationOptions() {}
 
     /**
-     * Renders {@code model} and the recognized entries of {@code settings}
-     * into CLI flag tokens, in the fixed order {@code --model},
-     * {@code --allowedTools}, {@code --disallowedTools}, {@code --max-turns}.
-     *
-     * @param model the pinned, non-blank model id ({@code executor.model} /
-     *     {@code check.model()})
-     * @param settings the opaque settings map; may be empty, never null
-     * @return the rendered flag tokens, always starting with {@code --model}
-     *     and the model id
-     */
-    public static List<String> render(String model, Map<String, Object> settings) {
-        List<String> argv = new ArrayList<>();
-        argv.add(MODEL_FLAG);
-        argv.add(model);
-        addToolListFlag(argv, ALLOWED_TOOLS_FLAG, settings.get(ALLOWED_TOOLS_KEY));
-        addToolListFlag(argv, DISALLOWED_TOOLS_FLAG, settings.get(DISALLOWED_TOOLS_KEY));
-        addMaxTurnsFlag(argv, settings.get(MAX_TURNS_KEY));
-        return argv;
-    }
-
-    /**
-     * Renders the same flags as {@link #render(String, Map)}, plus a
+     * Renders {@code --model}, then the recognized settings in the fixed order
+     * {@code --allowedTools}, {@code --disallowedTools}, {@code --max-turns}, with a
      * hard-wired, non-configurable pinpoint {@code Write} allowance for
      * {@code decisionFilePath} appended to the {@code --allowedTools} list
      * (design D7, closing the permission risk noted in the Risks section of
@@ -113,7 +95,7 @@ public final class AgentInvocationOptions {
     }
 
     /**
-     * Renders the same flags as {@link #render(String, Map)}, except {@code
+     * Renders the same flags as {@link #renderForExecutor}, except {@code
      * --allowedTools} is hard-wired policy rather than a pass-through of the
      * settings map (FR12, NFR-S1, D7): the judge runs strictly read-only. With
      * no {@code allowedTools} setting, the effective set is the full read-only
@@ -125,15 +107,13 @@ public final class AgentInvocationOptions {
      * silently dropped, never included regardless of what the manifest
      * requests. If the intersection is empty (the manifest requested only
      * write-capable tools), the {@code --allowedTools} flag is omitted
-     * entirely, consistent with {@link #render(String, Map)}'s existing
-     * empty-list handling.
+     * entirely, as an empty tool list is everywhere in this renderer.
      *
      * <p>No separate hard-wired {@code --disallowedTools} is added here: the
      * {@code allowedTools} intersection above already makes it impossible for
      * the effective set to contain a write-capable tool, so a defensive
      * disallow-list would be redundant — {@code disallowedTools} still
-     * renders normally as a pass-through of the manifest setting, same as
-     * {@link #render(String, Map)}.
+     * renders normally as a pass-through of the manifest setting.
      *
      * @param model the pinned, non-blank model id ({@code check.model()})
      * @param settings the opaque settings map; may be empty, never null

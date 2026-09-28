@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Unknown options are usage errors
-Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. Options whose name contains a dot (Spring properties such as `--factory.*`, `--spring.*`, `--logging.*`) and Spring Boot's own `--debug` and `--trace` switches SHALL pass through to configuration and are not checked by this rule. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment.
+Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. Options whose name contains a dot (Spring properties such as `--factory.*`, `--spring.*`, `--logging.*`) and Spring Boot's own `--debug` and `--trace` switches SHALL pass through to configuration and are not checked by this rule. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment. The entrypoint SHALL hand every non-empty command line to its subcommand's parser, so the check cannot be skipped by a command line that names no known option; only an empty command line (no subcommand token and no option) is the no-op that keeps a Spring test context from driving a run.
 <!-- implements FR8, NFR-R1, NFR-O1, UX2 of fix-operator-blockers -->
 
 #### Scenario: A mistyped task flag fails loudly
@@ -20,6 +20,19 @@ Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accep
 #### Scenario: Rejected before side effects
 - **WHEN** `gnomish take` is invoked with an unknown option
 - **THEN** it exits with the usage error before any tracker call, branch, worktree or box is created
+
+#### Scenario: A mistyped run flag is not a silent success
+- **WHEN** the operator runs `gnomish run --tsk=fix the flaky spec` or a bare `gnomish --dirr=.`
+- **THEN** the command exits with the usage error naming `--tsk` (or `--dirr`) for `'gnomish run'` and listing the options `run` accepts
+- **AND** the exit code is 2, not 0
+
+#### Scenario: A run with no task is a usage error, not a no-op
+- **WHEN** the operator runs `gnomish run` or `gnomish run --debug` with neither `--task`, `--task-file` nor `--resume`
+- **THEN** the command exits with the usage error saying exactly one of `--task` or `--task-file` is required
+
+#### Scenario: An empty command line stays a no-op
+- **WHEN** the application starts with no arguments at all, as a Spring test context does
+- **THEN** no parser runs, nothing is printed, and the process exits 0
 
 ### Requirement: The project directory is resolved once to an absolute path
 Every subcommand that accepts `--dir` SHALL resolve its value — or, for the subcommands where the option is optional (`run`, `take`, `serve`, `board`, `dashboard`), the working directory when it is absent — to an absolute, normalized path when the command line is parsed, and every component SHALL receive that resolved path. Whether `--dir` is required does not change: `status` and `usage` SHALL keep refusing an absent `--dir` with their usage error. A relative `--dir` SHALL behave exactly like the equivalent absolute path.

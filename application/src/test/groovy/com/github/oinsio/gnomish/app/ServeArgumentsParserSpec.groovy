@@ -20,7 +20,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
         def parsed = parser.parse(args('serve'))
 
         then:
-        parsed.dir() == Path.of('.')
+        parsed.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
         parsed.slots() == null
         !parsed.drain()
     }

@@ -15,7 +15,8 @@ import org.jspecify.annotations.Nullable;
  * {@code discardWork} implement FR7, FR8, FR10, design D7, D9, D10 of add-git-workflow.
  *
  * @param dir the target project directory; defaults to the current working directory when
- *     {@code --dir} is absent (design D3); unresolved, not checked for existence here
+ *     {@code --dir} is absent (design D3); absolute and normalized (FR7 of
+ *     fix-operator-blockers), not checked for existence here
  * @param taskSource the task description's origin, exactly one of inline text or a file path
  *     (FR1); {@code null} when {@code --resume} is present — resume reads task identity from the
  *     branch, not from a freshly supplied description (FR8)
@@ -49,6 +50,10 @@ public record RunArguments(
         @Nullable String base,
         @Nullable String resume,
         boolean discardWork) {
+
+    public RunArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
 
     /**
      * The scope of {@code --interactive}'s override (FR10, design D6): the manifest-driven
