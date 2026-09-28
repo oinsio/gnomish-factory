@@ -147,10 +147,9 @@ class RemoteOutageServeEndToEndSpec extends Specification {
 
         and: 'three slots, three ready tasks, a WIP limit that never blocks this scenario'
         def ledger = new SlotLedger(3)
-        def automaton = new FeedAutomaton(
-                tracker, INSTANCE, ledger, runner, sleeper, clock,
-                new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT,
-                DirtyNotifier.NOOP, gate)
+        def automaton = new FeedAssembly(
+                sleeper, clock, new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
+                .feedAutomaton(tracker, INSTANCE, ledger, runner, DirtyNotifier.NOOP, gate)
 
         when: 'the feed fills all three slots — the only claims the outage costs the tracker (G5)'
         3.times { automaton.step() }

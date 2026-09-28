@@ -29,6 +29,12 @@ plugins {
 
 rootProject.name = 'gnomish-factory'
 
+// The project's own Error Prone checks (design D1/D9 of add-parameter-count-gate). Composed
+// as a regular included build, not under pluginManagement: its projects are dependencies —
+// the check on each module's errorprone processor path, its annotation compileOnly — and
+// Gradle substitutes their `com.github.oinsio.build` coordinates by the projects there.
+includeBuild 'build-checks'
+
 // The layered module tree (FR1, design D1 of split-into-modules). Modules are
 // added pass by pass; whatever has not been extracted yet still lives in the
 // root project, which stays the composition root until `:bootstrap` exists.

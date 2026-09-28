@@ -77,7 +77,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     def "the observability wiring writes its ledger under the home, for the configured instance"() {
         given:
         def clock = Clock.fixed(NOW, ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(1)
+        def slotLedger = new SlotLedger(1, ENGINE_CLOCK)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
 import com.github.oinsio.gnomish.board.BoardModel
+import com.github.oinsio.gnomish.board.EligibilityInputs
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -53,7 +54,7 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#1', AbortFacts.none(), false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, BASE, CAP, NOW, 0, 3)
+        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
 
         when:
         def row = mapper.toDto(model, 3).ready().rows()[0]
@@ -72,7 +73,7 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#2', facts, false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, BASE, CAP, NOW, 0, 3)
+        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
 
         when:
         def eligibility = mapper.toDto(model, 3).ready().rows()[0].eligibility()
@@ -86,7 +87,7 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#3', AbortFacts.none(), false, true)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, BASE, CAP, NOW, 0, 3)
+        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
 
         when:
         def eligibility = mapper.toDto(model, 3).ready().rows()[0].eligibility()
@@ -103,7 +104,7 @@ class BoardJsonMapperSpec extends Specification {
         def open = [
             new OpenTask(new TaskRef('github:o/r#10'), new TrackerTaskState.Working('holder-a'), null, UntrustedText.tracker('working title'))
         ]
-        def model = BoardModel.build(ready, open, false, NOW, BASE, CAP, NOW, 3, 3)
+        def model = BoardModel.build(ready, open, false, NOW, new EligibilityInputs(BASE, CAP, 3, 3))
 
         when:
         def dto = mapper.toDto(model, 3)
@@ -119,7 +120,7 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#5', AbortFacts.none(), false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, BASE, CAP, NOW, 0, 3)
+        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
 
         when:
         def readyDto = mapper.toDto(model, 3).ready()

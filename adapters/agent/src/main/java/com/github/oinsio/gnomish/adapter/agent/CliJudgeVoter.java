@@ -50,13 +50,10 @@ import org.jspecify.annotations.Nullable;
  */
 public final class CliJudgeVoter implements JudgeVoter {
 
-    private final FactoryProperties factoryProperties;
-    private final Clock clock;
-    private final AgentProgressListener progressListener;
+    private final AgentRoundEquipment equipment;
     private final PipelineLaw law;
     private final JudgePromptBuilder promptBuilder;
     private final JudgeEnvironmentSource environmentSource;
-    private final AgentRoundResultExtractor resultExtractor = new AgentRoundResultExtractor();
     private final JudgeVerdictExtractor verdictExtractor = new JudgeVerdictExtractor();
 
     /**
@@ -120,9 +117,8 @@ public final class CliJudgeVoter implements JudgeVoter {
             ChildEnvAllowlist childEnv,
             PipelineLaw law,
             @Nullable JudgeEnvironmentSource environmentSource) {
-        this.factoryProperties = factoryProperties;
-        this.clock = clock;
-        this.progressListener = progressListener;
+        this.equipment =
+                new AgentRoundEquipment(factoryProperties, clock, progressListener, new AgentRoundResultExtractor());
         this.law = law;
         this.promptBuilder = new JudgePromptBuilder(law);
         this.environmentSource =
@@ -158,13 +154,6 @@ public final class CliJudgeVoter implements JudgeVoter {
         // defensive try/catch is warranted (D14 of add-sandbox-core).
         String prompt = promptBuilder.build(check, context, workspace);
         return JudgeRoundExecution.run(
-                factoryProperties,
-                clock,
-                progressListener,
-                resultExtractor,
-                verdictExtractor,
-                check,
-                environmentSource.environmentFor(workspace),
-                prompt);
+                equipment, verdictExtractor, check, environmentSource.environmentFor(workspace), prompt);
     }
 }

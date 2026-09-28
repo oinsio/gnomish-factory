@@ -18,10 +18,14 @@ spotless {
     format 'misc', {
         // Build metadata hygiene only; docs are deliberately excluded
         // (markdown trailing spaces are semantic, archived changes immutable).
-        // '*/*.gradle' covers every module build file plus the `build-logic`
-        // included build (whose own sources Spotless cannot reach from inside
-        // that build), so a new module needs no entry here (FR6).
-        target '*.gradle', '*/*.gradle', 'build-logic/src/main/groovy/*.gradle',
+        // '**/*.gradle' recursively covers every module build file at any
+        // nesting depth (including two-levels-deep subprojects such as
+        // `:sandbox:core`, `:sandbox:docker` and `:gnomish-plugin-api:sample`,
+        // which a fixed-depth glob like '*/*.gradle' would silently miss),
+        // plus the `build-logic` and `build-checks` included builds (whose own
+        // sources Spotless cannot reach from inside those builds), so a new
+        // module — however deeply nested — needs no entry here (FR6).
+        target '**/*.gradle',
             'gradle.properties', 'gradle/libs.versions.toml', '.gitignore', '.gitattributes'
         trimTrailingWhitespace()
         endWithNewline()

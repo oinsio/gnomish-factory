@@ -1,0 +1,27 @@
+// Build for the project's own Error Prone checks (design D9 of add-parameter-count-gate).
+//
+// Neither project applies `java-conventions`: that plugin puts these very checks on the
+// processor path, which from inside their own build would be a cycle. They are the one
+// exemption by layout in the gate's single-owner table, and carry no production code of
+// the factory.
+subprojects {
+    apply plugin: 'java-library'
+
+    group = 'com.github.oinsio.build'
+    version = '0.1.0-SNAPSHOT'
+
+    def libs = rootProject.extensions.getByType(VersionCatalogsExtension).named('libs')
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(libs.findVersion('java').get().requiredVersion.toInteger())
+        }
+    }
+
+    // Same reproducibility / OSV-Scanner posture as the main build and `build-logic`:
+    // every project commits its lockfile. Regenerate with
+    // `./gradlew -p build-checks build --write-locks`.
+    dependencyLocking {
+        lockAllConfigurations()
+    }
+}

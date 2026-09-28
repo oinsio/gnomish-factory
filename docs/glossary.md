@@ -80,6 +80,14 @@ terms) live in `.claude/rules/process-invariants.md`.
   value because the protocol is never run without the threshold. Type:
   `AbortFuse`, a member of the **slot wiring**. *Not:* the
   stage attempt limit, which counts quality failures.
+- **Abort trigger** — what tripped one infrastructure abort, as one value: the
+  recovery-cause category the attempt spends from, and the live exception
+  when the trigger still holds one (an uncaught take-run crash) or none (an
+  engine `Aborted` outcome, whose cause is a string the domain already
+  rendered). Built only through its two factories, so no caller assembles
+  the nullable by hand; handed whole to the **abort fuse**, the one entry into
+  the abort protocol from a take run. Type: `AbortTrigger`. *Not:* the
+  abort's outcome (release or park) — that is the protocol's decision.
 - **Resume** — any instance continuing a task from its branch and state file;
   requires no hand-off from the previous holder.
 - **Order** — the resolved description of the work one invocation performs,
@@ -118,6 +126,23 @@ terms) live in `.claude/rules/process-invariants.md`.
   task, so it exists before any task is claimed; unlike the **slot wiring** it
   is not equipment — it is what the wiring and the dispatch chain are built
   over. *Not:* the order, and not the slot wiring.
+- **Feed assembly** — the serve feed's assembly object: holds the feed's
+  timing equipment (sleeper, clock, idle timing, WIP limit) as fields and
+  builds one feed automaton per `serve` daemon from the per-daemon values
+  (tracker, instance id, slot ledger, slot runner, dirty notifier, outage
+  gate), constructing the feed's cycle and view tracker on the way. The one
+  door into the automaton: its constructor is package-private and takes the
+  cycle and view tracker built. Carries no decision, so it has no spec of its
+  own and is exercised through the serve wiring. Type: `FeedAssembly`.
+  *Not:* the automaton itself, which runs the feed cycle.
+- **Eligibility inputs** — the values the feed evaluates one ready task
+  against when deciding whether it would claim it now: the backoff shape
+  (base and cap), the open-front count and the WIP limit. Backoff is measured
+  at the board's own observation instant, which is not part of the inputs.
+  Resolved once per invocation and handed whole to the board's
+  model and the eligibility policy, so the board answers exactly as the take
+  feed would. Type: `EligibilityInputs`. *Not:* the task's own facts (abort
+  count, last abort) — those are what the inputs are evaluated against.
 - **Claim tenure** — as a type, the liveness view of one tenure (one holding
   of a claim, identified by its **claim epoch**): the claim beat that keeps the
   claim alive and the claim-loss flag the beat sets when the claim is lost.
@@ -137,6 +162,20 @@ terms) live in `.claude/rules/process-invariants.md`.
   branch after every attempt.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
+- **Agent round equipment** — what every agent round is launched with: the
+  installation's agent settings (CLI binary, tail drain grace), the clock
+  that stamps the round, the live-progress subscriber and the extractor that
+  shapes the round's essential result. Built once per owner (the stage
+  executor, the judge voter) and taken whole by that owner's round
+  execution, so the group is assembled in one place rather than re-listed at
+  every launch. Type: `AgentRoundEquipment`. *Not:* the round's job (the
+  prompt, the working copy, the round listener), which is passed per call.
+- **GitHub marker fields** — the wire form of a GitHub structural marker: the
+  hidden JSON a marker comment carries, as data alone (kind, instance,
+  timestamp, format version, and the optional park reason, content identity
+  and claim epoch), with the codec that renders and parses it kept apart.
+  Type: `GithubMarkerFields`, a Jackson record; `GithubMarkerJson` is the
+  codec. *Not:* the marker itself, which is the comment on the tracker.
 
 ## Crash consistency
 
@@ -435,6 +474,24 @@ trusted/task tier split, and the law-root rule.
   construction differing only in the **ownership mode** — plus a manual run's
   execution-mode plan. Type: `ContainerSupports`. *Not:* one run's container
   support (`ContainerRunSupport`), which it builds.
+- **Task container settings** — the operator configuration one task container
+  is created with: the image, the runtime, the resource bounds and the
+  disk-quota opt-in, read off the sandbox settings once and carried whole
+  into the environment and the materializer. The image requirement lives in
+  its constructor, so a blank image cannot become a settings value. Type:
+  `TaskContainerSettings`. *Not:* the sandbox settings as a whole, of which
+  these are the per-container slice.
+- **Box git link** — the git link between the factory and one **box**: the
+  factory's local clone the box's working copy is seeded from, and the fetch
+  that brings the box's commits back into that clone. One value because
+  neither names a thing without the other — a seed source with no way back is
+  a leak, a harvest into nothing has no destination. Type: `BoxGitLink`; the
+  environment harvests through it rather than reading the fetch back out.
+- **Box timing** — the timing equipment every box operation runs on: the clock
+  that stamps exec starts, the pause the self-check waits with, and the
+  deadline every `docker` management command is bounded by. All three are
+  about time; a host directory such as the guard config root is deliberately
+  not in it. Type: `BoxTiming`.
 - **Project identity** — the label scoping a sweep to its own project: a
   stable digest of the clone's **normalized** `origin` remote URL, or an
   explicit operator override. Normalization removes the URL's userinfo,

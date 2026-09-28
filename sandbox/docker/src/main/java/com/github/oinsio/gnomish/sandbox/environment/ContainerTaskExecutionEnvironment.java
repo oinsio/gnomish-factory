@@ -5,9 +5,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
-import com.github.oinsio.gnomish.sandbox.ResourceLimits;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +34,9 @@ import org.slf4j.LoggerFactory;
  * task (FR5). Runtime outages ({@link DockerUnavailableException}) surface as
  * infrastructure failures, no attempt burned (NFR-R1).
  *
- * <p>Implements FR3, FR4, FR10, FR11, NFR-R1, NFR-R2 of add-sandbox-core.
+ * <p>Implements FR3, FR4, FR10, FR11, NFR-R1, NFR-R2 of add-sandbox-core; FR6 of
+ * add-parameter-count-gate (the equipment arrives as {@link BoxGitLink} and {@link
+ * TaskContainerSettings}, and the materialize half is an instance held here).
  */
 public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnvironment {
 
@@ -55,54 +55,39 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
 
     private final DockerCli docker;
     private final String key;
-    private final Path sourceClone;
-    private final ContainerHarvest harvester;
-    private final String image;
-    private final String runtime;
-    private final ResourceLimits limits;
-    private final boolean enforceDiskQuota;
+    private final BoxGitLink link;
     private final Clock clock;
     private final ChildEnvAllowlist allowlist;
-    private final ObjectOwnership ownership;
+    private final ContainerMaterializer materializer;
 
     private @Nullable ContainerFileChannel channel;
     private @Nullable String branch;
 
     /**
-     * @param sourceClone the factory's local clone the working copy is seeded from (design D3,
-     *     FR3); mounted read-only into the one-shot seed helper only, never the task container
-     * @param harvester the factory-side fetch behind {@link #harvest} (FR5); never null
-     * @param image the operator-configured {@code factory.sandbox.image}; required to bind the
-     *     container adapter (validated here, per {@code SandboxProperties}); never null or blank
-     * @param enforceDiskQuota whether to add {@code --storage-opt size=} — opt-in, since it needs a
-     *     quota-capable storage driver most daemons lack (documented in operator docs)
+     * @param link the factory's local clone the working copy is seeded from (design D3, FR3) and
+     *     the factory-side fetch behind {@link #harvest} (FR5); never null
+     * @param settings the operator-configured image (required to bind the container adapter,
+     *     validated where the value is built), runtime, limits and disk-quota opt-in; never null
      * @param allowlist the layered child-environment allowlist (D6, FR9); the container base is
      *     empty — only composed {@code --env} entries reach an exec child, the image's own {@code
      *     ENV} supplies the runtime environment; never null
+     * @param ownership the mode and project identity stamped on every object this environment
+     *     creates; never null
      */
     ContainerTaskExecutionEnvironment(
             DockerCli docker,
             String key,
-            Path sourceClone,
-            ContainerHarvest harvester,
-            @Nullable String image,
-            String runtime,
-            ResourceLimits limits,
-            boolean enforceDiskQuota,
+            BoxGitLink link,
+            TaskContainerSettings settings,
             Clock clock,
             ChildEnvAllowlist allowlist,
             ObjectOwnership ownership) {
         this.docker = docker;
         this.key = key;
-        this.sourceClone = sourceClone;
-        this.harvester = harvester;
-        this.image = requireImage(image);
-        this.runtime = runtime;
-        this.limits = limits;
-        this.enforceDiskQuota = enforceDiskQuota;
+        this.link = link;
         this.clock = clock;
         this.allowlist = allowlist;
-        this.ownership = ownership;
+        this.materializer = new ContainerMaterializer(docker, key, link.sourceClone(), settings, ownership);
     }
 
     @Override
@@ -111,11 +96,9 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         String name = FactoryDockerLabels.containerName(key);
         DockerResult inspect = docker.run(DockerCommands.inspectContainerState(name));
         if (inspect.ok()) {
-            ContainerMaterializer.reattach(
-                    docker, key, image, sourceClone, name, inspect, branch, commitPin, ownership);
+            materializer.reattach(name, inspect, branch, commitPin);
         } else {
-            ContainerMaterializer.create(
-                    docker, key, image, sourceClone, runtime, limits, enforceDiskQuota, branch, commitPin, ownership);
+            materializer.create(branch, commitPin);
         }
         channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
         this.branch = branch;
@@ -155,7 +138,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         if (b == null) {
             throw new IllegalStateException("environment not materialized: key " + key);
         }
-        harvester.fetch(FactoryDockerLabels.containerName(key), b);
+        link.harvest(FactoryDockerLabels.containerName(key), b);
     }
 
     @Override
@@ -191,12 +174,5 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         if (channel == null) {
             throw new IllegalStateException("environment not materialized: key " + key);
         }
-    }
-
-    private static String requireImage(@Nullable String image) {
-        if (image == null || image.isBlank()) {
-            throw new IllegalStateException("factory.sandbox.image must be set to bind the container adapter (FR3)");
-        }
-        return image;
     }
 }

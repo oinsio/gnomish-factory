@@ -36,22 +36,23 @@ flowchart TB
 
 The diagram shows the layers, not every edge. Notable specifics: `:adapters:github` is the strictest adapter — it sees only `:gnomish-plugin-api` and `:domain`, never `:application`; `:sandbox:docker` realizes the `:sandbox:core` port and is also consumed by the other adapter modules for environment wiring; `:bootstrap`, as the composition root, additionally reaches every lower layer directly. The exact permitted edge set is not this picture — it is declared per module and enforced (see below).
 
-| Module                | Holds                                                                                                                         |
-|-----------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `:domain`             | the stage engine and the pipeline model — pure, no I/O, no framework                                                          |
-| `:gitobjects`         | git-object plumbing shared below the adapter layer                                                                            |
-| `:subprocess`         | the dependency-free JDK-only leaf: the one subprocess wait/kill/drain discipline (supervisor primitive + capture runner)      |
+| Module                | Holds                                                                                                                                                                                              |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `:domain`             | the stage engine and the pipeline model — pure, no I/O, no framework                                                                                                                               |
+| `:gitobjects`         | git-object plumbing shared below the adapter layer                                                                                                                                                 |
+| `:subprocess`         | the dependency-free JDK-only leaf: the one subprocess wait/kill/drain discipline (supervisor primitive + capture runner)                                                                           |
 | `:gnomish-plugin-api` | the published third-party contract: tracker port, `SecretsProvider`, the adapter SPI ([README](../../gnomish-plugin-api/README.md)); its `sample` submodule is a minimal consumer of that contract |
-| `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                        |
-| `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                             |
-| `:application`        | the use cases (`run`, `take`, `serve`, `status`, `usage`, `board`, `dashboard`) and the ports they drive adapters through     |
-| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over one shared HTTP core                                        |
-| `:adapters:git`       | the git-subprocess adapter: task repository, attempt persistence, state-file mappers                                          |
-| `:adapters:agent`     | the agent-CLI executor and judge voter                                                                                        |
-| `:adapters`           | the coarse remainder: console, `.gnomish/` loader, check runners, secrets, pipeline law, the in-memory reference tracker      |
-| `:bootstrap`          | the composition root: `main()`, `@Configuration`, assemblies, architecture tests                                              |
-| `:test-fixtures`      | Spock fixtures shared across modules, consumed at test scope only                                                             |
-| `build-logic/`        | an included build of convention plugins; every module build file is thin                                                      |
+| `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                                                                                             |
+| `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                                                                                                  |
+| `:application`        | the use cases (`run`, `take`, `serve`, `status`, `usage`, `board`, `dashboard`) and the ports they drive adapters through                                                                          |
+| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over one shared HTTP core                                                                                                             |
+| `:adapters:git`       | the git-subprocess adapter: task repository, attempt persistence, state-file mappers                                                                                                               |
+| `:adapters:agent`     | the agent-CLI executor and judge voter                                                                                                                                                             |
+| `:adapters`           | the coarse remainder: console, `.gnomish/` loader, check runners, secrets, pipeline law, the in-memory reference tracker                                                                           |
+| `:bootstrap`          | the composition root: `main()`, `@Configuration`, assemblies, architecture tests                                                                                                                   |
+| `:test-fixtures`      | Spock fixtures shared across modules, consumed at test scope only                                                                                                                                  |
+| `build-logic/`        | an included build of convention plugins; every module build file is thin                                                                                                                           |
+| `build-checks/`       | an included build of the project's own Error Prone checks (`ParameterCountLimit`); `java-conventions` puts them on every module's processor path                                                   |
 
 The direction is enforced, not documented: each module declares the sibling projects its production classpath may reach (`verifyModuleLayering`), the dependency-analysis plugin fails any undeclared or unused edge, and ArchUnit rules hold the package-level boundaries inside a module. A violation fails `./gradlew check` naming the rule and the offending edge.
 

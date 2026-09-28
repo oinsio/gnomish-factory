@@ -79,16 +79,16 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             Path guardRoot,
             OwnershipMode mode = OwnershipMode.MANUAL,
             String projectId = 'test-project') {
-        new ContainerEnvironments(
-                this, key, sourceClone,
-                { String container, String branch -> } as ContainerHarvest,
-                sandbox,
-                { -> Instant.now() } as Clock,
-                ChildEnvAllowlist.none(),
-                { d -> } as Sleeper,
-                guardRoot,
-                mode,
-                projectId)
+        new ContainerEnvironments(this, key, new ContainerEnvironmentBuilder(
+                        this,
+                        new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
+                        sandbox,
+                        new BoxTiming({
+                            -> Instant.now()
+                        } as Clock, { d -> } as Sleeper, DockerCli.DEFAULT_COMMAND_TIMEOUT),
+                        ChildEnvAllowlist.none(),
+                        guardRoot,
+                        new ObjectOwnership(mode, projectId)))
     }
 
     /** A finished child process with canned merged output — the exec seam's daemon-free stand-in. */

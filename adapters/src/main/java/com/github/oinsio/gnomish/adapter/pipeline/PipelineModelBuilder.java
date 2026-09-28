@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper.StageEntry;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
-import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Result;
 import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
@@ -44,27 +43,28 @@ final class PipelineModelBuilder {
      * unparseable, the model cannot be built and the model-dependent tiers are
      * skipped (D6); the earlier tiers' errors already explain why.
      *
+     * <p>Takes the {@link ParsedTree} whole rather than its three components
+     * (FR6 of add-parameter-count-gate, design D12).
+     *
      * @return the mapped, validated definition, or {@code null} when it could not
      *     be produced
      */
     static @Nullable PipelineDefinition mapAndValidate(
             LawSource law,
-            Result<ConfigDto> config,
-            Result<PipelineDto> pipeline,
-            Map<String, StageDto> stages,
+            ParsedTree tree,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
             ConnectionProfiles profiles,
             List<ConfigError> errors) {
-        if (!(config instanceof Ok<ConfigDto>(ConfigDto value))
-                || !(pipeline instanceof Ok<PipelineDto>(PipelineDto value1))) {
+        if (!(tree.config() instanceof Ok<ConfigDto>(ConfigDto value))
+                || !(tree.pipeline() instanceof Ok<PipelineDto>(PipelineDto value1))) {
             return null;
         }
         List<String> pipelineNames = value1.stages();
         if (pipelineNames == null) {
             return null;
         }
-        List<StageEntry> entries = orderedEntries(pipelineNames, stages);
+        List<StageEntry> entries = orderedEntries(pipelineNames, tree.stages());
         if (entries == null) {
             return null;
         }

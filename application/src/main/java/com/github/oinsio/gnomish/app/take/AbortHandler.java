@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,9 +20,10 @@ import org.slf4j.LoggerFactory;
  * uncaught exception of the take run itself. Both funnel into the identical
  * best-effort protocol — ERROR log, then either {@code recordAbort} (below the
  * fuse) or {@code park(INFRA)} (fuse tripped) — so this class exposes one entry
- * point, {@link #handle}, taking a free-text {@code cause} plus the last known
- * {@link TaskState}, rather than two separate methods per trigger; the caller
- * (a later wiring task) reduces either trigger to that shape before calling in.
+ * point, {@link #handle}, taking a free-text {@code cause}, the last known
+ * {@link TaskState} and the {@link AbortTrigger} that names which trigger it
+ * was, rather than two separate methods per trigger; the caller reduces either
+ * trigger to that shape before calling in, through {@link AbortFuse#handle}.
  *
  * <p>Best-effort covers BOTH tracker writes, not just the below-fuse {@code
  * recordAbort} (NFR-R2): the fuse-tripping {@code park(INFRA)} is equally
@@ -80,8 +80,17 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      * propagate; {@code handle} always returns the matching {@link TakeResult}
      * (NFR-R2).
      *
+     * <p>Package-private: a take run enters through {@link AbortFuse#handle}, which relays its own
+     * threshold, so the fuse is the only entry into this protocol from outside the package (design
+     * D8 of add-parameter-count-gate).
+     *
+     * <p>The log line depends on the trigger (design D7 of harden-untrusted-text-sinks): a crash
+     * rides its live {@link Throwable} so Logback renders the stack and cause chain, while an
+     * engine {@code Aborted} outcome has only the rendered cause text, flattened onto the record's
+     * single line.
+     *
      * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port; FR1, NFR-R1 of
-     * cap-abort-cause-length.
+     * cap-abort-cause-length; FR6 of add-parameter-count-gate.
      *
      * @param ref the aborting task's identity; never null
      * @param finalState the last known task state; never null
@@ -91,47 +100,21 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      *     caller; never null
      * @param threshold the configured abort-fuse threshold (K); positive
      * @param instanceId this factory instance's identity; never null
-     * @param category which category of the unified accounting this attempt
-     *     spends — a crashed run or a failed branch repair; never null
+     * @param trigger what tripped the abort: which category of the unified accounting this
+     *     attempt spends, and the exception itself when the trigger still holds one; never null
      * @return {@link TakeResult.Aborted} below the fuse, {@link
      *     TakeResult.AwaitingHuman} with {@link ParkReason#INFRA} at the fuse
      */
-    public TakeResult handle(
+    TakeResult handle(
             TaskRef ref,
             TaskState finalState,
             UntrustedText cause,
             AbortFacts facts,
             int threshold,
             InstanceId instanceId,
-            RecoveryCause category) {
-        return handle(ref, finalState, cause, facts, threshold, instanceId, category, null);
-    }
-
-    /**
-     * {@link #handle(TaskRef, TaskState, UntrustedText, AbortFacts, int, InstanceId, RecoveryCause)} for a
-     * trigger that still holds the exception itself (design D7 of harden-untrusted-text-sinks).
-     *
-     * <p>The two triggers differ in what they can give the log. An uncaught take-run exception is
-     * a live {@link Throwable}, so it rides the trailing argument and Logback renders its stack
-     * and cause chain — indented, one frame per line. An engine {@code Aborted} outcome carries
-     * only a string the domain already rendered, with no throwable anywhere in reach, so that one
-     * stays a message argument and the sink flattens it onto the record's single line. Passing a
-     * rendered trace as a message argument where the throwable exists would lose the shape for no
-     * reason, which is what this overload is for.
-     *
-     * @param crash the exception the abort came from, or {@code null} when the trigger is an
-     *     engine {@code Aborted} outcome and {@code cause} is all there is
-     * @return the same result the other overload documents
-     */
-    public TakeResult handle(
-            TaskRef ref,
-            TaskState finalState,
-            UntrustedText cause,
-            AbortFacts facts,
-            int threshold,
-            InstanceId instanceId,
-            RecoveryCause category,
-            @Nullable Throwable crash) {
+            AbortTrigger trigger) {
+        RecoveryCause category = trigger.category();
+        Throwable crash = trigger.crash();
         if (crash == null) {
             log.error(
                     OperatorEvent.INFRASTRUCTURE_ABORT.head() + "Infrastructure abort on task {} ({}): {}",
@@ -159,21 +142,6 @@ public record AbortHandler(Tracker tracker, Clock clock) {
 
         recordAbortBestEffort(ref, trackerCause, instanceId, category);
         return new TakeResult.Aborted(finalState, cause);
-    }
-
-    /**
-     * The crash-category entry point kept for the callers whose attempt can only be an instance
-     * crash — an engine {@code Aborted} outcome, whose durable persist failed inside a running
-     * round.
-     */
-    public TakeResult handle(
-            TaskRef ref,
-            TaskState finalState,
-            UntrustedText cause,
-            AbortFacts facts,
-            int threshold,
-            InstanceId instanceId) {
-        return handle(ref, finalState, cause, facts, threshold, instanceId, RecoveryCause.INSTANCE_CRASH);
     }
 
     /**

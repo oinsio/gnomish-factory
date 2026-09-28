@@ -77,17 +77,8 @@ public final class TakeCrashAbort {
         AbortFacts facts = abortFactsBestEffort(order.tracker(), ref);
         TaskState finalState = TaskState.atStageStart(
                 order.run().definition().stages().getFirst().name());
-        return abortFuse
-                .handler()
-                .handle(
-                        ref,
-                        finalState,
-                        cause,
-                        facts,
-                        abortFuse.threshold(),
-                        order.instanceId(),
-                        categoryOf(crash),
-                        crash);
+        return abortFuse.handle(
+                ref, finalState, cause, facts, order.instanceId(), AbortTrigger.crashed(categoryOf(crash), crash));
     }
 
     /**

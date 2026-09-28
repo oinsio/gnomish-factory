@@ -1,0 +1,3 @@
+// The exemption token of the parameter-count gate (design D5 of add-parameter-count-gate).
+// Consumed `compileOnly` by every module of the main build, so it declares no dependency:
+// whatever it dragged in would land on every module's compile classpath.

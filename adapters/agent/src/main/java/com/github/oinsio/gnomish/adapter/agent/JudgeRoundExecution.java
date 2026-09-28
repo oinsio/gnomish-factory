@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote;
@@ -33,8 +32,15 @@ import org.slf4j.LoggerFactory;
  * the operator. One site, one line — the caller receives the same facts (FR5 of
  * harden-logging-observability).
  *
+ * <p>Kept in sync with {@link ExecutorRoundExecution}: both launch one agent round from the same
+ * {@link AgentRoundEquipment} — the CLI binary through the environment port with the factory-set
+ * AI seam variables, a {@link StreamDrain} started before the wait, the wait bounded by {@code
+ * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
+ * then {@code agentCliTailDrainGrace} for the tail — and each maps every failure of that launch
+ * sequence through one site (here: {@code cannotVerify}; there: {@code ExecutorFailure}).
+ *
  * <p>Implements FR1, FR2, FR3, FR6, NFR-R1 of fix-round-stdout-drain; FR5 of
- * harden-logging-observability.
+ * harden-logging-observability; FR6 of add-parameter-count-gate (design D6, Sync surfaces).
  */
 final class JudgeRoundExecution {
 
@@ -46,14 +52,13 @@ final class JudgeRoundExecution {
     private JudgeRoundExecution() {}
 
     static Vote run(
-            FactoryProperties factoryProperties,
-            Clock clock,
-            AgentProgressListener progressListener,
-            AgentRoundResultExtractor resultExtractor,
+            AgentRoundEquipment equipment,
             JudgeVerdictExtractor verdictExtractor,
             VerifyCheck.Judge check,
             TaskExecutionEnvironment environment,
             String prompt) {
+        FactoryProperties factoryProperties = equipment.factoryProperties();
+        Clock clock = equipment.clock();
         var invocationFlags = AgentInvocationOptions.renderForJudge(check.model(), check.settings());
         List<String> command = AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), invocationFlags);
 
@@ -71,7 +76,7 @@ final class JudgeRoundExecution {
 
         // Same shared drain as the executor round (FR6 of fix-round-stdout-drain), started
         // before the wait so the vote's stream is never bounded by the OS pipe buffer (FR1).
-        try (StreamDrain drain = StreamDrain.start(launched.output(), clock, progressListener)) {
+        try (StreamDrain drain = StreamDrain.start(launched.output(), clock, equipment.progressListener())) {
             Duration roundTimeout = RoundTimeout.resolve(check.settings());
             var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
             if (wait instanceof ExecHandle.Wait.TimedOut) {
@@ -93,7 +98,7 @@ final class JudgeRoundExecution {
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
             Instant roundEnd = clock.now();
-            AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd, drain.bytesRead());
+            AgentRoundResult roundResult = equipment.resultExtractor().extract(events, roundEnd, drain.bytesRead());
             Verdict verdict = verdictExtractor.extract(roundResult.result());
             return new Vote(verdict, roundResult.usage().tokensByModel());
         } catch (MissingResultEventException e) {

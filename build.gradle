@@ -194,4 +194,7 @@ tasks.named('check') {
 // once, manually" failure this change removes.
 tasks.named('check') {
     dependsOn gradle.includedBuild('build-logic').task(':check')
+    // The same edge for the gate's own build (NFR-R1, M3 of add-parameter-count-gate): its
+    // unit spec would otherwise run only on a remembered `./gradlew -p build-checks check`.
+    dependsOn gradle.includedBuild('build-checks').task(':parameter-count-check:check')
 }

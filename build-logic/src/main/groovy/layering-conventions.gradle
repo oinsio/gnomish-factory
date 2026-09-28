@@ -33,18 +33,26 @@ def layering = extensions.create('layering', LayeringExtension)
 layering.allowedProjects.convention([] as Set)
 
 // Walks a resolved configuration's component graph and collects every project
-// (as opposed to external module) it reaches, excluding the module itself.
+// of THIS build (as opposed to an external module, or a project of an included
+// build) it reaches, excluding the module itself. A project of another build is
+// not a layer of the factory: `build-checks` substitutes the parameter-count
+// gate's annotation onto every module's compile classpath by coordinates
+// (design D9 of add-parameter-count-gate), and it carries no factory code — so
+// the gate's universe is the main build's module tree, the one `settings.gradle`
+// declares and the one the FR2 direction is stated over.
 def projectDependenciesOf = { String configurationName ->
     configurations.named(configurationName).get().incoming.resolutionResult.rootComponent.map { root ->
         Set<String> found = []
         Set<Object> seen = []
         List queue = [root]
+        def ownBuild = ((ProjectComponentIdentifier) root.id).build
         while (!queue.isEmpty()) {
             def component = queue.remove(0)
             if (!seen.add(component.id)) {
                 continue
             }
-            if (component != root && component.id instanceof ProjectComponentIdentifier) {
+            if (component != root && component.id instanceof ProjectComponentIdentifier
+                    && ((ProjectComponentIdentifier) component.id).build == ownBuild) {
                 found.add(((ProjectComponentIdentifier) component.id).projectPath)
             }
             component.dependencies.each { dependency ->

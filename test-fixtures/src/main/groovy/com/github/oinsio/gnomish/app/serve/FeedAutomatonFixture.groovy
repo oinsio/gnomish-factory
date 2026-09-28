@@ -15,7 +15,8 @@ import java.time.Duration
  * supplied was a real-clock {@code RemoteOutageGates.system(...)} the test-time gate could not
  * see there. Here the default gate runs on virtual time — it starts closed and nothing reachable
  * from these factories opens it, so its clock is never consulted (a closed gate's {@code
- * probeIfDue()} is a no-op).
+ * probeIfDue()} is a no-op). Both build through {@link FeedAssembly}, the one door into the automaton
+ * (design D7 of add-parameter-count-gate).
  *
  * <p>Shared by the {@code :application} and {@code :bootstrap} specs, which is why it lives in
  * {@code :test-fixtures} rather than one module's test tree.
@@ -36,9 +37,8 @@ class FeedAutomatonFixture {
             Tracker tracker, InstanceId instanceId, SlotLedger slotLedger, SlotRunner slotRunner, Sleeper sleeper,
             Clock clock, Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
             Random random, DirtyNotifier dirtyNotifier) {
-        new FeedAutomaton(tracker, instanceId, slotLedger, slotRunner, sleeper, clock,
-                new IdleTiming(idlePollInterval, backoffBase, backoffCap, random), wipLimit, dirtyNotifier,
-                closedGate(idlePollInterval))
+        new FeedAssembly(sleeper, clock, new IdleTiming(idlePollInterval, backoffBase, backoffCap, random), wipLimit)
+                .feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, closedGate(idlePollInterval))
     }
 
     private static RemoteOutageGate closedGate(Duration idlePollInterval) {

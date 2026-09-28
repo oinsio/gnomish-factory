@@ -63,12 +63,8 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         def e = new ContainerTaskExecutionEnvironment(
                 new DockerCli(),
                 key,
-                source,
-                new ContainerHarvestFetch(runner, source),
-                GitSandboxImage.IMAGE,
-                'runc',
-                LIMITS,
-                false,
+                new BoxGitLink(source, new ContainerHarvestFetch(runner, source)),
+                new TaskContainerSettings(GitSandboxImage.IMAGE, 'runc', LIMITS, false),
                 clock,
                 ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         envs << e

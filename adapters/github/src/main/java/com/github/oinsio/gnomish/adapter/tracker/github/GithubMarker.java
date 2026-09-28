@@ -131,7 +131,7 @@ public final class GithubMarker {
             @Nullable String reason,
             @Nullable GithubCommentIdentity identity,
             @Nullable ClaimEpoch epoch) {
-        var fields = new GithubMarkerJson(
+        var fields = new GithubMarkerFields(
                 kind.wireValue(),
                 instanceId,
                 at.toString(),
@@ -140,7 +140,7 @@ public final class GithubMarker {
                 identity == null ? null : identity.task(),
                 identity == null ? null : identity.intent(),
                 epoch == null ? null : epoch.token());
-        return COMMENT_PREFIX + fields.serialize() + COMMENT_SUFFIX + "\n" + humanText;
+        return COMMENT_PREFIX + GithubMarkerJson.serialize(fields) + COMMENT_SUFFIX + "\n" + humanText;
     }
 
     /**
@@ -164,12 +164,12 @@ public final class GithubMarker {
             return Optional.empty();
         }
         String json = matcher.group("json");
-        Optional<GithubMarkerJson> parsed = GithubMarkerJson.deserialize(json);
+        Optional<GithubMarkerFields> parsed = GithubMarkerJson.deserialize(json);
         if (parsed.isEmpty()) {
             warnDropped(json, "its structural JSON does not parse");
             return Optional.empty();
         }
-        GithubMarkerJson fields = parsed.get();
+        GithubMarkerFields fields = parsed.get();
         if (fields.kind() == null || fields.instance() == null || fields.at() == null) {
             warnDropped(json, "its structural JSON is missing kind, instance or at");
             return Optional.empty();
@@ -204,7 +204,7 @@ public final class GithubMarker {
                 // structural prefix is their text, and it travels as the carrier from here.
                 UntrustedText.tracker(humanText),
                 fields.reason(),
-                fields.identity().orElse(null),
+                GithubMarkerJson.identity(fields).orElse(null),
                 fields.epoch() == null ? null : new ClaimEpoch(fields.epoch())));
     }
 

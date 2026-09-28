@@ -112,3 +112,20 @@ tasks.named('functionalTest') {
     inputs.file(allowedLicenses).withPropertyName('allowedLicenses').withPathSensitivity(PathSensitivity.NONE)
     systemProperty 'gnomish.allowedLicensesFile', allowedLicenses.asFile.absolutePath
 }
+
+// NFR-R1, design D10 of add-parameter-count-gate: the parameter-count wiring scenario
+// applies `java-conventions` to a miniature project whose settings `includeBuild` the
+// REAL `build-checks` directory, so the check the mini build compiles under is the one the
+// main build ships — not a copy. `java-conventions` reads the `libs` catalog, so the mini
+// settings import the repository's own catalog file too. Both are inputs: a change to the
+// check's source or to a pinned version re-runs the scenario.
+def buildChecksDir = layout.projectDirectory.dir('../build-checks')
+def versionCatalog = layout.projectDirectory.file('../gradle/libs.versions.toml')
+tasks.named('functionalTest') {
+    inputs.files(fileTree(buildChecksDir) { include '**/src/main/**', '**/*.gradle', '**/*.lockfile' })
+            .withPropertyName('buildChecksSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(versionCatalog).withPropertyName('versionCatalog').withPathSensitivity(PathSensitivity.NONE)
+    systemProperty 'gnomish.buildChecksDir', buildChecksDir.asFile.absolutePath
+    systemProperty 'gnomish.versionCatalog', versionCatalog.asFile.absolutePath
+}

@@ -55,10 +55,11 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
     private static void runRound(TaskExecutionEnvironment environment, Duration grace = Duration.ofSeconds(30)) {
         JudgeRoundExecution.run(
-                propertiesWithGrace(grace),
-                new VirtualClock(),
-                { event -> },
-                new AgentRoundResultExtractor(),
+                new AgentRoundEquipment(
+                        propertiesWithGrace(grace),
+                        new VirtualClock(),
+                        { event -> },
+                        new AgentRoundResultExtractor()),
                 new JudgeVerdictExtractor(),
                 CHECK,
                 environment,

@@ -1,14 +1,11 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
-import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 
 /**
  * The {@code serve} feed loop: the four-state automaton (design D1) that decides, cycle by cycle,
@@ -35,8 +32,9 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  * points {@link FeedStateLogger} logs from; {@link #drain()} does not update it (a one-shot CLI run).
  *
  * <p>Implements FR5, FR9, FR10, NFR-O1, NFR-O2, NFR-R3, M3, D1, D4 of add-factory-serve. Implements
- * FR1 of add-serve-observability (design D4): the injected {@link DirtyNotifier} is forwarded to
- * {@link FeedViewTracker}, which wakes it on every actual feed-state transition.
+ * FR1 of add-serve-observability (design D4): the {@link DirtyNotifier} handed to {@link
+ * FeedAssembly} reaches {@link FeedViewTracker}, which wakes it on every actual feed-state transition.
+ * Implements FR6 of add-parameter-count-gate (design D7): construction lives in {@link FeedAssembly}.
  */
 public final class FeedAutomaton {
 
@@ -47,61 +45,42 @@ public final class FeedAutomaton {
     private final IdleTiming idleTiming;
 
     // Extracted collaborators (NFR-O1 logging, poll-and-claim mechanics, FR5 observability view) —
-    // each keeps this class within the file-size limit.
-    private final FeedStateLogger stateLogger = new FeedStateLogger();
+    // each keeps this class within the file-size limit. The logger is the cycle's own instance, so
+    // step() and the cycle's slot-filled vantage point share one once-per-transition latch.
+    private final FeedStateLogger stateLogger;
     private final FeedCycle cycle;
     private final FeedViewTracker viewTracker;
 
     /**
-     * The feed automaton the {@code serve} composition root builds — the only constructor (D5 of
-     * collapse-composition-roots: the two defaulting ones moved to {@code FeedAutomatonFixture} in
-     * {@code :test-fixtures}). Its {@link RemoteOutageGate} is the one the feed consults before
-     * every claim (FR14, NFR-R3 of add-base-ref-resolution), the SAME instance a slot's {@code
-     * TakeSlotRunner} opens on an {@code InfrastructureUnavailable} result.
-     *
-     * <p>Ten parameters, three over the limit: the constructor is a composition root inside the
-     * class (it builds the cycle, its resilience and the view tracker), a responsibility finding
-     * recorded for {@code split-feed-automaton-composition} rather than hidden behind a facade.
+     * The only constructor, package-private: the built {@link FeedCycle} and {@link FeedViewTracker}
+     * arrive as values, so this class no longer builds them and nothing outside the package can
+     * assemble an automaton except through {@link FeedAssembly} (design D7 of
+     * add-parameter-count-gate; the two defaulting constructors had already moved to {@code
+     * FeedAutomatonFixture} in {@code :test-fixtures} under D5 of collapse-composition-roots).
      *
      * @param idleTiming the Idle interval and jitter, and the backoff bounds and random source the
      *     feed's selection grades against
      * @param wipLimit the WIP limit W (FR6)
-     * @param dirtyNotifier woken on a feed-state transition (FR1 of add-serve-observability, design
-     *     D4); {@link DirtyNotifier#NOOP} absent a writer
-     * @param remoteOutageGate the remote outage gate this feed's {@link FeedCycle} consults and
-     *     advances every cycle; never null
+     * @param cycle the poll-and-claim mechanics, carrying the outage retry and the remote outage
+     *     gate (FR14, NFR-R3 of add-base-ref-resolution)
+     * @param viewTracker the observability view (FR5), seeded with its idle baseline
      */
-    public FeedAutomaton(
-            Tracker tracker,
-            InstanceId instanceId,
+    FeedAutomaton(
             SlotLedger slotLedger,
-            SlotRunner slotRunner,
             Sleeper sleeper,
             Clock clock,
             IdleTiming idleTiming,
             int wipLimit,
-            DirtyNotifier dirtyNotifier,
-            RemoteOutageGate remoteOutageGate) {
+            FeedCycle cycle,
+            FeedViewTracker viewTracker) {
         this.slotLedger = slotLedger;
         this.sleeper = sleeper;
         this.clock = clock;
         this.wipLimit = wipLimit;
         this.idleTiming = idleTiming;
-        // NFR-R3: the outage backoff reuses the Idle state's jittered interval, not a separate policy.
-        // FR4: the retry's own edge logging runs on real time — the suppressor is log-plane only,
-        //     never a source of behavior, so it does not join the injected-time contract the
-        //     sleeper and clock above carry.
-        var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered, RepeatSuppressor.system());
-        var resilience = new FeedResilience(outageRetry, new FinishedDecline(), remoteOutageGate);
-        this.cycle = new FeedCycle(
-                new FeedTracker(tracker, instanceId),
-                slotLedger,
-                slotRunner,
-                idleTiming.selection(wipLimit),
-                stateLogger,
-                resilience);
-        // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.
-        this.viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.now(), wipLimit, dirtyNotifier);
+        this.stateLogger = cycle.stateLogger();
+        this.cycle = cycle;
+        this.viewTracker = viewTracker;
     }
 
     /**

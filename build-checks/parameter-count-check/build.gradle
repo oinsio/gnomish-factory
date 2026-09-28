@@ -1,0 +1,45 @@
+// The parameter-count gate: a BugChecker run inside every module's Error Prone pass
+// (design D1/D9 of add-parameter-count-gate). Verified by its own unit spec on Error
+// Prone's compilation harness (design D10, NFR-R1); the wiring into the main build is
+// verified separately, in `build-logic`'s functional suite.
+apply plugin: 'groovy' // the unit spec is Spock
+
+def libs = rootProject.extensions.getByType(VersionCatalogsExtension).named('libs')
+
+// The javac internals a BugChecker reaches through the check API (symbols, types). The
+// same list opens them to the harness's in-process compiler in the test JVM.
+def javacPackages = ['api', 'code', 'comp', 'file', 'main', 'model', 'parser', 'processing', 'tree', 'util']
+
+dependencies {
+    // The check names the exemption annotation by class, so a rename cannot leave it
+    // looking for a type that no longer exists; the class must then be loadable wherever
+    // the check runs — on the processor path, beside it.
+    implementation project(':parameter-count-annotations')
+    compileOnly libs.findLibrary('errorprone-check-api').get()
+}
+
+testing {
+    suites {
+        test(JvmTestSuite) {
+            // Spock 2 runs on the JUnit Platform; as in `build-logic`'s functional suite,
+            // the suite's own JUnit version aligns the launcher, since this build imports
+            // no BOM.
+            useJUnitJupiter()
+            dependencies {
+                implementation libs.findLibrary('errorprone-check-api').get()
+                implementation libs.findLibrary('errorprone-test-helpers').get()
+                implementation libs.findLibrary('groovy').get()
+                implementation libs.findLibrary('spock-core').get()
+                runtimeOnly libs.findLibrary('junit-platform-launcher').get()
+            }
+        }
+    }
+}
+
+tasks.named('compileJava', JavaCompile) {
+    options.compilerArgs += javacPackages.collect { "--add-exports=jdk.compiler/com.sun.tools.javac.${it}=ALL-UNNAMED" }
+}
+
+tasks.named('test', Test) {
+    jvmArgs javacPackages.collect { "--add-opens=jdk.compiler/com.sun.tools.javac.${it}=ALL-UNNAMED" }
+}

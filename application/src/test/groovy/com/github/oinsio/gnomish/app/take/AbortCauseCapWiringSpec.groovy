@@ -48,7 +48,7 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE, AbortTrigger.engineAborted(RecoveryCause.INSTANCE_CRASH))
 
         then: 'the marker carries the capped cause: bounded, head and tail kept, omission named'
         captured.cause().length() <= AbortCauseBudget.BUDGET_CHARS
@@ -84,7 +84,7 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), facts, THRESHOLD, INSTANCE)
+        def result = handler.handle(REF, STATE, UntrustedText.subprocess(cause), facts, THRESHOLD, INSTANCE, AbortTrigger.engineAborted(RecoveryCause.INSTANCE_CRASH))
 
         then:
         captured.contains('characters omitted')
@@ -110,7 +110,7 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when:
-        handler.handle(REF, STATE, UntrustedText.subprocess('z' * 500_000), facts, 1_000_000, INSTANCE, RecoveryCause.RECOVERY_FAILURE)
+        handler.handle(REF, STATE, UntrustedText.subprocess('z' * 500_000), facts, 1_000_000, INSTANCE, AbortTrigger.engineAborted(RecoveryCause.RECOVERY_FAILURE))
 
         then:
         captured.length() < 32_767
@@ -135,8 +135,8 @@ class AbortCauseCapWiringSpec extends Specification {
         }
 
         when: 'the same cause aborts below the fuse and at it'
-        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE)
-        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(THRESHOLD - 1, null), THRESHOLD, INSTANCE)
+        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(0, null), THRESHOLD, INSTANCE, AbortTrigger.engineAborted(RecoveryCause.INSTANCE_CRASH))
+        handler.handle(REF, STATE, UntrustedText.subprocess(cause), new AbortFacts(THRESHOLD - 1, null), THRESHOLD, INSTANCE, AbortTrigger.engineAborted(RecoveryCause.INSTANCE_CRASH))
 
         then:
         // The marker carries the carrier itself now (task 6.3): the adapter that publishes it is

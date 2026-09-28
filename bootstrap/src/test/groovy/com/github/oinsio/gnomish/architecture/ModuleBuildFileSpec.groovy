@@ -150,10 +150,19 @@ class ModuleBuildFileSpec extends Specification {
         walk { it.fileName.toString().endsWith('.gradle') }
     }
 
-    /** The main build's project build files; `build-logic` is a separate included build. */
+    /**
+     * The main build's project build files. The two included builds are left out: `build-logic`
+     * is where the convention plugins are defined, and `build-checks` holds the Error Prone check
+     * those conventions put on every module's processor path — applying them there would be a
+     * cycle (design D9 of add-parameter-count-gate, the one exemption by layout).
+     */
+    private static final List<String> INCLUDED_BUILDS = ['build-logic', 'build-checks']
+
     private static List<File> moduleBuildFiles() {
-        walk {
-            it.fileName.toString() == 'build.gradle' && !it.toString().contains("build-logic${File.separator}")
+        walk { path ->
+            path.fileName.toString() == 'build.gradle' && INCLUDED_BUILDS.every { build ->
+                !path.toString().contains("${build}${File.separator}")
+            }
         }
     }
 

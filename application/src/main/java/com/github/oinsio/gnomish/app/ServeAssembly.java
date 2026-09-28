@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier;
+import com.github.oinsio.gnomish.app.serve.FeedAssembly;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.IdleTiming;
@@ -128,11 +129,9 @@ final class ServeAssembly {
             DirtyNotifier dirtyNotifier,
             RemoteOutageGate remoteOutageGate) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
-        return new FeedAutomaton(
-                tracker,
-                instanceId,
-                slotLedger,
-                slotRunner,
+        // D7 of add-parameter-count-gate: the feed's collaborators are built by its assembly object,
+        // constructed here over the daemon's timing equipment.
+        var assembly = new FeedAssembly(
                 new ThreadSleeper(),
                 feedClock,
                 new IdleTiming(
@@ -140,9 +139,8 @@ final class ServeAssembly {
                         trackerProperties.abortBackoffBase(),
                         trackerProperties.abortBackoffCap(),
                         new Random()),
-                trackerConfig.wipLimit(),
-                dirtyNotifier,
-                remoteOutageGate);
+                trackerConfig.wipLimit());
+        return assembly.feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, remoteOutageGate);
     }
 
     /**

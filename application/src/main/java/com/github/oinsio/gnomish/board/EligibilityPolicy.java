@@ -19,11 +19,12 @@ import org.jspecify.annotations.Nullable;
  * now.
  *
  * <p>This class is pure logic — like {@link BackoffPolicy} and {@code
- * FeedPolicy}, it takes {@code base}/{@code cap}/{@code openFrontCount}/
- * {@code wipLimit} as explicit parameters rather than reading configuration
- * or the tracker itself; resolving those values is the caller's job.
+ * FeedPolicy}, it takes the backoff shape, the open-front count and the
+ * WIP limit as one explicit {@link EligibilityInputs} value, and the
+ * evaluation instant beside it, rather than reading configuration or the tracker
+ * itself; resolving those values is the caller's job.
  *
- * <p>Implements FR2 of add-board-command.
+ * <p>Implements FR2 of add-board-command; FR6 of add-parameter-count-gate.
  */
 final class EligibilityPolicy {
 
@@ -33,19 +34,15 @@ final class EligibilityPolicy {
      * Resolves {@code task}'s eligibility reason in feed precedence order.
      *
      * @param task the ready task to evaluate; never null
-     * @param base the backoff base for a single abort; never null
-     * @param cap the maximum backoff delay; never null
-     * @param now the instant to evaluate backoff against; never null
-     * @param openFrontCount the current open-front count ({@code Working} +
-     *     {@code AwaitingHuman}), i.e. the size of the fetched {@code
-     *     listOpen} result
-     * @param wipLimit the configured WIP limit; fresh tasks are held once
-     *     {@code openFrontCount >= wipLimit}
+     * @param inputs the backoff shape, open-front count and WIP limit to
+     *     judge {@code task} against; never null
+     * @param now the instant to evaluate backoff at; never null
      * @return the reason the feed would not claim {@code task} now, or
      *     {@code null} when it would
      */
-    static @Nullable EligibilityReason resolve(
-            ReadyTask task, Duration base, Duration cap, Instant now, int openFrontCount, int wipLimit) {
+    static @Nullable EligibilityReason resolve(ReadyTask task, EligibilityInputs inputs, Instant now) {
+        Duration base = inputs.base();
+        Duration cap = inputs.cap();
         if (BackoffPolicy.isBackedOff(task.abortFacts(), base, cap, now)) {
             Instant lastAbortAt = Objects.requireNonNull(
                     task.abortFacts().lastAbortAt(),
@@ -57,7 +54,7 @@ final class EligibilityPolicy {
         if (task.finished()) {
             return new EligibilityReason.Finished();
         }
-        if (!task.returned() && openFrontCount >= wipLimit) {
+        if (!task.returned() && inputs.openFrontCount() >= inputs.wipLimit()) {
             return new EligibilityReason.WipHeld();
         }
         return null;
