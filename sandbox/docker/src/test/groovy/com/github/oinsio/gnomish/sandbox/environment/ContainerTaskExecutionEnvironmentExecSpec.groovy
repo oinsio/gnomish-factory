@@ -28,7 +28,8 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
 
     private ContainerTaskExecutionEnvironment env(DockerCli docker) {
         new ContainerTaskExecutionEnvironment(
-                docker, 'k1', Path.of('/factory/clone'), harvester, 'gnomish/img', 'runc', LIMITS, false, clock,
+                docker, 'k1', new BoxGitLink(Path.of('/factory/clone'), harvester),
+                new TaskContainerSettings('gnomish/img', 'runc', LIMITS, false), clock,
                 ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
     }
 

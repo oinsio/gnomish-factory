@@ -44,6 +44,13 @@ pitest {
         // ServeRuntimeWiringSpec, which proves each wiring by its effect on a real drain, and
         // ServeShutdownWiringSpec, which drives the assembled runtime through every shutdown path.
         'com.github.oinsio.gnomish.app.ServeRuntimeAssembly',
+        // The serve feed's assembly object (design D7 of add-parameter-count-gate): builds the
+        // FeedTracker, outage retry, resilience, cycle and view tracker that FeedAutomaton's
+        // constructor used to build, over the timing equipment it holds as fields — no conditional,
+        // no loop, no computed value. Driven by :bootstrap's ServeRuntimeWiringSpec (the real serve
+        // assembly through ServeAssembly.feedAutomaton) and FeedAutomatonOutageIntegrationSpec (the
+        // outage retry it wires, observed through a real automaton's cycles).
+        'com.github.oinsio.gnomish.app.serve.FeedAssembly',
 
         // Integration-covered exemptions (task 8.7 of split-into-modules, design D13(c); the bar is
         // in `.claude/rules/testing.md`, "Per-class exemptions ... integration-covered"). Each of

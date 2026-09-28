@@ -7,6 +7,77 @@
 
 ---
 
+## Статус на 2026-09-27
+
+Сверено с кодом ветки `add-parameter-count-gate`, открытыми change'ами и
+архивом. Раздел 7 (направления будущих аудитов) не сверялся.
+
+### Сделано
+
+- **1.2** — обе проверки границы проверяют exit code, host разрешает
+  decision-файл раунда; пара задекларирована маркерами.
+- **1.3** — `EnvironmentSalvage` ставит epoch-trailer и отключает hooks;
+  пара задекларирована.
+- **1.4** — три дефектные копии резолва tip идут через `VerifiedTip`.
+- **2.3** — единый владелец `EnvelopePaths` под гейтом сборки
+  (`fix-envelope-medium`); копий `show()` нет.
+- **2.6 (частично)** — маппер `TaskOutcome → TaskLifecycleEvent` вынесен в
+  `TaskOutcomeLifecycleEvent.of`.
+- **2.7 (частично)** — `fromWire` + round-trip-спеки у новых словарей.
+- **3.2** — `BranchShape.disposition()` подключён в production.
+- **4.1** — закрыт через `SlotWiring` и фасады (`introduce-slot-wiring`,
+  `collapse-composition-roots`), а не через `TakeContext`/`TakeMechanics`:
+  `ManualRunRunner` 278 → 124 строки, `SubcommandDispatchFactory` и
+  `TakeCommandFactory` удалены.
+- **4.2 (частично)** — `ContainerRunSupport` 309 → 298, `ContainerRunTermination`
+  198 → 131 строка; пара всё ещё в двух файлах.
+- **4.4 (обосновано)** — `catch (Throwable)` в `TakeSlotRunner` и
+  `StandingReaper` оставлены намеренно, обоснование в javadoc.
+- **Раздел 8** — правила, команды и маркеры `Kept in sync with` на месте.
+- **8.6 п.1** — закрыт по существу через `VerifiedTip`; контракт
+  `GitCommandResult.stdout()` не менялся.
+
+### Запланировано
+
+- **1.1** — `volatile` на трёх полях `TakeSlotRunner` + причина в javadoc:
+  `fix-operator-blockers`, FR10, D7, задача 7.1. Уточнение: сегодня все записи
+  идут до старта feed-потока, так что видимость держится на порядке
+  `Thread.start`; реальной потери строк нет, есть хрупкость.
+- **3.1 `agentCliEnvPassthrough`** — удаление в `add-project-registry`, 1.4.
+- **8.6 п.3** — гейт на число параметров: текущая ветка
+  `add-parameter-count-gate`.
+- **2.2, 2.5** — `add-command-executor` оставляет обе пары задекларированными,
+  общего типа не вводит; cap размера в host-варианте decision-файла не
+  планируется.
+
+### Не тронуто и не запланировано
+
+- **4.4** — `catch (Exception)` в `JudgeVerdictExtractor` без обоснования.
+- **3.1** — `updateAttemptLimit` без вызывающих (мёртвый код или пропавшая
+  проводка — не решено); `InMemoryTrackerHarness` в `src/main`; test-only
+  методы не сужены.
+- **2.4** — ~35 копий `requireNonBlank`, общего `Preconditions` нет.
+- **2.5** — три грамматики длительностей; `domain.pipeline.Durations` — это
+  другой класс (предикат положительности).
+- **2.6** — `RecordedOutcome` и `status.Outcome` не схлопнуты.
+- **2.7** — ledger/snapshot словари ручные; `SweepActionAggregator` читает 3
+  категории из 6.
+- **2.8** — общего `Backoff` нет, переполнение `BackoffPolicy.delay` при
+  `count >= 64` не исправлено; `ExecPipeDrain.join()` без таймаута; два
+  `CheckDto`; `stages/%s/stage.yaml` в 10 файлах; 1 MiB cap в 6 местах;
+  `new ObjectMapper()` — уже 31 (было 19).
+- **4.3** — value-типов `TaskId`/`BranchName` нет.
+- **4.5** — `StatusRenderer.render(boolean json)`; 7 `System.out/err` в
+  application; `java.io.tmpdir` в 3 файлах; файлов >200 строк стало 56
+  (было 27).
+- **Хвост: пагинация GitHub** — `GithubHeartbeat` читает одну страницу
+  (`per_page=100`) без Link-follow; пагинация в `add-tracker-task-hierarchy`
+  касается только иерархии.
+- **Хвост: `freezeUntilReverified`** — политика при упавшем повторном чтении
+  не специфицирована.
+
+---
+
 ## Общий вывод
 
 Кодовая база в целом дисциплинированная: слоение чистое (ноль импортов
@@ -108,20 +179,20 @@ Optional<String>` с `--verify` и проверкой exit code.
 
 ~12 пар классов синхронизируются вручную:
 
-| Host | Container |
-|---|---|
-| `TakeFreshClaim` | `TakeContainerFreshClaim` |
-| `TakeEngineExecution` | `TakeContainerEngineExecution` |
-| `TakeResumeBootstrap` | `TakeContainerResumeBootstrap` |
-| `TakeResumeRunner` | `TakeContainerResumeRunner` |
-| `GitModeRunner` | `ContainerGitModeRunner` |
-| `GitResumeRunner` | `ContainerResumeRunner` |
-| `GitAttemptPersistence` | `EnvironmentAttemptPersistence` |
-| `WorktreeSalvage` | `EnvironmentSalvage` |
-| `RoundBoundaryCheck` | `HarvestedBoundaryCheck` |
-| `GitTaskRepository` | `GitObjectsTaskRepository` |
+| Host                         | Container                       |
+|------------------------------|---------------------------------|
+| `TakeFreshClaim`             | `TakeContainerFreshClaim`       |
+| `TakeEngineExecution`        | `TakeContainerEngineExecution`  |
+| `TakeResumeBootstrap`        | `TakeContainerResumeBootstrap`  |
+| `TakeResumeRunner`           | `TakeContainerResumeRunner`     |
+| `GitModeRunner`              | `ContainerGitModeRunner`        |
+| `GitResumeRunner`            | `ContainerResumeRunner`         |
+| `GitAttemptPersistence`      | `EnvironmentAttemptPersistence` |
+| `WorktreeSalvage`            | `EnvironmentSalvage`            |
+| `RoundBoundaryCheck`         | `HarvestedBoundaryCheck`        |
+| `GitTaskRepository`          | `GitObjectsTaskRepository`      |
 | `HostRoundEnvironmentSource` | `SandboxRoundEnvironmentSource` |
-| `HostResumeMechanics` | `ContainerResumeMechanics` |
+| `HostResumeMechanics`        | `ContainerResumeMechanics`      |
 
 Пункты 1.2 и 1.3 — уже случившиеся сбои этой ручной синхронизации. Только
 последняя пара спрятана за настоящей абстракцией — `ResumeMechanics<B>`

@@ -155,6 +155,11 @@ opentest4j = { module = "org.opentest4j:opentest4j" }
 spock-core = { module = "org.spockframework:spock-core", version.ref = "spock" }
 spock-spring = { module = "org.spockframework:spock-spring", version.ref = "spock" }
 errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
+# The project's own Error Prone checks in the `build-checks` included build (design D1/D9 of
+# add-parameter-count-gate): the BugChecker API they compile against, and the in-process
+# compilation harness their unit specs drive. Same version as the core the checks run inside.
+errorprone-check-api = { module = "com.google.errorprone:error_prone_check_api", version.ref = "errorprone" }
+errorprone-test-helpers = { module = "com.google.errorprone:error_prone_test_helpers", version.ref = "errorprone" }
 nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 # Plain artifact, not archunit-junit5: the rules are asserted inside Spock

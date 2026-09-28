@@ -8,8 +8,11 @@ import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink
+import com.github.oinsio.gnomish.sandbox.environment.BoxTiming
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
+import com.github.oinsio.gnomish.sandbox.environment.ObjectOwnership
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.charset.StandardCharsets
@@ -70,16 +73,12 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
         key = taskKey
         ContainerEnvironments.forTask(
                 taskKey,
-                cloneDir,
-                new ContainerHarvestFetch(gitRunner, cloneDir),
+                new BoxGitLink(cloneDir, new ContainerHarvestFetch(gitRunner, cloneDir)),
                 new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
-                new SystemClock(),
+                new BoxTiming(new SystemClock(), new ThreadSleeper(), Duration.ofMinutes(5)),
                 ChildEnvAllowlist.none(),
-                new ThreadSleeper(),
                 tempDir.resolve('guard-config'),
-                OwnershipMode.MANUAL,
-                'test-project',
-                Duration.ofMinutes(5))
+                new ObjectOwnership(OwnershipMode.MANUAL, 'test-project'))
     }
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a

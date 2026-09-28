@@ -46,9 +46,51 @@ and `TakeContainerEngineExecution`, built per run from `SlotWiring` reads
 A constructor or method with **more than 7 parameters** must take a parameter object instead
 (precedent: `EnginePorts`, `TakeClaimAndWork`). Two adjacent parameters of the same type
 (`Path, Path`; `String taskId, String branch`) are a transposition hazard at any count —
-prefer distinct value types or a parameter object. A mechanical build gate for this limit
-should land together with the refactoring that brings existing offenders under it — turning
-it on earlier just paints the build red.
+prefer distinct value types or a parameter object.
+
+**The limit is enforced at compile time** by the project's own Error Prone check,
+`ParameterCountLimit` (the `build-checks` included build), which `java-conventions` places on
+every module's processor path: an eighth parameter fails `compileJava` in the module that
+declares it, with the count, the limit and the transformation to apply in the message. No
+module configures the check and none can opt out; the only production Java outside it is the
+check's own build, which cannot apply the convention that would put the check on its own
+processor path. The wiring is pinned by `ParameterCountGateFunctionalSpec` in `build-logic`,
+the semantics by `ParameterCountLimitSpec` beside the check
+(provenance: `add-parameter-count-gate`).
+
+**Two exemptions, decided from the syntax tree, never from a list:**
+
+- **A record's constructors** — canonical, compact or explicit. The record *is* the parameter
+  object the rule asks for, so its constructor is the parameter object being declared. The
+  exemption stops there: an ordinary method housed in a record chooses its own signature and
+  is counted like any other method.
+- **An overriding or implementing method** — it does not choose its signature; the declaration
+  it overrides did.
+
+Nothing else is exempt by construction — not dependency-injection sites, not constructors at a
+higher threshold, not composition roots. Composition roots are fixed, not excused (the facade
+clause below).
+
+**A genuine exception is one declaration carrying `@ParameterLimitExemption(reason = "…")`**,
+with a non-blank reason written on the declaration it excuses. There is no bulk form: the
+annotation targets methods and constructors only, the check ignores `@SuppressWarnings`, and no
+allowlist file exists — so a grep for the annotation's name is the complete, current list of
+the gate's exceptions with their justifications. The reason is the record of why this
+signature cannot take a parameter object; a blank one is reported like an eighth parameter. If
+exemptions ever accumulate past a handful, revisit the limit in a change rather than grow the
+list.
+
+**When a record earns the exemption, and when it is a bag wearing it.** The gate counts; it
+cannot tell a parameter object from an argument bag, and a count gate rewards bags. Review
+owns that call, by three tests the preceding refactorings used — a record that fails one is a
+bag, and bundling into it is the shape this rule forbids:
+
+1. **The group recurs** across several signatures of the code that *uses* it, not only at the
+   one site that was over the limit.
+2. **It names a domain concept** the reader already has — a term with a glossary entry
+   (`AgentRoundEquipment`, `BoxTiming`, `EligibilityInputs`), not `…Args` or `…Params`.
+3. **It absorbs behavior**: an invariant in its constructor, a method beyond accessors, or
+   the delete-one test — remove one component and the rest still name a thing.
 
 **Composition sites take facades, not parameter objects** (`docs/adr/0010-facade-over-parameter-object.md`).
 A parameter object fits a group that recurs across signatures of code that *uses* it; the

@@ -14,7 +14,10 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
+import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink;
+import com.github.oinsio.gnomish.sandbox.environment.BoxTiming;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
+import com.github.oinsio.gnomish.sandbox.environment.ObjectOwnership;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -40,12 +43,12 @@ import org.jspecify.annotations.NullMarked;
 // module's one does not reach this source root, so without the class-level marker the
 // ContainerSupportFactory overrides here read as unannotated against their null-marked supertype.
 @NullMarked
-final class ContainerRunSupportFactory implements ContainerSupportFactory {
-
-    private final List<String> checkCredentialEnvVars;
-    private final Map<String, CheckClientFactory> checkClientRegistry;
-    private final OwnershipMode ownershipMode;
-    private final ClaimEpochSource epochs;
+record ContainerRunSupportFactory(
+        List<String> checkCredentialEnvVars,
+        Map<String, CheckClientFactory> checkClientRegistry,
+        OwnershipMode ownershipMode,
+        ClaimEpochSource epochs)
+        implements ContainerSupportFactory {
 
     /**
      * @param checkCredentialEnvVars the credential names the configured check providers declared
@@ -59,15 +62,8 @@ final class ContainerRunSupportFactory implements ContainerSupportFactory {
      *     harden-task-branch-contract) — always the bundle's own tenure record (FR4 of
      *     fix-claim-epoch-fence), which on the plain {@code gnomish run} path is never written to
      */
-    ContainerRunSupportFactory(
-            List<String> checkCredentialEnvVars,
-            Map<String, CheckClientFactory> checkClientRegistry,
-            OwnershipMode ownershipMode,
-            ClaimEpochSource epochs) {
-        this.checkCredentialEnvVars = List.copyOf(checkCredentialEnvVars);
-        this.checkClientRegistry = checkClientRegistry;
-        this.ownershipMode = ownershipMode;
-        this.epochs = epochs;
+    ContainerRunSupportFactory {
+        checkCredentialEnvVars = List.copyOf(checkCredentialEnvVars);
     }
 
     /**
@@ -99,16 +95,12 @@ final class ContainerRunSupportFactory implements ContainerSupportFactory {
                 sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
         var environments = ContainerEnvironments.forTask(
                 TaskIdSanitizer.sanitize(taskId),
-                cloneDir,
-                new ContainerHarvestFetch(runner, cloneDir),
+                new BoxGitLink(cloneDir, new ContainerHarvestFetch(runner, cloneDir)),
                 sandboxProperties,
-                new SystemClock(),
+                new BoxTiming(new SystemClock(), new ThreadSleeper(), factoryProperties.dockerCommandTimeout()),
                 allowlist,
-                new ThreadSleeper(),
                 Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
-                ownershipMode,
-                projectId,
-                factoryProperties.dockerCommandTimeout());
+                new ObjectOwnership(ownershipMode, projectId));
         var sandboxLifecyclePass =
                 SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, Clock.systemUTC());
         return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass, epochs);

@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.AbortTrigger;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
@@ -12,7 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 /**
  * The exhaustive {@link TaskOutcome} -> {@link TakeResult} dispatch shared by {@link
  * TakeEngineExecution#run} (host mode) and {@link TakeContainerEngineExecution#run} (container
- * mode): a fresh {@code Aborted} outcome goes through {@link AbortHandler} with a freshly fetched
+ * mode): a fresh {@code Aborted} outcome goes through {@link AbortFuse#handle} with a freshly fetched
  * abort-facts snapshot (task 5.3), a fresh {@code Escalated} outcome is parked through {@link
  * TakeEscalationExit} (task 5.8, FR13, D12), a fresh {@code Completed} outcome is finished through
  * {@link TakeFinishReport} (task 5.11, FR18, D11), and a fresh {@code Paused} outcome is parked as
@@ -67,15 +68,13 @@ final class TakeOutcomeDispatch {
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = order.tracker().fetchTask(order.ref()).abortFacts();
-                yield abortFuse
-                        .handler()
-                        .handle(
-                                order.ref(),
-                                aborted.finalState(),
-                                aborted.cause(),
-                                facts,
-                                abortFuse.threshold(),
-                                order.instanceId());
+                yield abortFuse.handle(
+                        order.ref(),
+                        aborted.finalState(),
+                        aborted.cause(),
+                        facts,
+                        order.instanceId(),
+                        AbortTrigger.engineAborted(RecoveryCause.INSTANCE_CRASH));
             }
             case TaskOutcome.Escalated escalated -> TakeEscalationExit.exit(escalated, order, retry, park);
             case TaskOutcome.Completed completed ->

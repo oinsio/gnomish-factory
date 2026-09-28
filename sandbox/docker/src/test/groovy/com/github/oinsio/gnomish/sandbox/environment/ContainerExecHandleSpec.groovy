@@ -32,7 +32,8 @@ class ContainerExecHandleSpec extends Specification {
         given: 'a materialized container environment over a scripted docker seam'
         def docker = new ScriptedDockerCli(new ScriptedProcess())
         def e = new ContainerTaskExecutionEnvironment(
-                docker, 'k1', Path.of('/factory/clone'), harvester, 'gnomish/img', 'runc', LIMITS, false, clock,
+                docker, 'k1', new BoxGitLink(Path.of('/factory/clone'), harvester),
+                new TaskContainerSettings('gnomish/img', 'runc', LIMITS, false), clock,
                 ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         e.materialize('task/x', null)
 

@@ -179,19 +179,39 @@ class GitTransferBoundarySpec extends Specification {
 
     /**
      * The module directories {@code settings.gradle} declares: every {@code include 'a:b'} as
-     * {@code a/b}, plus every {@code includeBuild} — the build-logic plugins are production
-     * source too, and the shared walk already reaches them.
+     * {@code a/b}, plus every {@code includeBuild} — the build-logic plugins and the build-checks
+     * compiler checks are production source too, and the shared walk already reaches them. An
+     * included build that is itself multi-project ({@code build-checks}, design D9 of
+     * add-parameter-count-gate) contributes the projects its own settings file includes, each
+     * under its directory; a single-project one ({@code build-logic}) contributes its directory.
      */
     private static Set<String> declaredModules() {
-        def settings = RepoSourceTree.repoRoot().resolve('settings.gradle').toFile().readLines()
-        def included = settings.collect { RepoSourceTree.codeOnly(it).trim() }
-        .findAll {
-            it.startsWith("include '") || it.startsWith("includeBuild '")
+        def included = includes(RepoSourceTree.repoRoot())
+        def includedBuilds = settingsLines(RepoSourceTree.repoRoot())
+                .findAll { it.startsWith("includeBuild '") }
+                .collect { it.replaceFirst(/^includeBuild '([^']+)'$/, '$1') }
+        def declared = included + includedBuilds.collectMany { build ->
+            def own = includes(RepoSourceTree.repoRoot().resolve(build))
+            own.isEmpty() ? [build] : own.collect {
+                "${build}/${it}".toString()
+            }
         }
-        .collect {
-            it.replaceFirst(/^include(Build)? '([^']+)'$/, '$2').replace(':', '/')
+        assert declared.size() >= 15: "settings.gradle lists fewer modules than the build has: $declared"
+        declared.toSet()
+    }
+
+    /** The {@code include 'a:b'} entries of a build's settings file, as {@code a/b}. */
+    private static List<String> includes(Path buildDir) {
+        settingsLines(buildDir)
+                .findAll { it.startsWith("include '") }
+                .collect {
+                    it.replaceFirst(/^include '([^']+)'$/, '$1').replace(':', '/')
+                }
+    }
+
+    private static List<String> settingsLines(Path buildDir) {
+        buildDir.resolve('settings.gradle').toFile().readLines().collect {
+            RepoSourceTree.codeOnly(it).trim()
         }
-        assert included.size() >= 15: "settings.gradle lists fewer modules than the build has: $included"
-        included.toSet()
     }
 }

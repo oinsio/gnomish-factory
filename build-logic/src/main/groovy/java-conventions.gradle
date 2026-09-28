@@ -46,6 +46,14 @@ dependencies {
     // never leak onto the application classpath.
     errorprone libs.findLibrary('errorprone-core').get()
     errorprone libs.findLibrary('nullaway').get()
+
+    // The parameter-count gate (FR5 of add-parameter-count-gate, design D1/D9): the
+    // project's own Error Prone check, wired here once so every module compiles under it
+    // and none can opt out. The coordinates are substituted by the `build-checks` included
+    // build; nothing is published. The annotation is the gate's only exemption token,
+    // compileOnly because it is source-retained and must reach no runtime classpath.
+    errorprone 'com.github.oinsio.build:parameter-count-check'
+    compileOnly 'com.github.oinsio.build:parameter-count-annotations'
 }
 
 // Retain formal parameter names in the bytecode. Spring resolves an ambiguous

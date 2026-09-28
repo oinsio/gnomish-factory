@@ -36,10 +36,11 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
 
         when:
         def vote = JudgeRoundExecution.run(
-                properties,
-                new VirtualClock(),
-                { event -> },
-                new AgentRoundResultExtractor(),
+                new AgentRoundEquipment(
+                        properties,
+                        new VirtualClock(),
+                        { event -> },
+                        new AgentRoundResultExtractor()),
                 new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
                 environment,
@@ -73,10 +74,11 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
 
         when:
         def vote = JudgeRoundExecution.run(
-                properties,
-                new VirtualClock(),
-                { event -> },
-                new AgentRoundResultExtractor(),
+                new AgentRoundEquipment(
+                        properties,
+                        new VirtualClock(),
+                        { event -> },
+                        new AgentRoundResultExtractor()),
                 new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
                 environment,

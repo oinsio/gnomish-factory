@@ -25,9 +25,9 @@ trait ContainerEnvironmentsFixture {
     Sleeper sleeper = { Duration d -> } as Sleeper
 
     ContainerEnvironments environments(String key, ChildEnvAllowlist allowlist = ChildEnvAllowlist.none()) {
-        new ContainerEnvironments(
-                docker, key, Path.of('/factory/clone'), harvester, sandbox,
-                clock, allowlist, sleeper, Path.of('/factory/guard-config'),
-                OwnershipMode.TRACKED, 'proj-1')
+        new ContainerEnvironments(docker, key, new ContainerEnvironmentBuilder(
+                        docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
+                        new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), allowlist, Path.of('/factory/guard-config'),
+                        new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')))
     }
 }

@@ -55,10 +55,11 @@ public final class BoardComposition {
                 open,
                 truncated,
                 now,
-                trackerProperties.abortBackoffBase(),
-                trackerProperties.abortBackoffCap(),
-                now,
-                open.size(),
-                trackerConfig.wipLimit());
+                new EligibilityInputs(
+                        trackerProperties.abortBackoffBase(),
+                        trackerProperties.abortBackoffCap(),
+                        now,
+                        open.size(),
+                        trackerConfig.wipLimit()));
     }
 }

@@ -209,15 +209,8 @@ public final class PipelineLoader {
         tree.checkShape(errors);
         errors.addAll(StageConsistency.check(tree.pipelineStageNames(), raw.stages()));
 
-        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
-                law,
-                tree.config(),
-                tree.pipeline(),
-                tree.stages(),
-                trackerValidators,
-                checkProviders,
-                profiles,
-                errors);
+        PipelineDefinition model =
+                PipelineModelBuilder.mapAndValidate(law, tree, trackerValidators, checkProviders, profiles, errors);
 
         LoadOutcome outcome =
                 errors.isEmpty() && model != null ? new LoadOutcome.Loaded(model) : new LoadOutcome.Invalid(errors);

@@ -24,9 +24,9 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
     def "forTask builds the per-task environment seam, never a null"() {
         when: 'the production construction path runs'
         def seam = ContainerEnvironments.forTask(
-                KEY, Path.of('/factory/clone'), harvester, sandbox,
-                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'),
-                OwnershipMode.TRACKED, 'proj-1', Duration.ofMinutes(5))
+                KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
+                new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), ChildEnvAllowlist.none(),
+                Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
 
         then: 'the seam is real and carries the round key it was built for'
         seam.baseKey() == KEY
@@ -40,10 +40,11 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         environments(KEY, ChildEnvAllowlist.none()).ownershipMode() == OwnershipMode.TRACKED
 
         and:
-        new ContainerEnvironments(
-                docker, KEY, Path.of('/factory/clone'), harvester, sandbox,
-                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'),
-                OwnershipMode.MANUAL, 'proj-1').ownershipMode() == OwnershipMode.MANUAL
+        new ContainerEnvironments(docker, KEY, new ContainerEnvironmentBuilder(
+                        docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
+                        new BoxTiming(clock, sleeper, Duration.ofMinutes(5)), ChildEnvAllowlist.none(),
+                        Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')))
+                .ownershipMode() == OwnershipMode.MANUAL
     }
 
     // FR9: the probe answers what the composed allowlist actually does, never a hardwired boolean

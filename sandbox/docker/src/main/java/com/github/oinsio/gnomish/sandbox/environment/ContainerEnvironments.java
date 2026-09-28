@@ -1,14 +1,9 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -37,95 +32,56 @@ public final class ContainerEnvironments {
 
     private final DockerCli docker;
     private final String baseKey;
-    private final Path sourceClone;
-    private final ContainerHarvest harvester;
-    private final SandboxProperties sandbox;
-    private final Clock clock;
-    private final ChildEnvAllowlist allowlist;
-    private final Sleeper sleeper;
-    private final Path guardConfigRoot;
-    private final OwnershipMode mode;
-    private final String projectId;
+    private final ContainerEnvironmentBuilder builder;
 
     /** What a previous lease recorded, offered to every environment built here; see {@link #restoreDenials}. */
     private @Nullable DenialRestoration restoredDenials;
 
     /**
-     * The production construction: a fresh docker subprocess seam per task. Exists because
-     * {@link DockerCli} is deliberately package-private — app-layer assemblies name only the
-     * environment-facing types. See the canonical constructor below for parameter semantics.
+     * The production construction: a fresh docker subprocess seam per task, bounded by {@code
+     * timing.dockerCommandTimeout()} — the installation's {@code factory.docker-command-timeout},
+     * threaded from the composition root because {@link DockerCli} is not nameable outside this
+     * package (FR5, FR10, design D8 of bound-subprocess-commands). Exists because {@link DockerCli}
+     * is deliberately package-private — app-layer assemblies name only the environment-facing
+     * types (design D11 of add-parameter-count-gate for the parameter shape).
      *
-     * @param dockerCommandTimeout the hard bound on each {@code docker} management command this
-     *     task issues — the installation's {@code factory.docker-command-timeout}, threaded from
-     *     the composition root because {@link DockerCli} is not nameable outside this package
-     *     (FR5, FR10, design D8 of bound-subprocess-commands); never null
+     * @param baseKey the sanitized task identifier keying the round environment; never blank
+     * @param link the factory clone working copies are seeded from and the fetch behind {@code
+     *     harvest()} (D3, FR5 of add-sandbox-core); never null
+     * @param sandbox the operator sandbox config: image, runtime, limits, allowlist; never null
+     * @param timing the exec clock, the self-check pause and the docker command bound; never null
+     * @param allowlist the run's layered child-env allowlist (D6, FR9); never null
+     * @param guardConfigRoot the factory-private directory guard configs render under (per
+     *     environment key), never inside a working copy or scratch area; never null
+     * @param ownership the mode and project identity stamped on every object this task creates
+     *     (FR2, FR8 of add-serve-sandbox-lifecycle); never null
      * @return the per-task environment seam; never null
      */
     public static ContainerEnvironments forTask(
             String baseKey,
-            Path sourceClone,
-            ContainerHarvest harvester,
+            BoxGitLink link,
             SandboxProperties sandbox,
-            Clock clock,
+            BoxTiming timing,
             ChildEnvAllowlist allowlist,
-            Sleeper sleeper,
             Path guardConfigRoot,
-            OwnershipMode mode,
-            String projectId,
-            Duration dockerCommandTimeout) {
+            ObjectOwnership ownership) {
+        var docker = new DockerCli(timing.dockerCommandTimeout());
         return new ContainerEnvironments(
-                new DockerCli(dockerCommandTimeout),
+                docker,
                 baseKey,
-                sourceClone,
-                harvester,
-                sandbox,
-                clock,
-                allowlist,
-                sleeper,
-                guardConfigRoot,
-                mode,
-                projectId);
+                new ContainerEnvironmentBuilder(docker, link, sandbox, timing, allowlist, guardConfigRoot, ownership));
     }
 
     /**
      * @param docker the docker subprocess seam shared by every role; never null
      * @param baseKey the sanitized task identifier keying the round environment; never blank
-     * @param sourceClone the factory clone working copies are seeded from (D3); never null
-     * @param harvester the factory-side fetch behind {@code harvest()} (FR5); never null
-     * @param sandbox the operator sandbox config: image, runtime, limits, allowlist; never null
-     * @param clock the exec start-instant source; never null
-     * @param allowlist the run's layered child-env allowlist (D6, FR9); never null
-     * @param sleeper the guard-readiness pause seam of the self-check; never null
-     * @param guardConfigRoot the factory-private directory guard configs render under (per
-     *     environment key), never inside a working copy or scratch area; never null
-     * @param mode the ownership mode stamped on every object this task creates (FR2 of
-     *     add-serve-sandbox-lifecycle); never null
-     * @param projectId the project identity stamped on every object this task creates (FR8 of
-     *     add-serve-sandbox-lifecycle); never blank
+     * @param builder the per-role assembly holding everything else a role's environment is built
+     *     from — this seam can no longer build one itself; never null
      */
-    ContainerEnvironments(
-            DockerCli docker,
-            String baseKey,
-            Path sourceClone,
-            ContainerHarvest harvester,
-            SandboxProperties sandbox,
-            Clock clock,
-            ChildEnvAllowlist allowlist,
-            Sleeper sleeper,
-            Path guardConfigRoot,
-            OwnershipMode mode,
-            String projectId) {
+    ContainerEnvironments(DockerCli docker, String baseKey, ContainerEnvironmentBuilder builder) {
         this.docker = docker;
         this.baseKey = baseKey;
-        this.sourceClone = sourceClone;
-        this.harvester = harvester;
-        this.sandbox = sandbox;
-        this.clock = clock;
-        this.allowlist = allowlist;
-        this.sleeper = sleeper;
-        this.guardConfigRoot = guardConfigRoot;
-        this.mode = mode;
-        this.projectId = projectId;
+        this.builder = builder;
     }
 
     /**
@@ -138,7 +94,7 @@ public final class ContainerEnvironments {
      * @return the ownership mode every object of this task is labelled with; never null
      */
     public OwnershipMode ownershipMode() {
-        return mode;
+        return builder.ownershipMode();
     }
 
     /**
@@ -177,7 +133,7 @@ public final class ContainerEnvironments {
      * construction state to check it.
      */
     public boolean scrubsCredential(String credentialEnvVar) {
-        return allowlist.compose(List.of(), Map.of(credentialEnvVar, "probe")).isEmpty();
+        return builder.scrubsCredential(credentialEnvVar);
     }
 
     /**
@@ -222,16 +178,6 @@ public final class ContainerEnvironments {
     }
 
     private SelfCheckedEnvironment environment(String key) {
-        return ContainerEnvironmentBuilder.build(
-                docker,
-                key,
-                sourceClone,
-                harvester,
-                sandbox,
-                clock,
-                allowlist,
-                sleeper,
-                guardConfigRoot,
-                new ObjectOwnership(mode, projectId));
+        return builder.build(key);
     }
 }

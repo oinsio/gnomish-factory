@@ -26,8 +26,15 @@ import java.util.Optional;
  * concurrently through a {@link StreamDrain}, waits for exit within {@code roundTimeout}, closes
  * the round, and reads the decision file. Extracted from {@link CliStageExecutor} for file size.
  *
+ * <p>Kept in sync with {@link JudgeRoundExecution}: both launch one agent round from the same
+ * {@link AgentRoundEquipment} — the CLI binary through the environment port with the factory-set
+ * AI seam variables, a {@link StreamDrain} started before the wait, the wait bounded by {@code
+ * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
+ * then {@code agentCliTailDrainGrace} for the tail — and each maps every failure of that launch
+ * sequence through one site (here: {@link ExecutorFailure}; there: {@code cannotVerify}).
+ *
  * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain; FR1 of
- * fix-denial-attribution-durability.
+ * fix-denial-attribution-durability; FR6 of add-parameter-count-gate (design D6, Sync surfaces).
  */
 final class ExecutorRoundExecution {
 
@@ -47,14 +54,13 @@ final class ExecutorRoundExecution {
      * failure of the round is wrapped, the launch included — the three ExecutorFailure names.
      */
     static ExecutionResult run(
-            FactoryProperties factoryProperties,
-            Clock clock,
-            AgentProgressListener progressListener,
-            AgentRoundResultExtractor resultExtractor,
+            AgentRoundEquipment equipment,
             DecisionFileReader decisionFileReader,
             StageExecutor.Request request,
             String prompt,
             RoundEnvironmentSource.Round round) {
+        FactoryProperties factoryProperties = equipment.factoryProperties();
+        Clock clock = equipment.clock();
         var stage = request.stage();
         var executor = stage.executor();
         var invocationFlags = AgentInvocationOptions.renderForExecutor(
@@ -78,7 +84,7 @@ final class ExecutorRoundExecution {
             // the essential result event lives. try-with-resources is what guarantees no drain
             // thread and no open stream outlives the round on any exit path (NFR-R1).
             try (StreamDrain drain =
-                    StreamDrain.start(launched.output(), clock, listenerFor(progressListener, round))) {
+                    StreamDrain.start(launched.output(), clock, listenerFor(equipment.progressListener(), round))) {
                 Duration roundTimeout = RoundTimeout.resolve(executor.settings());
                 var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
                 // Both early endings are classified before the drain's events are consulted
@@ -94,7 +100,7 @@ final class ExecutorRoundExecution {
 
                 List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
                 Instant roundEnd = clock.now();
-                AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd, drain.bytesRead());
+                AgentRoundResult roundResult = equipment.resultExtractor().extract(events, roundEnd, drain.bytesRead());
                 ExecutorUsage usage = withWallTime(roundResult.usage(), wallTime);
                 ToolTrace trace = trace(request, events, roundEnd);
 

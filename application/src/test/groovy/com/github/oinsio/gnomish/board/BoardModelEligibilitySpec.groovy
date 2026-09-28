@@ -41,7 +41,7 @@ class BoardModelEligibilitySpec extends Specification {
         ]
 
         when: 'the model is built with the scenario\'s WIP parameters'
-        def model = BoardModel.build(readyTasks, [], false, NOW, BASE, CAP, NOW, openFrontCount, wipLimit)
+        def model = BoardModel.build(readyTasks, [], false, NOW, new EligibilityInputs(BASE, CAP, NOW, openFrontCount, wipLimit))
 
         then: 'the row carries exactly the expected reason'
         model.readyRows()[0].eligibilityReason() == expectedReason

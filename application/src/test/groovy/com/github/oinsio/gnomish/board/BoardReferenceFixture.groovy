@@ -69,6 +69,6 @@ final class BoardReferenceFixture {
             new OpenTask(new TaskRef('github:h/3'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, UntrustedText.tracker('Checkpoint pause'))
         ]
 
-        return BoardModel.build(ready, open, true, GENERATED_AT, BASE, CAP, GENERATED_AT, OPEN_FRONT_COUNT, WIP_LIMIT)
+        return BoardModel.build(ready, open, true, GENERATED_AT, new EligibilityInputs(BASE, CAP, GENERATED_AT, OPEN_FRONT_COUNT, WIP_LIMIT))
     }
 }

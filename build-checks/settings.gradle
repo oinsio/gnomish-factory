@@ -1,0 +1,35 @@
+// Settings for the `build-checks` included build — the home of the project's own
+// Error Prone checks (design D1/D9 of add-parameter-count-gate).
+//
+// A sibling of `build-logic` rather than part of it: `build-logic` is a single-project
+// build of Groovy convention plugins, and these are Java compiler plugins with their own
+// unit specs. The main build composes this one with `includeBuild 'build-checks'`, so a
+// module's `errorprone 'com.github.oinsio.build:<check>'` line is substituted by the
+// project here and nothing is published.
+plugins {
+    // The checks compile and run inside the same JDK the main build pins; auto-provisions
+    // it on a machine that lacks it. Version literal for the reason the root settings give:
+    // the catalog is not available to the settings plugins block.
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+    versionCatalogs {
+        // The main build's catalog, reused verbatim as `build-logic` does: the checks
+        // compile against the same Error Prone version the modules run them inside.
+        create('libs') {
+            from(files('../gradle/libs.versions.toml'))
+        }
+    }
+}
+
+rootProject.name = 'build-checks'
+
+// The limit check itself: a BugChecker on each module's Error Prone processor path.
+include 'parameter-count-check'
+// Its exemption annotation, split out because it lands on each module's compile
+// classpath (compileOnly) and must drag nothing behind it.
+include 'parameter-count-annotations'

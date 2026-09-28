@@ -181,13 +181,20 @@ entirely package-private. The stock check cannot be the gate; a project check ca
   `application/.../board/BoardModel.java:130` build (9). The last two are ordinary methods
   housed in records; the 2026-09-27 hand-over scan did not count them. Line numbers move
   with the code; the scan in task 2.8 is authoritative.
+  **Closed 2026-09-27:** 0 with the gate on — the gate's own scan over every module's
+  `compileJava`, full `check` green, zero exemption annotations (tasks 2.8, 3.3, 4.5).
 - **Modules**: a new included build for the check and its annotation (design D9), every
   module through the shared convention plugin, plus the thirteen signatures in
   `sandbox/docker`, `adapters/agent`, `adapters/github`, `adapters` and `application`.
-  Call sites of the changed signatures also live in the test trees of `adapters/git` (six
-  container-environment specs) and `adapters/agent` (four round specs), and in
-  `test-fixtures` (`ScriptedSandboxDocker`, `FeedAutomatonFixture`); those are call-site
-  updates under NFR-R2.
+  Call sites of the changed signatures also live in production in `bootstrap`
+  (`ContainerRunSupportFactory`, the one `forTask` caller) and in the test trees of
+  `adapters/git` (six container-environment specs), `adapters/agent` (four round specs),
+  `sandbox/docker` (`ContainerEnvironmentsFixture`, `ContainerEnvironmentsSeamSpec`,
+  `ContainerTaskExecutionEnvironmentUnitSpec`, `ContainerTaskExecutionEnvironmentExecSpec`,
+  `ContainerExecHandleSpec`), `bootstrap` (`ContainerModeIsolationE2ESpec`), `application`
+  (`BoardReferenceFixture`, `BoardModelEligibilitySpec`, `BoardJsonMapperSpec`,
+  `AbortHandlerSpec`, `AbortCauseCapWiringSpec`), and in `test-fixtures`
+  (`ScriptedSandboxDocker`, `FeedAutomatonFixture`); those are call-site updates under NFR-R2.
 - **Rules**: `.claude/rules/process-invariants.md`, parameter-count section (FR7);
   `.claude/rules/manual-sync-pairs.md` is not touched (design, Sync surfaces).
 - **Build**: one compile-time artifact on the Error Prone processor path and one
@@ -197,6 +204,11 @@ entirely package-private. The stock check cannot be the gate; a project check ca
 - **Depends on**: `collapse-composition-roots` — landed and archived 2026-09-27
   (`openspec/changes/archive/2026/09/2026-09-27-collapse-composition-roots`); it left the
   `FeedAutomaton` constructor as its one residual, which D7 absorbs.
+- **Follow-up, out of scope**: PIT is pinned at 1.25.7; the record-redefinition crash
+  (hcoles/pitest#1285) that motivates every `@DoNotMutate` of the JVMTI category — and the
+  one D8 may need on `AbortFuse.handle` — is fixed in 1.25.9 and carried into 1.30.0. The bump
+  is its own change (catalog, verification metadata, a full mutation run, and the retirement of
+  the JVMTI reason in `testing.md`), decided 2026-09-27 not to ride this one.
 - **Sequenced after**: `fix-operator-blockers` — its task 2.2 edits the same two methods
   (`ExecutorRoundExecution.run`, `JudgeRoundExecution.run`) whose signatures D6 changes;
   applying it first keeps D6 a signature change over settled bodies. That change's proposal

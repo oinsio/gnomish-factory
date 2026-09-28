@@ -48,12 +48,9 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
  */
 public final class CliStageExecutor implements StageExecutor {
 
-    private final FactoryProperties factoryProperties;
-    private final Clock clock;
-    private final AgentProgressListener progressListener;
+    private final AgentRoundEquipment equipment;
     private final ExecutorPromptBuilder promptBuilder;
     private final RoundEnvironmentSource environmentSource;
-    private final AgentRoundResultExtractor resultExtractor = new AgentRoundResultExtractor();
     private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     /**
@@ -108,9 +105,8 @@ public final class CliStageExecutor implements StageExecutor {
             AgentProgressListener progressListener,
             PipelineLaw law,
             RoundEnvironmentSource environmentSource) {
-        this.factoryProperties = factoryProperties;
-        this.clock = clock;
-        this.progressListener = progressListener;
+        this.equipment =
+                new AgentRoundEquipment(factoryProperties, clock, progressListener, new AgentRoundResultExtractor());
         this.promptBuilder = new ExecutorPromptBuilder(law);
         this.environmentSource = environmentSource;
     }
@@ -201,14 +197,6 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     private ExecutionResult runRoundInEnvironment(Request request, String prompt, RoundEnvironmentSource.Round round) {
-        return ExecutorRoundExecution.run(
-                factoryProperties,
-                clock,
-                progressListener,
-                resultExtractor,
-                decisionFileReader,
-                request,
-                prompt,
-                round);
+        return ExecutorRoundExecution.run(equipment, decisionFileReader, request, prompt, round);
     }
 }

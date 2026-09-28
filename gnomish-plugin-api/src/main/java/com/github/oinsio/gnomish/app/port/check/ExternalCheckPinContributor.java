@@ -7,7 +7,7 @@ import java.util.Set;
  * The adapter half of the pin-check contract (FR16, design D10): the paths an
  * external-check adapter itself contributes to a check's pin set — a platform adapter
  * names its own definition file (GitHub Actions contributes the {@code checkId} workflow
- * file), while a human oracle has no repo-borne definition and contributes none. {@link
+ * file), while a human oracle has no repo-borne definition and contributes none. {@code
  * PinCheckedExternalCheckClient} unions this contribution with the stage law's declared
  * pin paths before the adapter's first poll.
  *

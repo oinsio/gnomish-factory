@@ -83,10 +83,11 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
 
     private void runRound(TaskExecutionEnvironment environment, Duration grace) {
         ExecutorRoundExecution.run(
-                new FactoryProperties('factory-01', 'claude', grace, [], null, null, null),
-                new VirtualClock(),
-                { event -> },
-                new AgentRoundResultExtractor(),
+                new AgentRoundEquipment(
+                        new FactoryProperties('factory-01', 'claude', grace, [], null, null, null),
+                        new VirtualClock(),
+                        { event -> },
+                        new AgentRoundResultExtractor()),
                 new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',

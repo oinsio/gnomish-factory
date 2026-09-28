@@ -72,12 +72,8 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
         env = new ContainerTaskExecutionEnvironment(
                 new DockerCli(),
                 'ro-' + System.nanoTime(),
-                source,
-                new ContainerHarvestFetch(new GitProcessRunner(), source),
-                IMAGE,
-                'runc',
-                LIMITS,
-                false,
+                new BoxGitLink(source, new ContainerHarvestFetch(new GitProcessRunner(), source)),
+                new TaskContainerSettings(IMAGE, 'runc', LIMITS, false),
                 clock,
                 ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         env.materialize('task/readonly', null)
