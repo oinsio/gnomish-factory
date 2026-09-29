@@ -67,6 +67,8 @@ within one pipeline are not supported"). There is no stage-by-stage migration
 into container mode yet — the image has to satisfy every stage from its first
 run. See the boundary stated at the end of this section.
 
+<!-- implements FR17 of fix-operator-blockers -->
+
 The target repo can declare *needs* in a stage's `Mechanism` (e.g. requiring
 egress control) — needs may only tighten. Binding an adapter, and any
 weakening, is yours alone: a repo can never request host mode. When a stage's

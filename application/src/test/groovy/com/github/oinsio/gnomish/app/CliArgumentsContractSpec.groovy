@@ -156,4 +156,18 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
         where:
         subcommand << Subcommand.values().findAll { CONTRACT[it].dirRequired }
     }
+
+    // FR7, FR8: an empty --dir is a usage error, never the working directory in disguise
+    def "FR7: #subcommand refuses an empty --dir"() {
+        when:
+        String[] raw = (CONTRACT[subcommand].tokens + ['--dir=']) as String[]
+        (CONTRACT[subcommand].parse as Closure).call(args(raw))
+
+        then:
+        def e = thrown(UsageException)
+        e.message.contains('--dir requires a value')
+
+        where:
+        subcommand << Subcommand.values()
+    }
 }

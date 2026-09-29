@@ -92,11 +92,24 @@ final class ArgumentsParsingSupport {
      *
      * <p>Implements FR7 of fix-operator-blockers.
      *
-     * @throws UsageException if the flag is given with no value, or given more than once
+     * @throws UsageException if the flag is given with no or an empty value, or given more than once
      */
     static Path projectDir(ApplicationArguments args) {
-        String value = singleValue(args, DIR);
+        String value = dirValue(args);
         return resolve(value == null ? "" : value);
+    }
+
+    /**
+     * The {@code --dir} value, or {@code null} when the flag is absent. An empty value ({@code
+     * --dir=}) is the usage error of a missing one: resolved, it would silently become the
+     * working directory (FR8 of fix-operator-blockers).
+     */
+    private static @Nullable String dirValue(ApplicationArguments args) {
+        String value = singleValue(args, DIR);
+        if (value != null && value.isBlank()) {
+            throw new UsageException("--" + DIR + " requires a value (e.g. --" + DIR + "=/path/to/clone)");
+        }
+        return value;
     }
 
     /**
@@ -106,10 +119,11 @@ final class ArgumentsParsingSupport {
      *
      * <p>Implements FR7 of fix-operator-blockers.
      *
-     * @throws UsageException if the flag is absent, given with no value, or given more than once
+     * @throws UsageException if the flag is absent, given with no or an empty value, or given more
+     *     than once
      */
     static Path requiredProjectDir(ApplicationArguments args, String subcommandToken) {
-        String value = singleValue(args, DIR);
+        String value = dirValue(args);
         if (value == null) {
             throw new UsageException(
                     "--dir is required (e.g. gnomish " + subcommandToken + " --dir=/path/to/clone <task>)");
