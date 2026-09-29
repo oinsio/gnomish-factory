@@ -9,6 +9,9 @@ import spock.lang.Unroll
  * {@code error_*} subtype and, by the CLI's own wire contract, no {@code result} field — the final
  * text exists only on {@code success}. That line is still the round's result event, so the round
  * ends with a named subtype rather than as a missing-result infrastructure failure.
+ *
+ * <p>FR15 of fix-operator-blockers: a limit-ended result line is a result event with empty text
+ * (design D12).
  */
 class StreamJsonErrorResultSpec extends Specification {
 

@@ -19,6 +19,9 @@ import spock.lang.TempDir
  * FR1 of harden-task-branch-contract: delivery is a fact about the task's own branch. A cleanup
  * commit an earlier task left in the base — its branch merged with history — is not this task's
  * delivery, so a live task forked from that base must not read as delivered.
+ *
+ * <p>FR14 of fix-operator-blockers (with its NFR-R4 and M6): delivery is searched only in the task's own
+ * first-parent history after its STARTED commit (design D11).
  */
 class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
 

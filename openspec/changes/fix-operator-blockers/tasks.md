@@ -270,7 +270,7 @@ and 10.4 is what the artifacts now ask of the code.
       Verify the existing "skips a result line missing the result field"
       parser spec still passes, and `:adapters:agent:check` is green with PIT
       100%.
-- [ ] 10.4 Traceability (`traceability.md`): the javadoc of
+- [x] 10.4 Traceability (`traceability.md`): the javadoc of
       `GitShowTip.cleanupCommit` and of `StreamJsonEventMapper.isResultEvent`,
       and the headers of `DeliveryAncestrySpec` and
       `StreamJsonErrorResultSpec`, cite FR14 / FR15 of fix-operator-blockers

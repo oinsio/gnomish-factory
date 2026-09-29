@@ -110,6 +110,8 @@ final class StreamJsonEventMapper {
      * error_during_execution}, ...), which by the CLI's contract carries none — the final text
      * exists only on {@code success}. Dropping that line would turn a round that ended on a named
      * subtype into a missing-result infrastructure failure (FR4).
+     *
+     * <p>Implements FR4 of add-agent-executor; FR15 of fix-operator-blockers.
      */
     private static boolean isResultEvent(StreamJsonLine wire) {
         String subtype = wire.subtype();

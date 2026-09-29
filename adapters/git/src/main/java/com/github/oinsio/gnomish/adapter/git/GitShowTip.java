@@ -134,7 +134,8 @@ final class GitShowTip {
      * {@code tip^} instead is wrong for every branch that gained commits after cleanup.
      *
      * @return the cleanup commit's id, or empty when the task's own history holds none
-     *     <p>Implements FR1 of harden-task-branch-contract; FR6 of fix-envelope-medium.
+     *     <p>Implements FR1 of harden-task-branch-contract; FR6 of fix-envelope-medium;
+     *     FR14 of fix-operator-blockers, with its NFR-R4.
      */
     Optional<String> cleanupCommit() {
         return nearestOwnCommit(ServiceCommitMessages.taskEvent(TaskLifecycleEvent.STARTED), revision)
