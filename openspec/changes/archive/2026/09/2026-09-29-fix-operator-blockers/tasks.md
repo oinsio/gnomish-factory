@@ -278,6 +278,15 @@ and 10.4 is what the artifacts now ask of the code.
       add-agent-executor only). Verify
       `grep -rn "FR14 of fix-operator-blockers\|FR15 of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
       names each of the four files.
+- [x] 10.5 Red first: `DeliveryAncestrySpec` — PROJ-1 is fast-forwarded
+      into the base (`--ff-only`) and a bare `gnomish/PROJ-3` points at that
+      base; `cleanupCommitInHistory()` is `false`. Recorded red (`true`): the
+      nearest STARTED commit was PROJ-1's. Then the STARTED commit counts only
+      when its `task.json` names the task whose branch the revision's full ref
+      name is (`StartedCommitOwnership`, design D11); rows pin a foreign,
+      suffix, absent and unreadable `task.json`, `HEAD` on the branch, a tag
+      and a bare commit id.
+      Verify `:adapters:git:check` is green with PIT 100%.
 
 ## 11. Reported failures once, and the binding example (design D13)
 
