@@ -1,0 +1,4 @@
+# NFR-O1 of fix-operator-blockers: a failure the runner already reported to the operator is not
+# logged a second time as Spring Boot's "Application run failed" record.
+org.springframework.boot.SpringBootExceptionReporter=\
+com.github.oinsio.gnomish.app.ReportedFailureExceptionReporter

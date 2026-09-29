@@ -49,3 +49,21 @@ Every subcommand that accepts `--dir` SHALL resolve its value — or, for the su
 #### Scenario: Status still requires the directory
 - **WHEN** the operator runs `gnomish status` with no `--dir`
 - **THEN** the command exits with the usage error saying `--dir` is required, as before
+
+### Requirement: A reported failure is printed once
+A failure the factory has already reported to the operator — a usage error or any other classified failure, and the exit-code carriers with which `take` and `serve` end — SHALL reach the operator once: its one line on stderr, or nothing more when the command already printed its outcome. The framework SHALL add no failure record of its own for it: no stack trace on stdout or stderr and no record in the log file. The exit code SHALL be the one the factory maps for the failure. An unclassified fault SHALL keep its WARN with the stack trace in the log file, and a failure raised before any command runs SHALL keep the framework's own report.
+<!-- implements FR16, NFR-O1 of fix-operator-blockers -->
+
+#### Scenario: A usage error is one line
+- **WHEN** the operator runs `gnomish status --dir=. --task=x`
+- **THEN** the process exits 2 and stderr holds exactly the usage error line
+- **AND** stdout holds no `Application run failed` record and no stack trace
+- **AND** the log file gains no record of the failure
+
+#### Scenario: A completed take is not an unhandled failure
+- **WHEN** `gnomish take` finishes and ends with its computed exit code
+- **THEN** no WARN "unhandled exception", no `gnomish run failed:` line and no framework failure record is written
+
+#### Scenario: An unclassified fault keeps its trace
+- **WHEN** a command ends with a fault no classification names
+- **THEN** stderr holds `gnomish run failed: <message>` and the log file holds the WARN with the stack trace

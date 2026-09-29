@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
+import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -18,9 +20,29 @@ import org.slf4j.Logger;
  * the project's file-size target (`.claude/rules/process-invariants.md`).
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
- * harden-untrusted-text-sinks.
+ * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers.
  */
 final class RunExceptionReporting {
+
+    /** Families whose own message is the operator's line. */
+    private static final List<Class<? extends Throwable>> PRINTS_OWN_MESSAGE = List.of(
+            UsageException.class,
+            PipelineLoadFailedException.class,
+            InternalErrorException.class,
+            DefaultBranchUnboundException.class,
+            GitVersionRefusedException.class, // UX2 of own-git-transfer-argv: a precondition, not a crash
+            UnsupportedStateFileVersionException.class); // FR4: clean refusal, no WARN/stack trace
+
+    /** Families that mean the scripted or interactive input ran out. */
+    private static final List<Class<? extends Throwable>> INPUT_EXHAUSTED =
+            List.of(InputExhaustedException.class, ConsoleClosedException.class);
+
+    /** Families whose outcome the callee already put on the console. */
+    private static final List<Class<? extends Throwable>> ALREADY_REPORTED = List.of(
+            TaskNotFoundException.class, // UX3, D15: calm message already on the console
+            BranchShapeRefusedException.class, // FR16: diagnosis already on the console
+            TakeExitCodeException.class, // D16 of add-tracker-port: exit-code carriers, outcome
+            ServeExitCodeException.class); // already reported by the command itself
 
     private RunExceptionReporting() {}
 
@@ -48,29 +70,43 @@ final class RunExceptionReporting {
             throws IOException, InterruptedException {
         try {
             action.run();
-        } catch (UsageException
-                | PipelineLoadFailedException
-                | InternalErrorException
-                | DefaultBranchUnboundException
-                | GitVersionRefusedException ex) { // UX2 of own-git-transfer-argv: a precondition, not a crash
-            errorConsole.print(ex.getMessage() + ConsoleIO.LINE_END);
-            throw ex;
-        } catch (InputExhaustedException | ConsoleClosedException ex) {
-            errorConsole.print("Input exhausted — stopping." + ConsoleIO.LINE_END);
-            throw ex;
-        } catch (TaskNotFoundException ex) { // UX3, D15: calm message already on the console
-            throw ex;
-        } catch (BranchShapeRefusedException ex) { // FR16: diagnosis already on the console
-            throw ex;
-        } catch (UnsupportedStateFileVersionException ex) { // FR4: clean refusal, no WARN/stack trace
-            errorConsole.print(ex.getMessage() + ConsoleIO.LINE_END);
-            throw ex;
         } catch (RuntimeException | IOException ex) {
-            log.warn(
-                    OperatorEvent.RUN_UNHANDLED_EXCEPTION.head() + "gnomish run terminated with an unhandled exception",
-                    ex);
-            errorConsole.print("gnomish run failed: " + ex.getMessage() + ConsoleIO.LINE_END);
+            String line = calmLine(ex);
+            if (line == null) {
+                log.warn(
+                        OperatorEvent.RUN_UNHANDLED_EXCEPTION.head()
+                                + "gnomish run terminated with an unhandled exception",
+                        ex);
+                errorConsole.print("gnomish run failed: " + ex.getMessage() + ConsoleIO.LINE_END);
+            } else if (!line.isEmpty()) {
+                errorConsole.print(line + ConsoleIO.LINE_END);
+            }
             throw ex;
         }
+    }
+
+    /**
+     * The one classification of a failure that ends a command: the single line the operator gets
+     * for it, the empty string when the callee already reported it, or {@code null} for an
+     * unclassified fault, which takes the generic WARN-backed fallback. {@link
+     * ReportedFailureExceptionReporter} reads the same answer, so a failure reported here is never
+     * reported a second time by Spring Boot's own "Application run failed" record (NFR-O1,
+     * FR16 of fix-operator-blockers).
+     */
+    static @Nullable String calmLine(Throwable failure) {
+        if (isAny(failure, PRINTS_OWN_MESSAGE)) {
+            return String.valueOf(failure.getMessage());
+        }
+        if (isAny(failure, INPUT_EXHAUSTED)) {
+            return "Input exhausted — stopping.";
+        }
+        if (isAny(failure, ALREADY_REPORTED)) {
+            return "";
+        }
+        return null;
+    }
+
+    private static boolean isAny(Throwable failure, List<Class<? extends Throwable>> families) {
+        return families.stream().anyMatch(family -> family.isInstance(failure));
     }
 }

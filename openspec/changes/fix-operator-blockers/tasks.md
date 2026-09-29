@@ -279,13 +279,51 @@ and 10.4 is what the artifacts now ask of the code.
       `grep -rn "FR14 of fix-operator-blockers\|FR15 of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
       names each of the four files.
 
+## 11. Reported failures once, and the binding example (design D13)
+
+Added 2026-09-29 from the operator review (items 4 and 5); carried out
+before the change's artifacts named it, so 11.1–11.4 record work already done
+and 11.5 is what the artifacts now ask of the code. `--help` and the
+dashboard's output path from the same review are NG10.
+
+- [x] 11.1 Red first: `ExitCodeMatrixSpec` (`:bootstrap`, packaged jar) — `run
+      --dir=<root> --task=x --bogus=1` exits 2 with exactly one non-blank
+      stderr line starting `unknown option --bogus for 'gnomish run'`, and no
+      `Application run failed` / `UsageException` on stdout. Recorded red
+      before the fix, and red again with the `spring.factories` registration
+      removed (FR16, NFR-O1, M7).
+- [x] 11.2 Red first: `RunExceptionReportingSpec` — "stays silent for a
+      failure the callee already reported" over `TaskNotFoundException`,
+      `TakeExitCodeException`, `ServeExitCodeException`: no stderr line, no
+      log record, the same exception rethrown. Recorded red for the two exit
+      carriers (FR16, M7).
+- [x] 11.3 `RunExceptionReporting.calmLine` is the one classification (three
+      lists: own message, input exhausted, already reported — the exit
+      carriers join the last); `ReportedFailureExceptionReporter`
+      (`application`) claims what it classifies and is registered in
+      `:bootstrap`'s `META-INF/spring.factories`;
+      `ReportedFailureExceptionReporterSpec` (design D13). Verify
+      `:application:check` and `:bootstrap:check` green with PIT 100%, and
+      the packaged jar with `GNOMISH_LOG_DIR` set writes one stderr line and
+      no log record for `status --dir=. --task=x`.
+- [x] 11.4 `operator-guide-sandbox.md`, "Binding stages": the example no
+      longer pairs `default=container` with `stages.review=host`; the
+      mixed-binding limit is stated directly under the block (FR17).
+- [x] 11.5 Traceability (`traceability.md`): the javadoc of
+      `RunExceptionReporting.calmLine` and `ReportedFailureExceptionReporter`,
+      and the three specs of 11.1–11.3, cite FR16 of fix-operator-blockers
+      (today they cite NFR-O1 only). Verify
+      `grep -rn "FR16 of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
+      names each of the five files.
+
 ## 9. Wrap-up
 
 - [x] 9.1 Traceability: every FR/NFR/UX of the proposal is named by at least
       one spec or javadoc (`traceability.md`). Verify with
       `grep -rn "of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
       against the proposal's ID list. Includes FR11, FR12, NFR-R3, NFR-O2
-      of §8; FR14, FR15, NFR-R4 of §10 are covered by 10.4.
+      of §8; FR14, FR15, NFR-R4 of §10 are covered by 10.4; FR16, FR17 of
+      §11 by 11.5 and 11.4.
 - [x] 9.2 Root `./gradlew check` green (PIT 100% on touched classes). Verify
       the command's exit code.
 - [x] 9.3 Operator-stand acceptance (M3, human step): on the reference stand,

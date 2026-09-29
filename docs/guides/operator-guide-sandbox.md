@@ -57,8 +57,15 @@ whose protection cannot be demonstrated.
 
 ```properties
 factory.bindings.default=container      # the default even when unset
-factory.bindings.stages.review=host     # per-stage override, operator-only
+factory.bindings.stages.review=container # per-stage override, operator-only
 ```
+
+A per-stage override may not mix modes today: every stage of one pipeline must
+resolve to the same adapter, so `stages.review=host` beside a `container`
+default is refused when the slot starts ("mixed host/container stage bindings
+within one pipeline are not supported"). There is no stage-by-stage migration
+into container mode yet — the image has to satisfy every stage from its first
+run. See the boundary stated at the end of this section.
 
 The target repo can declare *needs* in a stage's `Mechanism` (e.g. requiring
 egress control) — needs may only tighten. Binding an adapter, and any

@@ -41,6 +41,33 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         (result.stdout() + result.stderr()).contains('--task')
     }
 
+    def "NFR-O1, FR16 of fix-operator-blockers: a usage error is one stderr line, with no framework trace"() {
+        given: 'the subcommand handed an option it does not accept'
+        List<String> noArgsNeeded = []
+
+        when:
+        def result = harness.run(
+                E2eFixture.projectRoot(),
+                [
+                    '--dir=' + E2eFixture.projectRoot(),
+                    '--task=x',
+                    '--bogus=1'
+                ],
+                noArgsNeeded)
+
+        then:
+        result.exitCode() == 2
+
+        and: 'stderr carries the message exactly once, and nothing else'
+        def stderrLines = result.stderr().readLines().findAll { !it.isBlank() }
+        stderrLines.size() == 1
+        stderrLines[0].startsWith("unknown option --bogus for 'gnomish run'; accepted: ")
+
+        and: 'the framework adds no failure record of its own on stdout'
+        !result.stdout().contains('Application run failed')
+        !result.stdout().contains('UsageException')
+    }
+
     def "broken pipeline exits 3 before any dialog"() {
         given: 'a fixture whose plan stage references a missing instructions.md'
         Path brokenRoot = brokenFixtureRoot()

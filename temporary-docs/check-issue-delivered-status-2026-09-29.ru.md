@@ -1,7 +1,7 @@
 # Проверка issue: `status` показывает `Delivered` для эскалированной задачи (2026-09-29)
 
-Рабочая заметка по итогам `/check-issue`. Две исправленные проблемы и наблюдения, которые
-остались открытыми. Ветка: `fix-operator-blockers`, изменения не закоммичены.
+Рабочая заметка по итогам `/check-issue`. Четыре исправленные проблемы (две из второго отчёта
+добавлены ниже, разделы «Решено 3» и «Решено 4») и наблюдения, которые остались открытыми. Ветка: `fix-operator-blockers`, изменения не закоммичены.
 
 ## Исходный отчёт (кратко)
 
@@ -11,6 +11,9 @@
   `Delivered`.
 - Тот же прогон упал с `[GF112] executor threw … MissingResultEventException: stream-json
   carried no result event`. К этому моменту гном сделал 33 вызова инструментов при `maxTurns: 30`.
+- Второй отчёт (пункты 4–6 и «мелочь» ревью оператора): пример смешанных биндингов в гайде,
+  usage-ошибка трижды и со стектрейсом, нет `--help`, `dashboard` молчит. Пункты 4 и 5
+  исправлены (решено 3–4), `--help` и печать пути — доработки (Н6, Н7).
 
 ---
 
@@ -128,6 +131,108 @@ flowchart LR
 
 ---
 
+## Решено 3: пример в гайде по биндингам показывал конфигурацию, которую код отвергает
+
+### Причина
+
+- В `docs/guides/operator-guide-sandbox.md`, раздел «Binding stages», пример содержал пару
+  `factory.bindings.default=container` + `factory.bindings.stages.review=host`.
+- Именно такую конфигурацию отвергает `SandboxModeSelector.plan`
+  (`application/.../app/SandboxModeSelector.java:74-78`): `UsageException` «mixed
+  host/container stage bindings within one pipeline are not supported». Ограничение было
+  названо честно, но на 40 строк ниже. Оператор копирует блок, а не абзац из другого места.
+
+### Исправление
+
+- В примере теперь `stages.review=container`.
+- Сразу под блоком добавлена оговорка: одна pipeline не может смешивать режимы, пара
+  `stages.review=host` рядом с `container` будет отвергнута при старте слота (с этим
+  сообщением), поэтапной миграции в container-режим пока нет, образ должен удовлетворять всем
+  стадиям с первого запуска.
+
+Вердикт аналитический: это документация, запускать нечего. Код не менялся.
+
+---
+
+## Решено 4: usage-ошибка печаталась несколько раз и со стектрейсом (NFR-O1)
+
+### Что воспроизведено
+
+На собранном jar, `java -jar gnomish.jar status --dir=. --task=x`:
+
+- код возврата 2 — верно;
+- в stderr сообщение дважды: чистой строкой и внутри ERROR «Application run failed» со
+  стектрейсом на 33 кадра;
+- та же ERROR-запись в stdout (appender `CONSOLE_STDOUT` пропускает WARN и выше);
+- и она же в файловом логе `~/.gnomish/logs/gnomish.log`. В реальном логе нашлось 23 такие
+  записи для `UsageException`, 12 для `InputExhaustedException`, 5 для
+  `EscalationEofException`.
+
+### Причина
+
+- `RunExceptionReporting.run` печатает оператору одну строку и **пробрасывает** исключение:
+  так Spring получает код возврата через `RunExitCodeMapper`.
+- Spring Boot (`SpringApplication.reportFailure`) не знает, что исключение уже сообщено, и
+  сам пишет ERROR «Application run failed» со стектрейсом, если его не забрал ни один
+  `SpringBootExceptionReporter`.
+
+### Смежный дефект, найденный по ходу
+
+`TakeExitCodeException` (им `take` **всегда** сообщает код возврата, D16 of
+add-tracker-port) и `ServeExitCodeException` (сбой старта `serve`, строка уже напечатана)
+попадали в общую ветку `catch (RuntimeException | IOException)`. В итоге каждый завершённый
+`take` давал WARN `[GF…] gnomish run terminated with an unhandled exception` со стектрейсом и
+строку `gnomish run failed: take exiting with code 0`. Воспроизведено спеком (красный на обоих
+исключениях до исправления).
+
+### Исправление
+
+- `RunExceptionReporting.calmLine(Throwable)` — единственная классификация: строка для
+  оператора, пустая строка («уже сообщено вызываемым кодом») или `null` (неклассифицированный
+  сбой, общая ветка с WARN). Классы собраны в три явных списка: `PRINTS_OWN_MESSAGE`,
+  `INPUT_EXHAUSTED`, `ALREADY_REPORTED`. В `ALREADY_REPORTED` добавлены
+  `TakeExitCodeException` и `ServeExitCodeException`.
+- Новый `application/.../app/ReportedFailureExceptionReporter` реализует
+  `SpringBootExceptionReporter` и возвращает `true` ровно для того, что классифицирует
+  `calmLine`. Зарегистрирован в `bootstrap/src/main/resources/META-INF/spring.factories`
+  (композиционный корень).
+- Неклассифицированный сбой и сбой до старта раннера (контекст не поднялся) Spring
+  по-прежнему пишет как раньше.
+
+Первая версия была на pattern-switch с несколькими шаблонами в одном `case`. PIT оставил два
+выживших мутанта в служебном байткоде, который javac генерирует для такого switch (проверки
+повторного входа). Поэтому классификация переписана на списки.
+
+```mermaid
+flowchart LR
+    Cmd["команда бросает UsageException"] --> RER["RunExceptionReporting: одна строка в stderr"]
+    RER --> Spring["SpringApplication.handleRunFailure"]
+    Spring --> Exit["RunExitCodeMapper: код 2"]
+    Spring --> Rep["ReportedFailureExceptionReporter: уже сообщено"]
+    Rep --> NoLog["ERROR-запись не пишется"]
+```
+
+### Регрессионные спеки
+
+- `bootstrap/.../e2e/ExitCodeMatrixSpec`, новая фича «a usage error is one stderr line, with no
+  framework trace»: реальный jar, `run --bogus=1`, в stderr ровно одна строка, в stdout нет
+  `Application run failed`. Без регистрации репортера красная, с ней зелёная. (Harness всегда
+  подставляет `run`, поэтому сценарий на `run`, а не на `status`.)
+- `application/.../RunExceptionReportingSpec`: фича «stays silent for a failure the callee
+  already reported» стала data-driven — `TaskNotFoundException`, `TakeExitCodeException`,
+  `ServeExitCodeException`; ни строки в stderr, ни записи в лог.
+- `application/.../ReportedFailureExceptionReporterSpec`: забирает классифицированные,
+  оставляет Spring'у неклассифицированный `IllegalStateException`.
+
+### Проверки
+
+- `:application:check` зелёный, PIT 2315/2315.
+- `:bootstrap:check` зелёный, PIT 239/239.
+- Ручной прогон jar: stderr — одна строка, stdout — только баннер, в файловом логе (через
+  `GNOMISH_LOG_DIR`) 0 записей.
+
+---
+
 ## Открытые наблюдения
 
 ### Н1. Что должен означать ход, упёршийся в лимит (вопрос дизайна)
@@ -235,10 +340,42 @@ flowchart LR
 параллельным прогоном тестов в том же Gradle-демоне. Смежная известная проблема: гонка на
 `.git/config` в `harden()` (заметка «Concurrent harden race» в памяти от 2026-09-24).
 
+
+### Н6. `--help` не принимается ни одной подкомандой
+
+**Что сейчас.** `gnomish --help` → `unknown option --help for 'gnomish run'; accepted: …`, код
+2. То же для `status --help`, `take --help`, `serve --help`, `board --help`, `usage --help`,
+`dashboard --help`, и `-h` (`'-h' is not a gnomish subcommand`). Проверено на jar.
+
+**Почему не исправлено.** Это соответствует FR8 (неизвестная опция — usage-ошибка). `--help` не
+описан ни в одной спецификации, так что это запрос на функциональность, а не дефект.
+Приписывание флага к `gnomish run` тоже по замыслу: без подкоманды действует неявный `run`
+(javadoc `Subcommand`). Для оператора это сбивает с толку, но не противоречит спеку.
+
+**Что предлагается.** `--help`/`-h` принимается каждой подкомандой (и без подкоманды), печатает
+в stdout тот же список принятых опций, что уже собирает `ArgumentsParsingSupport` для
+usage-ошибки, и выходит с кодом 0. Без подкоманды — список подкоманд. Через `/opsx:propose`;
+возможно, вместе с Н7 и `add-doctor-command`.
+
+### Н7. `gnomish dashboard` ничего не печатает
+
+**Что сейчас.** `DashboardCommand.renderOnce` пишет файл через `AtomicFileWriter` и ничего не
+выводит. При первом запуске выглядит как «команда ничего не сделала»; путь по умолчанию
+(`dashboard.html` в каталоге наблюдаемости инстанса, `ObservabilityPaths.directory`) оператор
+не знает.
+
+**Что предлагается.** Печатать в stdout абсолютный путь отрендеренного файла (для `--watch` —
+один раз при старте). Требования на это нет, поэтому это тоже доработка, а не дефект; тот же
+`/opsx:propose`, что и Н6.
+
 ---
 
 ## Рекомендуемый коммит
 
+Решено 1–2 уже закоммичены (`2e5093dd`). Для решённых 3–4:
+
 ```
-fix: scope delivery to the task's own history; keep error_* result lines
+fix: report a command failure once, not again via Spring Boot
+
+Refs: fix-operator-blockers NFR-O1
 ```

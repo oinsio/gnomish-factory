@@ -69,6 +69,22 @@ defects are still live:
   own contract, carries no `result` field (the final text exists only on
   `success`); the adapter dropped every result line without that field, so a
   round that ended on a named limit read as "the agent emitted no result".
+- **A usage error is printed four times, with a stack trace.** Found by the
+  operator review on 2026-09-29: `gnomish status --dir=. --task=x` exits 2
+  with the right sentence on stderr, then Spring Boot logs the same exception
+  as an ERROR `Application run failed` record with a 33-frame stack trace —
+  on stderr again, on stdout, and in the shared log file. The factory prints
+  its line and rethrows so the exit code reaches its mapper; Spring Boot does
+  not know the failure was already reported. The same path made every
+  completed `take` log a WARN "unhandled exception" and print `gnomish run
+  failed: take exiting with code 0`: the exception that carries `take`'s and
+  `serve`'s exit code fell into the generic fallback.
+- **The binding guide shows a configuration the factory refuses.** Its
+  example pairs `factory.bindings.default=container` with
+  `factory.bindings.stages.review=host`; slot start refuses exactly that
+  ("mixed host/container stage bindings within one pipeline are not
+  supported"). The limit is stated, but forty lines below the block an
+  operator copies.
 
 These block the first release: a release that works only after the operator
 reverse-engineers two wrapper scripts is not a release.
@@ -111,6 +127,14 @@ reverse-engineers two wrapper scripts is not a release.
 - **MODIFIED**: a result line of an `error_*` subtype is the round's result
   event even without a `result` field; the round ends on its named subtype
   rather than as a missing-result infrastructure failure.
+- **MODIFIED**: a failure the factory has already reported to the operator —
+  a usage error or any other classified failure, and the exit-code carriers of
+  `take` and `serve` — is reported once; Spring Boot's own failure record is
+  not added on top, and a completed `take` is no longer logged as an
+  unhandled exception.
+- **MODIFIED** (docs): the sandbox guide's binding example shows only a
+  configuration the factory accepts, with the mixed-binding limit stated
+  under it.
 
 ## Capabilities
 
@@ -137,6 +161,8 @@ reverse-engineers two wrapper scripts is not a release.
   best-effort" names the limit-ended result line as a result event.
 - `lifecycle/task-branch-contract`: "Total branch-shape classification"
   scopes `Delivered` to the task's own history.
+- `cli-arguments` (also, new in this change): a reported failure is printed
+  once.
 
 ## Goals
 
@@ -179,6 +205,11 @@ reverse-engineers two wrapper scripts is not a release.
 - **NG9**: a "how to resume this task" hint in `gnomish status`. The full
   report already prints the stage, the attempts and the last escalation for a
   parked task; the return path is a feature, not an operator blocker.
+- **NG10**: `--help` / `-h` for every subcommand, and `gnomish dashboard`
+  printing the path of the page it rendered. Both were raised by the
+  2026-09-29 operator review; neither is a defect (FR8 makes an unknown
+  `--help` a usage error by design, and no requirement asks `dashboard` to
+  print), so they are features for a change of their own.
 
 ## Users & Scenarios
 
@@ -271,6 +302,17 @@ reverse-engineers two wrapper scripts is not a release.
   SHALL be the round's result event even when it carries no `result` field,
   with empty result text and its subtype verbatim; a `success` line without a
   `result` field stays skipped.
+- **FR16**: a failure the factory has already reported to the operator — the
+  classified families (usage error, pipeline load failure, exhausted input,
+  task not found, ...) and the exit-code carriers of `take` and `serve` —
+  SHALL appear once: its line on stderr (or nothing more, when the command
+  already printed its outcome), with no framework failure record, no stack
+  trace on stdout or stderr, and no record in the log file. An unclassified
+  fault keeps its WARN with the stack trace in the log, and a failure raised
+  before any command runs keeps the framework's own report.
+- **FR17**: the sandbox guide's binding example SHALL show only a
+  configuration the factory accepts, and the mixed host/container limit SHALL
+  be stated directly under the example.
 
 ### Non-Functional
 
@@ -292,7 +334,7 @@ reverse-engineers two wrapper scripts is not a release.
   `Parked`, `Answered`) as terminal because of a commit it inherited from its
   base (FR14).
 - **NFR-O1**: a usage error SHALL name the offending option and the accepted
-  set in one message, so a single run shows the fix.
+  set in one message, printed once (FR16), so a single run shows the fix.
 - **NFR-O2**: a signal stop of an idle daemon SHALL add no WARN or ERROR line
   and no stack trace after the serve-stopping anchor (FR12); a genuine
   tracker failure on a thread that was not interrupted keeps its WARN.
@@ -334,6 +376,11 @@ reverse-engineers two wrapper scripts is not a release.
   after start, bare branch, and the earlier task still `Delivered`); a
   limit-ended result line yields a result event for 3 of 3 `error_*` subtypes
   and the extractor throws no `MissingResultEventException` for it.
+- **M7**: the packaged jar given an unknown option writes exactly one
+  non-blank line to stderr and no `Application run failed` record to stdout;
+  3 of 3 already-reported families (task not found, `take` and `serve` exit
+  carriers) print nothing and log nothing; the Spring Boot reporter claims
+  every classified family and leaves an unclassified fault alone.
 
 ## Open Questions
 
@@ -382,5 +429,11 @@ reverse-engineers two wrapper scripts is not a release.
 - `adapters/git`: `GitShowTip.cleanupCommit` (FR14), `DeliveryAncestrySpec`.
 - `adapters/agent`: `StreamJsonEventMapper` (FR15),
   `StreamJsonErrorResultSpec`.
+- `application`: `RunExceptionReporting` (one classification, `calmLine`),
+  new `ReportedFailureExceptionReporter` (FR16); `:bootstrap`:
+  `META-INF/spring.factories` registers it; specs
+  `RunExceptionReportingSpec`, `ReportedFailureExceptionReporterSpec`,
+  `ExitCodeMatrixSpec`.
+- Docs: `operator-guide-sandbox.md`, "Binding stages" (FR17).
 - No new dependencies. Overlaps: `remove-interactive-console` and
   `make-run-headless` also touch `RunArgumentsParser` (rebase order in design).
