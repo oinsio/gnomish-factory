@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Component;
 @Component
 public final class RunArgumentsParser {
 
+    private static final String RUN_TOKEN = "run";
     private static final String DIR = "dir";
     private static final String TASK = "task";
     private static final String TASK_FILE = "task-file";
@@ -35,6 +38,11 @@ public final class RunArgumentsParser {
     private static final String BASE = "base";
     private static final String RESUME = "resume";
     private static final String DISCARD_WORK = "discard-work";
+    private static final String INTERACTIVE = "interactive";
+
+    /** Every option {@code run} accepts (FR8 of fix-operator-blockers). */
+    private static final List<String> ACCEPTED =
+            List.of(DIR, TASK, TASK_FILE, TASK_ID, FROM_STAGE, INTERACTIVE, MODE, BASE, RESUME, DISCARD_WORK);
 
     /**
      * Filesystem/git-ref-safe charset for {@code --task-id}: ASCII letters, digits, {@code -}
@@ -53,7 +61,8 @@ public final class RunArgumentsParser {
      *     or a flag's value fails its format check
      */
     public RunArguments parse(ApplicationArguments args) {
-        Path dir = parseDir(args);
+        ArgumentsParsingSupport.rejectUnknownOptions(args, RUN_TOKEN, ACCEPTED, Map.of());
+        Path dir = ArgumentsParsingSupport.projectDir(args);
         String resume = singleValue(args, RESUME);
         TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);
@@ -64,11 +73,6 @@ public final class RunArgumentsParser {
         boolean discardWork = args.containsOption(DISCARD_WORK);
         GitFlagsValidator.validate(mode, resume, base, discardWork, args);
         return new RunArguments(dir, taskSource, taskId, fromStage, interactiveMode, mode, base, resume, discardWork);
-    }
-
-    private Path parseDir(ApplicationArguments args) {
-        String value = singleValue(args, DIR);
-        return value == null ? Path.of(".") : Path.of(value);
     }
 
     private TaskSource parseTaskSource(ApplicationArguments args) {

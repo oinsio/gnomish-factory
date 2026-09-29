@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.github;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import java.io.IOException;
@@ -36,7 +35,12 @@ import org.slf4j.LoggerFactory;
  * API base rather than the individual request: Resilience4j's events carry the throwable, not the
  * URI, and one client is one host.
  *
- * <p>Implements NFR-R2, NFR-S1 of add-tracker-port; FR5 of harden-logging-observability.
+ * <p>An interrupt of the calling thread is not an infrastructure failure: {@link #send} fails
+ * with {@link GithubCallInterruptedException} after the one attempt in flight, never retries it and
+ * leaves the interrupt set (FR11, NFR-R3 of fix-operator-blockers).
+ *
+ * <p>Implements NFR-R2, NFR-S1 of add-tracker-port; FR5 of harden-logging-observability; FR11,
+ * NFR-R3 of fix-operator-blockers.
  */
 public final class GithubHttpClient {
 
@@ -115,6 +119,9 @@ public final class GithubHttpClient {
      *
      * @throws GithubHttpException if the retry policy exhausts its attempts
      *     without a non-5xx response (network failure or persistent 5xx)
+     * @throws GithubCallInterruptedException if the calling thread is interrupted while the
+     *     request waits on GitHub — no further attempt is made and the interrupt stays set (FR11 of
+     *     fix-operator-blockers)
      */
     public HttpResponse<String> send(HttpRequest.Builder requestBuilder) {
         HttpRequest request = requestBuilder
@@ -126,6 +133,10 @@ public final class GithubHttpClient {
         Function<HttpRequest, HttpResponse<String>> attempt = Retry.decorateFunction(retry, this::doSend);
         try {
             return attempt.apply(request);
+        } catch (GithubCallInterruptedException cancelled) {
+            // The stop of the calling thread, not an exhausted transport: it leaves unwrapped, so no
+            // handler of GithubHttpException reclassifies it as an outage (FR11, NFR-R3).
+            throw cancelled;
         } catch (RuntimeException e) {
             throw new GithubHttpException("GitHub API call failed after retries: " + request.uri(), e);
         }
@@ -137,20 +148,10 @@ public final class GithubHttpClient {
         } catch (IOException e) {
             throw new GithubHttpUncheckedIOException(e);
         } catch (InterruptedException e) {
-            throw onInterrupted(e);
+            // The JDK client has cancelled the exchange; restore the interrupt it consumed so the
+            // caller reads the stop from its own thread (the tracker-port requirement).
+            Thread.currentThread().interrupt();
+            throw new GithubCallInterruptedException("GitHub API call interrupted: " + request.uri(), e);
         }
-    }
-
-    // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — an
-    // interrupt landing inside the brief window of a real blocking HttpClient#send call is a
-    // genuine timing race, not reliably reproducible in a unit test (same rationale as
-    // HostExecHandle#waitForAtMost's identical shape). The happy-path send and the sibling
-    // IOException branch are covered by GithubHttpClientSpec's WireMock scenarios; this isolates
-    // only the interrupt-restoration branch so it has nowhere for a mutant to hide as a false
-    // SURVIVED/NO_COVERAGE against the rest of doSend.
-    @DoNotMutate
-    private static GithubHttpUncheckedIOException onInterrupted(InterruptedException e) {
-        Thread.currentThread().interrupt();
-        return new GithubHttpUncheckedIOException(new IOException(e));
     }
 }

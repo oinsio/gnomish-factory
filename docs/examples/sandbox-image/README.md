@@ -47,6 +47,20 @@ Build arguments (all optional):
 Registry endpoints are deliberately parameters (D7): pointing the image at a
 private depot or mirror is a `--build-arg`, never an image edit.
 
+## Agent authentication
+
+<!-- implements FR9, UX1, UX3 of fix-operator-blockers -->
+
+The image bakes the stock agent CLI and no credential. The agent logs in with
+`CLAUDE_CODE_OAUTH_TOKEN` (a subscription token printed by `claude setup-token`)
+or `ANTHROPIC_API_KEY`, set in the **factory's** environment: the factory hands
+it to every agent round and judge vote in the box, and to nothing else, with no
+`env-passthrough` entry. Add `api.anthropic.com` to
+`factory.sandbox.egress-allowlist`. Nothing in the image wraps the `claude`
+binary — the factory passes the permission mode and the MCP exclusion itself.
+See [Agent authentication in the
+box](../../guides/operator-guide-sandbox.md#agent-authentication-in-the-box).
+
 ## The CA seam
 
 Drop the factory's CA certificate (`*.pem` or `*.crt`) into `ca/` before

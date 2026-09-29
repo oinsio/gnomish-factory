@@ -25,6 +25,9 @@ final class StreamJsonEventMapper {
 
     private static final Logger log = LoggerFactory.getLogger(StreamJsonEventMapper.class);
 
+    /** The subtype prefix the CLI gives every result line of a round it ended on an error or a limit. */
+    private static final String ERROR_SUBTYPE_PREFIX = "error_";
+
     private StreamJsonEventMapper() {}
 
     // M4 documented exception (see build.gradle's pitest block for the general
@@ -94,12 +97,31 @@ final class StreamJsonEventMapper {
     // an equal literal — no test can observe the difference.
     @DoNotMutate
     private static Optional<AgentEvent> toResult(StreamJsonLine wire, UntrustedText sessionId) {
-        String result = wire.result();
-        if (result == null) {
+        if (!isResultEvent(wire)) {
             return skip(wire, "result line without a result field");
         }
         return present(new AgentEvent.ResultEvent(
-                sessionId, wire.subtype(), UntrustedText.agent(result), wire.usage(), wire.modelUsage()));
+                sessionId, wire.subtype(), UntrustedText.agent(resultTextOf(wire)), wire.usage(), wire.modelUsage()));
+    }
+
+    /**
+     * Whether a result-type line is the round's result event: it carries the result field, or it
+     * is a line of a round the CLI ended on an error or a limit ({@code error_max_turns}, {@code
+     * error_during_execution}, ...), which by the CLI's contract carries none — the final text
+     * exists only on {@code success}. Dropping that line would turn a round that ended on a named
+     * subtype into a missing-result infrastructure failure (FR4).
+     *
+     * <p>Implements FR4 of add-agent-executor; FR15 of fix-operator-blockers.
+     */
+    private static boolean isResultEvent(StreamJsonLine wire) {
+        String subtype = wire.subtype();
+        return wire.result() != null || (subtype != null && subtype.startsWith(ERROR_SUBTYPE_PREFIX));
+    }
+
+    /** The line's result text, empty for a limit-ended round's line that carries none. */
+    private static String resultTextOf(StreamJsonLine wire) {
+        String result = wire.result();
+        return result == null ? "" : result;
     }
 
     private static List<ContentBlock> contentOf(StreamJsonLine wire) {

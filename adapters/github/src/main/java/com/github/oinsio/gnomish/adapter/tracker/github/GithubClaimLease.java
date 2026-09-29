@@ -158,7 +158,10 @@ public final class GithubClaimLease {
     /**
      * Runs the verify-read (step 3, design D13); on an infrastructure
      * failure ({@link GithubHttpException} or {@link GithubClaimException})
-     * best-effort deletes {@code ownCommentId} first, then rethrows.
+     * best-effort deletes {@code ownCommentId} first, then rethrows. An interrupted read ({@link
+     * com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException}) skips the delete,
+     * which would fail at once on the set interrupt: the comment is resolved away by the next
+     * reader, as any undeleted claim is (FR11 of fix-operator-blockers, design D8).
      */
     private GithubClaimWindow listCommentsOrCleanUp(GithubTaskId id, long ownCommentId) {
         try {
@@ -189,7 +192,8 @@ public final class GithubClaimLease {
      * operator looking at a thread with two claim comments needs to find the line that explains it.
      *
      * <p>A {@code 404} is not a failure: a racing remover already deleted the comment, which is the
-     * outcome this call wanted.
+     * outcome this call wanted. An interrupt is not a delete failure either: the cancellation
+     * propagates as the stop of the calling thread (FR11 of fix-operator-blockers).
      */
     private void deleteComment(GithubTaskId id, long commentId) {
         String path = "/repos/%s/%s/issues/comments/%d".formatted(id.owner(), id.repo(), commentId);

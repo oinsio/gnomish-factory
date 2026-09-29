@@ -20,7 +20,11 @@ import org.jspecify.annotations.Nullable;
  * RuntimeException} increments {@link #consecutiveFailures()} and is rethrown completely
  * unchanged — this decorator is transparent, never altering a caller's error handling (FR8).
  *
- * <p>Implements FR8, D12 of add-serve-observability.
+ * <p>The one failure left uncounted is one thrown on a thread whose interrupt is set: the call
+ * failed because the thread was told to stop, which says nothing about the tracker's health — the
+ * port obliges every adapter to leave that interrupt set (FR12 of fix-operator-blockers).
+ *
+ * <p>Implements FR8, D12 of add-serve-observability; FR12 of fix-operator-blockers.
  */
 public final class TrackerHealthTracker implements Tracker {
 
@@ -151,12 +155,16 @@ public final class TrackerHealthTracker implements Tracker {
      * #lastSuccessAt}) or failure (increments the streak) before propagating the outcome
      * unchanged — a normal return or the original {@link RuntimeException}.
      */
-    private <T> T call(Supplier<T> op) {
+    private <T extends @Nullable Object> T call(Supplier<T> op) {
         T result;
         try {
             result = op.get();
         } catch (RuntimeException failure) {
-            consecutiveFailures.incrementAndGet();
+            // A failure on an interrupted thread is the stop of that thread, not a tracker failure
+            // (FR12 of fix-operator-blockers): rethrown just the same, but not counted.
+            if (!Thread.currentThread().isInterrupted()) {
+                consecutiveFailures.incrementAndGet();
+            }
             throw failure;
         }
         lastSuccessAt = clock.now();

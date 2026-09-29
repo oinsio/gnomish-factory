@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
 
@@ -41,6 +43,14 @@ final class TakeArgumentsParser {
             List.of("mode", "task", "task-file", "task-id", "resume", "from-stage");
 
     /**
+     * Every option {@code take} knows (FR8 of fix-operator-blockers): its own flags plus {@link
+     * #REJECTED_FLAGS}, which stay known so their specific refusal wins over the generic one.
+     */
+    private static final List<String> ACCEPTED = Stream.concat(
+                    Stream.of(DIR, "interactive", BASE, DISCARD_WORK, TAKEOVER), REJECTED_FLAGS.stream())
+            .toList();
+
+    /**
      * @param args the raw application arguments, including the leading {@code take} token
      * @return the validated flags
      * @throws UsageException if a rejected flag is present, {@code --base} is given on the bare
@@ -48,11 +58,12 @@ final class TakeArgumentsParser {
      *     shared flag ({@code --dir}, {@code --interactive}) fails its own format check
      */
     TakeArguments parse(ApplicationArguments args) {
+        ArgumentsParsingSupport.rejectUnknownOptions(args, TAKE_TOKEN, ACCEPTED, Map.of());
         rejectRunOnlyFlags(args);
-        Path dir = parseDir(args);
+        Path dir = ArgumentsParsingSupport.projectDir(args);
         List<String> refs = ArgumentsParsingSupport.allPositionalsAfterSubcommand(args, TAKE_TOKEN);
         RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
-        String base = singleValue(args, BASE);
+        String base = ArgumentsParsingSupport.singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
         boolean takeover = args.containsOption(TAKEOVER);
         if (refs.isEmpty() && base != null) {
@@ -95,18 +106,5 @@ final class TakeArgumentsParser {
                         + " (its own claim/branch protocol replaces them)");
             }
         }
-    }
-
-    private Path parseDir(ApplicationArguments args) {
-        String value = singleValue(args, DIR);
-        return value == null ? Path.of(".") : Path.of(value);
-    }
-
-    /**
-     * Returns the single value of {@code name}, or {@code null} if the flag is absent. Multiple
-     * occurrences are rejected, mirroring {@link RunArgumentsParser}'s own {@code singleValue}.
-     */
-    private @Nullable String singleValue(ApplicationArguments args, String name) {
-        return ArgumentsParsingSupport.singleValue(args, name);
     }
 }

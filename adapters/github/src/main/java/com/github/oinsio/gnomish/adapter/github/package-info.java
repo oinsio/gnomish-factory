@@ -8,6 +8,10 @@
  * com.github.oinsio.gnomish.adapter.github.GithubHttpException}, wrapping
  * transport errors carried internally as {@link
  * com.github.oinsio.gnomish.adapter.github.GithubHttpUncheckedIOException}),
+ * its cancellation ({@link
+ * com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException},
+ * an interrupt of the calling thread, deliberately not an infrastructure
+ * failure — FR11 of fix-operator-blockers),
  * a generic ETag conditional-request cache ({@link
  * com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache}),
  * and rate-limit detection on {@code 403} responses ({@link

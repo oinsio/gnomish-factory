@@ -40,6 +40,14 @@ import org.jspecify.annotations.Nullable;
  * plane and the streak state that goes with it (FR4 of harden-logging-observability). This class
  * classifies; that one reports.
  *
+ * <p>An interrupted runs query is none of the three: it is the stop of the polling thread, not a
+ * platform that could not answer, so {@code poll} deliberately does not catch {@link
+ * com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException} and writes no outcome
+ * line for it. Classifying it as cannot-verify would escalate the task as an infrastructure failure
+ * blaming a reachable GitHub, and the polling loop's sleeper swallows interrupts, so nothing else
+ * would end the loop; propagating ends the slot through the engine's shutdown-caused
+ * classification instead (FR11 of fix-operator-blockers, design D8).
+ *
  * <p>Resilience4j retrying of the underlying HTTP call already happens one layer down, inside
  * {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient#send}: this class adds no
  * second retry layer, it only classifies what the shared plumbing hands back — a successful
@@ -48,6 +56,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements NFR-R1, NFR-R3 of add-external-check-github-actions.
  * <p>Implements FR6, NFR-C1 of add-external-check-github-actions.
  * <p>Implements NFR-O1, UX1 of add-external-check-github-actions.
+ * <p>Implements FR11 of fix-operator-blockers.
  */
 public final class GithubWorkflowRunPoll {
 
@@ -86,6 +95,9 @@ public final class GithubWorkflowRunPoll {
      *     succeeds; {@link PollStatus.CannotVerify} when it could not be answered — either an
      *     infrastructure failure (network error, persistent 5xx, or rate limiting) or a
      *     client-side rejection (401/403/404, a misconfiguration) — never null
+     * @throws com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException if the
+     *     polling thread is interrupted while the query waits on GitHub (FR11 of
+     *     fix-operator-blockers)
      */
     public PollStatus poll(String checkId, String headSha) {
         Optional<GithubWorkflowRun> matchingRun = Optional.empty();

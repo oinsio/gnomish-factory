@@ -8,9 +8,15 @@ import java.nio.file.Path;
  *
  * <p>Implements FR1 of add-board-command.
  *
- * @param dir the target project directory (the {@code --dir} value); defaults to {@code .}
+ * @param dir the target project directory (the {@code --dir} value, or the working directory),
+ *     absolute and normalized (FR7 of fix-operator-blockers)
  * @param json whether {@code --json} was given
  * @param limit the {@code listReady} window size (the {@code --limit} value); defaults to 50,
  *     always positive
  */
-record BoardArguments(Path dir, boolean json, int limit) {}
+record BoardArguments(Path dir, boolean json, int limit) {
+
+    BoardArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
+}

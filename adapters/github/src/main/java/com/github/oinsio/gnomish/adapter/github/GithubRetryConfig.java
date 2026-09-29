@@ -27,7 +27,7 @@ import java.time.Duration;
  * io.github.resilience4j.retry.Retry} instance and its execution.
  *
  * <p>Implements NFR-R2 of add-tracker-port, NFR-R1 of
- * add-external-check-github-actions.
+ * add-external-check-github-actions; NFR-R3 of fix-operator-blockers.
  */
 final class GithubRetryConfig {
 
@@ -45,7 +45,9 @@ final class GithubRetryConfig {
      * errors — see {@link GithubHttpClient}) and responses whose status code
      * is {@code >= 500}, is exactly {@code 429}, or is a {@code 403} carrying
      * GitHub's rate-limit signal (see {@link GithubRateLimit}); any other 4xx
-     * response or any other exception is not retried.
+     * response or any other exception is not retried — in particular {@link
+     * GithubCallInterruptedException}, the stop of the calling thread, which must consume no retry
+     * budget (NFR-R3 of fix-operator-blockers).
      */
     static RetryConfig build() {
         return RetryConfig.<HttpResponse<?>>custom()

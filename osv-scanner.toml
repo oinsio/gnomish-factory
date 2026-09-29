@@ -97,6 +97,22 @@ reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own in
 id = "GHSA-mhm7-754m-9p8w"
 ignoreUntil = 2026-11-01
 reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-gx83-3vf8-gh7j"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-q4xh-88c3-wmh7"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-vvgp-rfg2-7rr6"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-wjgm-6hv5-3cvf"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
 
 # --- Accepted risk: httpclient5/httpcore5(-h2) superseded conflict candidates,
 # metadata-only ---

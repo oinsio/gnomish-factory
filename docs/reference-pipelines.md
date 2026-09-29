@@ -65,10 +65,6 @@ check after cheaper `command` checks.
 **Limitations:**
 
 - Runs with `binding=host`: no sandbox image is built for this project yet.
-- The wrapper scripts `gnomish` and `claude-gnome` work around gaps in the factory's
-  command-line handling and agent launch (absolute `--dir`, the agent's permission mode,
-  per-project log and secret paths). Expect them to shrink as the factory gains
-  per-project configuration.
 - The `deliver` stage needs a separate `GH_TOKEN` passed into the stage's environment.
 - Hello-world scale: it shows the pipeline works, not how it behaves on a large codebase.
 

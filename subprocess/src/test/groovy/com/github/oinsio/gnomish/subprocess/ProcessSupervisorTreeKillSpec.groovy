@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.subprocess
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -52,7 +53,11 @@ wait
         grandchildren.every { !it.isAlive() }
 
         and: 'the signal-ignoring parent was forced, not merely asked (128 + SIGKILL)'
-        supervision.exitCode() == 137
+        // Read from the process itself, not from supervision.exitCode(): on a loaded CI runner the
+        // supervisor's bounded reap can report -1 (exit not yet observed) for a process that has
+        // died a moment later, which says nothing about whether it was forced.
+        process.waitFor(10, TimeUnit.SECONDS)
+        process.exitValue() == 137
 
         cleanup:
         killQuietly(process.toHandle())

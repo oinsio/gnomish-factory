@@ -33,10 +33,12 @@ public record BindingProperties(@Name("default") @Nullable String defaultBinding
 
     // defaultBinding stays @Nullable so BindingResolver owns the container-default rule (D13) in one
     // place; stages is defensively defaulted because Spring's reflective binding can pass null for an
-    // unset property despite this package's @NullMarked contract. @Name binds the documented
-    // `factory.bindings.default` key — `default` is a Java keyword, so no component could carry it.
-    public BindingProperties(@Nullable String defaultBinding, @Nullable Map<String, String> stages) {
-        this.defaultBinding = defaultBinding;
-        this.stages = stages == null ? Map.of() : Map.copyOf(stages);
+    // unset property despite this package's @NullMarked contract. The constructor is compact so the
+    // component's @Name("default") reaches the canonical constructor's parameter, which is where
+    // constructor binding reads it: an explicit constructor redeclares the parameters without the
+    // annotation, and the documented `factory.bindings.default` key bound nothing (FR6 of
+    // fix-operator-blockers, design D4). `default` is a Java keyword, so no component could carry it.
+    public BindingProperties {
+        stages = stages == null ? Map.of() : Map.copyOf(stages);
     }
 }

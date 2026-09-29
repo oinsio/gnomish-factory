@@ -107,17 +107,34 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
         ]
     }
 
-    // UX3, design D15: a task-not-found already printed a calm message on stdout, so printing a
-    // second line here would say the same thing twice.
-    def "stays silent for a task that was not found"() {
+    // FR16 of fix-operator-blockers; UX3, design D15: a task-not-found already printed a calm
+    // message on stdout, so printing a second line here would say the same thing twice. The
+    // take/serve exit carriers are the same shape: the command reported its own outcome and throws
+    // only to hand Spring Boot the code (D16 of add-tracker-port) — a completed take is not an
+    // unhandled failure.
+    def "stays silent for a failure the callee already reported"() {
+        given:
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+
         when:
         def output = reportOf({
-            throw new TaskNotFoundException('PROJ-1')
+            throw failure
         } as RunExceptionReporting.ThrowingAction)
 
         then:
         output.isEmpty()
-        rethrown instanceof TaskNotFoundException
+        rethrown.is(failure)
+        logs.list.isEmpty()
+
+        cleanup:
+        logs.detach()
+
+        where:
+        failure << [
+            new TaskNotFoundException('PROJ-1'),
+            new TakeExitCodeException(0),
+            new ServeExitCodeException(1)
+        ]
     }
 
     // UX3: anything unclassified is the generic fallback — named as a run failure and carrying the

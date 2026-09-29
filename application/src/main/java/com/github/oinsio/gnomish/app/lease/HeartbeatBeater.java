@@ -31,8 +31,11 @@ import org.slf4j.LoggerFactory;
  * fault) is the WARN, the beats in between are DEBUG, a counted roll-up returns at the quiet
  * period, and the beat that lands again emits one INFO closing the outage.
  *
+ * <p>A beat that fails on a thread whose interrupt is set is the stop of that thread: it is
+ * {@code UNCONFIRMED} with no WARN and no streak (FR12, NFR-O2 of fix-operator-blockers).
+ *
  * <p>Implements FR8 of add-claim-heartbeat. Implements FR13 of harden-task-branch-contract.
- * Implements FR4 of harden-logging-observability.
+ * Implements FR4 of harden-logging-observability. Implements FR12, NFR-O2 of fix-operator-blockers.
  *
  * @param tracker the port the beat writes through
  * @param progress the engine-event-fed progress source for the payload
@@ -50,6 +53,13 @@ record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, Clock clock,
         try {
             result = tracker.heartbeat(ref, payload);
         } catch (RuntimeException e) {
+            if (Thread.currentThread().isInterrupted()) {
+                // The stop, not a beat failure (FR12, NFR-O2 of fix-operator-blockers): no verdict
+                // was reached, so the beat is unconfirmed, but no streak opens and nothing warns;
+                // the worker's loop above ends on the interrupt left set here.
+                log.debug("beat for {} interrupted by the stop", ref.id(), e);
+                return BeatOutcome.UNCONFIRMED;
+            }
             logFailure(ref, e);
             return BeatOutcome.UNCONFIRMED;
         }

@@ -41,8 +41,12 @@ import org.slf4j.LoggerFactory;
  * the read no longer carries. That bounds the latch to the tasks currently finished in the feed,
  * and it is why a one-shot caller can still build its own and throw it away with the run.
  *
+ * <p>A decline that fails on a thread whose interrupt is set is the stop of that thread, not a
+ * failed decline: the sweep ends there, at DEBUG, with no further tracker call and the interrupt
+ * left set for the loop above (FR12, NFR-O2 of fix-operator-blockers).
+ *
  * <p>Implements FR3, FR4, NFR-R2, NFR-R3, NFR-O1 of enforce-finish-terminality; FR12 of
- * harden-logging-observability.
+ * harden-logging-observability; FR12, NFR-O2 of fix-operator-blockers.
  */
 public final class FinishedDecline {
 
@@ -97,6 +101,16 @@ public final class FinishedDecline {
                 tracker.declineFinished(task.ref(), DeclineFinishedMessage.forTask(task.ref()));
                 announceDecline(task.ref().id());
             } catch (RuntimeException e) {
+                if (Thread.currentThread().isInterrupted()) {
+                    // The stop, not a decline failure (FR12, NFR-O2 of fix-operator-blockers): no
+                    // further tracker call, and no release either — the entries not yet visited
+                    // are still finished, so releasing their latches would be a false recovery.
+                    log.debug(
+                            "declineFinished for task {} interrupted by the stop; sweep abandoned",
+                            task.ref().id(),
+                            e);
+                    return;
+                }
                 log.warn(
                         OperatorEvent.DECLINE_FINISHED_FAILED.head()
                                 + "declineFinished failed for task {}; left for the next poll cycle",

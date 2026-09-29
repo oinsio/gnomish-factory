@@ -15,8 +15,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR9 of add-tracker-port; FR2, FR3 of add-factory-serve.
  *
  * @param dir the target project directory; defaults to the current working directory when {@code
- *     --dir} is absent, matching {@link RunArguments#dir()}; unresolved, not checked for existence
- *     here
+ *     --dir} is absent, matching {@link RunArguments#dir()}; absolute and normalized (FR7 of
+ *     fix-operator-blockers), not checked for existence here
  * @param refs the raw positional ref strings naming the task(s) (e.g. {@code take 42} or {@code
  *     take github:owner/repo#42}): empty for bare auto mode, one element for explicit mode, two or
  *     more for batch mode (FR2 of add-factory-serve). Carried verbatim — short-ref expansion
@@ -42,6 +42,10 @@ record TakeArguments(
         @Nullable String base,
         boolean discardWork,
         boolean takeover) {
+
+    TakeArguments {
+        ArgumentsParsingSupport.requireAbsoluteDir(dir);
+    }
 
     // PIT M5 documented exception (build.gradle has the full rationale style): @DoNotMutate — this
     // instance method sits on a record, and its mutants hit the same known JVMTI RedefineClasses

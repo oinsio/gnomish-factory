@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
 
@@ -18,6 +20,10 @@ final class DashboardArgumentsParser {
     private static final String DIR = "dir";
     private static final String OUT = "out";
     private static final String WATCH = "watch";
+    private static final String DASHBOARD_TOKEN = "dashboard";
+
+    /** Every option {@code dashboard} accepts (FR8 of fix-operator-blockers). */
+    private static final List<String> ACCEPTED = List.of(DIR, OUT, WATCH);
 
     /**
      * Parses {@code args} into a validated {@link DashboardArguments}.
@@ -26,15 +32,11 @@ final class DashboardArgumentsParser {
      * @return the validated flags
      */
     DashboardArguments parse(ApplicationArguments args) {
-        Path dir = parseDir(args);
+        ArgumentsParsingSupport.rejectUnknownOptions(args, DASHBOARD_TOKEN, ACCEPTED, Map.of());
+        Path dir = ArgumentsParsingSupport.projectDir(args);
         Path out = parseOut(args);
         boolean watch = args.containsOption(WATCH);
         return new DashboardArguments(dir, out, watch);
-    }
-
-    private Path parseDir(ApplicationArguments args) {
-        String value = ArgumentsParsingSupport.singleValue(args, DIR);
-        return value == null ? Path.of(".") : Path.of(value);
     }
 
     private @Nullable Path parseOut(ApplicationArguments args) {

@@ -4,13 +4,17 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
 
+import com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.adapter.github.GithubFastRetryConfig
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException
+import com.github.oinsio.gnomish.adapter.github.InterruptMidRequest
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -27,6 +31,10 @@ import spock.lang.Specification
  * surface as a distinct terminal error, because a bounded terminal-write retry only consumes
  * {@link TrackerUnavailableException} — anything else skips the retry budget entirely and fails a
  * transition whose truth marker has usually already landed.
+ *
+ * <p>The one failure that must NOT classify so is an interrupted write (FR11, NFR-R3 of
+ * fix-operator-blockers): the thread was told to stop, and a retry budget spent on that is a stop
+ * delayed and reported as an outage.
  */
 class GithubRetryableFailureSpec extends Specification {
 
@@ -82,6 +90,28 @@ class GithubRetryableFailureSpec extends Specification {
         failure.cause instanceof GithubHttpException
     }
 
+    // FR11, NFR-R3 of fix-operator-blockers: the comment POST is interrupted while GitHub holds its
+    //     answer back — the write fails as the stop it is, never as a retryable tracker outage.
+    def "an interrupted tracker write is not a retryable tracker outage"() {
+        given: 'the comment POST answers only long after the interrupt'
+        wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE}/comments"))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":900,"body":"marker"}')
+                .withFixedDelay(30_000)))
+        stubLabels()
+        def tracker = newTracker(GithubFastRetryConfig.fastClient(wireMock.baseUrl()))
+
+        when:
+        def outcome = InterruptMidRequest.run(wireMock,
+                postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE}/comments"))) {
+                    tracker.park(refFor(ISSUE), ParkReason.ESCALATION, 'needs a decision')
+                }
+
+        then:
+        !(outcome.failure instanceof TrackerUnavailableException)
+        outcome.failure instanceof GithubCallInterruptedException
+        outcome.interruptSet
+    }
+
     // A write that succeeds is untouched by the translation: no wrapping, no swallowed outcome.
     def "a successful write passes through the transport translation unchanged"() {
         given:
@@ -94,8 +124,7 @@ class GithubRetryableFailureSpec extends Specification {
         noExceptionThrown()
     }
 
-    private GithubTracker newTracker() {
-        def httpClient = newHttpClient()
+    private GithubTracker newTracker(GithubHttpClient httpClient = newHttpClient()) {
         def labelOps = new GithubLabelOps(httpClient)
         def cache = new GithubConditionalRequestCache(httpClient)
         def labels = new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human',
@@ -124,7 +153,7 @@ class GithubRetryableFailureSpec extends Specification {
     }
 
     private GithubHttpClient newHttpClient() {
-        new GithubHttpClient(wireMock.baseUrl(), 'tok', RetryConfig.custom()
+        GithubFastRetryConfig.fastClient(wireMock.baseUrl(), RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
                 .retryOnException({ true })

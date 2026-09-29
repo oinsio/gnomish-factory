@@ -41,10 +41,16 @@ import org.slf4j.LoggerFactory;
  * post-outage sighting (FR9). A repair failure on ONE task is caught per-task so the rest still
  * run, and re-arms that task for a later tick.
  *
+ * <p><b>Stop.</b> A tracker call that fails on a thread whose interrupt is set failed because the
+ * standing reaper was told to stop, not because the tracker is down: the sweep returns at once, at
+ * DEBUG, with the observation windows kept, no listing-failed signal and no further tracker call,
+ * and the interrupt left set for the loop above (FR12, NFR-O2 of fix-operator-blockers).
+ *
  * <p>Not thread-safe: one reaper belongs to one reaper thread that calls {@link
  * #reapOnce(Collection)} sequentially, and is the sole WRITER of its {@link StalenessMemory}.
  *
- * <p>Implements FR4, FR9, NFR-R2 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract.
+ * <p>Implements FR4, FR9, NFR-R2 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract;
+ * FR12, NFR-O2 of fix-operator-blockers.
  */
 // A final class, not a record: PIT's Gregor engine RUN_ERRORs (crashes its minion JVM) when
 // mutating a record here — the JVMTI RedefineClasses restriction on record classes
@@ -101,6 +107,14 @@ public final class Reaper implements ReaperDuty {
             openTasks = tracker.listOpen();
             readyTasks = tracker.listReady(READY_SWEEP_LIMIT);
         } catch (RuntimeException e) {
+            if (Thread.currentThread().isInterrupted()) {
+                // The stop, not an outage (FR12, NFR-O2 of fix-operator-blockers): the listing
+                // failed because this thread was told to stop, so nothing about the tracker was
+                // learned — the windows stay, no failure is signalled, and the interrupt is left
+                // set for the loop above.
+                log.debug("sweep listing interrupted by the stop; tick abandoned", e);
+                return;
+            }
             // Tracker outage: forget the observation windows so recovery restarts every timer from
             // its first post-outage sighting (FR9, D2). No observation is fed, so nothing accrues,
             // and no pre-outage window survives to falsely repair a state that has since moved.
@@ -131,7 +145,9 @@ public final class Reaper implements ReaperDuty {
         List<TrackerObservation> sweep = TrackerObservation.sweep(notOwn(readyTasks, own), openFacts(openTasks, own));
         reportForeign(sweep);
         for (TrackerRepair repair : memory.observe(sweep)) {
-            repair(repair);
+            if (!repair(repair)) {
+                return;
+            }
         }
     }
 
@@ -172,18 +188,23 @@ public final class Reaper implements ReaperDuty {
         return facts;
     }
 
-    /** Routes one released shape to the port operation its recovery names, converging on a no-op. */
-    private void repair(TrackerRepair repair) {
+    /**
+     * Routes one released shape to the port operation its recovery names, converging on a no-op.
+     *
+     * @return {@code false} when the repair was cut short by the stop, so the sweep makes no
+     *     further tracker call (FR12 of fix-operator-blockers)
+     */
+    private boolean repair(TrackerRepair repair) {
         // FR8/UX2: everything this repair decides — the convergence no-ops and the failure WARN
         // alike — is findable by taskId. The scope must wrap the catch, so the two are nested: a
         // try-with-resources with its own catch clause closes the resource before the catch runs.
         try (var ignored = MdcAwareThread.taskScope(repair.ref().id())) {
-            repairInScope(repair);
+            return repairInScope(repair);
         }
     }
 
     /** The repair itself, running inside {@link #repair}'s task-scoped MDC. */
-    private void repairInScope(TrackerRepair repair) {
+    private boolean repairInScope(TrackerRepair repair) {
         try {
             switch (repair.shape()) {
                 case TrackerShape.Claimed(ClaimFacts.Live claim) -> removeClaim(repair, claim);
@@ -207,6 +228,16 @@ public final class Reaper implements ReaperDuty {
                 case TrackerShape.Foreign ignoredForeign -> {}
             }
         } catch (RuntimeException e) {
+            if (Thread.currentThread().isInterrupted()) {
+                // The stop, not a repair failure (FR12 of fix-operator-blockers): the latch is not
+                // re-armed and the rest of the sweep is abandoned; a later process re-observes the
+                // shape from scratch anyway.
+                log.debug(
+                        "repair of {} interrupted by the stop; sweep abandoned",
+                        repair.ref().id(),
+                        e);
+                return false;
+            }
             // An infrastructure failure repairing ONE task must not stop the others, and must not
             // silence it: re-arm the once-per-shape latch (design D14) so the same unchanged shape
             // is retried next tick instead of staying frozen until its facts change.
@@ -216,6 +247,7 @@ public final class Reaper implements ReaperDuty {
                     e);
             memory.retryEmission(repair);
         }
+        return true;
     }
 
     private void removeClaim(TrackerRepair repair, ClaimFacts claim) {

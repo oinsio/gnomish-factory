@@ -77,7 +77,7 @@ reachable remote still works offline in both forms.
 
 ## Resuming a task
 
-`gnomish run --dir <dir> --resume <task>` locates the task branch — checking the local repo first, then a remote-tracking branch, then falling back to a narrow fetch of exactly `gnomish/<task>` — and continues from its recorded state:
+`gnomish run --dir=<dir> --resume=<task>` locates the task branch — checking the local repo first, then a remote-tracking branch, then falling back to a narrow fetch of exactly `gnomish/<task>` — and continues from its recorded state:
 
 - **escalated** → re-opens the decision dialog;
 - **paused** (manual checkpoint) → asks for confirmation before proceeding;

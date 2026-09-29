@@ -1,9 +1,13 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,9 +113,23 @@ final class GitShowTip {
     }
 
     /**
-     * Searches the revision's history for a commit whose message carries the cleanup subject
+     * Searches the task's own history for a commit whose message carries the cleanup subject
      * verbatim ({@code --fixed-strings}, so nothing in the message is read as a pattern). A single
      * match is enough, so the walk stops at the first one.
+     *
+     * <p>"Own history" is the first-parent line from the revision back to this task's STARTED
+     * commit, exclusive. The branch forks from a base that may already hold an earlier task's
+     * cleanup commit — its branch merged with history — and a walk over everything reachable would
+     * read that foreign delivery as this task's, so an escalated or interrupted task would classify
+     * as {@code Delivered}. The STARTED commit is located the same way — the nearest one on the
+     * first-parent line, since an earlier task's STARTED commit can sit further back in the base —
+     * and a revision with none has no delivery of its own. The nearest one counts only when its
+     * {@code task.json} names the task whose branch the revision's full ref name is ({@link
+     * StartedCommitOwnership}):
+     * a base that fast-forwarded an earlier task holds that task's STARTED commit on its own
+     * first-parent line, nearer than anything a branch with no STARTED commit of its own has.
+     * First-parent also keeps a base merged into the task branch after it started from
+     * contributing its cleanup commits.
      *
      * <p>The verdict is "a commit id was printed", with no separate exit-code check: {@code
      * rev-list} writes its diagnostics to stderr, so an unresolvable revision leaves stdout empty
@@ -121,20 +139,28 @@ final class GitShowTip {
      * (design D5): the {@code Completed} envelope stands at that commit's parent, and assuming
      * {@code tip^} instead is wrong for every branch that gained commits after cleanup.
      *
-     * @return the cleanup commit's id, or empty when the history holds none
-     *     <p>Implements FR6 of fix-envelope-medium.
+     * @return the cleanup commit's id, or empty when the task's own history holds none
+     *     <p>Implements FR1 of harden-task-branch-contract; FR6 of fix-envelope-medium;
+     *     FR14 of fix-operator-blockers, with its NFR-R4.
      */
     Optional<String> cleanupCommit() {
-        GitCommandResult result = GitReadGate.answered(
-                revision,
-                "rev-list",
-                runner.run(
-                        repo,
-                        "rev-list",
-                        "--max-count=1",
-                        "--fixed-strings",
-                        "--grep=" + ServiceCommitMessages.cleanup(),
-                        revision));
+        return nearestOwnCommit(ServiceCommitMessages.taskEvent(TaskLifecycleEvent.STARTED), revision)
+                .filter(started -> StartedCommitOwnership.ownedBy(
+                        symbolicFullName(),
+                        new GitShowTip(runner, repo, started).readAtTip(EnvelopePaths.TASK_JSON_PATH)))
+                .flatMap(started -> nearestOwnCommit(ServiceCommitMessages.cleanup(), revision, "^" + started));
+    }
+
+    /**
+     * The nearest commit on the revision's first-parent line whose message carries {@code message}
+     * verbatim, or empty when none does.
+     */
+    private Optional<String> nearestOwnCommit(String message, String... revisions) {
+        List<String> args = new ArrayList<>(
+                List.of("rev-list", "--first-parent", "--max-count=1", "--fixed-strings", "--grep=" + message));
+        args.addAll(List.of(revisions));
+        GitCommandResult result =
+                GitReadGate.answered(revision, "rev-list", runner.run(repo, args.toArray(String[]::new)));
         // @UntrustedParser warrant (design D11 of type-untrusted-text): what leaves here is git's
         //     own object id for a commit in this repository — used only as a revision argument and
         //     compared for equality, never rendered to a reader, so no untrusted text escapes as
@@ -142,6 +168,20 @@ final class GitShowTip {
         return result.stdout().isBlank()
                 ? Optional.empty()
                 : Optional.of(result.stdout().forParsing().trim());
+    }
+
+    /**
+     * The ref the revision names, in full ({@code refs/heads/gnomish/PROJ-1} for a worktree's
+     * {@code HEAD} as for {@code gnomish/PROJ-1}), or empty when it names none — a commit id, a
+     * detached {@code HEAD}. {@code rev-parse} prints nothing for those, as for an unresolvable
+     * revision, so stdout alone is the answer.
+     */
+    private String symbolicFullName() {
+        GitCommandResult result = GitReadGate.answered(
+                revision, "rev-parse", runner.run(repo, "rev-parse", "--symbolic-full-name", revision));
+        // @UntrustedParser warrant (design D11 of type-untrusted-text): git's own name for a ref of
+        //     this repository, compared against the task branch and never rendered to a reader.
+        return result.stdout().forParsing().trim();
     }
 
     /** The classifier's fact: whether {@link #cleanupCommit()} found one. */

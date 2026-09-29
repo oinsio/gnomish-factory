@@ -33,7 +33,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         RunArguments result = parser.parse(args('--task=fix the flaky spec'))
 
         then:
-        result.dir() == Path.of('.')
+        result.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
     }
 
     def "FR7/D8: --mode absent defaults to Mode.GIT"() {

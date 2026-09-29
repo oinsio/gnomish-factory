@@ -103,11 +103,11 @@ Hygiene **alerts** do not render in this block. They surface as alarm lines in
 the status line at the top of the page, alongside the daemon's own conditions,
 because that is where an operator already looks:
 
-| Condition                  | Fires when                                                                 |
-|-----------------------------|------------------------------------------------------------------------------|
-| `sandbox sweep not running` | no tick has completed for longer than `k` × the sweep's own cadence            |
+| Condition                   | Fires when                                                                          |
+|-----------------------------|-------------------------------------------------------------------------------------|
+| `sandbox sweep not running` | no tick has completed for longer than `k` × the sweep's own cadence                 |
 | `sandbox cleanup stalled`   | `n` consecutive ticks in a row reached no claim verdict — ticking, deciding nothing |
-| `an instance died or hung`  | a **`tracked`** running box was stopped as an orphan, named with its task      |
+| `an instance died or hung`  | a **`tracked`** running box was stopped as an orphan, named with its task           |
 
 The third one is a symptom, not a statistic: a routine `manual` age-policy stop
 raises no alert at all — it appears in the block's category breakdown and
@@ -117,7 +117,7 @@ beating.
 ## Wall-display recipe (`--watch`)
 
 ```bash
-gnomish dashboard --watch --dir /srv/acme/widgets
+gnomish dashboard --watch --dir=/srv/acme/widgets
 ```
 
 Open the output file in a browser tab once (`file:///home/you/.gnomish/serve/
@@ -162,7 +162,7 @@ every render cycle (local files, effectively free).
 ## Ticket-snapshot recipe (one-shot, `--out`)
 
 ```bash
-gnomish dashboard --out incident.html --dir /srv/acme/widgets
+gnomish dashboard --out=incident.html --dir=/srv/acme/widgets
 ```
 
 Without `--watch`, the command renders once and exits — no loop, no
@@ -185,16 +185,16 @@ instance name) exactly as `gnomish board` and `gnomish take` do.
 
 ## Documented constants
 
-| Constant                 | Value | Meaning                                                      |
-|---------------------------|-------|----------------------------------------------------------------|
-| Render / refresh cadence  | 10 s  | `--watch` re-render interval and meta-refresh period           |
-| Board refresh cadence     | 60 s  | how often the tracker board re-fetches for its two blocks      |
-| Page-staleness multiplier | k = 3 | freshness-strip threshold: no re-render for `k ×` cadence (~30 s), re-checked every second |
-| History window            | 7 days | ledger days aggregated into the outcomes and tokens blocks    |
-| Sweep-staleness multiplier | k = 3 | `sandbox sweep not running` threshold: no tick for `k ×` the sweep's own cadence, which travels in the snapshot as `vitals.sweep.intervalSeconds` |
-| Consecutive-skipped threshold | n = 3 | `sandbox cleanup stalled` threshold: ticks in a row reaching no claim verdict |
-| Kept-inventory bound      | 20 rows | kept environments the snapshot records, **oldest first**; not rendered on the page since redesign-dashboard |
-| Sweep-action bound        | 20 rows | sweep actions read from the ledger window; feed the dead-instance alert, not a page table |
+| Constant                      | Value   | Meaning                                                                                                                                           |
+|-------------------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| Render / refresh cadence      | 10 s    | `--watch` re-render interval and meta-refresh period                                                                                              |
+| Board refresh cadence         | 60 s    | how often the tracker board re-fetches for its two blocks                                                                                         |
+| Page-staleness multiplier     | k = 3   | freshness-strip threshold: no re-render for `k ×` cadence (~30 s), re-checked every second                                                        |
+| History window                | 7 days  | ledger days aggregated into the outcomes and tokens blocks                                                                                        |
+| Sweep-staleness multiplier    | k = 3   | `sandbox sweep not running` threshold: no tick for `k ×` the sweep's own cadence, which travels in the snapshot as `vitals.sweep.intervalSeconds` |
+| Consecutive-skipped threshold | n = 3   | `sandbox cleanup stalled` threshold: ticks in a row reaching no claim verdict                                                                     |
+| Kept-inventory bound          | 20 rows | kept environments the snapshot records, **oldest first**; not rendered on the page since redesign-dashboard                                       |
+| Sweep-action bound            | 20 rows | sweep actions read from the ledger window; feed the dead-instance alert, not a page table                                                         |
 
 These are constants of the command, not configuration — there is no flag to
 change them (design D4/D5). The two sandbox thresholds deliberately need no

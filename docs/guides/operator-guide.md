@@ -89,6 +89,17 @@ flowchart LR
    wired yet, CI hygiene for the residual gnome-modified-workflow threat, and
    the `timeout-class` trade-off).
 
+   A `deliver` stage that opens the pull request with `gh` needs a third token,
+   **`GH_TOKEN`**, which the gnome's process reads. Do not reuse
+   `GNOMISH_GITHUB_TOKEN` for it: give it a fine-grained token on the target
+   repo with **contents: read and write** and **pull requests: read and write**,
+   nothing more, and pass it into the stage's environment with
+   `factory.sandbox.env-passthrough=GH_TOKEN` (see
+   [`operator-guide-sandbox.md`](operator-guide-sandbox.md#environment-passthrough)).
+   Every process of the stage can read a passed-through variable, so this token
+   is scoped as if the gnome held it — which it does.
+   <!-- implements FR9 of fix-operator-blockers -->
+
 3. **`factory.*` properties** are per-instance/installation tuning, set the
    same way as the existing `factory.instance-name`/`factory.agent-cli-binary`
    properties (Spring `--key=value` or `application.yaml`):
@@ -296,8 +307,8 @@ Both trip the same threshold; the split exists so the park report can tell you
 *which* kind keeps happening. Stage verification failures are a different count
 entirely (the stage attempt limit) and never touch this one.
 
-| Setting                              | Default | Meaning                                                                 |
-|--------------------------------------|---------|-------------------------------------------------------------------------|
+| Setting                              | Default | Meaning                                                                  |
+|--------------------------------------|---------|--------------------------------------------------------------------------|
 | `tracker.abort-threshold`            | `3`     | K: attempts, both categories together, before the task parks for a human |
 | `factory.tracker.abort-backoff-base` | `2m`    | delay before an attempt-carrying task is offered to bare `take` again    |
 | `factory.tracker.abort-backoff-cap`  | `1h`    | ceiling on that exponential backoff (`base × 2^(n-1)`)                   |
@@ -494,7 +505,7 @@ STATE="${XDG_STATE_HOME:-$HOME/.local/state}/gnomish-board-watch.json"
 ESCALATION_MAX_S=$((4 * 3600))          # tune to your escalation SLA
 now=$(date -u +%s)
 
-board=$(gnomish board --json --dir "$CLONE_DIR")
+board=$(gnomish board --json --dir="$CLONE_DIR")
 queued=$(jq -r '.ready.queuedCount' <<<"$board")
 truncated=$(jq -r '.truncated' <<<"$board")
 
@@ -619,18 +630,18 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 
 ### Exit Codes
 
-| Code | Meaning                                                                                            |
-|------|----------------------------------------------------------------------------------------------------|
-| 0    | delivered, or a clean bare-mode no-op (empty queue)                                                |
-| 1    | failure outside a claimed run (tracker unreachable at startup, label provisioning failure)         |
-| 2    | usage error                                                                                        |
-| 3    | pipeline load failure                                                                              |
-| 10   | parked as escalation — a decision is needed                                                        |
-| 11   | parked as a manual checkpoint                                                                      |
-| 12   | infrastructure abort, below the abort threshold — task returned to `Ready`                         |
-| 13   | parked as infra — abort threshold reached, or an infrastructure escalation                         |
-| 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                    |
-| 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo) |
+| Code | Meaning                                                                                                                                                                                                             |
+|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | delivered, or a clean bare-mode no-op (empty queue)                                                                                                                                                                 |
+| 1    | failure outside a claimed run (tracker unreachable at startup, label provisioning failure)                                                                                                                          |
+| 2    | usage error                                                                                                                                                                                                         |
+| 3    | pipeline load failure                                                                                                                                                                                               |
+| 10   | parked as escalation — a decision is needed                                                                                                                                                                         |
+| 11   | parked as a manual checkpoint                                                                                                                                                                                       |
+| 12   | infrastructure abort, below the abort threshold — task returned to `Ready`                                                                                                                                          |
+| 13   | parked as infra — abort threshold reached, or an infrastructure escalation                                                                                                                                          |
+| 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                                                                                                                                     |
+| 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo)                                                                                                                  |
 | 16   | infrastructure unavailable — claim released because a base-ref remote could not be reached; see [`operator-guide-serve.md`](operator-guide-serve.md#base-ref-resolution-task-branchbase-and-the-remote-outage-gate) |
 
 Codes shared with `gnomish run` (0/1/2/3/10/11/12) keep the same meaning. An
