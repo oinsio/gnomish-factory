@@ -53,6 +53,22 @@ defects are still live:
   when a stop arrives while claims are held. The `factory-serve` capability
   already requires stop-caused interrupts to be logged without stack traces;
   these paths break it.
+- **An escalated task reads as delivered.** Found on the operator stand on
+  2026-09-28: after a run escalated (`outcome=awaitingHuman (ESCALATION)`),
+  `gnomish status <task>` printed only `Shape: Delivered`, and the list mode
+  showed `Delivered` for every unfinished task. The delivery check searched
+  the whole reachable history for the cleanup commit, so a cleanup commit an
+  earlier task left in the base — its branch merged with history — made every
+  task forked from that base "delivered", over `Parked`, `InProgress` and
+  `Created` alike. The same fact routes a pickup, so `take` also treated such
+  an escalated task as finished and never resumed it.
+- **A round that hits the turn limit escalates as an infrastructure failure.**
+  The same run failed with `MissingResultEventException: stream-json carried
+  no result event` after 33 tool calls under `maxTurns: 30`. The CLI ends such
+  a round with a result line of subtype `error_max_turns` that, by the CLI's
+  own contract, carries no `result` field (the final text exists only on
+  `success`); the adapter dropped every result line without that field, so a
+  round that ended on a named limit read as "the agent emitted no result".
 
 These block the first release: a release that works only after the operator
 reverse-engineers two wrapper scripts is not a release.
@@ -90,6 +106,11 @@ reverse-engineers two wrapper scripts is not a release.
   instead of reporting "cannot verify"; and the daemon's reaper, finished-task
   decline, tracker health counter and claim heartbeat treat a failure on an
   interrupted thread as the stop it is.
+- **MODIFIED**: a task branch is `Delivered` only by a cleanup commit of its
+  own; a cleanup commit inherited from the base no longer delivers it.
+- **MODIFIED**: a result line of an `error_*` subtype is the round's result
+  event even without a `result` field; the round ends on its named subtype
+  rather than as a missing-result infrastructure failure.
 
 ## Capabilities
 
@@ -112,6 +133,10 @@ reverse-engineers two wrapper scripts is not a release.
   failure.
 - `factory-serve`: adds a requirement that daemon workers treat an interrupt
   as a stop, not a failure.
+- `agent-executor` (also): "Result event is essential, telemetry is
+  best-effort" names the limit-ended result line as a result event.
+- `lifecycle/task-branch-contract`: "Total branch-shape classification"
+  scopes `Delivered` to the task's own history.
 
 ## Goals
 
@@ -145,6 +170,15 @@ reverse-engineers two wrapper scripts is not a release.
   the process-tree kill. Their tick can still fail on a subprocess the kill
   ends; the window is narrow and the fix is a stop hook per worker, recorded
   as a follow-up.
+- **NG8**: deciding what a limit-ended round means for the stage (a normal
+  round end judged by verification, a quality failure without verification,
+  or an outcome of its own) and carrying the CLI's `errors[]`,
+  `terminal_reason` and `num_turns` past the adapter. This change only stops
+  such a round from reading as an infrastructure failure; today it ends like
+  any other round and the stage's verification decides.
+- **NG9**: a "how to resume this task" hint in `gnomish status`. The full
+  report already prints the stage, the attempts and the last escalation for a
+  parked task; the return path is a feature, not an operator blocker.
 
 ## Users & Scenarios
 
@@ -225,6 +259,18 @@ reverse-engineers two wrapper scripts is not a release.
   directory or a temporary-index directory that is not an absolute path, with
   an error naming the path; a relative path SHALL never reach a git process
   whose working directory differs from the factory's.
+- **FR14**: a task branch SHALL classify as `Delivered` only when its own
+  history — the commits after the task's STARTED commit on the branch's
+  first-parent line — holds the cleanup commit; a cleanup commit reachable
+  only through the base the branch forked from, or through a base merged into
+  the branch, SHALL NOT deliver it, and a branch with no STARTED commit of its
+  own SHALL NOT be delivered. Every reader of the shape (`status` for one task
+  and in list mode, the pickup, container mode) gets the same answer.
+- **FR15**: a stream-json result line whose subtype names a limit or error
+  (`error_max_turns`, `error_during_execution`, `error_max_budget_usd`, ...)
+  SHALL be the round's result event even when it carries no `result` field,
+  with empty result text and its subtype verbatim; a `success` line without a
+  `result` field stays skipped.
 
 ### Non-Functional
 
@@ -242,6 +288,9 @@ reverse-engineers two wrapper scripts is not a release.
   to a stale read of a sink that was already set (FR10).
 - **NFR-R3**: an interrupt SHALL consume no retry budget and SHALL NOT become
   a `TrackerUnavailableException` (FR11).
+- **NFR-R4**: a pickup SHALL NOT treat a live task (`Created`, `InProgress`,
+  `Parked`, `Answered`) as terminal because of a commit it inherited from its
+  base (FR14).
 - **NFR-O1**: a usage error SHALL name the offending option and the accepted
   set in one message, so a single run shows the fix.
 - **NFR-O2**: a signal stop of an idle daemon SHALL add no WARN or ERROR line
@@ -280,6 +329,11 @@ reverse-engineers two wrapper scripts is not a release.
   real-thread spec that stops the standing reaper mid-listing records zero
   WARN lines; each of the four catch sites has a spec row with the interrupt
   set and a control row without it.
+- **M6**: a live task forked from a base holding an earlier task's cleanup
+  commit is not `Delivered` in 4 of 4 spec rows (forked base, base merged in
+  after start, bare branch, and the earlier task still `Delivered`); a
+  limit-ended result line yields a result event for 3 of 3 `error_*` subtypes
+  and the extractor throws no `MissingResultEventException` for it.
 
 ## Open Questions
 
@@ -325,5 +379,8 @@ reverse-engineers two wrapper scripts is not a release.
   `operator-guide-dashboard.md`, `operator-guide.md` (deliver-stage token,
   board example), `operator-guide-run.md` (resume example),
   `docs/reference-pipelines.md` (wrapper-script note).
+- `adapters/git`: `GitShowTip.cleanupCommit` (FR14), `DeliveryAncestrySpec`.
+- `adapters/agent`: `StreamJsonEventMapper` (FR15),
+  `StreamJsonErrorResultSpec`.
 - No new dependencies. Overlaps: `remove-interactive-console` and
   `make-run-headless` also touch `RunArgumentsParser` (rebase order in design).

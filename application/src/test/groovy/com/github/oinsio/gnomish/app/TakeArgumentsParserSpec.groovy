@@ -20,7 +20,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
         then:
         result.ref() == '42'
-        result.dir() == Path.of('.')
+        result.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
         result.interactiveMode() == RunArguments.InteractiveMode.NONE
         result.base() == null
         !result.discardWork()
@@ -82,7 +82,8 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     @Unroll
     def "--interactive#suffix parses to #expected"(String suffix, List<String> flags, RunArguments.InteractiveMode expected) {
         when:
-        TakeArguments result = parser.parse(args(*(['take', '42'] + flags)))
+        String[] tokens = (['take', '42'] + flags) as String[]
+        TakeArguments result = parser.parse(args(tokens))
 
         then:
         result.interactiveMode() == expected
@@ -100,7 +101,12 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     @Unroll
     def "explicit take rejects --#flag before touching the tracker"(String flag) {
         when:
-        parser.parse(args(*(['take', '42'] + ["--$flag=x".toString()])))
+        List<String> tokens = [
+            'take',
+            '42',
+            "--$flag=x".toString()
+        ]
+        parser.parse(args(*tokens))
 
         then:
         thrown(UsageException)
@@ -119,7 +125,11 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     @Unroll
     def "bare take rejects --#flag before touching the tracker"(String flag) {
         when:
-        parser.parse(args(*(['take'] + ["--$flag=x".toString()])))
+        List<String> tokens = [
+            'take',
+            "--$flag=x".toString()
+        ]
+        parser.parse(args(*tokens))
 
         then:
         thrown(UsageException)

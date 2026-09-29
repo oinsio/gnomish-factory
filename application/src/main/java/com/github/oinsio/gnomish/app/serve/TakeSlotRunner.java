@@ -54,6 +54,16 @@ import org.slf4j.MDC;
  * refresh it implies (see that class for the stale-signal defect this closes). Opening the gate
  * never touches an in-flight slot: it only changes what the NEXT feed cycle's {@link
  * FeedCycle#claimOrAbandon} does.
+ *
+ * <p><b>Late sinks (D7 of fix-operator-blockers).</b> Three sinks arrive after construction, as
+ * {@code process-invariants.md} ("Immutable after construction") permits only for a named cycle:
+ * the ledger writer, because the slot runner is built before the feed automaton and the
+ * observability wiring that owns the ledger appender needs that automaton ({@code
+ * ServeRuntimeAssembly}); the drain report and the run-summary accumulator, because the drain
+ * path creates them itself after assembly and only in drain mode ({@code ServeShutdownWiring}).
+ * Each field is {@code volatile}, so a slot thread sees a sink set before it runs whatever order
+ * the threads were started in, and {@link #run(TaskRef)} reads each once and treats {@code null}
+ * as not attached. Implements FR10, NFR-R2 of fix-operator-blockers.
  */
 public final class TakeSlotRunner implements SlotRunner {
 
@@ -65,9 +75,9 @@ public final class TakeSlotRunner implements SlotRunner {
     private final InstanceId instanceId;
     private final String taskIdMdcKey;
     private final SlotOutcomeLog outcomeLog = new SlotOutcomeLog(log);
-    private @Nullable DrainReport drainReport;
-    private @Nullable TaskOutcomeLedgerWriter ledgerWriter;
-    private @Nullable RunSummaryAccumulator runSummaryAccumulator;
+    private volatile @Nullable DrainReport drainReport;
+    private volatile @Nullable TaskOutcomeLedgerWriter ledgerWriter;
+    private volatile @Nullable RunSummaryAccumulator runSummaryAccumulator;
 
     /**
      * @param wiring the slot's equipment (D2 of introduce-slot-wiring), built once per daemon and
@@ -140,14 +150,17 @@ public final class TakeSlotRunner implements SlotRunner {
             // collapse-composition-roots), shared with bare take's claim walk.
             TakeResult result = claimAndWork.workClaimed(run, claimed, tracker, instanceId);
             outcomeLog.detail(claimed, result);
-            if (drainReport != null) {
-                drainReport.record(claimed, result);
+            DrainReport report = drainReport;
+            if (report != null) {
+                report.record(claimed, result);
             }
-            if (runSummaryAccumulator != null) {
-                runSummaryAccumulator.record(result);
+            RunSummaryAccumulator accumulator = runSummaryAccumulator;
+            if (accumulator != null) {
+                accumulator.record(result);
             }
-            if (ledgerWriter != null) {
-                ledgerWriter.write(claimed, result);
+            TaskOutcomeLedgerWriter writer = ledgerWriter;
+            if (writer != null) {
+                writer.write(claimed, result);
             }
             outcomeLog.summarize(result, WallTime.since(startedNanos));
         } catch (Throwable crash) {

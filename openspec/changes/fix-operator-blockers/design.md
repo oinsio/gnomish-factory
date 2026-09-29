@@ -2,7 +2,7 @@
 
 ## Context
 
-Driven by FR1–FR13 of the proposal; the defects and their evidence are in
+Driven by FR1–FR15 of the proposal; the defects and their evidence are in
 proposal.md, "Why". Current state that shapes the approach:
 
 - The agent argv is assembled in two steps inside `adapters/agent`:
@@ -48,6 +48,22 @@ proposal.md, "Why". Current state that shapes the approach:
   `RuntimeException` without looking at the interrupt. `FeedOutageRetry`
   already checks `Thread.interrupted()` before it logs — the one site that
   gets it right.
+- The branch classifier checks delivery first (`BranchShapeClassifier`), and
+  the fact comes from `GitShowTip.cleanupCommit`, which ran
+  `git rev-list --max-count=1 --fixed-strings --grep="gnomish: cleanup" <tip>`
+  over everything reachable from the tip. Every reader of a shape reaches it
+  through `RefTipSource`: `BranchStateReader` and `TaskBranchLister`
+  (`status`), `GitTaskBranches` (the pickup), `ContainerTipReader` (container
+  mode); `DeliveredBranchReader` uses the located commit id itself. The
+  cleanup commit is written only on `COMPLETED`
+  (`GitObjectsTerminalCommits.cleanUp`, `CleanupCommit.commit`); escalation
+  writes none. `GitObjects.historyContains` performs the same whole-history
+  search but has no production caller.
+- `StreamJsonEventMapper.toResult` skipped every `result` line without a
+  `result` field. The CLI's result message carries that field on `success`
+  only; its `error_*` subtypes carry `errors[]`, `num_turns` and
+  `terminal_reason` instead. The javadoc of `AgentEvent.ResultEvent#subtype`
+  already names `error_max_turns` as a subtype the event carries.
 
 ## Decisions
 
@@ -264,6 +280,45 @@ outside an operator-blockers change); checking in `GitObjects.open` only
 (the record's constructor is the one site no future factory method can
 bypass).
 
+**D11 — Delivery is searched in the task's own history only.**
+`GitShowTip.cleanupCommit` first locates the task's STARTED commit — the
+nearest commit on the first-parent line whose message carries
+`gnomish: task started` — and then searches for the cleanup commit with
+`rev-list --first-parent ... <tip> ^<started>`. No STARTED commit means no
+delivery of its own (FR14, NFR-R4). Nearest, because an earlier task's STARTED
+commit can sit further back in the base; first-parent in the second search,
+because a base merged into the task branch after it started brings its
+cleanup commits in on a second parent. The fix sits in the one owner of the
+fact, so `status` (both modes), the pickup and container mode change
+together, and branches already classified wrongly need no migration: the
+shape is read afresh on every call.
+*Rationale:* the defect is a scope error of one query, not of the
+classifier's rules; the classifier's "delivery first" order is contract
+(`task-branch-contract`) and stays.
+*Alternatives rejected:* a first-parent search with no lower bound (a base
+that fast-forwards or rebase-merges an earlier task puts that task's cleanup
+commit on the first-parent line); reading the task's start point from
+`task.json` (the cleanup commit deletes `.gnomish-task/`, so a delivered tip
+has no envelope to read it from); detecting cleanup by content — the commit
+that removed `.gnomish-task/` — (a larger rewrite of a fact that already has a
+message-based owner, and an earlier task's cleanup commit removed the same
+path).
+
+**D12 — A limit-ended result line is a result event with empty text.**
+`StreamJsonEventMapper` accepts a `result` line without a `result` field when
+its subtype starts with `error_`, as a `ResultEvent` with empty result text
+and the subtype verbatim (FR15). The decision lives in two small methods
+(`isResultEvent`, `resultTextOf`) outside the `@DoNotMutate` method, so the
+mutation gate covers it. A `success` line without `result` is still skipped,
+as the existing parser spec pins.
+*Rationale:* the adapter's own contract already treats `error_max_turns` as a
+subtype of the result event; dropping the line misreported a named limit as
+"the agent emitted no result", an infrastructure escalation.
+*Alternative rejected:* carrying `subtype`, `errors[]` and `terminal_reason`
+into `AgentRoundResult` and giving a limit-ended round its own stage outcome —
+that decides what such a round means for the stage, which is NG8 and needs a
+change of its own; this change only restores the result event.
+
 ### Sync surfaces
 
 Sync surfaces: none — host and container mode already share one argv
@@ -278,6 +333,13 @@ JDK call, and each site's reaction is its own (a quiet return, a stopped
 loop, an uncounted failure, an unconfirmed beat, an `InterruptedException`). There is no common
 behaviour to drift, so no marker and no extracted helper.
 
+The delivery search of D11 has a dormant second form:
+`GitObjects.historyContains` (gitobjects) runs the same whole-history
+`rev-list --grep` and has no production caller. It is not a pair today —
+nothing reads delivery through it — and this change leaves it untouched; if
+it is ever wired to a delivery question it must adopt D11's scope or the
+defect returns (Risks).
+
 ### Single-owner mechanisms
 
 | Owner                                                                                   | Value (type)                                                                 | Consumers                                                                                                                                                                                                                                                                                                                       | Old way removed                                                                                                                                                                                                                     | Enforced by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -288,6 +350,7 @@ behaviour to drift, so no marker and no extracted helper.
 | `GitExec` compact constructor, `CommitBuilder` constructor (gitobjects)                 | "this path is absolute" for the git dir and the temporary-index dir (`Path`) | `GitObjects.open` (the only builder of `GitExec` and `CommitBuilder`), reached from `LawSources.gitObjectsOf` and `ContainerRunSupport`                                                                                                                                                                                         | none to remove: no caller absolutizes today; both production callers receive an absolute path once D5 lands                                                                                                                         | the constructors throw on a relative path; a `gitobjects` spec pins both refusals, and `ManualRunRunnerSpec` runs git mode from a relative `--dir` end to end (task 5.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `ArgumentsParsingSupport.rejectUnknownOptions`                                          | the usage error (`UsageException`)                                           | the same seven parsers; `ManualRunRunner` (`:bootstrap`), which must hand every non-empty `run` command line to `RunArgumentsParser`                                                                                                                                                                                            | none in the parsers: no parser rejects unknown options today. In the entrypoint: `ManualRunRunner.RUN_FLAGS` and its `noneMatch(args::containsOption)` gate are deleted; the FR12 no-op keeps only the empty-command-line criterion | `CliArgumentsContractSpec` feeds an unknown option to every `Subcommand` at the parser; `CliEntrypointContractSpec` (`:bootstrap`) drives an unknown option for every `Subcommand` through `ManualRunRunner.run` and asserts the usage error, plus the empty-command-line no-op; `RawOptionReadBoundarySpec` (`:bootstrap`, `ClaimlessGitBoundarySpec` precedent) scans production sources of both `application` and `bootstrap` and allows `containsOption` / `getOptionNames` only in the seven `*ArgumentsParser` files, `ArgumentsParsingSupport`, `GitFlagsValidator` and `InteractiveModeParser`, asserting the scan reached every allowlisted file |
 | `GithubHttpClient.doSend`                                                               | "this call was cancelled" (`GithubCallInterruptedException`)                 | `GithubHttpClient.send` (rethrows unwrapped), `GithubRetryConfig`'s predicate (never retries it), `GithubTransport` (does not translate it), `GithubClaimLease` (skips the best-effort delete), `GithubWorkflowRunPoll` (lets it propagate, no `CannotVerify`)                                                                  | the `InterruptedException` → `GithubHttpUncheckedIOException` wrapping in `onInterrupted` is deleted                                                                                                                                | parameter type: the new class is not a `GithubHttpException`, so no existing catch matches it; `GithubHttpClientSpec` asserts one request and the type; `GithubWorkflowRunPollSpec` asserts the propagation                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `GitShowTip.cleanupCommit` (adapters/git)                                               | this task's own cleanup commit (`Optional<String>` commit id)                | `RefTipSource.cleanupCommitInHistory` → `BranchStateReader`, `TaskBranchLister`, `GitTaskBranches`, `ContainerTipReader` (`:bootstrap`); `DeliveredBranchReader` (the located id)                                                                                                                                               | the whole-history `rev-list --grep` in `cleanupCommit` is replaced by the scoped search; `GitObjects.historyContains` survives with no production caller (Sync surfaces, Risks)                                                     | one owner by construction: every production reader of the fact goes through `GitShowTip`; `DeliveryAncestrySpec` pins the scope on a real clone (forked base, base merged in after start, bare branch, the earlier task still delivered). No gate stops a new whole-history search from appearing elsewhere — recorded in Risks                                                                                                                                                                                                                                                                                                                           |
 | the calling thread's interrupt (set by the adapter, per the `tracker-port` requirement) | "the failure is the stop" (`boolean`)                                        | `Reaper.reapOnce` (the sweep listing, and the per-task repair — found by the task 8.3 sweep: same reaper thread, same WARN shape; an interrupted repair ends the sweep without re-arming the latch), `FinishedDecline.declineObserved`, `TrackerHealthTracker.call`, `HeartbeatBeater.beat`; `FeedOutageRetry` already complies | each site's unconditional WARN / bookkeeping in its `catch (RuntimeException)`                                                                                                                                                      | no mechanical gate: a `catch (RuntimeException)` that should read the interrupt cannot be told apart by a scan. Each consumer's spec carries an interrupt-set row and a control row, and `StandingReaperResilienceSpec` pins the whole stop on a real thread; the task 8.3 sweep records every other catch of a tracker call                                                                                                                                                                                                                                                                                                                              |
 
 The directory stays a `Path` rather than a new value type: `add-project-registry`
@@ -341,6 +404,22 @@ record-level absoluteness check is the enforcement until then.
   runs on the same heartbeat worker, and the sweep records whether its
   `tickLog.failed` path is reached by a tracker failure or only by the beater's
   already-handled outcome.
+
+- [The subject `gnomish: task started` became a parsing contract (D11),
+  while `ServiceCommitMessages`' javadoc still says only the snapshot subject
+  is one] → follow-up: state it in that javadoc and give the subject a
+  package-visible constant beside `SNAPSHOT_PREFIX`, so a rename fails a spec
+  instead of silently widening delivery again.
+- [`GitObjects.historyContains` is a second, unscoped form of the delivery
+  search] → follow-up: delete it, or give it D11's scope and declare it; not
+  wired anywhere today.
+- [D11 assumes the STARTED commit sits on the task branch's first-parent
+  line] → true for `createTask` in both modes and for a rebase of the branch;
+  a history in which the task branch was merged *into* another branch and work
+  continued there is not covered by a spec.
+- [A limit-ended round now ends as a normal round and is judged by the
+  stage's verification (D12)] → intended for this change; whether it should
+  instead be a quality failure or an outcome of its own is NG8.
 
 ## Migration Plan
 

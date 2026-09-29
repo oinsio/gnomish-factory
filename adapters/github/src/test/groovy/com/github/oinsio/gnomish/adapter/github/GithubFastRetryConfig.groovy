@@ -34,6 +34,16 @@ class GithubFastRetryConfig {
         new GithubHttpClient(baseUrl, 'tok', withRateLimiting())
     }
 
+    /**
+     * Same package-private test seam as {@link #fastClient(String)}, for a spec that needs its
+     * own {@link RetryConfig} shape (a different {@code maxAttempts} or predicate) rather than
+     * {@link #withRateLimiting()} — the seam being package-private is the only reason a spec
+     * outside {@code adapter.github} cannot build the client itself.
+     */
+    static GithubHttpClient fastClient(String baseUrl, RetryConfig retryConfig) {
+        new GithubHttpClient(baseUrl, 'tok', retryConfig)
+    }
+
     /** Retries only server errors (>= 500) — the plain infrastructure-failure policy. */
     static RetryConfig serverErrorsOnly() {
         builder().retryOnResult({ HttpResponse<?> r ->

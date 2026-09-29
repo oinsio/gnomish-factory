@@ -44,3 +44,30 @@ The environment passed to CLI processes SHALL be the layered allowlist of the ex
 - **WHEN** the factory environment holds `ANTHROPIC_API_KEY` and a stage runs an agent round followed by a `command` check, with no passthrough configured
 - **THEN** the agent round's environment contains `ANTHROPIC_API_KEY`
 - **AND** the command check's environment does not
+
+### Requirement: Result event is essential, telemetry is best-effort
+The adapter SHALL treat the stream-json result event as essential — a missing or unparseable result event is an infrastructure failure of the round — while telemetry parsing is best-effort: on telemetry parse trouble the round SHALL still complete with `ExecutorUsage.none()` and an empty trace. Unknown event types and unknown fields SHALL be ignored silently. The missing-result failure SHALL report how much of the stream was read (bytes and parsed-event count), and when the read volume is consistent with a filled OS pipe buffer the message SHALL name stream truncation as the likely cause — so a human can tell "the agent emitted no result" apart from "the stream was cut short" without reading adapter source. A result line whose subtype names an error or a limit (`error_max_turns`, `error_during_execution`, `error_max_budget_usd`, ...) SHALL be the round's result event even though, by the CLI's contract, it carries no `result` field: the event carries empty result text and the subtype verbatim. A `success` result line without a `result` field SHALL remain unparseable.
+<!-- implements FR4, NFR-R1, NFR-R2, D3 of add-agent-executor -->
+<!-- implements FR5, NFR-R2, UX2 of fix-round-stdout-drain -->
+<!-- implements FR15 of fix-operator-blockers -->
+
+#### Scenario: Telemetry failure does not fail the round
+- **WHEN** usage fields in an otherwise valid stream cannot be parsed
+- **THEN** the round completes normally with `ExecutorUsage.none()` and an empty trace
+
+#### Scenario: Missing result event is infrastructure
+- **WHEN** the process exits without emitting a parseable result event
+- **THEN** the round is an infrastructure failure and no stage attempt is burned
+
+#### Scenario: Diagnostics carry read volume
+- **WHEN** a round fails for want of a result event
+- **THEN** the failure message reports the bytes and events read from the stream
+
+#### Scenario: Truncation is hinted at the buffer boundary
+- **WHEN** a result-less stream's read volume sits at an OS pipe-buffer boundary
+- **THEN** the failure message names probable stream truncation as the likely cause
+
+#### Scenario: Limit-ended round carries its result event
+- **WHEN** the CLI ends a round on its turn limit with a result line of subtype `error_max_turns` and no `result` field
+- **THEN** the round has its result event with subtype `error_max_turns` and empty result text
+- **AND** the round is not reported as a missing-result infrastructure failure

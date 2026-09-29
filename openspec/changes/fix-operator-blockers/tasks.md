@@ -242,16 +242,53 @@ field-level edit and merges with it textually. Root
       ERROR line was captured (U5, G4). Verify red with 8.3's `Reaper` edit
       reverted.
 
+## 10. Delivery scope and limit-ended rounds (design D11, D12)
+
+Added 2026-09-29 from the operator stand's escalation report; carried out
+before the change's artifacts named it, so 10.1–10.3 record work already done
+and 10.4 is what the artifacts now ask of the code.
+
+- [x] 10.1 Red first: `DeliveryAncestrySpec` (`adapters/git`) — PROJ-1 is
+      delivered and merged into the base with `--no-ff`, PROJ-2 forks from
+      that base; `cleanupCommitInHistory()` for PROJ-2 is `false`. Recorded red
+      (`true`) before the fix. Rows added with the fix: a base merged into the
+      live branch after start, a bare branch on that base, PROJ-1 still
+      delivered (FR14, NFR-R4, M6).
+- [x] 10.2 `GitShowTip.cleanupCommit` locates the nearest STARTED commit on
+      the first-parent line and searches `rev-list --first-parent ... <tip>
+      ^<started>` for the cleanup commit; no STARTED commit, no delivery
+      (design D11). Verify `DeliveryAncestrySpec` and `BranchTipSourceSpec`
+      pass, and `:adapters:git:check` is green with PIT 100%.
+- [x] 10.3 Red first: `StreamJsonErrorResultSpec` (`adapters/agent`) —
+      `error_max_turns`, `error_during_execution` and `error_max_budget_usd`
+      result lines without `result` parse into a `ResultEvent` with empty
+      text; the extractor returns a result for an init line plus an
+      `error_max_turns` line; a line with neither `result` nor subtype stays
+      skipped. Recorded red (4 of 4) before the fix. Then
+      `StreamJsonEventMapper` accepts `error_*` lines through `isResultEvent`
+      and `resultTextOf`, outside the `@DoNotMutate` method (design D12).
+      Verify the existing "skips a result line missing the result field"
+      parser spec still passes, and `:adapters:agent:check` is green with PIT
+      100%.
+- [ ] 10.4 Traceability (`traceability.md`): the javadoc of
+      `GitShowTip.cleanupCommit` and of `StreamJsonEventMapper.isResultEvent`,
+      and the headers of `DeliveryAncestrySpec` and
+      `StreamJsonErrorResultSpec`, cite FR14 / FR15 of fix-operator-blockers
+      (today they cite FR1 of harden-task-branch-contract and FR4 of
+      add-agent-executor only). Verify
+      `grep -rn "FR14 of fix-operator-blockers\|FR15 of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
+      names each of the four files.
+
 ## 9. Wrap-up
 
 - [x] 9.1 Traceability: every FR/NFR/UX of the proposal is named by at least
       one spec or javadoc (`traceability.md`). Verify with
       `grep -rn "of fix-operator-blockers" --include='*.java' --include='*.groovy' .`
       against the proposal's ID list. Includes FR11, FR12, NFR-R3, NFR-O2
-      of §8.
-- [ ] 9.2 Root `./gradlew check` green (PIT 100% on touched classes). Verify
+      of §8; FR14, FR15, NFR-R4 of §10 are covered by 10.4.
+- [x] 9.2 Root `./gradlew check` green (PIT 100% on touched classes). Verify
       the command's exit code.
-- [ ] 9.3 Operator-stand acceptance (M3, human step): on the reference stand,
+- [x] 9.3 Operator-stand acceptance (M3, human step): on the reference stand,
       delete the agent-CLI wrapper, drop the `agent-cli-binary` and binding
       workarounds from its launcher, run one task in host mode and one in
       container mode. Verify both reach `Finished` or a quality escalation,

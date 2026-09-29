@@ -16,14 +16,25 @@ import org.jspecify.annotations.Nullable;
  * temp index is the only disk artifact and is removed in a {@code finally} — no working copy, no
  * checkout, no hooks.
  *
- * <p>Implements FR25 of add-sandbox-core.
+ * <p>{@code tempDir} must be absolute: the index reaches git as {@code GIT_INDEX_FILE}, which git
+ * resolves against its own working directory — the git dir, not the factory's (design D10 of
+ * fix-operator-blockers).
+ *
+ * <p>Implements FR25 of add-sandbox-core; FR13 of fix-operator-blockers.
  */
 final class CommitBuilder {
 
     private final GitExec exec;
     private final Path tempDir;
 
+    /**
+     * @throws IllegalArgumentException naming {@code tempDir} if it is not absolute (FR13 of
+     *     fix-operator-blockers)
+     */
     CommitBuilder(GitExec exec, Path tempDir) {
+        if (!tempDir.isAbsolute()) {
+            throw new IllegalArgumentException("temporary index directory must be an absolute path: " + tempDir);
+        }
         this.exec = exec;
         this.tempDir = tempDir;
     }
