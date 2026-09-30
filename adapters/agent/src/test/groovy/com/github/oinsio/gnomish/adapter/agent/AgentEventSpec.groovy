@@ -92,6 +92,26 @@ class AgentEventSpec extends Specification {
         new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), [:], [:]).modelUsage() == [:]
     }
 
+    // FR4: a JSON null inside usage/modelUsage is dropped rather than rejected, and the copy is unmodifiable
+    def "ResultEvent drops null-valued keys from usage and modelUsage"() {
+        given:
+        def usage = [input_tokens: 10, fallback_credit: null]
+        def modelUsage = ['claude-x': [inputTokens: 10], 'claude-y': null]
+
+        when:
+        def event = new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), usage, modelUsage)
+
+        then:
+        event.usage() == [input_tokens: 10]
+        event.modelUsage() == ['claude-x': [inputTokens: 10]]
+
+        when:
+        event.usage().put('output_tokens', 1)
+
+        then:
+        thrown(UnsupportedOperationException)
+    }
+
     // FR4: ResultEvent rejects a blank sessionId
     def "ResultEvent rejects a blank sessionId"() {
         when:
