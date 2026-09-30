@@ -125,6 +125,24 @@ class StreamJsonParserSpec extends Specification {
         event.modelUsage() == [(('claude-x')): [inputTokens: 10, outputTokens: 5]]
     }
 
+    // FR4, D3: Claude Code 2.1.x reports "fallback_credit":null inside usage; a null-valued key
+    // must not throw out of the drain — it reads the same as an absent key
+    def "parses a result line whose usage and modelUsage carry JSON null values"() {
+        given: 'a result line as Claude Code 2.1.285 writes it, with null-valued keys'
+        def line = '{"type":"result","subtype":"success","session_id":"sess-1","result":"done",' +
+                '"usage":{"input_tokens":10,"output_tokens":5,"service_tier":"standard","fallback_credit":null},' +
+                '"modelUsage":{"claude-x":{"inputTokens":10,"outputTokens":5},"claude-y":null}}'
+
+        when: 'the line is parsed'
+        def events = parser.parse(readerOf(line))
+
+        then: 'the ResultEvent keeps every present value and drops only the null ones'
+        events.size() == 1
+        def event = events[0].event() as AgentEvent.ResultEvent
+        event.usage() == [input_tokens: 10, output_tokens: 5, service_tier: 'standard']
+        event.modelUsage() == [(('claude-x')): [inputTokens: 10, outputTokens: 5]]
+    }
+
     // FR4, D3: a result-type line missing the result field itself is skipped, never a
     // ResultEvent with a null result — this is the "essential" degradation path (task 3.2)
     def "silently skips a result line missing the result field, logging the skip reason"() {

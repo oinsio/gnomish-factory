@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -139,8 +141,8 @@ public sealed interface AgentEvent {
         public ResultEvent {
             sessionId = requireNonBlank(sessionId, "sessionId");
             result = requireNonNull(result, "ResultEvent.result");
-            usage = usage == null ? null : Map.copyOf(usage);
-            modelUsage = modelUsage == null ? null : Map.copyOf(modelUsage);
+            usage = copyOfPresent(usage);
+            modelUsage = copyOfPresent(modelUsage);
         }
     }
 
@@ -157,6 +159,28 @@ public sealed interface AgentEvent {
             throw new IllegalArgumentException("AgentEvent." + component + " must not be blank");
         }
         return value;
+    }
+
+    /**
+     * Defensively copies a raw wire object into an unmodifiable map, dropping the keys the CLI
+     * reported as JSON {@code null} ({@code "fallback_credit": null} in Claude Code 2.1.x's
+     * {@code usage}). {@link Map#copyOf} rejects null values, so copying such a line verbatim threw
+     * on every round and failed it as an executor error. A null-valued key and an absent one read
+     * the same to every consumer ({@code Map.get} returns null for both), so nothing is lost. A
+     * null map stays null — the absent-vs-present signal {@link TokenUsageMapper} falls back on.
+     * Same explicit-static-method rationale as {@link #requireNonBlank}.
+     */
+    private static @Nullable Map<String, Object> copyOfPresent(@Nullable Map<String, Object> wire) {
+        if (wire == null) {
+            return null;
+        }
+        Map<String, Object> present = new LinkedHashMap<>();
+        wire.forEach((key, value) -> {
+            if (value != null) {
+                present.put(key, value);
+            }
+        });
+        return Collections.unmodifiableMap(present);
     }
 
     /**
