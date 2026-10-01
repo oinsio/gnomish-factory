@@ -240,7 +240,12 @@ folds into `FactoryHome` via the published property (D1, D6). It adds no
 parallel implementation — host and container mode resolve the project once,
 before either mode is chosen — and touches no row of the `manual-sync-pairs.md`
 registry (the ledger readers change only the folder they read, not the wire
-tokens). It touches one end of a declared pair: `WorktreeJanitor`, kept in sync
+tokens). The two readers that name where a setting came from — the violation
+report (UX1) and `project show` (FR4) — word it differently but classify it
+through one owner, `SettingOrigin` (command line in its `--`/`-D` forms, the
+one-based line of a text resource, or neither), so the line arithmetic and the
+command-line detection exist once; the switch over its sealed cases makes a new
+case a compile error in both readers rather than a hand-sync. It touches one end of a declared pair: `WorktreeJanitor`, kept in sync
 with `SandboxLifecycleTick` on the immediate-then-cadence daemon-loop shape. Only
 the janitor's constructor and swept folder change; the loop shape
 (`start`/`loop`/`tick`/`lastRunAt`) is untouched, so `SandboxLifecycleTick` needs

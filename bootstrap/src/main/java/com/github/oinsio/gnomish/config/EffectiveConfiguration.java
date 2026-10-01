@@ -12,13 +12,9 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
 import org.springframework.boot.origin.Origin;
-import org.springframework.boot.origin.OriginLookup;
-import org.springframework.boot.origin.TextResourceOrigin;
-import org.springframework.core.env.CommandLinePropertySource;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.PropertySource;
-import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.io.Resource;
 
 /**
@@ -116,21 +112,14 @@ public final class EffectiveConfiguration {
             return value + " from " + origin(home);
         }
 
+        /** The origin as {@code project show} words it: a file under the home relative to it. */
         String origin(FactoryHome home) {
-            if (source instanceof CommandLinePropertySource<?>) {
-                return "command line";
-            }
-            if (source.getName().equals(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)) {
-                return "command line (-D)";
-            }
-            Origin origin = OriginLookup.getOrigin(source, key);
-            if (origin instanceof TextResourceOrigin text) {
-                TextResourceOrigin.Location location = text.getLocation();
-                if (location != null) {
-                    return file(text.getResource(), home) + ":" + (location.getLine() + 1);
-                }
-            }
-            return origin != null ? origin.toString() : source.getName();
+            return switch (SettingOrigin.of(source, key)) {
+                case SettingOrigin.CommandLine _ -> "command line";
+                case SettingOrigin.SystemProperty _ -> "command line (-D)";
+                case SettingOrigin.TextLine(Resource resource, int line) -> file(resource, home) + ":" + line;
+                case SettingOrigin.Other(Origin origin) -> origin != null ? origin.toString() : source.getName();
+            };
         }
 
         private static String file(@Nullable Resource resource, FactoryHome home) {

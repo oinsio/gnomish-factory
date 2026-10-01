@@ -14,9 +14,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.env.OriginTrackedMapPropertySource;
-import org.springframework.boot.origin.Origin;
-import org.springframework.boot.origin.OriginLookup;
-import org.springframework.boot.origin.TextResourceOrigin;
 import org.springframework.core.env.CommandLinePropertySource;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
@@ -141,32 +138,21 @@ public final class OperatorSources {
     }
 
     private static SettingSource sourceOf(PropertySource<?> source) {
-        return source instanceof CommandLinePropertySource<?>
-                        || source.getName().equals(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
-                ? SettingSource.COMMAND_LINE
-                : SettingSource.OTHER;
+        return SettingOrigin.isCommandLine(source) ? SettingSource.COMMAND_LINE : SettingSource.OTHER;
     }
 
     /**
-     * Where a key was found: file and line, the command-line form, or — for a source that tracks no
-     * text origin — the source's name.
+     * Where a key was found, as a violation line words it (UX1): file and line, the command-line
+     * form, or — for a source that tracks no text origin — the source's name.
      */
     private static String location(PropertySource<?> source, String key) {
-        if (source instanceof CommandLinePropertySource<?>) {
-            return "the command line (--" + key + ")";
-        }
-        if (source.getName().equals(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)) {
-            return "the command line (-D" + key + ")";
-        }
-        Origin origin = OriginLookup.getOrigin(source, key);
-        if (origin instanceof TextResourceOrigin text) {
-            Resource resource = text.getResource();
-            TextResourceOrigin.Location line = text.getLocation();
-            if (resource != null && line != null) {
-                return resource.getDescription() + ":" + (line.getLine() + 1);
-            }
-        }
-        return source.getName();
+        return switch (SettingOrigin.of(source, key)) {
+            case SettingOrigin.CommandLine _ -> "the command line (--" + key + ")";
+            case SettingOrigin.SystemProperty _ -> "the command line (-D" + key + ")";
+            case SettingOrigin.TextLine(Resource resource, int line)
+            when resource != null -> resource.getDescription() + ":" + line;
+            case SettingOrigin.TextLine _, SettingOrigin.Other _ -> source.getName();
+        };
     }
 
     private static boolean othersMayWrite(PosixFileAttributeView view) {

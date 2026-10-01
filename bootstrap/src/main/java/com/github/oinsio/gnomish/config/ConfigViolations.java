@@ -18,6 +18,7 @@ import java.util.Optional;
 public final class ConfigViolations {
 
     private static final String SEPARATOR = " — ";
+    private static final String VALUE_PLACEHOLDER = "<value>";
 
     private final ConfigLevels levels;
     private final ConfigPlaces places;
@@ -63,12 +64,14 @@ public final class ConfigViolations {
      * A {@code FACTORY_*} environment variable: never a source of configuration (FR7, NFR-S1).
      *
      * @param variable the variable's name
-     * @param value its value, echoed in the equivalent line the fix suggests
+     * @param value its value, echoed in the equivalent line the fix suggests — or, when it holds a
+     *     control character that would split or restyle the line (UX1), named by a placeholder
      */
     public void variable(String variable, String value) {
         String key = levels.propertyOf(variable);
+        String shown = value.chars().anyMatch(Character::isISOControl) ? VALUE_PLACEHOLDER : value;
         String fix = levels.find(key)
-                .map(known -> places.equivalent(known.level(), key, value))
+                .map(known -> places.equivalent(known.level(), key, shown))
                 .orElse("unset it: " + key + " is not a known key");
         add(
                 "env" + variable,
