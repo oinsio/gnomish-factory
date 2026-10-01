@@ -266,7 +266,7 @@ is gone (6.1).
       proposal's ID list.
 - [x] 8.2 Root `./gradlew check` green (PIT 100% on touched classes). Verify the
       exit code.
-- [ ] 8.3 Operator-stand acceptance (M1) — a human step, not a gate; every
+- [x] 8.3 Operator-stand acceptance (M1) — a human step, not a gate; every
       behaviour it exercises is already covered by the specs above. Register the
       stand's clones, move its launcher options into `project.yaml` and secrets
       into the project folder, and run a task with only `--dir`. Verify the

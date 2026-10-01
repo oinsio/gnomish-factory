@@ -144,14 +144,19 @@ can see exactly what the classpath loaded.
 - **THEN** the report lists `host` and `container` with their isolation levels
   and the artifact each provider was loaded from
 
-### Requirement: The documented default-binding key binds
-The operator's default stage binding SHALL be read from `factory.bindings.default` — the key the operator guides and the factory's own error messages name — in every property source form the factory reads (command line, configuration file, system property). No other spelling of the key SHALL be required for the value to take effect.
+### Requirement: The default-binding key binds from the project file
+The operator's default stage binding SHALL be read from `factory.bindings.default` — the key the operator guides and the factory's own error messages name — set in the resolved project's `project.yaml`. It is a sandbox-boundary key of the operator-configuration capability: set in any other source it SHALL stop startup with the violation report, never bind silently. No other spelling of the key SHALL be required for the value to take effect.
 <!-- implements FR6 of fix-operator-blockers -->
+<!-- implements FR6, NFR-S1 of add-project-registry -->
 
-#### Scenario: Command-line default binds host
-- **WHEN** the factory starts with `--factory.bindings.default=host` and no per-stage overrides
+#### Scenario: Project file default binds host
+- **WHEN** the resolved project's `project.yaml` sets `factory.bindings.default: host` and no per-stage overrides
 - **THEN** every stage resolves to the `host` binding and no container is created
 
 #### Scenario: The error message's advice works as written
-- **WHEN** startup refuses because the container binding needs `factory.sandbox.image`, and the operator reruns with the `factory.bindings.default=host` the message suggests
+- **WHEN** startup refuses because the container binding needs `factory.sandbox.image`, and the operator follows the message by setting `factory.bindings.default: host` in the project file it names
 - **THEN** the rerun starts in host mode
+
+#### Scenario: Command-line default is refused
+- **WHEN** the operator passes `--factory.bindings.default=host`
+- **THEN** startup stops with a violation naming `projects/<name>/project.yaml` as the only place for the key, and no stage is bound
