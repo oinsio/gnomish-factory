@@ -17,11 +17,15 @@ import org.springframework.core.env.MapPropertySource;
  * resolved to a registered project logs to {@code projects/<name>/logs/<instance>.log}, a
  * project-less command to {@code logs/factory.log} — both paths from {@link FactoryHome}, the one
  * owner of operator paths. The file is published as the internal property {@value #PROPERTY},
- * which {@code logback-spring.xml} reads with {@code <springProperty>}; no log-directory variable
- * exists besides it.
+ * which {@code logback-spring.xml} reads with {@code <springProperty>}, beside the same path without
+ * its {@code .log} extension as {@value #ARCHIVE_BASE_PROPERTY}, so a rolled segment is named
+ * {@code <instance>.<date>.<n>.log} and keeps the extension; no log-directory variable exists
+ * besides them.
  *
- * <p>The instance name is bound from the environment the way the context binds it later — through
- * {@link FactoryProperties}, so its default and its relaxed spellings have one owner.
+ * <p>Only the instance name is bound here, with the binder the context uses later, so its relaxed
+ * spellings have one owner; its default and its blank check come from {@link FactoryProperties}.
+ * Every other {@code factory.*} key is left to the context's own binding, which reports a bad value
+ * of it — this step must not fail on a key it does not read.
  *
  * <p>Implements FR11, UX3 of add-project-registry.
  */
@@ -30,8 +34,13 @@ public final class OperatorLogFile {
     /** The internal property {@code logback-spring.xml} reads the log file from. */
     public static final String PROPERTY = "gnomish.internal.log-file";
 
+    /** The internal property carrying the log file without its extension, for rolled segments. */
+    public static final String ARCHIVE_BASE_PROPERTY = "gnomish.internal.log-archive-base";
+
     /** The environment's name for the source carrying {@link #PROPERTY}. */
     public static final String SOURCE = "operator log file";
+
+    private static final String INSTANCE_NAME = "factory.instance-name";
 
     private OperatorLogFile() {}
 
@@ -45,17 +54,30 @@ public final class OperatorLogFile {
      */
     public static void publish(ConfigurableEnvironment environment, FactoryHome home, @Nullable ProjectName project) {
         Path file = project == null ? home.hostLogFile() : projectLogFile(environment, home, project);
-        environment.getPropertySources().addFirst(new MapPropertySource(SOURCE, Map.of(PROPERTY, file.toString())));
+        environment.getPropertySources().addFirst(new MapPropertySource(SOURCE, properties(file)));
+    }
+
+    /**
+     * The internal properties {@code logback-spring.xml} reads for {@code file}.
+     *
+     * @param file a log file, named {@code <stem>.log} by {@link FactoryHome}
+     * @return {@link #PROPERTY} and {@link #ARCHIVE_BASE_PROPERTY}
+     */
+    public static Map<String, Object> properties(Path file) {
+        String path = file.toString();
+        return Map.of(PROPERTY, path, ARCHIVE_BASE_PROPERTY, path.replaceFirst("\\.log$", ""));
     }
 
     private static Path projectLogFile(ConfigurableEnvironment environment, FactoryHome home, ProjectName project) {
-        String instance = Binder.get(environment)
-                .bindOrCreate("factory", FactoryProperties.class)
-                .instanceName();
+        @Nullable
+        String configured =
+                Binder.get(environment).bind(INSTANCE_NAME, String.class).orElse(null);
         try {
+            // the six-argument constructor resolves the unset and blank cases as the binding does
+            String instance = new FactoryProperties(configured, null, null, null, null, null).instanceName();
             return home.project(project).logFile(instance);
         } catch (IllegalArgumentException e) {
-            throw new ConfigurationViolationsException(List.of("factory.instance-name: " + e.getMessage()
+            throw new ConfigurationViolationsException(List.of(INSTANCE_NAME + ": " + e.getMessage()
                     + " — the instance name is a folder and file name under the project's logs and serve folders"));
         }
     }

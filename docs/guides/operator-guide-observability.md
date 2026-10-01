@@ -155,7 +155,7 @@ factory home, outside every workspace and every git tree:
 
 ```
 ~/.gnomish/projects/widgets/logs/default.log                # current
-~/.gnomish/projects/widgets/logs/default.log.2026-09-02.0   # rolled, 10MB or one UTC day
+~/.gnomish/projects/widgets/logs/default.2026-09-02.0.log   # rolled, 10MB or one UTC day
 ~/.gnomish/logs/factory.log                                 # commands with no project (project add, project list)
 ```
 

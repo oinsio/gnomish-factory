@@ -250,9 +250,11 @@ is gone (6.1).
       `BootstrapScanRootSpec` onto it; rewrite `FactoryEnvironmentOverrideSpec` into
       the spec that `FACTORY_INSTANCE_NAME` stops startup with the equivalent
       file line (the "Environment variable is refused" scenario). Verify
-      `./gradlew :bootstrap:test` green and
-      `git grep -ln "new SpringApplication\|SpringApplicationBuilder" -- '*/src/test/*'`
-      lists only files that use the fixture. (Pulled forward into §4; the boot step
+      `./gradlew :bootstrap:test` green and every test file that boots a
+      `FactoryApplication` context does so through `FactoryBoot`, which installs
+      `OperatorHomeFixture` (`git grep -ln "FactoryApplication" -- 'bootstrap/src/test/*'`;
+      a `new SpringApplication()` handed only to `postProcessEnvironment`, as in
+      `OperatorConfigLoaderHarness`, boots nothing). (Pulled forward into §4; the boot step
       is the `:bootstrap` test helper `FactoryBoot`, since `:test-fixtures` cannot
       reach `CommandExit`.)
 

@@ -61,9 +61,19 @@ class FactoryHomeSpec extends Specification {
 
         expect:
         home.hostConfig() == Path.of('/srv/gnomish/factory.yaml')
-        home.hostSecrets() == Path.of('/srv/gnomish/secrets')
+        home.hostSecret('GNOMISH_GITHUB_TOKEN') == Path.of('/srv/gnomish/secrets/GNOMISH_GITHUB_TOKEN')
         home.hostLogFile() == Path.of('/srv/gnomish/logs/factory.log')
         home.projects() == Path.of('/srv/gnomish/projects')
+    }
+
+    // FR8: a secret name cannot lead out of the host secrets folder
+    def "a secret name that is not one folder name is refused for the host secrets folder"() {
+        when:
+        FactoryHome.at(Path.of('/srv/gnomish')).hostSecret('/etc/passwd')
+
+        then:
+        def e = thrown(IllegalArgumentException)
+        e.message == "invalid secret name '/etc/passwd': it must be one folder name, not . or .."
     }
 
     // FR1: a project's folder is projects/<name> under the same root

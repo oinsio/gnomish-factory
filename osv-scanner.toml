@@ -113,6 +113,19 @@ reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own in
 id = "GHSA-wjgm-6hv5-3cvf"
 ignoreUntil = 2026-11-01
 reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+# Added 2026-10-01: the two advisories 2.22.3 fixes on the project's own line. The
+# project resolves 2.22.3 everywhere it declares jackson-databind; with the
+# 2.21.4 entries removed from verification-metadata.xml, `spotlessCheck` fails
+# verification on `detachedConfiguration2` naming jackson-databind-2.21.4.jar,
+# so the Spotless tool classpath is still the sole source.
+[[IgnoredVulns]]
+id = "GHSA-cxp5-3px4-pw24"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format), never on any production or test classpath (resolves to 2.22.3 everywhere the project declares it). Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-wv8q-qhhj-9h54"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format), never on any production or test classpath (resolves to 2.22.3 everywhere the project declares it). Re-review 2026-11-01."
 
 # --- Accepted risk: httpclient5/httpcore5(-h2) superseded conflict candidates,
 # metadata-only ---

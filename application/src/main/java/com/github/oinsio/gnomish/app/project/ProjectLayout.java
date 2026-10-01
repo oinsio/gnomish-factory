@@ -37,9 +37,15 @@ public final class ProjectLayout {
         return dir.resolve("project.yaml");
     }
 
-    /** The project's secrets folder, consulted ahead of the host's (FR8). */
-    public Path secrets() {
-        return dir.resolve("secrets");
+    /**
+     * The file of secret {@code name} in the project's secrets folder, consulted ahead of the
+     * host's (FR8).
+     *
+     * @param name the secret's variable name; one path segment
+     * @throws IllegalArgumentException if {@code name} is not one path segment
+     */
+    public Path secret(String name) {
+        return dir.resolve("secrets").resolve(PathSegment.require(name, "secret name"));
     }
 
     /**

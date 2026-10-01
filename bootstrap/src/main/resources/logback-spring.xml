@@ -21,8 +21,10 @@
   `FactoryHome`, the one owner of operator paths:
   `<home>/projects/<name>/logs/<instance>.log` for a command resolved to a
   registered project, `<home>/logs/factory.log` for a project-less one. Two
-  projects on one host therefore never share a file. `<springProperty>` reads
-  it from the Spring environment; the loader always publishes it before this
+  projects on one host therefore never share a file. Rolled segments take the
+  same path without `.log` from `gnomish.internal.log-archive-base` and append
+  `.<date>.<n>.log`, so they keep the extension. `<springProperty>` reads
+  both from the Spring environment; the loader always publishes it before this
   file is read, so it carries no default — a default here would be a second
   place that knows where logs live. Test isolation follows from the same fact:
   the E2E layer spawns this jar against a temporary `GNOMISH_HOME`, so its log
@@ -84,6 +86,7 @@
                     class="com.github.oinsio.gnomish.logging.SafeMdcConverter"/>
 
     <springProperty scope="context" name="GNOMISH_LOG_FILE" source="gnomish.internal.log-file"/>
+    <springProperty scope="context" name="GNOMISH_LOG_ARCHIVE_BASE" source="gnomish.internal.log-archive-base"/>
     <property name="GNOMISH_LOG_PATTERN"
               value="%d{ISO8601} [%thread] %-5level [taskId=%safeX{taskId}, stage=%safeX{stage}, attempt=%safeX{attempt}, component=%safeX{component}] %logger{36} - %safeMsg%n%safeEx"/>
 
@@ -92,7 +95,7 @@
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${GNOMISH_LOG_FILE}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${GNOMISH_LOG_FILE}.%d{yyyy-MM-dd}.%i</fileNamePattern>
+            <fileNamePattern>${GNOMISH_LOG_ARCHIVE_BASE}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
             <totalSizeCap>100MB</totalSizeCap>

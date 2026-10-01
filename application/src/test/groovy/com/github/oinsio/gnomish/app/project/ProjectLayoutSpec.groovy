@@ -18,7 +18,7 @@ class ProjectLayoutSpec extends Specification {
     def "the project file and secrets folder sit in the project folder"() {
         expect:
         layout.config() == Path.of('/srv/gnomish/projects/widgets/project.yaml')
-        layout.secrets() == Path.of('/srv/gnomish/projects/widgets/secrets')
+        layout.secret('GNOMISH_GITHUB_TOKEN') == Path.of('/srv/gnomish/projects/widgets/secrets/GNOMISH_GITHUB_TOKEN')
     }
 
     // FR11: one log file per instance of the project
@@ -40,19 +40,20 @@ class ProjectLayoutSpec extends Specification {
                 Path.of('/srv/gnomish/projects/widgets/worktrees/widgets-demo')
     }
 
-    // FR1: an instance name cannot lead out of the project folder
-    def "an instance name that is not one folder name is refused for #use"() {
+    // FR1, FR8: an instance or secret name cannot lead out of the project folder
+    def "a #what that is not one folder name is refused for #use"() {
         when:
         path.call()
 
         then:
         def e = thrown(IllegalArgumentException)
-        e.message == "invalid instance name '../other': it must be one folder name, not . or .."
+        e.message == "invalid $what '../other': it must be one folder name, not . or .."
 
         where:
-        use | path
-        'logs' | { layout.logFile('../other') }
-        'serve' | { layout.serveDir('../other') }
+        use | what | path
+        'logs' | 'instance name' | { layout.logFile('../other') }
+        'serve' | 'instance name' | { layout.serveDir('../other') }
+        'secrets' | 'secret name' | { layout.secret('../other') }
     }
 
     // FR1: one project folder, one layout

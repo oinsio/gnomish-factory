@@ -40,7 +40,8 @@ import org.slf4j.LoggerFactory;
  * </ol>
  * A file's whole content, stripped of surrounding whitespace, is the value. The file name is the
  * secret's exact variable name, so no mapping table exists and a plugin's credential needs
- * nothing. A folder file readable or writable by group or others is refused, never read: {@link
+ * nothing; the file's path comes from {@link FactoryHome} and {@link ProjectLayout}, which refuse a
+ * name that is not one path segment, so no name reaches a file outside the folders. A folder file readable or writable by group or others is refused, never read: {@link
  * #find} throws a {@link UsageException} naming the file and the {@code chmod} that fixes it
  * (NFR-S2). The check covers the folders only — the files the factory home owns; an {@code
  * N_FILE} target is the operator's own mount (a Docker secret is typically world-readable inside
@@ -66,7 +67,7 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
             PosixFilePermission.OTHERS_READ,
             PosixFilePermission.OTHERS_WRITE);
 
-    private final List<Path> folders;
+    private final List<Function<String, Path>> folders;
     private final Function<String, @Nullable String> env;
 
     /**
@@ -91,20 +92,21 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
      *     null} when the variable is unset; never null itself
      */
     EnvFileSecretsProvider(FactoryHome home, @Nullable ProjectLayout project, Function<String, @Nullable String> env) {
-        this.folders = project == null ? List.of(home.hostSecrets()) : List.of(project.secrets(), home.hostSecrets());
+        this.folders = project == null ? List.of(home::hostSecret) : List.of(project::secret, home::hostSecret);
         this.env = env;
     }
 
     /**
      * {@inheritDoc}
      *
-     * @throws UsageException if a secrets-folder file named {@code name} is readable or writable
-     *     by group or others (NFR-S2 of add-project-registry)
+     * @throws UsageException if {@code name} is not one path segment, or a secrets-folder file
+     *     named {@code name} is readable or writable by group or others (NFR-S2 of
+     *     add-project-registry)
      */
     @Override
     public Optional<String> find(String name) {
-        for (Path folder : folders) {
-            Path file = folder.resolve(name);
+        for (Function<String, Path> folder : folders) {
+            Path file = fileIn(folder, name);
             if (Files.exists(file)) {
                 return readFolderFile(file);
             }
@@ -114,6 +116,15 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
             return readFile(name + FILE_SUFFIX, fileRef.strip());
         }
         return present(env.apply(name));
+    }
+
+    /** The file of {@code name} in one secrets folder; a name that is not one segment is the operator's mistake. */
+    private static Path fileIn(Function<String, Path> folder, String name) {
+        try {
+            return folder.apply(name);
+        } catch (IllegalArgumentException e) {
+            throw new UsageException(e.getMessage() + " — a secret is named by its variable name");
+        }
     }
 
     /** A secrets-folder file: refused when group or others may read or write it, else read. */

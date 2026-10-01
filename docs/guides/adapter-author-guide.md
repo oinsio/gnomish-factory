@@ -519,7 +519,9 @@ public List<String> credentialEnvVars() {
 Why this matters: the wiring hands the *active* adapter's declared list to the
 agent process launcher, which strips every named variable from the gnome's CLI
 subprocess environment — regardless of the
-`factory.sandbox.env-passthrough` setting. The **same declared-scrub list also
+`factory.sandbox.env-passthrough` setting (a sandbox-boundary key, read only
+from the project's own `projects/<name>/project.yaml`; see
+[ADR 0011](../adr/0011-operator-configuration-levels.md)). The **same declared-scrub list also
 applies to command checks**: a command-check subprocess (the `command` verify
 type) runs with the factory environment minus the active adapter's declared
 credential variables, so your declared vars are excluded from **both** the agent

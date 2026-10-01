@@ -88,12 +88,12 @@ class OperatorLogFileSpec extends Specification {
     }
 
     // FR11, NFR-O2: an instance name that cannot be a file name stops startup with one report line
-    def "FR11: an instance name holding a separator is reported, printed once, and exits 2"() {
+    def "FR11: an instance name #shape is reported, printed once, and exits 2"() {
         when:
         harness.load([
             'run',
             "--dir=$widgets".toString(),
-            '--factory.instance-name=a/b'
+            "--factory.instance-name=$value".toString()
         ])
 
         then:
@@ -102,6 +102,27 @@ class OperatorLogFileSpec extends Specification {
         refused.violations()[0].startsWith('factory.instance-name: ')
         refused.exitCode == 2
         harness.console.printed == [refused.message + '\n']
+
+        where:
+        shape | value
+        'holding a separator' | 'a/b'
+        'set blank' | ''
+    }
+
+    // FR11: only the instance name decides the file — a bad value of another factory.* key is the
+    // context's binding to report, not the log file's
+    def "FR11: an invalid #key does not stop the log file from being published"() {
+        expect:
+        harness.load([
+            'run',
+            "--dir=$widgets".toString(),
+            "--factory.$key=$value".toString()
+        ]).get(OperatorLogFile.PROPERTY) == logFile('widgets', 'default').toString()
+
+        where:
+        key | value
+        'git-network-timeout' | 'not-a-duration'
+        'docker-command-timeout' | '-5s'
     }
 
     private Path logFile(String project, String instance) {

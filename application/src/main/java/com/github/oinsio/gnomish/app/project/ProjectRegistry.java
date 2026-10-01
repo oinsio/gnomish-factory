@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -84,11 +85,12 @@ public final class ProjectRegistry {
      * The registered clone {@code dir} is, compared by real path on both sides.
      *
      * @param dir an absolute directory, as the argument owner resolved {@code --dir}
-     * @throws UsageException naming the {@code project add} line for an unregistered directory, or
-     *     the registered clone {@code dir} is inside
+     * @throws UsageException naming the {@code project add} line for an unregistered directory,
+     *     the registered clone {@code dir} is inside, or the read failure of a {@code dir} that
+     *     exists but cannot be resolved
      */
     public RegisteredClone resolve(Path dir) {
-        Path real = real(dir);
+        Path real = operatorReal(dir);
         for (RegisteredClone clone : clones()) {
             if (real(clone.clonePath()).equals(real)) {
                 return clone;
@@ -120,7 +122,7 @@ public final class ProjectRegistry {
         if (!Files.isDirectory(path) || !Files.exists(path.resolve(".git"))) {
             throw new UsageException(path + " is not a git working tree");
         }
-        Path real = real(path);
+        Path real = operatorReal(path);
         for (RegisteredClone owned : clones()) {
             if (real(owned.clonePath()).equals(real)) {
                 throw new UsageException(path + " is already registered as clone " + owned.cloneName() + " of project "
@@ -157,7 +159,25 @@ public final class ProjectRegistry {
         }
     }
 
-    /** The real path of an existing directory; a missing one is compared as given. */
+    /**
+     * The real path of the operator's directory; a missing one is compared as given, and one that
+     * cannot be resolved for another reason (a folder on the way the operator cannot search) is
+     * refused, so the failure is not reported as an unregistered directory.
+     */
+    private static Path operatorReal(Path dir) {
+        try {
+            return dir.toRealPath();
+        } catch (NoSuchFileException e) {
+            return dir.toAbsolutePath().normalize();
+        } catch (IOException e) {
+            throw new UsageException(dir + " cannot be read (" + e + ")");
+        }
+    }
+
+    /**
+     * The real path of a registered clone; one that is missing or cannot be resolved is compared
+     * as written, so an unreachable clone never stops another clone from resolving.
+     */
     private static Path real(Path dir) {
         try {
             return dir.toRealPath();

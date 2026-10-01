@@ -38,9 +38,9 @@ class EnvFileSecretsFolderSpec extends Specification {
     // FR8: "Project secret wins over host and environment"
     def "FR8: the project folder's file wins over the host folder, N_FILE and N"() {
         given:
-        secret(widgets.secrets(), 'from-project\n')
-        secret(home.hostSecrets(), 'from-host')
-        def viaFile = secret(tempDir.resolve('elsewhere'), 'from-file')
+        secret(widgets.secret(TOKEN), 'from-project\n')
+        secret(home.hostSecret(TOKEN), 'from-host')
+        def viaFile = secret(tempDir.resolve('elsewhere').resolve(TOKEN), 'from-file')
 
         expect:
         providerFor([(TOKEN): 'from-env', (TOKEN + '_FILE'): viaFile.toString()], widgets).find(TOKEN) ==
@@ -50,7 +50,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // FR8: "Shared agent token from the host folder"
     def "FR8: a secret only the host folder holds resolves for every project and for none"() {
         given:
-        secret(home.hostSecrets(), 'shared', 'CLAUDE_CODE_OAUTH_TOKEN')
+        secret(home.hostSecret('CLAUDE_CODE_OAUTH_TOKEN'), 'shared')
 
         expect:
         [
@@ -66,8 +66,8 @@ class EnvFileSecretsFolderSpec extends Specification {
     // FR8: the host folder comes ahead of the environment
     def "FR8: the host folder's file wins over N_FILE and N"() {
         given:
-        secret(home.hostSecrets(), 'from-host')
-        def viaFile = secret(tempDir.resolve('elsewhere'), 'from-file')
+        secret(home.hostSecret(TOKEN), 'from-host')
+        def viaFile = secret(tempDir.resolve('elsewhere').resolve(TOKEN), 'from-file')
 
         expect:
         providerFor([(TOKEN): 'from-env', (TOKEN + '_FILE'): viaFile.toString()], widgets).find(TOKEN) ==
@@ -77,7 +77,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // FR8: a command with no project never reads a project folder
     def "FR8: with no project resolved, a project folder's file is not consulted"() {
         given:
-        secret(widgets.secrets(), 'from-project')
+        secret(widgets.secret(TOKEN), 'from-project')
 
         expect:
         providerFor([(TOKEN): 'from-env'], null).find(TOKEN) == Optional.of('from-env')
@@ -86,7 +86,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // NFR-S2: "Loose permissions are refused"
     def "NFR-S2: a #where folder file with mode #mode is refused naming the file and the chmod"() {
         given:
-        def file = secret(where == 'project' ? widgets.secrets() : home.hostSecrets(), 'leaked', TOKEN, mode)
+        def file = secret(where == 'project' ? widgets.secret(TOKEN) : home.hostSecret(TOKEN), 'leaked', mode)
 
         when:
         providerFor([(TOKEN): 'from-env'], widgets).find(TOKEN)
@@ -108,7 +108,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // NFR-S2: only the folders the factory home owns are checked; an N_FILE target keeps its contract
     def "NFR-S2: a world-readable file named by N_FILE is still read"() {
         given:
-        def mounted = secret(tempDir.resolve('run-secrets'), 'mounted', TOKEN, 'rw-r--r--')
+        def mounted = secret(tempDir.resolve('run-secrets').resolve(TOKEN), 'mounted', 'rw-r--r--')
 
         expect:
         providerFor([(TOKEN + '_FILE'): mounted.toString()], widgets).find(TOKEN) == Optional.of('mounted')
@@ -117,7 +117,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // NFR-S1 of add-sandbox-core: a folder file is the answer — blank is absent, never a fall-through
     def "FR8: a blank folder file resolves to empty, not to the environment"() {
         given:
-        secret(home.hostSecrets(), '  \n')
+        secret(home.hostSecret(TOKEN), '  \n')
 
         expect:
         providerFor([(TOKEN): 'from-env'], widgets).find(TOKEN) == Optional.empty()
@@ -126,7 +126,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     // FR5, NFR-S1 of harden-logging-observability: an unreadable folder file warns naming the file
     def "FR8: an unreadable folder file fails closed with one warning naming the file"() {
         given: 'a private directory where the file would be, so the read fails'
-        def unreadable = Files.createDirectories(home.hostSecrets().resolve(TOKEN))
+        def unreadable = Files.createDirectories(home.hostSecret(TOKEN))
         Files.setPosixFilePermissions(unreadable, PosixFilePermissions.fromString('rwx------'))
 
         when:
@@ -145,6 +145,26 @@ class EnvFileSecretsFolderSpec extends Specification {
         !warnings[0].formattedMessage.contains('from-env')
     }
 
+    // FR8: the file name is the secret's variable name — one segment, never a path out of the folder
+    def "FR8: a secret name that is #shape is refused, and no file outside the folders is read"() {
+        given:
+        def outside = secret(tempDir.resolve('outside').resolve(TOKEN), 'outside-value')
+        String name = shape == 'an absolute path' ? outside.toString() : "../../../outside/$TOKEN".toString()
+
+        when:
+        providerFor([:], where == 'project' ? widgets : null).find(name)
+
+        then:
+        def refused = thrown(UsageException)
+        refused.message.contains(name)
+        !refused.message.contains('outside-value')
+
+        where:
+        shape | where
+        'a relative path' | 'project'
+        'an absolute path' | 'host'
+    }
+
     private EnvFileSecretsProvider providerFor(Map<String, String> vars, ProjectLayout project) {
         new EnvFileSecretsProvider(home, project, { String name ->
             vars.get(name)
@@ -152,8 +172,8 @@ class EnvFileSecretsFolderSpec extends Specification {
     }
 
     /** Writes a secret file with the given mode — private by default, whatever the umask. */
-    private static Path secret(Path folder, String value, String name = TOKEN, String mode = 'rw-------') {
-        def file = Files.createDirectories(folder).resolve(name)
+    private static Path secret(Path file, String value, String mode = 'rw-------') {
+        Files.createDirectories(file.parent)
         Files.writeString(file, value)
         Files.setPosixFilePermissions(file, PosixFilePermissions.fromString(mode))
         file

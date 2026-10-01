@@ -81,8 +81,9 @@ class LogbackConfigSpec extends Specification {
         then:
         fileAppender.file == published
 
-        and: 'rolled segments sit beside it, named after it'
-        fileAppender.rollingPolicy.fileNamePattern == "${published}.%d{yyyy-MM-dd}.%i"
+        and: 'rolled segments sit beside it, named after it and keeping its .log extension'
+        fileAppender.rollingPolicy.fileNamePattern ==
+                "${home.absolutePath}/projects/widgets/logs/default.%d{yyyy-MM-dd}.%i.log"
     }
 
     // FR11 of add-project-registry, design D1: the old derivations are gone — no home lookup and

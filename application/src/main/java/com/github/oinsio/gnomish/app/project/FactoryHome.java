@@ -84,9 +84,14 @@ public final class FactoryHome {
         return root.resolve("factory.yaml");
     }
 
-    /** The host secrets folder, consulted after the project's (FR8). */
-    public Path hostSecrets() {
-        return root.resolve("secrets");
+    /**
+     * The file of secret {@code name} in the host secrets folder, consulted after the project's (FR8).
+     *
+     * @param name the secret's variable name; one path segment
+     * @throws IllegalArgumentException if {@code name} is not one path segment
+     */
+    public Path hostSecret(String name) {
+        return root.resolve("secrets").resolve(PathSegment.require(name, "secret name"));
     }
 
     /** The log file of a command that runs with no project, {@code logs/factory.log} (FR11). */
