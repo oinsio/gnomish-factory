@@ -74,6 +74,23 @@ class ProjectRegistrySpec extends Specification {
                 ['widgets', 'widgets-demo'] as Set
     }
 
+    // NFR-R1: a clones map the edit cannot extend leaves the project file as it was
+    def "a project file whose clones map is in flow style is refused and left unchanged"() {
+        given:
+        def file = home.project(name('widgets')).config()
+        Files.createDirectories(file.parent)
+        Files.writeString(file, 'clones: {}\n')
+
+        when:
+        ProjectRegistry.scan(home).add(name('widgets'), gitTree('widgets'))
+
+        then:
+        def e = thrown(UsageException)
+        e.message.startsWith("$file: cannot add clone widgets to its clones map")
+        Files.readString(file) == 'clones: {}\n'
+        ProjectRegistry.scan(home).project(name('widgets')).orElseThrow().clones().isEmpty()
+    }
+
     // FR2: one path, one project
     def "a path registered to any project is refused naming its owner"() {
         given:

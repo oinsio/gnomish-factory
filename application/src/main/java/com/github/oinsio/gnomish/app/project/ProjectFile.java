@@ -16,8 +16,8 @@ import org.springframework.core.env.PropertySource;
  * clones:} map names each clone and its absolute path, beside the project's {@code factory:}
  * configuration (design D3). Parsed by {@link OperatorFile} — the parser the configuration is
  * read with, so one parser serves both — and extended by a text edit that keeps
- * the operator's comments and layout, checked by reading the result back before anything is
- * written.
+ * the operator's comments and layout, checked by reading the result back before it is handed
+ * on to be written ({@link #withClone}).
  *
  * <p>Implements FR2, NFR-R1 of add-project-registry.
  */
@@ -67,12 +67,39 @@ final class ProjectFile {
      * entry at the indentation of the existing ones, or in a new {@code clones:} map at the top when
      * the file has none. Every other line is kept as the operator wrote it.
      *
+     * <p>The result is read back before it is returned: it must register exactly the clones of
+     * {@code text} plus the new one. A {@code clones:} map the line edit cannot extend — one written
+     * in flow style ({@code clones: {}}) — would otherwise gain a second {@code clones:} key, and the
+     * file would no longer read for any command (NFR-R1).
+     *
+     * @param file the file the text came from, named in a refusal
      * @param text the current content; empty for a project's first clone
      * @param clone the new clone's name
-     * @param path the new clone's absolute path
+     * @param path the new clone's absolute, normalized path
      * @return the new content
+     * @throws UsageException if the edited text does not read back as the old clones plus the new one
      */
-    static String withClone(String text, CloneName clone, Path path) {
+    static String withClone(Path file, String text, CloneName clone, Path path) {
+        Map<CloneName, Path> expected = new LinkedHashMap<>(clones(file, text));
+        expected.put(clone, path);
+        String edited = edit(text, clone, path);
+        if (!expected.equals(readBack(file, edited))) {
+            throw new UsageException(file + ": cannot add clone " + clone + " to its clones map; write the map in"
+                    + " block style, one 'name: path' line under 'clones:', and run the command again");
+        }
+        return edited;
+    }
+
+    /** The clones the edited text registers; none when it does not read at all. */
+    private static Map<CloneName, Path> readBack(Path file, String edited) {
+        try {
+            return clones(file, edited);
+        } catch (UsageException e) {
+            return Map.of();
+        }
+    }
+
+    private static String edit(String text, CloneName clone, Path path) {
         List<String> lines = new ArrayList<>(text.lines().toList());
         String entry = quote(clone.value()) + ": " + quote(path.toString());
         int clonesLine = clonesLine(lines);

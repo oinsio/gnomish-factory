@@ -77,7 +77,7 @@ class ProjectFileSpec extends Specification {
     // FR2: a project's first clone creates the clones map
     def "the first clone creates the clones map"() {
         expect:
-        ProjectFile.withClone('', new CloneName('widgets'), Path.of('/src/widgets')) ==
+        ProjectFile.withClone(FILE, '', new CloneName('widgets'), Path.of('/src/widgets')) ==
                 "clones:\n  'widgets': '/src/widgets'\n"
     }
 
@@ -87,7 +87,7 @@ class ProjectFileSpec extends Specification {
         def text = '# widgets\nfactory:\n  serve:\n    slots: 2'
 
         when:
-        def edited = ProjectFile.withClone(text, new CloneName('widgets'), Path.of('/src/widgets'))
+        def edited = ProjectFile.withClone(FILE, text, new CloneName('widgets'), Path.of('/src/widgets'))
 
         then:
         edited == "clones:\n  'widgets': '/src/widgets'\n# widgets\nfactory:\n  serve:\n    slots: 2\n"
@@ -107,7 +107,7 @@ class ProjectFileSpec extends Specification {
             '''.stripIndent()
 
         when:
-        def edited = ProjectFile.withClone(text, new CloneName('widgets-demo'), Path.of('/src/widgets-demo'))
+        def edited = ProjectFile.withClone(FILE, text, new CloneName('widgets-demo'), Path.of('/src/widgets-demo'))
 
         then:
         edited == '''\
@@ -125,7 +125,7 @@ class ProjectFileSpec extends Specification {
     // FR2: an empty clones map takes the default indentation
     def "an empty clones map takes two spaces of indentation"() {
         expect:
-        ProjectFile.withClone(text, new CloneName('widgets'), Path.of('/src/widgets')) == expected
+        ProjectFile.withClone(FILE, text, new CloneName('widgets'), Path.of('/src/widgets')) == expected
 
         where:
         text || expected
@@ -139,7 +139,7 @@ class ProjectFileSpec extends Specification {
         def text = 'factory:\n  serve:\n    slots: 2\nclones:\n  \n  # main\n    widgets: /src/widgets\n'
 
         when:
-        def edited = ProjectFile.withClone(text, new CloneName('demo'), Path.of('/src/demo'))
+        def edited = ProjectFile.withClone(FILE, text, new CloneName('demo'), Path.of('/src/demo'))
 
         then:
         edited == "factory:\n  serve:\n    slots: 2\nclones:\n    'demo': '/src/demo'\n  \n  # main\n    widgets: /src/widgets\n"
@@ -148,9 +148,36 @@ class ProjectFileSpec extends Specification {
     // FR2: a quote in a name or path survives the round trip
     def "a quote in the clone name or path is escaped"() {
         when:
-        def edited = ProjectFile.withClone('', new CloneName("o'brien"), Path.of("/src/o'brien"))
+        def edited = ProjectFile.withClone(FILE, '', new CloneName("o'brien"), Path.of("/src/o'brien"))
 
         then:
         ProjectFile.clones(FILE, edited) == [(new CloneName("o'brien")): Path.of("/src/o'brien")]
+    }
+
+    // NFR-R1: an edit whose result does not read back as the old clones plus the new one is refused
+    def "a clones map in flow style is refused rather than given a second clones key"() {
+        when:
+        ProjectFile.withClone(FILE, text, new CloneName('widgets'), Path.of('/src/widgets'))
+
+        then:
+        def e = thrown(UsageException)
+        e.message == "$FILE: cannot add clone widgets to its clones map; write the map in block style," +
+                " one 'name: path' line under 'clones:', and run the command again"
+
+        where:
+        text << [
+            "clones: {a: '/x'}\n",
+            'clones: {}\n'
+        ]
+    }
+
+    // NFR-R1: an edit that parses but drops the new clone is refused too
+    def "a clone name the parser does not read back under clones is refused"() {
+        when:
+        ProjectFile.withClone(FILE, '', new CloneName('[draft]'), Path.of('/src/[draft]'))
+
+        then:
+        def e = thrown(UsageException)
+        e.message.startsWith("$FILE: cannot add clone [draft] to its clones map")
     }
 }

@@ -112,7 +112,8 @@ public final class ProjectRegistry {
      * @param path an absolute, normalized directory
      * @return the new clone
      * @throws UsageException if {@code path} is not a git working tree, is already registered to
-     *     any project, or its clone name is taken in {@code name}
+     *     any project, its clone name is taken in {@code name}, or the project file's clones map
+     *     cannot be extended in place
      */
     public RegisteredClone add(ProjectName name, Path path) {
         CloneName clone = cloneName(path);
@@ -132,7 +133,7 @@ public final class ProjectRegistry {
         }
         ProjectLayout layout = home.project(name);
         ProjectFolders.Read read = reads.get(name);
-        write(layout.config(), ProjectFile.withClone(read == null ? "" : read.text(), clone, path));
+        write(layout.config(), ProjectFile.withClone(layout.config(), read == null ? "" : read.text(), clone, path));
         return new RegisteredClone(name, clone, path, layout);
     }
 
