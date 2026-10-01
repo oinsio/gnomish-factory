@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -45,7 +46,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     TaskLifecycleStore lifecycleStore = Mock(TaskLifecycleStore)
     TaskBranchGit branches = Mock(TaskBranchGit)
@@ -54,10 +55,10 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
 
     def setup() {
         cloneDir = tempDir.resolve('my-project')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
         Files.createDirectories(cloneDir)
-        Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1'))
-        store.taskRepository(_, _) >> lifecycleStore
+        Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
+        store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
         store.readRecordedState(_) >> { stateRead.call() }
     }
@@ -82,7 +83,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     private GitModeRunner runner() {
         new GitModeRunner(
                 assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees, new ClaimEpochBook()),
-                worktreesRoot, liveConsole())
+                registeredClone, liveConsole())
     }
 
     // FR1, FR3 of wire-host-mid-round-push (design D3): the fresh git-mode host run attaches the
@@ -96,7 +97,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitModeRunner(
                 assemblyRunningLoop(executor, new ScriptedConsoleIO(['']), new Verdict.Pass(), attached),
-                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, liveConsole())
+                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, liveConsole())
 
         when:
         runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
@@ -131,7 +132,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         def branchLine = lines.find { it.contains('git mode: branch') }
         def worktreeLine = lines.find { it.contains('git mode: worktree') }
         branchLine.contains('gnomish/PROJ-1')
-        worktreeLine.contains(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1').toString())
+        worktreeLine.contains(TaskWorktreePath.resolve(registeredClone, 'PROJ-1').toString())
         lines.indexOf(branchLine) <lines.indexOf(worktreeLine)
     }
 

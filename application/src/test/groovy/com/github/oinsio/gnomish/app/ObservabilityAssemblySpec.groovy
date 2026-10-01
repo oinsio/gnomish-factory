@@ -56,6 +56,11 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
     @TempDir
     Path homeDir
 
+    /** The instance's serve directory the assembly is handed, not yet created (FR10 of add-project-registry). */
+    Path serveDir() {
+        homeDir.resolve('projects/widgets/serve/default')
+    }
+
     private static final String INSTANCE_NAME = 'gnomish-observability-test'
 
     private static FeedAutomaton newAutomaton(SlotLedger slotLedger, Tracker tracker, InstanceId instanceId, DirtyNotifier notifier) {
@@ -96,8 +101,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
 
     private WorktreeJanitor newWorktreeJanitor(com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
         new WorktreeJanitor(
-                homeDir.resolve('worktrees'),
-                homeDir.resolve('clone'),
+                RegisteredCloneFixture.unregistered(homeDir, homeDir.resolve('clone')),
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 clock,
@@ -125,10 +129,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
 
         when:
         def observability = ObservabilityAssembly.assemble(
-                testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
                 instanceId,
-                homeDir,
+                serveDir(),
                 dirtyNotifier,
                 clock,
                 new SnapshotSources(
@@ -157,7 +160,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         observability.start()
 
         then: 'the snapshot file materializes at the deterministic path, reflecting the given identity/capacity'
-        def snapshotFile = ObservabilityPaths.snapshotFile(homeDir, INSTANCE_NAME)
+        def snapshotFile = ObservabilityPaths.snapshotFile(serveDir())
         new PollingConditions(timeout: 2).eventually {
             assert Files.exists(snapshotFile)
         }
@@ -175,7 +178,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         json.contains('"factoryVersion" : "dev"')
 
         and: 'the started ledger line landed too'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
         Files.readString(ledgerFile).contains('"event":"started"')
     }
 
@@ -202,10 +205,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
 
         when:
         def observability = ObservabilityAssembly.assemble(
-                testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
                 instanceId,
-                homeDir,
+                serveDir(),
                 dirtyNotifier,
                 clock,
                 new SnapshotSources(
@@ -230,7 +232,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         observability.remoteOutageLedgerWriter() != null
 
         then: 'a taskOutcome line lands for the SAME ref this test assigned to the slot ledger'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
         new PollingConditions(timeout: 2).eventually {
             assert Files.exists(ledgerFile)
         }

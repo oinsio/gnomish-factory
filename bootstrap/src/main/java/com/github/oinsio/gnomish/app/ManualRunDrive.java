@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.util.List;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 
 /**
@@ -18,11 +19,14 @@ import org.springframework.boot.ApplicationArguments;
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, D9, D10 of add-manual-run; FR5-FR8, FR13, FR14,
  * UX1-UX4, design D8, D9 of add-git-workflow; FR14, D13 of add-sandbox-core; FR7 of
- * collapse-composition-roots.
+ * collapse-composition-roots; FR3, FR9 of add-project-registry.
  */
 final class ManualRunDrive {
 
-    private final RunArgumentsParser argumentsParser;
+    private final RunArgumentsParser argumentsParser = new RunArgumentsParser();
+    /** The registered clone {@code --dir} names: the directory every run works in (FR3, D9 of add-project-registry). */
+    private final ProjectScope scope;
+
     private final PipelineStartup pipelineStartup;
     private final AdHocTaskSynthesizer taskSynthesizer;
     /**
@@ -37,17 +41,21 @@ final class ManualRunDrive {
     /** The console owner bound to standard output (FR5, FR6 of harden-untrusted-text-sinks). */
     private final ConsoleIO console;
 
-    private final ManualRunners runners;
+    /**
+     * The git-mode runners, read when a git-mode run starts: they work in the registered clone,
+     * whose bean exists only once a project was resolved (D9, FR9 of add-project-registry).
+     */
+    private final ObjectProvider<ManualRunners> runners;
 
     ManualRunDrive(
-            RunArgumentsParser argumentsParser,
+            ProjectScope scope,
             PipelineStartup pipelineStartup,
             AdHocTaskSynthesizer taskSynthesizer,
             ManualRunAssembly assembly,
             InMemoryAttemptPersistence inPlacePersistence,
             ConsoleIO console,
-            ManualRunners runners) {
-        this.argumentsParser = argumentsParser;
+            ObjectProvider<ManualRunners> runners) {
+        this.scope = scope;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
         this.assembly = assembly;
@@ -57,7 +65,7 @@ final class ManualRunDrive {
     }
 
     void drive(ApplicationArguments args) throws IOException {
-        RunArguments runArguments = argumentsParser.parse(args);
+        RunArguments runArguments = argumentsParser.parse(args, scope.registeredClone());
         if (runArguments.mode() == RunArguments.Mode.IN_PLACE) {
             console.print(ManualRunRunner.IN_PLACE_REMINDER + ConsoleIO.LINE_END);
         }
@@ -71,7 +79,7 @@ final class ManualRunDrive {
         String resume = runArguments.resume();
         if (resume != null) {
             // FR8: the resolved bindings decide the resume shape (D13) — see ManualRunners.
-            runners.resume(order(runArguments, definition), resume);
+            runners.getObject().resume(order(runArguments, definition), resume);
             return;
         }
 
@@ -80,7 +88,9 @@ final class ManualRunDrive {
 
         switch (runArguments.mode()) {
             case IN_PLACE -> driveInPlace(definition, synthesized, runArguments, loaded);
-            case GIT -> runners.run(order(runArguments, definition), synthesized.context(), synthesized.initialState());
+            case GIT ->
+                runners.getObject()
+                        .run(order(runArguments, definition), synthesized.context(), synthesized.initialState());
         }
     }
 

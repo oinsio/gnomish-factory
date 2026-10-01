@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,7 +55,7 @@ abstract class TakeLifecycleRevocationSpecBase extends Specification implements 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path bareRepo
     Tracker tracker
     TrackerAdapterFactory trackerFactory
@@ -126,14 +127,14 @@ tracker:
         // remote a real take startup/fresh-claim now resolves and refreshes its base against (FR5,
         // FR13 of add-base-ref-resolution), never the clone's local HEAD.
         bareRepo = addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
         TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
@@ -144,7 +145,7 @@ tracker:
         given: 'a Ready task seeded directly in a real tracker, and a two-stage fake-agent-backed pipeline'
         def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')
         def command = newCommand(factoryProperties)
-        Path worktree = worktreesRoot.resolve('project').resolve('PROJ-1')
+        Path worktree = registeredClone.worktrees().resolve('PROJ-1')
 
         and: 'the tracker is armed to close the task on the second round-boundary check, dropping a leftover file'
         closeOnSecondFetch(REF, worktree.resolve(LEFTOVER_FILE))

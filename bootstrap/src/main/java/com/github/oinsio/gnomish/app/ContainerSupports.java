@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
@@ -106,8 +107,9 @@ public final class ContainerSupports {
      * add-sandbox-core — container by default, never a silent host fallback) over this
      * installation's settings and probe.
      */
-    SandboxModeSelector.Plan plan(PipelineDefinition definition) {
-        return SandboxModeSelector.plan(definition, bindingProperties, sandboxProperties, bindingRegistry, dockerProbe);
+    SandboxModeSelector.Plan plan(PipelineDefinition definition, RegisteredClone clone) {
+        return SandboxModeSelector.plan(
+                definition, bindingProperties, sandboxProperties, bindingRegistry, dockerProbe, clone);
     }
 
     /**

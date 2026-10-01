@@ -44,7 +44,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             support
         }
         new ContainerTakeSupport(
-                new FactoryProperties(null, null, null, null, null, null),
+                new FactoryProperties(null, null, null, null, null),
                 new BindingProperties(null, [:]),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
@@ -73,7 +73,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
 
         when:
         def result = new TakeContainerFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
                 [] as List<Segment>)
 
@@ -110,7 +110,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
 
         when:
         def result = new TakeContainerFreshClaim(slotWiring(
-                        assemblyRunning(executor), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
+                        assemblyRunning(executor), git, tracker, CLONE, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline())),
                 [] as List<Segment>)
 
@@ -138,7 +138,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
 
         when:
         new TakeContainerFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE, containerTakeSupport(support))).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
                 new RunOrder(CLONE_DIR, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
                 [] as List<Segment>)
@@ -174,7 +174,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
 
         when:
         def result = new TakeContainerFreshClaim(slotWiring(
-                        invalidAssembly, git, tracker, WORKTREES_ROOT, containerTakeSupport(support))).claim(
+                        invalidAssembly, git, tracker, CLONE, containerTakeSupport(support))).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
                 [] as List<Segment>)
 

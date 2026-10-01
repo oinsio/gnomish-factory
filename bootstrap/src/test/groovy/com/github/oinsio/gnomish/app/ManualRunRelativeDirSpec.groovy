@@ -21,9 +21,6 @@ class ManualRunRelativeDirSpec extends Specification implements AppAssemblyFixtu
     Path projectRoot
 
     @TempDir
-    Path worktreesRoot
-
-    @TempDir
     Path homeDir
 
     def "FR7: run with a --dir relative to the working directory starts git mode"() {
@@ -37,7 +34,7 @@ class ManualRunRelativeDirSpec extends Specification implements AppAssemblyFixtu
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = newManualRunRunner(worktreesRoot, homeDir)
+        def runner = newManualRunRunner(projectRoot, homeDir)
         def args = new DefaultApplicationArguments(
                 "--dir=${relative}".toString(),
                 '--task=do the thing',

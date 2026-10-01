@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -24,14 +25,14 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir)
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -56,11 +57,11 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
      * and writing to {@code out}.
      */
     private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
+        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {
-        worktreesRoot.resolve('my-project').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     // FR6, FR7, UX1: the banner prints before the pipeline runs, naming the deterministic branch

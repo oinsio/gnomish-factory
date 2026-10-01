@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -30,7 +31,7 @@ class TakeCommandSweepSpec extends Specification implements BareGitRepoFixture, 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
     List<OpenTask> openTasks = []
 
@@ -62,7 +63,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
         tracker.listOpen() >> { openTasks }
         // Finished -> Skipped: the shortest run that still passes through the sweep call site.
         tracker.fetchTask(_) >> new TrackerTask(
@@ -71,7 +72,7 @@ tracker:
 
     private TakeCommand newCommand(SandboxLifecyclePass pass) {
         newTakeCommand(
-                testProperties(instanceName: 'gnomish-factory'), worktreesRoot, [github: fakeFactory(tracker)],
+                testProperties(instanceName: 'gnomish-factory'), registeredClone, [github: fakeFactory(tracker)],
                 TakeCommandSeams.DEFAULTS, pass)
     }
 

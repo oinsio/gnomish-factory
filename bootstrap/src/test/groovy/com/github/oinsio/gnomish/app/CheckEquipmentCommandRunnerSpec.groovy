@@ -25,7 +25,7 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     new ShellCommandCheckRunner(),
     [:],
     MapSecretsProvider.NONE,
-    new FactoryProperties('check-equipment', null, null, null, null))
+    new FactoryProperties('check-equipment', null, null, null))
 
     private final ChildEnvAllowlist childEnv = ChildEnvAllowlist.of(['PATH'], ['TRACKER_TOKEN'])
 

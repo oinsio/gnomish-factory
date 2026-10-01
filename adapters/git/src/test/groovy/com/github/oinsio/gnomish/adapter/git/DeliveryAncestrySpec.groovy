@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -31,15 +33,15 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
 
     def runner = new GitProcessRunner()
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     GitTaskRepository repository
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
-        worktreesRoot = tempDir.resolve('worktrees')
-        repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
     }
 
     private void create(String taskId) {
@@ -53,7 +55,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
     /** Runs PROJ-1 to delivery and merges its branch into the base with its history (no squash). */
     private void deliverAndMergeEarlierTask(String mergeMode = '--no-ff') {
         create('PROJ-1')
-        def worktree = worktreesRoot.resolve('clone').resolve('PROJ-1')
+        def worktree = registeredClone.worktrees().resolve('PROJ-1')
         def trace = new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
@@ -85,7 +87,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         deliverAndMergeEarlierTask()
 
         when: 'the base is merged into the live task branch'
-        def worktree = worktreesRoot.resolve('clone').resolve('PROJ-2')
+        def worktree = registeredClone.worktrees().resolve('PROJ-2')
         def merge = runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
                 'merge', '--no-ff', '-m', 'Merge base into PROJ-2', currentBranch(cloneDir))
         assert merge.exitCode() == 0
@@ -124,7 +126,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
     def "a gnome commit carrying the cleanup subject does not deliver the task (#message)"() {
         given: 'a live task'
         create('PROJ-2')
-        def worktree = worktreesRoot.resolve('clone').resolve('PROJ-2')
+        def worktree = registeredClone.worktrees().resolve('PROJ-2')
 
         when: 'the gnome commits with the cleanup subject somewhere in its message'
         new File(worktree.toFile(), 'b.txt').text = 'work'

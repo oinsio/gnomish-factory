@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -21,11 +21,12 @@ import java.util.List;
  * <p>Never log a wiring whole: the record {@code toString} renders the credential variable names
  * it carries (NFR-S1). It carries names only, never a credential value.
  *
- * <p>Implements FR1 of introduce-slot-wiring.
+ * <p>Implements FR1 of introduce-slot-wiring; FR9 of add-project-registry.
  *
  * @param assembly the run assembly (listener-augmented with the heartbeat's progress listener)
  * @param git the task-git capability set, including the claim-epoch book
- * @param worktreesRoot the directory the slot's task worktrees live under
+ * @param registeredClone the registered clone the slot works in; its task worktrees live in the clone's own
+ *     worktree folder (FR9 of add-project-registry)
  * @param taskIdMdcKey the MDC key the task id is bound under while the slot works a task
  * @param abort the abort handler and its threshold K
  * @param credentialEnvVarsToScrub the declared credential variable names scrubbed from agent
@@ -37,7 +38,7 @@ import java.util.List;
 public record SlotWiring(
         RunAssembly assembly,
         TaskGit git,
-        Path worktreesRoot,
+        RegisteredClone registeredClone,
         String taskIdMdcKey,
         AbortFuse abort,
         List<String> credentialEnvVarsToScrub,

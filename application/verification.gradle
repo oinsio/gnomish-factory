@@ -31,7 +31,7 @@ pitest {
     // the construction itself, never the coverage of the graph being constructed.
     excludedClasses = [
         'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
-        // The five `with*` copies of the seam parameter object; driven by :bootstrap's
+        // The six `with*` copies of the seam parameter object; driven by :bootstrap's
         // TakeCommandStandingReaperWiringSpec / TakeCommandBatchSpec / TakeHeartbeatLifecycleSpecBase,
         // each of which overrides one seam and asserts the resulting take run's behavior.
         'com.github.oinsio.gnomish.app.TakeCommandSeams',

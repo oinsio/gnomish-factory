@@ -5,13 +5,17 @@ import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import java.time.Clock;
 
 /**
  * The test-seam collaborators {@link TakeCommand} takes, defaulted for production wiring and
  * overridden selectively by individual specs: the beat {@link Sleeper} (task 6.1), the standing
  * reaper's OWN {@link Sleeper} (fix-reaper-idle-liveness FR5), the reaper's {@link MonotonicTime}
- * (task 6.6), the {@link TakeoverConfirmation} (task 6.2), and the {@link ServeProperties} used for
- * batch mode's concurrency limit N (task 6.2 of add-factory-serve, FR2). Replaces the former
+ * (task 6.6), the {@link TakeoverConfirmation} (task 6.2), the {@link ServeProperties} used for
+ * batch mode's concurrency limit N (task 6.2 of add-factory-serve, FR2), and the {@link Clock} that
+ * supplies "now" for bare-mode backoff and takeover (production wiring passes its {@code
+ * javaTimeClock} bean; moved here from the command's constructor so the command could take the
+ * {@link ProjectScope} within the parameter limit, FR3, FR10 of add-project-registry). Replaces the former
  * telescoping {@code of(...)} overloads of the command's factory, which design D7 of
  * collapse-composition-roots removed: start from {@link #DEFAULTS} and layer on only the seams a
  * given spec cares about.
@@ -26,7 +30,8 @@ record TakeCommandSeams(
         Sleeper reaperSleeper,
         MonotonicTime heartbeatMonotonicTime,
         TakeoverConfirmation takeoverConfirmation,
-        ServeProperties serveProperties) {
+        ServeProperties serveProperties,
+        Clock clock) {
 
     // Defaults batch mode's concurrency limit N to ServeProperties's own unset-slots default (2,
     // design D3); production wiring (ManualRunRunner) overrides via withServeProperties with the
@@ -36,30 +41,36 @@ record TakeCommandSeams(
             new ThreadSleeper(),
             new SystemMonotonicTime(),
             ConsoleTakeoverConfirmation.systemTty(),
-            new ServeProperties(0, null, null, null, null, null, null, null, null));
+            new ServeProperties(0, null, null, null, null, null, null, null, null),
+            Clock.systemUTC());
 
     TakeCommandSeams withHeartbeatSleeper(Sleeper heartbeatSleeper) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
     }
 
     TakeCommandSeams withReaperSleeper(Sleeper reaperSleeper) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
     }
 
     TakeCommandSeams withHeartbeatMonotonicTime(MonotonicTime heartbeatMonotonicTime) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
     }
 
     TakeCommandSeams withTakeoverConfirmation(TakeoverConfirmation takeoverConfirmation) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
     }
 
     TakeCommandSeams withServeProperties(ServeProperties serveProperties) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
+    }
+
+    TakeCommandSeams withClock(Clock clock) {
+        return new TakeCommandSeams(
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, clock);
     }
 }

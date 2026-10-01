@@ -2,17 +2,20 @@ package com.github.oinsio.gnomish
 
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.core.FileAppender
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
 import java.nio.file.Files
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
-import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.ConfigurableApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * The test suite does not write to the operator's log (task 2.3 of harden-logging-observability,
- * FR11, M4). The defect this closes was observed live: `logback-spring.xml` sends everything to
- * `~/.gnomish/logs/gnomish.log`, every {@code @SpringBootTest} in this module boots a real context
+ * FR11, M4). The defect this closes was observed live: `logback-spring.xml` sent everything to the
+ * operator's own log file under `~/.gnomish`, every {@code @SpringBootTest} in this module boots a real context
  * that applies it, and Gradle test-worker stack traces — provoked on purpose by specs asserting
  * failure paths — landed in the file an operator later greps as evidence of what their factory did.
  *
@@ -23,21 +26,44 @@ import spock.lang.Specification
  *       `logback-spring.xml` for Logback and for Spring Boot alike, so a booted context routes to
  *       the build directory. Asserted by booting one and following where a line actually goes.
  *   <li><b>Out of process</b>, {@code E2eProcessHarness} spawns the packaged jar, which carries the
- *       production configuration by design — a test-classpath file cannot reach it. Its
- *       {@code GNOMISH_LOG_DIR} redirect is what keeps it off the operator's file.
+ *       production configuration by design — a test-classpath file cannot reach it. That
+ *       configuration writes where the operator configuration loader decides, under the factory
+ *       home (FR11 of add-project-registry), and the harness points {@code GNOMISH_HOME} at a
+ *       temporary folder — which is what keeps it off the operator's file.
  * </ul>
  *
  * <p>The marker is emitted at INFO deliberately: INFO is the level that reaches the file appender
  * and not the WARN+ console, so a leak into the production configuration would show up here rather
  * than being masked by a threshold.
  *
- * <p>Implements FR11, M4 of harden-logging-observability.
+ * <p>Implements FR11, M4 of harden-logging-observability; FR11 of add-project-registry.
  */
-@SpringBootTest(classes = FactoryApplication)
 class OperatorLogIsolationSpec extends Specification {
 
-    private static final Path OPERATOR_LOG_DIR =
-    Path.of(System.getProperty('user.home'), '.gnomish', 'logs')
+    @Shared
+    @TempDir
+    Path operatorHomeDir
+
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
+
+    /** The operator's own factory home, whose logs no spec may write. */
+    private static final Path OPERATOR_HOME = Path.of(System.getProperty('user.home'), '.gnomish')
+
+    // Design D8 of add-project-registry: booted through the CommandExit argument registration,
+    // against a factory home of the spec's own.
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot()
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // FR11: a booted Spring context routes the suite's lines to the build directory
     def "a line logged from a booted context lands in the build directory, not the operator's log"() {
@@ -58,17 +84,17 @@ class OperatorLogIsolationSpec extends Specification {
     def "no appender attached to the booted root logger writes under the operator's .gnomish directory"() {
         expect:
         fileAppenders().every { FileAppender<?> appender ->
-            !Path.of(appender.file).toAbsolutePath().normalize().startsWith(OPERATOR_LOG_DIR)
+            !Path.of(appender.file).toAbsolutePath().normalize().startsWith(OPERATOR_HOME)
         }
     }
 
-    // M4, out-of-process half: the E2E layer's spawned production binary is redirected too
-    def "the E2E harness points the spawned factory's log at a temporary directory"() {
-        expect: 'the variable it sets is the one the production configuration reads'
-        E2eProcessHarness.LOG_DIR_VARIABLE == 'GNOMISH_LOG_DIR'
-
-        and:
-        !E2eProcessHarness.LOG_DIR.toAbsolutePath().normalize().startsWith(OPERATOR_LOG_DIR)
+    // M4, out-of-process half: the E2E layer's spawned production binary logs under a temporary
+    // factory home — the production configuration writes the file the loader published from it
+    // (FR11 of add-project-registry)
+    def "the E2E harness points the spawned factory's home, and so its log, at a temporary directory"() {
+        expect:
+        !E2eProcessHarness.HOME.root().startsWith(OPERATOR_HOME)
+        !E2eProcessHarness.HOME.hostLogFile().startsWith(OPERATOR_HOME)
     }
 
     private static Path testLogFile() {
@@ -86,8 +112,9 @@ class OperatorLogIsolationSpec extends Specification {
         } as List<FileAppender<?>>
     }
 
+    /** The operator's project-less log — the file a leaked line would reach first. */
     private static Path operatorLog() {
-        return OPERATOR_LOG_DIR.resolve('gnomish.log')
+        return OPERATOR_HOME.resolve('logs').resolve('factory.log')
     }
 
     /**

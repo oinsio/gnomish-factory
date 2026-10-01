@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -66,7 +67,7 @@ class TakeCommandStandingReaperWiringSpec extends Specification implements BareG
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     InMemoryTracker tracker
     InMemoryTrackerHarness harness
 
@@ -108,7 +109,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     private static TrackerAdapterFactory fixedFactory(Tracker t) {
@@ -134,7 +135,7 @@ tracker:
     }
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
-        newTakeCommand(testProps(), worktreesRoot, [github: fixedFactory(tracker)],
+        newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)],
         TakeCommandSeams.DEFAULTS
         .withServeProperties(serveProperties)
         .withHeartbeatSleeper(budgetedRealSleeper(600))

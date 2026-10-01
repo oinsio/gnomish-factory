@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -48,7 +49,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
 
     def setup() {
@@ -56,7 +57,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def cleanup() {
@@ -76,15 +77,15 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     }
 
     private GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        new GitTaskRepository(gitRunner, registeredClone, ClaimEpochSource.NONE)
     }
 
     private Path expectedWorktree(String taskId) {
-        worktreesRoot.resolve('my-project').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     private GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        new GitResumeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot, 'taskId')
+        new GitResumeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, 'taskId')
     }
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */

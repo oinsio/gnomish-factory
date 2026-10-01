@@ -25,19 +25,23 @@ class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppen
 
     static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
     static final InstanceInfo INSTANCE = new InstanceInfo('gnome-1', 'host1', '1.0.0')
-    static final String INSTANCE_NAME = 'gnome-1'
 
     @TempDir
     Path homeDir
 
+    /** The instance's serve directory, not yet created, inside the temporary folder. */
+    private Path serveDir() {
+        homeDir.resolve('serve')
+    }
+
     def clock = Clock.fixed(NOW, ZoneOffset.UTC)
 
     private SweepLedgerWriter writer() {
-        new SweepLedgerWriter(ledgerAppenderFor(homeDir, INSTANCE_NAME, NOW), INSTANCE, clock)
+        new SweepLedgerWriter(ledgerAppenderFor(serveDir(), NOW), INSTANCE, clock)
     }
 
     private List<String> ledgerLines() {
-        def file = ledgerFileFor(homeDir, INSTANCE_NAME, NOW)
+        def file = ledgerFileFor(serveDir(), NOW)
         Files.exists(file) ? Files.readAllLines(file).findAll {
             !it.isBlank()
         } : []
@@ -137,7 +141,7 @@ class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppen
     // leave an ERROR carrying the catalog code, so a silently ledger-less sweep is impossible.
     def "an append failure is swallowed, not propagated, and leaves one ERROR per lost line"() {
         given: 'a regular file where the ledger directory belongs, so every append fails'
-        Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        Files.writeString(serveDir(), 'not a directory')
         def writer = writer()
         def logs = LogCaptureSupport.attach(SweepLedgerWriter)
 

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -24,16 +25,17 @@ import org.slf4j.MDC;
  * reconcile the remote on resume-start, and build the same resume bundle shape (context,
  * outcome, last escalation, base commit and the durable base pin) from the loaded task record.
  *
- * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract.
+ * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract; FR9 of
+ * add-project-registry.
  *
  * @param git the task-git capability set: clone hardening, branch lookup, worktree
  *     materialization and divergence reconciliation; never null
- * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
- *     worktrees are created (design D6); never null
+ * @param registeredClone the registered clone whose own worktree folder the resumed worktree is
+ *     materialized in (design D6; FR9 of add-project-registry); never null
  * @param taskIdMdcKey the MDC key set to the branch's recorded taskId once bootstrap succeeds,
  *     matching {@link GitResumeRunner}'s own key
  */
-record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey) {
+record TakeResumeBootstrap(TaskGit git, RegisteredClone registeredClone, String taskIdMdcKey) {
 
     /**
      * Locates the task branch for {@code taskId} in {@code cloneDir}, materializes its worktree,
@@ -79,7 +81,7 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         }
 
         String branchName = TaskIdSanitizer.branchName(taskId);
-        Path worktree = git.worktrees().ensureWorktree(cloneDir, worktreesRoot, taskId, branchName);
+        Path worktree = git.worktrees().ensureWorktree(registeredClone, taskId, branchName);
         git.worktrees().reconcile(worktree, taskId, branchName);
         // Resume-start touchpoint (FR3 of fix-lifecycle-push): the divergence check above pulls
         // local up to what origin holds; this pushes origin up to what local holds, delivering a

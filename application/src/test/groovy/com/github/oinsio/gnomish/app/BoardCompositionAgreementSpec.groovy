@@ -72,10 +72,12 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         def factory = new RecordingTrackerAdapterFactory(tracker)
         def clock = Clock.fixed(NOW, ZoneOffset.UTC)
         def factoryProperties = new FactoryProperties(
-                INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
+                INSTANCE_NAME, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
         def trackerValidatorRegistry = TrackerValidatorStub.acceptingGithubSource()
         def boardCommand = new BoardCommand(
-                clock, factoryProperties, new TrackerWiring([github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry),
+                clock, factoryProperties,
+                RegisteredCloneFixture.scope(RegisteredCloneFixture.unregistered(projectDir.resolveSibling('gnomish-home'), projectDir)),
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry),
                 liveConsole())
 
         and: 'the board CLI\'s default readyLimit (50), stood in for as the dashboard\'s own choice too'

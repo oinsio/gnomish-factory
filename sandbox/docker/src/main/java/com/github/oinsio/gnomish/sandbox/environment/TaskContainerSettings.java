@@ -34,7 +34,8 @@ record TaskContainerSettings(String image, String runtime, ResourceLimits limits
 
     private static String requireImage(@Nullable String image) {
         if (image == null || image.isBlank()) {
-            throw new IllegalStateException("factory.sandbox.image must be set to bind the container adapter (FR3)");
+            throw new IllegalStateException(
+                    "factory.sandbox.image must be set in the project file to bind the container adapter (FR3)");
         }
         return image;
     }

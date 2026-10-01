@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -119,15 +120,15 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
-        def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
+        new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
                 new ToolTrace(new AttemptKey('PROJ-5', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'push', 'origin', 'gnomish/PROJ-5')
+        runner.run(seedRegistered.worktrees().resolve('PROJ-5'), 'push', 'origin', 'gnomish/PROJ-5')
 
         def observerClone = tempDir.resolve('observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')

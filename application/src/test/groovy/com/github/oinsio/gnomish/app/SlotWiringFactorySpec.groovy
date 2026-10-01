@@ -37,7 +37,7 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         def bound = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, CONFIG, adapterFactory, tracker, INSTANCE)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
         def heartbeat = TakeHeartbeat.forRun(tracker, CONFIG, { Duration d -> } as Sleeper)
-        def factory = new SlotWiringFactory(plain, WORKTREES_ROOT, 'taskId', FIXED_CLOCK, support, source)
+        def factory = new SlotWiringFactory(plain, RegisteredCloneFixture.provider(CLONE), 'taskId', FIXED_CLOCK, support, source)
 
         when:
         def wiring = factory.slotWiring(bound, git, heartbeat)
@@ -50,7 +50,7 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         and: "the caller's git and heartbeat tenure, the factory's equipment"
         wiring.git().is(git)
         wiring.tenure() == heartbeat.tenure()
-        wiring.worktreesRoot() == WORKTREES_ROOT
+        wiring.registeredClone() == CLONE
         wiring.taskIdMdcKey() == 'taskId'
         wiring.containerTakeSupport().is(support)
 

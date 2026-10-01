@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
@@ -43,7 +44,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
 
         def logFile = tempDir.resolve('mutation.log')
         def gitWrapper = writeLoggingGitWrapper(tempDir, logFile)
-        def worktreesRoot = tempDir.resolve('worktrees')
+        def registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
 
         and: 'N slots, each with its own GitProcessRunner instance, coordinated to start together'
         int slots = 4
@@ -61,12 +62,12 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     start.await()
                     def runner = new GitProcessRunner(gitWrapper.toString())
                     def branchCreator = new TaskBranchCreator(runner)
-                    def worktreeManager = new TaskWorktreeManager(runner, worktreesRoot)
+                    def worktreeManager = new TaskWorktreeManager(runner, registeredClone)
                     def push = new BranchPush(runner)
 
                     def branchName = (branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
                             as BranchCreationResult.Created).branchName()
-                    def worktree = worktreeManager.ensureWorktree(cloneDir, taskId, branchName)
+                    def worktree = worktreeManager.ensureWorktree(taskId, branchName)
 
                     new File(worktree.toFile(), "${taskId}.txt").text = "work by ${taskId}"
                     runner.run(worktree, 'add', "${taskId}.txt")

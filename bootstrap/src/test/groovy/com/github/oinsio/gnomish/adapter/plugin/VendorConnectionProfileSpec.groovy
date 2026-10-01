@@ -49,7 +49,7 @@ class VendorConnectionProfileSpec extends Specification {
     }
 
     private static FactoryProperties propertiesWithProfile(Map check = checkSubsection()) {
-        new FactoryProperties(null, null, null, null, check, profileConfig())
+        new FactoryProperties(null, null, null, check, profileConfig())
     }
 
     // FR16, "Two ports share one named profile": one definition, both ports — and the endpoint and
@@ -133,7 +133,7 @@ tracker:
     def "an undefined profile reference in a check subsection fails startup"() {
         when:
         new CheckClientConfiguration()
-                .checkClientRegistry(new FactoryProperties(null, null, null, null,
+                .checkClientRegistry(new FactoryProperties(null, null, null,
                 [github: [connection: 'does-not-exist', repo: 'acme/widgets']], profileConfig()))
 
         then:
@@ -147,7 +147,7 @@ tracker:
     def "declaring both the reference and an inline profile key fails startup"() {
         when:
         new CheckClientConfiguration()
-                .checkClientRegistry(new FactoryProperties(null, null, null, null,
+                .checkClientRegistry(new FactoryProperties(null, null, null,
                 [github: [connection: PROFILE, ('api-url'): 'https://ghe.acme.test', repo: 'acme/widgets']],
                 profileConfig()))
 

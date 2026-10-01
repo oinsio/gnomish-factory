@@ -48,13 +48,10 @@ final class FakeAgentSupport {
     /**
      * @param scenario the {@code GNOMISH_FAKE_SCENARIO} name to hardcode into
      *     the generated wrapper script
-     * @param envPassthrough the {@code agentCliEnvPassthrough} list (superseded
-     *     config, ignored at runtime — see {@code FactoryProperties}); defaults
-     *     to empty
      * @return {@link FactoryProperties} whose {@code agentCliBinary} is the
      *     generated wrapper script's path
      */
-    static FactoryProperties propertiesFor(String scenario, List<String> envPassthrough = []) {
+    static FactoryProperties propertiesFor(String scenario) {
         def path = WRAPPERS_BY_SCENARIO.computeIfAbsent(scenario) { String name ->
             def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
             wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${name}'\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
@@ -62,7 +59,7 @@ final class FakeAgentSupport {
             wrapper.deleteOnExit()
             wrapper.absolutePath
         }
-        new FactoryProperties('factory-01', path, envPassthrough, null, null)
+        new FactoryProperties('factory-01', path, null, null)
     }
 
     /**
@@ -98,7 +95,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, [], null, null)
+        new FactoryProperties('factory-01', wrapper.absolutePath, null, null)
     }
 
     /**

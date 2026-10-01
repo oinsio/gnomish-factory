@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -75,7 +76,8 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
         assert refreshed instanceof BaseRefreshOutcome.Refreshed:
         "refresh of '${baseName}' did not succeed: ${refreshed}"
         String commit = (refreshed as BaseRefreshOutcome.Refreshed).commit()
-        new GitTaskRepository(runner, clone, tempDir.resolve('worktrees'), ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(
+                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), clone), ClaimEpochSource.NONE).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 ObjectId.of(commit),
                 new BasePin(baseName, (refreshed as BaseRefreshOutcome.Refreshed).kind(), BaseRule.CONFIGURED_DEFAULT),

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -53,12 +54,12 @@ trait KillPointWorlds implements BareGitRepoFixture {
      */
     KillPointWorld hostWorld(Path root) {
         Path clone = initGnomishClone(root, 'my-project')
-        Path worktreesRoot = root.resolve('worktrees-root')
+        def registered = RegisteredCloneFixture.registered(root.resolve('home'), clone)
         def epochs = new ClaimEpochBook()
         Path gitLog = root.resolve('git-invocations.log')
         def runner = new GitProcessRunner(recordingGit(gitLog).toString())
-        def store = new GitTaskRepository(runner, clone, worktreesRoot, epochs)
-        def world = seed(clone, store, epochs, 'HEAD', worktreesRoot.resolve('my-project').resolve(TASK_ID))
+        def store = new GitTaskRepository(runner, registered, epochs)
+        def world = seed(clone, store, epochs, 'HEAD', registered.worktrees().resolve(TASK_ID))
         world.gitLog = gitLog
         world.runner = runner
         world
@@ -114,10 +115,11 @@ trait KillPointWorlds implements BareGitRepoFixture {
                 origin: origin,
                 creatingClone: creating,
                 creating: new GitTaskRepository(
-                        runner, creating, root.resolve('creating-worktrees'), new ClaimEpochBook()),
+                        runner, RegisteredCloneFixture.registered(root.resolve('creating-home'), creating), new ClaimEpochBook()),
                 recovering: new PushBestEffortTaskRepository(
                         new GitTaskRepository(
-                                runner, recovering, root.resolve('recovering-worktrees'), new ClaimEpochBook()),
+                                runner, RegisteredCloneFixture.registered(root.resolve('recovering-home'), recovering),
+                                new ClaimEpochBook()),
                         runner,
                         recovering),
                 recoveringClone: recovering,

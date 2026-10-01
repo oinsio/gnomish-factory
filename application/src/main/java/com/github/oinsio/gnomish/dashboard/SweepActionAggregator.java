@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
  * category} is missing or unrecognized (a newer factory version's vocabulary) is skipped rather
  * than raised — the render must survive it.
  *
- * <p>Implements NFR-O3, UX1 of add-serve-sandbox-lifecycle.
+ * <p>Implements NFR-O3, UX1 of add-serve-sandbox-lifecycle. Implements FR10 of add-project-registry.
  */
 public final class SweepActionAggregator {
 
@@ -47,19 +47,17 @@ public final class SweepActionAggregator {
     /**
      * Collects the window's sweep actions, newest first.
      *
-     * @param homeDir the user's home directory; never null
-     * @param instanceName the configured instance name; never null
+     * @param serveDir the instance's serve directory the ledger files live in; never null
      * @param today the reference UTC date the window ends at (inclusive); never null
      * @param windowDays how many trailing days to include; must be positive
      * @return the collected rows, newest first, bounded at {@link #MAX_ACTIONS}, with the
      *     pre-truncation total
      * @throws IOException if a ledger file within the window has a malformed non-tail line
      */
-    public SweepActionWindow aggregate(Path homeDir, String instanceName, LocalDate today, int windowDays)
-            throws IOException {
+    public SweepActionWindow aggregate(Path serveDir, LocalDate today, int windowDays) throws IOException {
         List<SweepActionRow> rows = new ArrayList<>();
         for (int offset = windowDays - 1; offset >= 0; offset--) {
-            Path file = ObservabilityPaths.ledgerFile(homeDir, instanceName, today.minusDays(offset));
+            Path file = ObservabilityPaths.ledgerFile(serveDir, today.minusDays(offset));
             if (!Files.exists(file)) {
                 continue;
             }

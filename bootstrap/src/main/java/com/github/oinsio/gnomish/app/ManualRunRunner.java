@@ -15,7 +15,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * The whole-CLI entrypoint (design D10): runs on the {@code ApplicationRunner} thread Spring Boot
- * calls after context refresh. {@link SubcommandDispatch} first tries {@code status}/{@code
+ * calls after context refresh. {@code gnomish project} goes to {@link ProjectCommand}, which lives
+ * in this module beside the project registry it drives (FR2, FR4 of add-project-registry); for
+ * every other subcommand {@link SubcommandDispatch} first tries {@code status}/{@code
  * usage}/{@code take} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port) — a bare {@code
  * gnomish take} is never confused with {@code gnomish run}, since the leading positional token
  * settles the subcommand. Only an empty command line — the form a Spring test context boots
@@ -32,7 +34,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
  * FR14, UX1-UX4, design D8, D9 of add-git-workflow; FR7 of collapse-composition-roots; FR8 of
- * fix-operator-blockers.
+ * fix-operator-blockers; FR2, FR4 of add-project-registry.
  */
 // Null-marked explicitly (JSpecify): this module carries no package-info, and the application
 // module's one does not reach this source root, so without the class-level marker the
@@ -67,6 +69,8 @@ public final class ManualRunRunner implements ApplicationRunner {
     private final GitVersionCheck gitVersionCheck;
 
     private final SubcommandDispatch subcommandDispatch;
+    /** {@code gnomish project}, routed here: it lives beside the registry in this module. */
+    private final ProjectCommand projectCommand;
     /**
      * Package-private: {@code ManualRunRunnerSpec} reads {@code drive.assembly.hostGitPush} to
      * assert the in-place assembly carries no mid-round push decoration.
@@ -78,10 +82,12 @@ public final class ManualRunRunner implements ApplicationRunner {
     ManualRunRunner(
             GitVersionCheck gitVersionCheck,
             SubcommandDispatch subcommandDispatch,
+            ProjectCommand projectCommand,
             ManualRunDrive drive,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
         this.gitVersionCheck = gitVersionCheck;
         this.subcommandDispatch = subcommandDispatch;
+        this.projectCommand = projectCommand;
         this.drive = drive;
         this.errorConsole = errorConsoleIO;
     }
@@ -96,6 +102,10 @@ public final class ManualRunRunner implements ApplicationRunner {
                         // subcommand dispatches, so run, take and serve all pass through it and
                         // no transfer, claim or tracker write precedes a refusal.
                         gitVersionCheck.verify();
+                        if (Subcommand.parse(args) == Subcommand.PROJECT) {
+                            projectCommand.run(args);
+                            return;
+                        }
                         if (subcommandDispatch.dispatchNonRun(args) || args.getSourceArgs().length == 0) {
                             return;
                         }

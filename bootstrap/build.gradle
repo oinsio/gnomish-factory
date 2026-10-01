@@ -99,6 +99,8 @@ dependencies {
     // Test scope (design D3/D8 of split-logtext-leaves): the log-contract and expectation gates
     // name the catalog; no production source here does.
     testImplementation project(':operatorevent')
+    // `ConfigLevels` derives the key → level table from the annotation (D4 of add-project-registry).
+    implementation project(':operatorconfig')
     // Test scope: the process-spawn boundary gate and the subprocess-backed harnesses name
     // `:subprocess`'s own types, which the gate asks be declared rather than inherited.
     testImplementation project(':subprocess')
@@ -115,16 +117,15 @@ dependencies {
     // The Groovy/Spock/JUnit-launcher test stack and the JSpecify + Error Prone
     // compiler plugins are declared by the convention plugins (design D9).
 
-    // The context-level bootstrap specs (task 3.3) compile against @SpringBootTest
-    // (spring-boot-test) and @ContextConfiguration (spring-test); @Autowired comes with the
-    // production-scope spring-beans above. spock-spring is a discovered global extension with no
+    // spring-boot-test stays on the test classpath; spring-test left with the last
+    // @SpringBootTest/@ContextConfiguration spec, since the context-level specs boot through
+    // CommandExit's argument registration instead (design D8 of add-project-registry). spock-spring is a discovered global extension with no
     // compile-time reference from spec bytecode, hence testRuntimeOnly (buildHealth advice); it is
     // declared per module rather than in `test-conventions` because it resolves Spring types at
     // discovery time, so it may only go on a test classpath that has Spring — which, per design
     // D3, is this module's alone.
     testRuntimeOnly libs.spock.spring
     testImplementation libs.spring.boot.test
-    testImplementation libs.spring.test
     // Compile-time since the sink converters (D1 of harden-untrusted-text-sinks); the FR4
     // logging-level spec captures events with Logback's ListAppender over the same edge.
     implementation libs.logback.classic
@@ -160,7 +161,7 @@ dependencies {
 
 // The one module allowed to reach the adapters (FR2, design D3) — that is what makes it
 // the composition root. The set is still stated rather than left open, so `:test-fixtures` never
-// lands on a production classpath (FR7); `:atomicfile`, `:baseref` and `:logtext` arrive
+// lands on a production classpath (FR7); `:baseref` and `:logtext` arrive
 // transitively, and so do the two JDK-only leafs — `:operatorevent` through `:domain`,
 // `:untrustedtext` through `:logtext`, whose `LogText` is a facade over it (FR11, design D9 of
 // split-logtext-leaves). No production source here names either leaf; the gate walks the
@@ -182,6 +183,10 @@ layering {
         ':gittransfer',
         ':gnomish-plugin-api',
         ':logtext',
+        // The operator-configuration level leaf (design D4 of add-project-registry): named by
+        // `ConfigLevels`, and reached through `:application` and `:sandbox:core`, whose
+        // configuration records carry `@ConfigLevel`.
+        ':operatorconfig',
         ':operatorevent',
         ':sandbox:core',
         ':sandbox:docker',

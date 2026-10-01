@@ -1,10 +1,6 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
-import com.github.oinsio.gnomish.adapter.git.TaskStart
-import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
+import com.github.oinsio.gnomish.adapter.git.*
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -15,15 +11,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.AttemptRecord
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,7 +19,6 @@ import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * The crash-reap-reclaim lifecycle on the real medium (FR6, NFR-R1 of fix-claim-epoch-fence), the
  * spec scenario "Crashed, reaped, reclaimed": instance A dies mid-round leaving a salvaged tip
@@ -169,7 +156,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
     private void crashInstanceA(ClaimEpoch epochA) {
         def book = new ClaimEpochBook()
         book.issued(TASK_ID, epochA)
-        def repository = new GitTaskRepository(gitRunner, projectDir, worktreesRoot, book)
+        def repository = new GitTaskRepository(gitRunner, registeredClone, book)
         // The base A pins is the clone's real branch name, as a fresh take's resolution would pin
         // it — not the literal 'HEAD', which origin holds no ref by, so B's resume could never
         // resolve it (FR13, D15 of add-base-ref-resolution).
@@ -179,7 +166,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
                 TaskStart.commit(projectDir, base),
                 TaskStart.pin(base, BaseRule.REPOSITORY_DEFAULT_BRANCH),
                 TaskState.atStageStart('build'))
-        def worktree = worktreesRoot.resolve('project').resolve(TASK_ID)
+        def worktree = registeredClone.worktrees().resolve(TASK_ID)
         // The round is recorded in state.json's own attempt history, not only as a tool trace: the
         // history is what makes the tip InProgress rather than Created, so a state written without
         // it would leave this scenario resuming a branch that records no round at all.

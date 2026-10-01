@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
  * gnomish dashboard --watch} has no drain/shutdown protocol of its own, unlike {@code serve}.
  *
  * <p>Implements FR7, FR8, FR9, NFR-P1, NFR-R1, NFR-R2 of add-dashboard-page (design D4, D9).
+ * Implements FR10 of add-project-registry.
  */
 public final class DashboardWatchLoop {
 
@@ -42,7 +43,8 @@ public final class DashboardWatchLoop {
     private final Clock clock;
 
     /**
-     * @param renderCycle the shared render composition; never null
+     * @param renderCycle the render composition over the instance's serve directory, so this loop
+     *     relays no path of its own but the output file; never null
      * @param sleeper the render-cadence sleeper — production {@code ThreadSleeper}, a controllable
      *     sleeper under test; never null
      * @param clock the wall-clock time source for every cycle's observation instant; never null
@@ -62,14 +64,12 @@ public final class DashboardWatchLoop {
      * also keeps every covering test bounded: a PIT mutant that drops the {@code sleep} call
      * turns this into a busy-render loop that only an interrupt can stop.
      *
-     * @param homeDir the user's home directory the observability files live under; never null
-     * @param instanceName the configured instance name; never null
      * @param outputFile the page's output path; never null
      * @param boardFetch the board composition call, re-run on {@link #BOARD_CADENCE}; never null
      */
-    public void run(Path homeDir, String instanceName, Path outputFile, Supplier<BoardModel> boardFetch) {
+    public void run(Path outputFile, Supplier<BoardModel> boardFetch) {
         while (!Thread.currentThread().isInterrupted()) {
-            renderOnce(homeDir, instanceName, outputFile, boardFetch);
+            renderOnce(outputFile, boardFetch);
             sleeper.sleep(RENDER_CADENCE);
         }
     }
@@ -78,11 +78,11 @@ public final class DashboardWatchLoop {
      * Runs exactly one cycle. Package-private so specs drive the loop deterministically, one cycle
      * at a time, mirroring {@code FeedAutomaton.step()}.
      */
-    void renderOnce(Path homeDir, String instanceName, Path outputFile, Supplier<BoardModel> boardFetch) {
+    void renderOnce(Path outputFile, Supplier<BoardModel> boardFetch) {
         Instant now = clock.instant();
         BoardSectionView boardView =
                 boardCache.dueFor(now, BOARD_CADENCE) ? boardCache.refresh(boardFetch, now) : boardCache.cached();
-        String html = renderCycle.render(homeDir, instanceName, boardView, now, RENDER_CADENCE);
+        String html = renderCycle.render(boardView, now, RENDER_CADENCE);
         try {
             AtomicFileWriter.write(outputFile, html);
         } catch (IOException writeFailure) {

@@ -4,7 +4,9 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -46,19 +48,19 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
         addRemote(seed, 'origin', bareOrigin.toString())
         gitOutput(seed, 'push', 'origin', 'HEAD:refs/heads/main')
 
-        worktreesRoot = tempDir.resolve('worktrees')
-        def taskWorktrees = tempDir.resolve('task-build').resolve('worktrees')
-        buildTaskBranch(seed, taskWorktrees, 'PROJ-1')
+        buildTaskBranch(RegisteredCloneFixture.registered(tempDir.resolve('task-build'), seed), 'PROJ-1')
         gitOutput(seed, 'push', 'origin', 'gnomish/PROJ-1')
 
         clone = seedClone(tempDir, bareOrigin.toString(), tempDir.resolve('clone'), '--branch', 'main', '--single-branch')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), clone)
     }
 
-    /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
-    private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
-        new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(
+    /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway factory home of its own. */
+    private void buildTaskBranch(RegisteredClone seed, String taskId) {
+        Path repo = seed.clonePath()
+        new GitTaskRepository(runner, seed, ClaimEpochSource.NONE).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []), TaskStart.commit(repo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def worktree = taskWorktrees.resolve(repo.fileName.toString()).resolve(taskId)
+        def worktree = TaskWorktreePath.resolve(seed, taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
@@ -91,7 +93,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         def output = captureStdout {
-            new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole()).run(args)
+            new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole()).run(args)
         }
 
         then: 'the fetch path was actually exercised, not vacuously true'
@@ -116,7 +118,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         def output = captureStdout {
-            new UsageCommand(TaskGitFixture.realClaimless(), liveConsole()).run(args)
+            new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole()).run(args)
         }
 
         then:
@@ -148,7 +150,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         captureStdout {
-            new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole()).run(args)
+            new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole()).run(args)
         }
 
         then: 'no new fetch happened: FETCH_HEAD is untouched and the tracking ref sha is unchanged'

@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Path
 import spock.lang.Specification
 
 /**
- * FR2, FR4, D3 of add-factory-serve (task 5.1): {@link ServeArgumentsParser} defaults {@code --dir}
- * exactly like {@link TakeArgumentsParser}, defaults {@code --slots} to {@code null} (the caller
+ * FR2, FR4, D3 of add-factory-serve (task 5.1): {@link ServeArgumentsParser} fills {@code dir}
+ * from the registered clone (FR3 of add-project-registry), defaults {@code --slots} to {@code null} (the caller
  * falls back to {@code ServeProperties#slots()}), validates a given {@code --slots} is positive,
  * carries {@code --drain} as a plain flag, and rejects every {@code take}-only flag before the
  * tracker is ever touched — including {@code --interactive}, since {@code serve} is
@@ -15,27 +16,31 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def parser = new ServeArgumentsParser()
 
-    def "defaults --dir to the current directory when absent"() {
+
+    /** The clone the configuration loader resolved: the {@code dir} every parse fills (FR3, D9 of add-project-registry). */
+    private static final RegisteredClone CLONE =
+    RegisteredCloneFixture.unregistered(Path.of('/tmp/gnomish-home'), Path.of('/tmp/registered-clone'))
+    def "FR3: dir is the registered clone's path when --dir is absent"() {
         when:
-        def parsed = parser.parse(args('serve'))
+        def parsed = parser.parse(args('serve'), CLONE)
 
         then:
-        parsed.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
+        parsed.dir() == CLONE.clonePath()
         parsed.slots() == null
         !parsed.drain()
     }
 
-    def "parses an explicit --dir override"() {
+    def "FR3: an explicit --dir is accepted and resolves nothing — the loader already did"() {
         when:
-        def parsed = parser.parse(args('serve', '--dir=/tmp/project'))
+        def parsed = parser.parse(args('serve', '--dir=/tmp/project'), CLONE)
 
         then:
-        parsed.dir() == Path.of('/tmp/project')
+        parsed.dir() == CLONE.clonePath()
     }
 
     def "parses an explicit positive --slots override"() {
         when:
-        def parsed = parser.parse(args('serve', '--slots=4'))
+        def parsed = parser.parse(args('serve', '--slots=4'), CLONE)
 
         then:
         parsed.slots() == 4
@@ -43,7 +48,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a zero --slots"() {
         when:
-        parser.parse(args('serve', '--slots=0'))
+        parser.parse(args('serve', '--slots=0'), CLONE)
 
         then:
         UsageException ex = thrown()
@@ -53,7 +58,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a negative --slots"() {
         when:
-        parser.parse(args('serve', '--slots=-1'))
+        parser.parse(args('serve', '--slots=-1'), CLONE)
 
         then:
         UsageException ex = thrown()
@@ -62,7 +67,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a non-numeric --slots"() {
         when:
-        parser.parse(args('serve', '--slots=many'))
+        parser.parse(args('serve', '--slots=many'), CLONE)
 
         then:
         UsageException ex = thrown()
@@ -71,7 +76,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "parses the --drain flag"() {
         when:
-        def parsed = parser.parse(args('serve', '--drain'))
+        def parsed = parser.parse(args('serve', '--drain'), CLONE)
 
         then:
         parsed.drain()
@@ -80,7 +85,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
     // FR4: serve is unconditionally non-interactive — not even --interactive is accepted
     def "rejects an inapplicable take-only or run-only flag"() {
         when:
-        parser.parse(args('serve', "--$flag".toString()))
+        parser.parse(args('serve', "--$flag".toString()), CLONE)
 
         then:
         UsageException ex = thrown()

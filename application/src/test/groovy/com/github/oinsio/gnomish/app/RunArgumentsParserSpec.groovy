@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -10,35 +11,40 @@ import spock.lang.Unroll
  * independent of pipeline load (task 7.1 scope only).
  *
  * <p>FR7 of add-git-workflow, design D8: {@code --project} was renamed to {@code --dir}
- * (default unchanged: the current working directory) and {@code --mode git|in-place} was
+ * (the directory itself is the registered clone the loader resolved, FR3 of
+ * add-project-registry) and {@code --mode git|in-place} was
  * added, defaulting to {@code git} when absent.
  */
 class RunArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
     private final RunArgumentsParser parser = new RunArgumentsParser()
 
+
+    /** The clone the configuration loader resolved: the {@code dir} every parse fills (FR3, D9 of add-project-registry). */
+    private static final RegisteredClone CLONE =
+    RegisteredCloneFixture.unregistered(Path.of('/tmp/gnomish-home'), Path.of('/tmp/registered-clone'))
     def "FR1: --dir and --task both present parse correctly"() {
         when:
-        RunArguments result = parser.parse(args('--dir=/tmp/workspace', '--task=fix the flaky spec'))
+        RunArguments result = parser.parse(args('--dir=/tmp/workspace', '--task=fix the flaky spec'), CLONE)
 
         then:
-        result.dir() == Path.of('/tmp/workspace')
+        result.dir() == CLONE.clonePath() // FR3 of add-project-registry: the loader resolved --dir
         result.taskSource() == new TaskSource.Inline('fix the flaky spec')
         result.taskId() == null
         result.fromStage() == null
     }
 
-    def "D3: --dir absent defaults to the current working directory"() {
+    def "FR3: with --dir absent, dir is still the registered clone's path"() {
         when:
-        RunArguments result = parser.parse(args('--task=fix the flaky spec'))
+        RunArguments result = parser.parse(args('--task=fix the flaky spec'), CLONE)
 
         then:
-        result.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
+        result.dir() == CLONE.clonePath()
     }
 
     def "FR7/D8: --mode absent defaults to Mode.GIT"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'))
+        RunArguments result = parser.parse(args('--task=t'), CLONE)
 
         then:
         result.mode() == RunArguments.Mode.GIT
@@ -46,7 +52,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7/D8: --mode=git parses to Mode.GIT"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--mode=git'))
+        RunArguments result = parser.parse(args('--task=t', '--mode=git'), CLONE)
 
         then:
         result.mode() == RunArguments.Mode.GIT
@@ -54,7 +60,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7/D8: --mode=in-place parses to Mode.IN_PLACE"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--mode=in-place'))
+        RunArguments result = parser.parse(args('--task=t', '--mode=in-place'), CLONE)
 
         then:
         result.mode() == RunArguments.Mode.IN_PLACE
@@ -62,7 +68,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7/UX1: --mode=garbage is a usage error naming the accepted values"() {
         when:
-        parser.parse(args('--task=t', '--mode=garbage'))
+        parser.parse(args('--task=t', '--mode=garbage'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -73,7 +79,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: repeated --mode is a usage error"() {
         when:
-        parser.parse(args('--task=t', '--mode=git', '--mode=in-place'))
+        parser.parse(args('--task=t', '--mode=git', '--mode=in-place'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -82,7 +88,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR1: --task-file parses to TaskSource.FromFile"() {
         when:
-        RunArguments result = parser.parse(args('--task-file=task.md'))
+        RunArguments result = parser.parse(args('--task-file=task.md'), CLONE)
 
         then:
         result.taskSource() == new TaskSource.FromFile(Path.of('task.md'))
@@ -90,7 +96,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR1/UX1: both --task and --task-file present is a usage error naming the conflict and the = form"() {
         when:
-        parser.parse(args('--task=inline text', '--task-file=task.md'))
+        parser.parse(args('--task=inline text', '--task-file=task.md'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -101,7 +107,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR1/UX1: neither --task nor --task-file present is a usage error"() {
         when:
-        parser.parse(args())
+        parser.parse(args(), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -112,7 +118,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     @Unroll
     def "FR1: --task-id=#taskId with a valid charset parses through"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', "--task-id=${taskId}"))
+        RunArguments result = parser.parse(args('--task=t', "--task-id=${taskId}"), CLONE)
 
         then:
         result.taskId() == taskId
@@ -130,7 +136,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     @Unroll
     def "UX1: --task-id=#taskId with an invalid character is a usage error"() {
         when:
-        parser.parse(args('--task=t', "--task-id=${taskId}"))
+        parser.parse(args('--task=t', "--task-id=${taskId}"), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -147,7 +153,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR1: --from-stage absent parses to null"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'))
+        RunArguments result = parser.parse(args('--task=t'), CLONE)
 
         then:
         result.fromStage() == null
@@ -155,7 +161,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR1: --from-stage present parses through as a plain string (definition-validity is task 7.3)"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--from-stage=build'))
+        RunArguments result = parser.parse(args('--task=t', '--from-stage=build'), CLONE)
 
         then:
         result.fromStage() == 'build'
@@ -163,7 +169,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: --from-stage= (blank) is a usage error"() {
         when:
-        parser.parse(args('--task=t', '--from-stage='))
+        parser.parse(args('--task=t', '--from-stage='), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -172,7 +178,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: repeated --task is a usage error"() {
         when:
-        parser.parse(args('--task=a', '--task=b'))
+        parser.parse(args('--task=a', '--task=b'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -181,7 +187,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10: --interactive absent parses to InteractiveMode.NONE"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'))
+        RunArguments result = parser.parse(args('--task=t'), CLONE)
 
         then:
         result.interactiveMode() == RunArguments.InteractiveMode.NONE
@@ -189,7 +195,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10/D6: bare --interactive parses to InteractiveMode.ALL"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive'))
+        RunArguments result = parser.parse(args('--task=t', '--interactive'), CLONE)
 
         then:
         result.interactiveMode() == RunArguments.InteractiveMode.ALL
@@ -197,7 +203,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10/D6: --interactive=executor parses to InteractiveMode.EXECUTOR_ONLY"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive=executor'))
+        RunArguments result = parser.parse(args('--task=t', '--interactive=executor'), CLONE)
 
         then:
         result.interactiveMode() == RunArguments.InteractiveMode.EXECUTOR_ONLY
@@ -205,7 +211,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10/D6: --interactive=judge parses to InteractiveMode.JUDGE_ONLY"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive=judge'))
+        RunArguments result = parser.parse(args('--task=t', '--interactive=judge'), CLONE)
 
         then:
         result.interactiveMode() == RunArguments.InteractiveMode.JUDGE_ONLY
@@ -213,7 +219,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: --interactive=garbage is a usage error naming the accepted values"() {
         when:
-        parser.parse(args('--task=t', '--interactive=garbage'))
+        parser.parse(args('--task=t', '--interactive=garbage'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -224,7 +230,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: --interactive given twice (bare) is a usage error"() {
         when:
-        parser.parse(args('--task=t', '--interactive', '--interactive'))
+        parser.parse(args('--task=t', '--interactive', '--interactive'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -233,7 +239,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "UX1: --interactive given twice with scoped values is a usage error"() {
         when:
-        parser.parse(args('--task=t', '--interactive=executor', '--interactive=judge'))
+        parser.parse(args('--task=t', '--interactive=executor', '--interactive=judge'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -242,7 +248,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7/D7: --base parses through as a plain ref string"() {
         when:
-        RunArguments result = parser.parse(args('--task=t', '--base=origin/main'))
+        RunArguments result = parser.parse(args('--task=t', '--base=origin/main'), CLONE)
 
         then:
         result.base() == 'origin/main'
@@ -250,7 +256,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7: --base absent parses to null"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'))
+        RunArguments result = parser.parse(args('--task=t'), CLONE)
 
         then:
         result.base() == null
@@ -258,7 +264,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR8/D9: --resume alone parses through, taskSource left unresolved"() {
         when:
-        RunArguments result = parser.parse(args('--resume=my-task'))
+        RunArguments result = parser.parse(args('--resume=my-task'), CLONE)
 
         then:
         result.resume() == 'my-task'
@@ -267,7 +273,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10/D10: --discard-work with --resume parses to discardWork true"() {
         when:
-        RunArguments result = parser.parse(args('--resume=my-task', '--discard-work'))
+        RunArguments result = parser.parse(args('--resume=my-task', '--discard-work'), CLONE)
 
         then:
         result.resume() == 'my-task'
@@ -276,7 +282,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "no flags at all: discardWork defaults to false, resume/base default to null"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'))
+        RunArguments result = parser.parse(args('--task=t'), CLONE)
 
         then:
         !result.discardWork()
@@ -286,7 +292,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     @Unroll
     def "FR8/UX1: --resume with #conflictingFlag is a usage error naming the conflict"() {
         when:
-        parser.parse(args('--resume=my-task', conflictingFlag))
+        parser.parse(args('--resume=my-task', conflictingFlag), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -304,7 +310,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     @Unroll
     def "FR7/UX1: #gitOnlyFlag with --mode=in-place is a usage error naming the conflict"() {
         when:
-        parser.parse(args('--task=t', '--mode=in-place', gitOnlyFlag))
+        parser.parse(args('--task=t', '--mode=in-place', gitOnlyFlag), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -319,7 +325,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR7/UX1: --resume with --mode=in-place is a usage error naming the conflict"() {
         when:
-        parser.parse(args('--resume=my-task', '--mode=in-place'))
+        parser.parse(args('--resume=my-task', '--mode=in-place'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
@@ -329,7 +335,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     def "FR10/UX1: --discard-work without --resume is a usage error"() {
         when:
-        parser.parse(args('--task=t', '--discard-work'))
+        parser.parse(args('--task=t', '--discard-work'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)

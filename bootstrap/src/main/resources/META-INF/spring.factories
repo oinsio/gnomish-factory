@@ -2,3 +2,8 @@
 # logged a second time as Spring Boot's "Application run failed" record.
 org.springframework.boot.SpringBootExceptionReporter=\
 com.github.oinsio.gnomish.app.ReportedFailureExceptionReporter
+
+# FR5, FR7 of add-project-registry (design D6): the operator configuration is assembled and checked
+# before any bean exists.
+org.springframework.boot.EnvironmentPostProcessor=\
+com.github.oinsio.gnomish.app.OperatorConfigLoader

@@ -32,12 +32,13 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
     }
 
     private ReportCommands reports() {
-        def properties = new FactoryProperties('reports-instance', null, null, null, null)
+        def properties = new FactoryProperties('reports-instance', null, null, null)
+        def scope = RegisteredCloneFixture.scope(registeredClone)
         new ReportCommands(
-                new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), console),
-                new UsageCommand(TaskGitFixture.realClaimless(), console),
-                new BoardCommand(Clock.systemUTC(), properties, wiringFailingOn('board'), console),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), FactoryPathsFixture.homeAt(tempDir), properties,
+                new StatusCommand(TaskGitFixture.realClaimless(), scope, console),
+                new UsageCommand(TaskGitFixture.realClaimless(), scope, console),
+                new BoardCommand(Clock.systemUTC(), properties, scope, wiringFailingOn('board'), console),
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), scope, properties,
                 wiringFailingOn('dashboard')))
     }
 

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import com.github.oinsio.gnomish.operatorconfig.ConfigLevel;
+import com.github.oinsio.gnomish.operatorconfig.Level;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -19,7 +21,10 @@ import org.jspecify.annotations.Nullable;
  * limits is the container adapter's concern (task 4.3); this record only carries
  * them.
  *
- * <p>Implements FR10 of add-sandbox-core.
+ * <p>Every limit is {@link Level#ANY} (design D5 of add-project-registry): a host default a project
+ * may raise or lower for its own toolchain.
+ *
+ * <p>Implements FR10 of add-sandbox-core; FR6 of add-project-registry.
  *
  * @param cpus the {@code --cpus} decimal allowance ({@code factory.sandbox.limits.cpus});
  *     defaults to {@code "2"} when unset; rejected if blank
@@ -33,7 +38,11 @@ import org.jspecify.annotations.Nullable;
  *     factory.sandbox.limits.disk}); defaults to {@code "10g"} when unset;
  *     rejected if blank
  */
-public record ResourceLimits(String cpus, String memory, long pids, String disk) {
+public record ResourceLimits(
+        @ConfigLevel(Level.ANY) String cpus,
+        @ConfigLevel(Level.ANY) String memory,
+        @ConfigLevel(Level.ANY) long pids,
+        @ConfigLevel(Level.ANY) String disk) {
 
     private static final String DEFAULT_CPUS = "2";
     private static final String DEFAULT_MEMORY = "2g";

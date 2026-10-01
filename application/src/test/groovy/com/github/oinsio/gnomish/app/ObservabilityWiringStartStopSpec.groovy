@@ -37,9 +37,8 @@ import spock.util.concurrent.PollingConditions
 class ObservabilityWiringStartStopSpec extends Specification {
 
     @TempDir
-    Path homeDir
+    Path serveDir
 
-    private static final String INSTANCE_NAME = 'gnomish-startstop-test'
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-startstop-test-ab12cd', 'worker-1', '0.1.0')
     private static final Instant NOW = Instant.parse('2026-08-03T10:00:00Z')
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC)
@@ -48,7 +47,7 @@ class ObservabilityWiringStartStopSpec extends Specification {
     private TaskOutcomeLedgerWriter taskOutcomeLedgerWriter = null
 
     private Path ledgerFile() {
-        ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(NOW, ZoneOffset.UTC))
+        ObservabilityPaths.ledgerFile(serveDir, LocalDate.ofInstant(NOW, ZoneOffset.UTC))
     }
 
     /**
@@ -58,7 +57,7 @@ class ObservabilityWiringStartStopSpec extends Specification {
      */
     private ObservabilityWiring newUnstartedWiring(LifecycleStateTracker lifecycleTracker) {
         def built = ObservabilityWiringTestFixtures.build(
-                homeDir, INSTANCE_NAME, INSTANCE, CLOCK, lifecycleTracker, Duration.ofHours(1), false)
+                serveDir, INSTANCE, CLOCK, lifecycleTracker, Duration.ofHours(1), false)
         snapshotFile = built.snapshotFile
         taskOutcomeLedgerWriter = built.taskOutcomeLedgerWriter
         return built.wiring

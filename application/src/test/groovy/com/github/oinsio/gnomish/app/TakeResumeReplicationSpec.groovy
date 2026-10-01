@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -34,7 +35,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     @TempDir
     Path tempDir
 
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path worktree
 
     Tracker tracker = Mock(Tracker)
@@ -55,14 +56,14 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     BaseRefGit baseRefGit = resumingBaseRefGit()
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees')
-        worktree = worktreesRoot.resolve('PROJ-1')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), CLONE_DIR)
+        worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _, _) >> worktree
+        worktrees.ensureWorktree(_, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
-        store.taskRepository(_, _) >> lifecycleStore
+        store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
         store.readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
         tracker.fetchTask(_) >> heldByUs()
@@ -75,8 +76,8 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */
     private TakeDispositionResume chain(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass()) {
         def git = git()
-        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor, verdict), git, tracker, worktreesRoot))
-        def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor, verdict), git, tracker, registeredClone))
+        def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 

@@ -77,7 +77,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
 
     private TakeDispatcher dispatcher(
             Map<String, TaskRepository> repositories, RunAssembly assembly, TakeHeartbeat heartbeat) {
-        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, WORKTREES_ROOT, containerTakeSupport(repositories),
+        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, containerTakeSupport(repositories),
                 heartbeat.tenure()), testProperties(), FIXED_CLOCK,
                 new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 TakeoverConfirmation.UNAVAILABLE)

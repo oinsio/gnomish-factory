@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
@@ -19,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -67,7 +69,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
     }
 
     private static FactoryProperties githubCheckProperties() {
-        new FactoryProperties(null, null, null, null,
+        new FactoryProperties(null, null, null,
                 [(GithubCheckClientFactory.PROVIDER): [('api-url'): 'https://api.github.com', repo: 'acme/widgets']])
     }
 
@@ -147,7 +149,9 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                         new FilesExistCheckRunner(),
                         new ShellCommandCheckRunner(),
                         githubRegistry(),
-                        new EnvFileSecretsProvider(),
+                        // An empty factory home of its own: no secrets folder, so every secret resolves from
+                        // the environment exactly as before the folders existed (FR8 of add-project-registry).
+                        new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null),
                         githubCheckProperties()),
                 new SystemClock(),
                 new ThreadSleeper(),

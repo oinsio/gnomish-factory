@@ -37,7 +37,7 @@ class RoundInterruptedWaitSpec extends Specification {
         when:
         ExecutorRoundExecution.run(
                 new AgentRoundEquipment(
-                        new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null),
+                        new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                         new VirtualClock(),
                         { event -> },
                         new AgentRoundResultExtractor()),
@@ -64,7 +64,7 @@ class RoundInterruptedWaitSpec extends Specification {
         when:
         def vote = JudgeRoundExecution.run(
                 new AgentRoundEquipment(
-                        new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null),
+                        new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                         new VirtualClock(),
                         { event -> },
                         new AgentRoundResultExtractor()),

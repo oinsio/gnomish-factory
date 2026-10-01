@@ -48,7 +48,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${scriptPath}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
+        testProperties(agentCliBinary: wrapper.absolutePath)
     }
 
     /**

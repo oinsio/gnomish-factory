@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
@@ -35,7 +36,7 @@ import java.util.Optional;
  * "absent" (NFR-R2).
  *
  * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules; FR1, NFR-R2
- * of fix-envelope-medium.
+ * of fix-envelope-medium; FR9 of add-project-registry.
  */
 public final class GitTaskStore implements TaskStoreGit {
 
@@ -61,9 +62,9 @@ public final class GitTaskStore implements TaskStoreGit {
      * decorator replicates, and no caller above this ever sees — or has to remember — the push.
      */
     @Override
-    public TaskLifecycleStore taskRepository(Path cloneDir, Path worktreesRoot) {
+    public TaskLifecycleStore taskRepository(RegisteredClone clone) {
         return new PushBestEffortTaskLifecycleStore(
-                new GitTaskRepository(runner, cloneDir, worktreesRoot, epochs), runner, cloneDir);
+                new GitTaskRepository(runner, clone, epochs), runner, clone.clonePath());
     }
 
     @Override

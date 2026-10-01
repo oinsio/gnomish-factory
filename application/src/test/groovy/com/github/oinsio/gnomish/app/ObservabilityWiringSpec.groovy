@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
@@ -33,18 +34,17 @@ import spock.lang.Timeout
 class ObservabilityWiringSpec extends Specification {
 
     @TempDir
-    Path homeDir
+    Path serveDir
 
-    private static final String INSTANCE_NAME = 'gnomish-wiring-test'
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-wiring-test-ab12cd', 'worker-1', '0.1.0')
 
     private Path ledgerFile(Instant at) {
-        ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(at, ZoneOffset.UTC))
+        ObservabilityPaths.ledgerFile(serveDir, LocalDate.ofInstant(at, ZoneOffset.UTC))
     }
 
     private ObservabilityWiring newWiring(Clock clock, LifecycleStateTracker lifecycleTracker) {
         ObservabilityWiringTestFixtures.build(
-                homeDir, INSTANCE_NAME, INSTANCE, clock, lifecycleTracker, Duration.ofSeconds(30), true).wiring
+                serveDir, INSTANCE, clock, lifecycleTracker, Duration.ofSeconds(30), true).wiring
     }
 
     def "finalizeStopped() transitions to stopped, writes the ledger line, and stops the writer — exactly once"() {
@@ -122,7 +122,7 @@ class ObservabilityWiringSpec extends Specification {
 
         when:
         wiring.sweepLedgerWriter().onTickCompleted(
-                new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord(now, [:], [], 0, 0))
+                new SweepTickRecord(now, [:], [], 0, 0))
 
         then:
         Files.readString(ledgerFile(now)).contains('"type":"sweepTick"')

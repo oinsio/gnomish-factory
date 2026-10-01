@@ -106,18 +106,22 @@ sequenceDiagram
 
 ## Using the factory
 
-The CLI is one boot jar with seven subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
+The CLI is one boot jar with eight subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
 
-| Command                    | What it does                                                                         | Reference                                                                            |
-|----------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)             |
-| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
-| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)         |
-| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)     |
-| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
-| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md) |
+| Command                    | What it does                                                                         | Reference                                                                             |
+|----------------------------|--------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)              |
+| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                      |
+| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)          |
+| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)      |
+| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                      |
+| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)  |
+| `gnomish project`          | register a clone (`add`), list projects (`list`), show paths and settings (`show`)   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#setting-up-a-project) |
 
 ```bash
+# once per clone: register it as a clone of a project (~/.gnomish/projects/widgets/)
+java -jar build/libs/*.jar project add widgets --dir=/path/to/target-repo
+
 # one ad-hoc task, no tracker (git mode by default: task branch + worktree + resume)
 java -jar build/libs/*.jar --task="fix the flaky login spec" --dir=/path/to/target-repo
 
@@ -125,9 +129,11 @@ java -jar build/libs/*.jar --task="fix the flaky login spec" --dir=/path/to/targ
 java -jar build/libs/*.jar take --dir=/path/to/target-repo
 ```
 
-**`run`** executes one task through one pipeline. By default it is manifest-driven — real `agent-cli` and judge adapters, no confirmation gate; `--interactive` swaps a human into either role (pipeline dry-runs, judge-prompt debugging). Git mode is the default and makes the task resumable from its branch by any instance; exit codes `>= 10` are legitimate terminal states. Squash-merge a completed task's PR so the round-by-round journal stays behind on the task branch.
+**Operator state** — configuration, secrets, logs, serve state and worktrees — lives under one folder, `~/.gnomish` (or `GNOMISH_HOME`), one subfolder per registered project. Every command that takes `--dir` works only in a registered clone. Project settings, the sandbox boundary included, go in the project's `project.yaml`; a setting in the wrong place stops startup with its file, line and fix (exit 2). See [*Setting up a project*](docs/guides/operator-guide.md#setting-up-a-project).
 
-**`take`** gets the task from a GitHub issue labeled `gnomish:ready` instead of a flag, and reports back on the issue thread — claim, progress, decisions, and outcome as comments and label transitions. It requires a `tracker` section in the target project's `.gnomish/config.yaml` plus a `GNOMISH_GITHUB_TOKEN` environment variable on the factory machine — never in yaml, never visible to the gnome. The lifecycle is one-way (`Ready → Working → Finished`); a reopened finished task is declined with a pointer to file a new one. Batch mode (`take <ref> <ref> ...`), `--takeover` for a stuck claim, and the full flag/exit-code reference live in the guides.
+**`run`** executes one task through one pipeline. By default, it is manifest-driven — real `agent-cli` and judge adapters, no confirmation gate; `--interactive` swaps a human into either role (pipeline dry-runs, judge-prompt debugging). Git mode is the default and makes the task resumable from its branch by any instance; exit codes `>= 10` are legitimate terminal states. Squash-merge a completed task's PR so the round-by-round journal stays behind on the task branch.
+
+**`take`** gets the task from a GitHub issue labeled `gnomish:ready` instead of a flag, and reports back on the issue thread — claim, progress, decisions, and outcome as comments and label transitions. It requires a `tracker` section in the target project's `.gnomish/config.yaml` plus a `GNOMISH_GITHUB_TOKEN` secret on the factory machine — a file in the project's or the host's secrets folder, or an environment variable — never in yaml, never visible to the gnome. The lifecycle is one-way (`Ready → Working → Finished`); a reopened finished task is declined with a pointer to file a new one. Batch mode (`take <ref> <ref> ...`), `--takeover` for a stuck claim, and the full flag/exit-code reference live in the guides.
 
 **Where gnomes execute**: by default each task runs in an ephemeral container box with an egress allowlist; host execution is the opt-in legacy mode. Configuration, image contract, and the threat model: [`docs/guides/operator-guide-sandbox.md`](docs/guides/operator-guide-sandbox.md) and [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md). The security implications of autonomous runs — who may set the `ready` label — are in [`docs/guides/operator-guide-autonomy-gate.md`](docs/guides/operator-guide-autonomy-gate.md); monitoring an unattended daemon is [`docs/guides/operator-guide-observability.md`](docs/guides/operator-guide-observability.md).
 

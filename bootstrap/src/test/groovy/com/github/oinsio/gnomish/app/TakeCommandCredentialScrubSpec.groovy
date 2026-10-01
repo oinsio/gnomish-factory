@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -46,7 +47,7 @@ class TakeCommandCredentialScrubSpec extends Specification implements BareGitRep
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
@@ -81,7 +82,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     /**
@@ -109,7 +110,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        testProperties(instanceName: INSTANCE_NAME, agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
+        testProperties(instanceName: INSTANCE_NAME, agentCliBinary: wrapper.absolutePath)
     }
 
     /** Declares CREDENTIAL_VAR via TrackerAdapterFactory#credentialEnvVars (design D17). */
@@ -166,7 +167,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
-        def command = newTakeCommand(factoryProperties, worktreesRoot, [github: fakeFactoryDeclaringCredential()])
+        def command = newTakeCommand(factoryProperties, registeredClone, [github: fakeFactoryDeclaringCredential()])
 
         when:
         command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))
@@ -198,7 +199,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
-        def command = newTakeCommand(factoryProperties, worktreesRoot, [github: fakeFactoryDeclaringNoCredential()])
+        def command = newTakeCommand(factoryProperties, registeredClone, [github: fakeFactoryDeclaringNoCredential()])
 
         when:
         command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -28,12 +29,13 @@ import org.jspecify.annotations.Nullable;
  * tail — the current tip of the pinned base ref, narrow-fetched or read locally, parking or
  * releasing the claim exactly alike on the two failure branches.
  *
- * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution.
+ * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution; FR9 of
+ * add-project-registry.
  */
 final class TakeResumeRunner {
 
     private final TaskGit git;
-    private final Path worktreesRoot;
+    private final RegisteredClone clone;
     private final TakeResumeBootstrap resumeBootstrap;
     private final TakeResumeExecution execution;
 
@@ -42,7 +44,7 @@ final class TakeResumeRunner {
      *     assembly reused from the manual-run path (the same {@link
      *     com.github.oinsio.gnomish.domain.engine.EnginePorts} bundle a live run uses, minus the
      *     dialog console take never opens); the task-git capability set the resumed run's store,
-     *     branch and worktree operations come from; the worktrees root (design D6); the MDC key set
+     *     branch and worktree operations come from; the registered clone (design D6); the MDC key set
      *     to the branch's recorded taskId once bootstrap succeeds, matching {@link
      *     GitResumeRunner}'s own key; the abort fuse applied when a resumed engine run returns
      *     {@code Aborted} (task 5.3); the tracker adapter's declared credential variable names
@@ -52,8 +54,8 @@ final class TakeResumeRunner {
      */
     TakeResumeRunner(SlotWiring wiring) {
         this.git = wiring.git();
-        this.worktreesRoot = wiring.worktreesRoot();
-        this.resumeBootstrap = new TakeResumeBootstrap(git, worktreesRoot, wiring.taskIdMdcKey());
+        this.clone = wiring.registeredClone();
+        this.resumeBootstrap = new TakeResumeBootstrap(git, clone, wiring.taskIdMdcKey());
         this.execution = new TakeResumeExecution(wiring);
     }
 
@@ -141,9 +143,8 @@ final class TakeResumeRunner {
      * follows (FR12 of harden-task-branch-contract), landing in one commit with the attempt-counter
      * reset it implies (FR4).
      */
-    TaskContext appendDecision(
-            Path cloneDir, ResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+    TaskContext appendDecision(ResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
+        var taskRepository = git.store().taskRepository(clone);
         var decision = ResumeDecisionCommit.decisionFor(finalState, text);
         taskRepository.appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);

@@ -3,31 +3,15 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
-import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
-import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
-import com.github.oinsio.gnomish.app.port.tracker.HumanReply
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
-import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * NFR-R1 of add-board-command: when the tracker is unreachable, {@code gnomish board} adds no
  * retry loop of its own and relies entirely on the existing generic reporting {@link
@@ -40,9 +24,6 @@ class BoardCommandOutageSpec extends Specification implements AppAssemblyFixture
 
     @TempDir
     Path tempDir
-
-    @TempDir
-    Path worktreesRoot
 
     @TempDir
     Path homeDir
@@ -75,13 +56,13 @@ tracker:
 ''')
     }
 
-    private ManualRunRunner newRunner(BoardCommand boardCommand) {
-        newManualRunRunner(worktreesRoot, homeDir,
+    private ManualRunRunner newRunner(TrackerWiring boardWiring) {
+        newManualRunRunner(projectDir, homeDir,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(),
                 testProperties(instanceName: INSTANCE_NAME),
-                boardCommand)
+                boardWiring)
     }
 
     // NFR-R1: the tracker outage message ("gnomish run failed: <adapter message>") reaches stderr
@@ -91,12 +72,8 @@ tracker:
         given: 'a tracker whose listReady fails as if the tracker endpoint refuses connections'
         def tracker = new OutageTracker()
         def factory = new OutageTrackerAdapterFactory(tracker)
-        def boardCommand = new BoardCommand(
-                Clock.systemUTC(),
-                testProperties(instanceName: INSTANCE_NAME),
-                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                LiveConsoleIO.onStdout())
-        def runner = newRunner(boardCommand)
+        def runner = newRunner(
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
         def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
         def originalErr = System.err
         def captured = new ByteArrayOutputStream()

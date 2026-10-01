@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
@@ -22,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  */
 final class FactoryPropertyDefaults {
 
-    static final String DEFAULT_INSTANCE_NAME = "gnomish-factory";
+    static final String DEFAULT_INSTANCE_NAME = "default";
     static final String DEFAULT_AGENT_CLI_BINARY = "claude";
     static final Duration DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE = Duration.ofSeconds(5);
     // The three subprocess deadlines of bound-subprocess-commands (design D8). Each mirrors the
@@ -38,7 +37,8 @@ final class FactoryPropertyDefaults {
     private FactoryPropertyDefaults() {}
 
     /**
-     * Resolves the unset case to the neutral {@code gnomish-factory} default (design D5, D6); a
+     * Resolves the unset case to the neutral {@code default} (design D5, D6; the value is design D5
+     * of add-project-registry, where the instance name is scoped by its project); a
      * value explicitly set to blank (e.g. {@code factory.instance-name=""}) is still rejected —
      * that is a configuration mistake, not "unset".
      */
@@ -91,11 +91,6 @@ final class FactoryPropertyDefaults {
             throw new IllegalArgumentException(propertyName + " must be positive");
         }
         return configured;
-    }
-
-    /** Resolves the unset case to an empty passthrough list (design D7). */
-    static List<String> envPassthrough(@Nullable List<String> agentCliEnvPassthrough) {
-        return agentCliEnvPassthrough == null ? List.of() : agentCliEnvPassthrough;
     }
 
     /** Resolves the unset case to {@link FactoryProperties.Tracker}'s own defaults (design D5, D10). */

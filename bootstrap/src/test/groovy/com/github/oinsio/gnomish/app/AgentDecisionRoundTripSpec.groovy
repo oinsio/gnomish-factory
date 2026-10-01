@@ -57,7 +57,7 @@ exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
+        testProperties(agentCliBinary: wrapper.absolutePath)
     }
 
     private static StageDefinition stage() {

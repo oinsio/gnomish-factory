@@ -27,7 +27,11 @@ import org.slf4j.LoggerFactory;
  * failing the render — the same "a degraded section never fails the others" contract {@link
  * SnapshotReader} already gives the daemon section (FR3, design D9).
  *
- * <p>Implements FR3, FR6, FR9, NFR-O1, NFR-R1 of add-dashboard-page (design D9).
+ * <p>Built over one instance's serve directory, computed once by the caller from the registered
+ * project (design D1 of add-project-registry): every render reads the snapshot and ledgers there.
+ *
+ * <p>Implements FR3, FR6, FR9, NFR-O1, NFR-R1 of add-dashboard-page (design D9). Implements FR10 of
+ * add-project-registry.
  */
 public final class DashboardRenderCycle {
 
@@ -37,12 +41,19 @@ public final class DashboardRenderCycle {
     private final LedgerAggregator ledgerAggregator = new LedgerAggregator();
     private final SweepActionAggregator sweepActionAggregator = new SweepActionAggregator();
     private final DashboardHtmlRenderer htmlRenderer = new DashboardHtmlRenderer();
+    private final Path serveDir;
+
+    /**
+     * @param serveDir the instance's serve directory the snapshot and ledger files are read from;
+     *     never null
+     */
+    public DashboardRenderCycle(Path serveDir) {
+        this.serveDir = serveDir;
+    }
 
     /**
      * Renders the full page for one cycle.
      *
-     * @param homeDir the user's home directory the observability files live under; never null
-     * @param instanceName the configured instance name (design D2); never null
      * @param boardView the board section's already-resolved view; never null
      * @param now the page's observation instant, also used to resolve the snapshot/ledger reads;
      *     never null
@@ -50,15 +61,10 @@ public final class DashboardRenderCycle {
      *     render (FR7, FR8); passed straight through to {@link DashboardHtmlRenderer#render}
      * @return the self-contained HTML document
      */
-    public String render(
-            Path homeDir,
-            String instanceName,
-            BoardSectionView boardView,
-            Instant now,
-            @Nullable Duration renderCadence) {
-        var daemonView = snapshotReader.read(ObservabilityPaths.snapshotFile(homeDir, instanceName), now);
-        var historyView = readHistory(homeDir, instanceName, now);
-        var hygieneView = readHygiene(daemonView, homeDir, instanceName, now);
+    public String render(BoardSectionView boardView, Instant now, @Nullable Duration renderCadence) {
+        var daemonView = snapshotReader.read(ObservabilityPaths.snapshotFile(serveDir), now);
+        var historyView = readHistory(now);
+        var hygieneView = readHygiene(daemonView, now);
         return htmlRenderer.render(daemonView, historyView, boardView, hygieneView, now, renderCadence);
     }
 
@@ -68,16 +74,12 @@ public final class DashboardRenderCycle {
      * unreadable ledger leaves the vital's breakdown intact, and a snapshot from a build without
      * the vital still shows the ledger's actions.
      */
-    private SandboxHygieneView readHygiene(
-            DaemonSnapshotView daemonView, Path homeDir, String instanceName, Instant now) {
+    private SandboxHygieneView readHygiene(DaemonSnapshotView daemonView, Instant now) {
         var sweep = SweepVitalReader.read(daemonView);
         SweepActionWindow actions;
         try {
             actions = sweepActionAggregator.aggregate(
-                    homeDir,
-                    instanceName,
-                    LocalDate.ofInstant(now, ZoneOffset.UTC),
-                    LedgerAggregator.DEFAULT_WINDOW_DAYS);
+                    serveDir, LocalDate.ofInstant(now, ZoneOffset.UTC), LedgerAggregator.DEFAULT_WINDOW_DAYS);
         } catch (IOException malformedLedger) {
             // An empty hygiene table and a healthy-and-quiet one render identically (FR5).
             log.warn(
@@ -89,9 +91,9 @@ public final class DashboardRenderCycle {
         return new SandboxHygieneView(sweep, actions.rows());
     }
 
-    private LedgerHistoryView readHistory(Path homeDir, String instanceName, Instant now) {
+    private LedgerHistoryView readHistory(Instant now) {
         try {
-            return ledgerAggregator.aggregate(homeDir, instanceName, LocalDate.ofInstant(now, ZoneOffset.UTC));
+            return ledgerAggregator.aggregate(serveDir, LocalDate.ofInstant(now, ZoneOffset.UTC));
         } catch (IOException malformedLedger) {
             log.warn(
                     OperatorEvent.OUTCOME_LEDGER_UNAGGREGATABLE.head()

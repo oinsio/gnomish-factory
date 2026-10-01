@@ -31,11 +31,11 @@ gnomish serve --slots=4              # override the configured slot count for th
 gnomish take 42 43 44                # batch: work three named refs, up to N concurrently
 ```
 
-| Flag                | Applies to    | Meaning                                                                 |
-|----------------------|---------------|--------------------------------------------------------------------------|
-| `--dir=<path>`       | `serve`       | project clone directory and `.gnomish/` location; defaults to `.`        |
-| `--slots=<n>`        | `serve`       | overrides `factory.serve.slots` for this run; must be a positive integer |
-| `--drain`            | `serve`       | stop-on-empty instead of running forever (see "Drain mode" below)        |
+| Flag           | Applies to | Meaning                                                                  |
+|----------------|------------|--------------------------------------------------------------------------|
+| `--dir=<path>` | `serve`    | project clone directory and `.gnomish/` location; defaults to `.`        |
+| `--slots=<n>`  | `serve`    | overrides `factory.serve.slots` for this run; must be a positive integer |
+| `--drain`      | `serve`    | stop-on-empty instead of running forever (see "Drain mode" below)        |
 
 `serve` has no `<ref>`, no `--interactive`, and none of `take`'s single-task
 flags (`--mode`, `--task`/`--task-file`/`--task-id`, `--resume`, `--from-stage`,
@@ -64,11 +64,11 @@ apply per ref — plus:
 `serve`'s own exit code (not the per-task outcome, which is the tracker's
 story) is:
 
-| Code | Meaning                                                                 |
-|------|--------------------------------------------------------------------------|
-| 0    | clean stop — drain completed, or a graceful SIGTERM within grace          |
-| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding |
-| 2    | usage error — malformed flags                                            |
+| Code | Meaning                                                                                                                                      |
+|------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                             |
+| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                           |
+| 2    | usage error — malformed flags, an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
 
 Batch `take` reuses the single-`take` exit-code table (see "`take` CLI
 Reference" in `operator-guide.md`) per ref, then aggregates: exit 0 only if
@@ -133,7 +133,7 @@ sequence closes the application context and then stops the logging system
 (ADR [0004](../adr/0004-logging-policy.md), design D6 of
 `harden-logging-observability`). Stopping the logging system last is what
 flushes the asynchronous file appender — a terminal slot line written while
-the drain was still running reaches `~/.gnomish/logs/gnomish.log` rather than
+the drain was still running reaches `~/.gnomish/projects/<name>/logs/<instance>.log` rather than
 dying in the queue. If the context close fails, the daemon logs `[GF053]` and
 stops logging anyway; the exit is not blocked by it.
 
@@ -212,16 +212,18 @@ Two different kinds of numbers govern `serve`, and mixing them up is the
 single most common misconfiguration (UX1: one command, a handful of instance
 knobs; the protocol needs none of them tuned per instance).
 
-**Instance knobs** — `factory.serve.*` / `factory.*` properties, set per
-installation (Spring `--key=value` or `application.yaml`), with a CLI override
-where one exists:
+**Instance knobs** — `factory.serve.*` / `factory.*` settings, set in the host
+file `~/.gnomish/factory.yaml`, the project file
+`~/.gnomish/projects/<name>/project.yaml` or on the command line
+(`--factory.<key>=<value>`) — every `factory.serve.*` key is accepted in all
+three — with a CLI override where one exists:
 
-| Property                             | CLI override | Default | Meaning                                                            |
-|---------------------------------------|--------------|---------|----------------------------------------------------------------------|
-| `factory.serve.slots`                 | `--slots`    | `2`     | N — concurrent claim/work slots for this instance                    |
-| `factory.serve.idle-poll-interval`     | —            | `30s`   | shared Idle-empty/Idle-blocked poll interval                         |
-| `factory.serve.sigterm-grace`         | —            | `30s`   | how long SIGTERM handling waits for in-flight slots before moving on |
-| `factory.serve.worktree-age-threshold` | —            | `14d`   | minimum **host worktree** inactivity before the janitor disposes of it |
+| Property                               | CLI override | Default | Meaning                                                                           |
+|----------------------------------------|--------------|---------|-----------------------------------------------------------------------------------|
+| `factory.serve.slots`                  | `--slots`    | `2`     | N — concurrent claim/work slots for this instance                                 |
+| `factory.serve.idle-poll-interval`     | —            | `30s`   | shared Idle-empty/Idle-blocked poll interval                                      |
+| `factory.serve.sigterm-grace`          | —            | `30s`   | how long SIGTERM handling waits for in-flight slots before moving on              |
+| `factory.serve.worktree-age-threshold` | —            | `14d`   | minimum **host worktree** inactivity before the janitor disposes of it            |
 | `factory.serve.sandbox-sweep-interval` | —            | `5m`    | cadence of the sandbox sweep+reap tick (one immediate tick at startup, then this) |
 
 The last two govern **two disjoint populations with two disjoint cleaners**, and
@@ -239,8 +241,8 @@ file already carries `heartbeat-interval`/`heartbeat-ttl-multiplier`, see
 "Quick Start" in `operator-guide.md`), and are read only from the factory's
 own clone — a task branch a gnome writes can never raise them:
 
-| Key         | Default | Meaning                                                                                          |
-|-------------|---------|---------------------------------------------------------------------------------------------------|
+| Key         | Default | Meaning                                                                                                         |
+|-------------|---------|-----------------------------------------------------------------------------------------------------------------|
 | `wip-limit` | `10`    | W — the project-wide cap on open fronts (`Working` + `AwaitingHuman`); operator-documented expectation is W ≥ N |
 
 The distinction matters operationally: slots (N) and poll cadence are yours to
@@ -346,14 +348,14 @@ first successful probe closes it.
 
 Operator-visible surface:
 
-| Signal      | What you see                                                                                                                                              |
-|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Log — open  | one WARN, `[GF145] remote outage gate opened for <target>: ...`, naming the target and the cause                                                              |
-| Log — during | DEBUG-only, roll-up-suppressed lines per failed probe; no repeated WARN                                                                                      |
-| Log — sustained | one ERROR, `[GF146] remote outage gate for <target> has been open longer than <threshold>: ...`, the first time the outage crosses the configured duration |
-| Log — close | one INFO recovery line naming the outage duration and probe count                                                                                             |
-| Snapshot    | a `remote` section beside `tracker`, one entry per target: `state` (`open` \| `closed`), `openSince`, `lastError` (scrubbed), `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt` — `gnomish dashboard` and the raw `snapshot.json` answer "blocked on remote X since T, next probe at T'" from this one place |
-| Exit code   | a single-shot `take` hitting the same failure ends with `TakeResult.InfrastructureUnavailable`, exit code **16**; `serve` itself has no exit code for it — the daemon stays up, the gate is its degraded-but-alive state |
+| Signal          | What you see                                                                                                                                                                                                                                                                                                     |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Log — open      | one WARN, `[GF145] remote outage gate opened for <target>: ...`, naming the target and the cause                                                                                                                                                                                                                 |
+| Log — during    | DEBUG-only, roll-up-suppressed lines per failed probe; no repeated WARN                                                                                                                                                                                                                                          |
+| Log — sustained | one ERROR, `[GF146] remote outage gate for <target> has been open longer than <threshold>: ...`, the first time the outage crosses the configured duration                                                                                                                                                       |
+| Log — close     | one INFO recovery line naming the outage duration and probe count                                                                                                                                                                                                                                                |
+| Snapshot        | a `remote` section beside `tracker`, one entry per target: `state` (`open` \| `closed`), `openSince`, `lastError` (scrubbed), `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt` — `gnomish dashboard` and the raw `snapshot.json` answer "blocked on remote X since T, next probe at T'" from this one place |
+| Exit code       | a single-shot `take` hitting the same failure ends with `TakeResult.InfrastructureUnavailable`, exit code **16**; `serve` itself has no exit code for it — the daemon stays up, the gate is its degraded-but-alive state                                                                                         |
 
 No task-level abort marker is written and no stage attempt is burned: the
 outage is charged to the daemon, never to the task (see the glossary's
@@ -433,7 +435,7 @@ visibly stranded with no long-lived instance around to reap it.
 ## Observability files and alerting
 
 While it runs, `serve` also publishes its state as local files under
-`~/.gnomish/serve/<instance-name>/` — a `snapshot.json` gauge (alive? busy?
+`~/.gnomish/projects/<name>/serve/<instance>/` — a `snapshot.json` gauge (alive? busy?
 what are the slots doing?) and daily `ledger-YYYY-MM-DD.jsonl` history
 files (what ran overnight, and what it cost) — with no added tracker
 writes and no inbound port. See

@@ -5,10 +5,9 @@ import com.github.oinsio.gnomish.FactoryProperties
 /**
  * Shared {@link FactoryProperties} builder for app-layer specs, defaulting to
  * the dominant {@code new FactoryProperties('test-instance', null, null,
- * null, null)} literal seen across both {@code :application}'s and {@code
+ * null)} literal seen across both {@code :application}'s and {@code
  * :bootstrap}'s spec trees. Pass overrides by key — {@code instanceName},
- * {@code agentCliBinary}, {@code agentCliEnvPassthrough}, {@code tracker},
- * {@code check} — for the sites that vary one of these; {@code tracker}
+ * {@code agentCliBinary}, {@code tracker}, {@code check} — for the sites that vary one of these; {@code tracker}
  * defaults to {@code null} (= default {@code Tracker}).
  *
  * <p>A plain Groovy trait, composable alongside the composition-root
@@ -21,7 +20,6 @@ trait FactoryPropertiesFixture {
         new FactoryProperties(
                 overrides.getOrDefault('instanceName', 'test-instance') as String,
                 overrides['agentCliBinary'] as String,
-                overrides['agentCliEnvPassthrough'] as List<String>,
                 overrides['tracker'] as FactoryProperties.Tracker,
                 overrides['check'] as Map<String, Map<String, Object>>)
     }

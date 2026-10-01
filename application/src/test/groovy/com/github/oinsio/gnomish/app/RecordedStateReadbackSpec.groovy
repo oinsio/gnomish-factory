@@ -55,8 +55,4 @@ class RecordedStateReadbackSpec extends Specification implements SeededCloneFixt
         expect: 'FR1 of fix-envelope-medium: absence is a value the caller routes on, not a fault'
         TaskGitFixture.real().store().readRecordedState(worktree) == Optional.empty()
     }
-
-    private Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
-    }
 }

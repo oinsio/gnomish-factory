@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
@@ -66,7 +67,7 @@ class TakeContainerLifecycleE2ESpec extends Specification implements BareGitRepo
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
     String originUrl
@@ -104,7 +105,7 @@ tracker:
         originUrl = gitea.createRepository("container-take-${System.nanoTime()}")
         addRemote(projectDir, 'origin', originUrl)
         gitOutput(projectDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     def cleanup() {
@@ -129,7 +130,7 @@ tracker:
         TakeCommands.of(
                 newAssembly(factoryProperties),
                 git,
-                worktreesRoot,
+                registeredClone,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),

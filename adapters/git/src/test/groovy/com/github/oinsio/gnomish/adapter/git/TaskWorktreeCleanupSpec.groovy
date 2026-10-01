@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -27,7 +28,6 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
     def worktreeManager
     def cleanup
 
-    Path worktreesRoot
     Path cloneDir
 
     private static TaskState sampleState() {
@@ -35,19 +35,18 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
     }
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees-root')
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreeManager = new TaskWorktreeManager(runner, worktreesRoot)
+        worktreeManager = new TaskWorktreeManager(runner, RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir))
         cleanup = new TaskWorktreeCleanup(runner)
     }
 
     private Path setUpWorktree(String taskId) {
         def result = branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
         def branchName = (result as BranchCreationResult.Created).branchName()
-        worktreeManager.ensureWorktree(cloneDir, taskId, branchName)
+        worktreeManager.ensureWorktree(taskId, branchName)
     }
 
     def "FR6: Completed removes the worktree but leaves the branch intact"() {

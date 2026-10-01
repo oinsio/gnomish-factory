@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import com.github.oinsio.gnomish.operatorconfig.ConfigLevel;
+import com.github.oinsio.gnomish.operatorconfig.Level;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -19,7 +21,11 @@ import org.springframework.boot.context.properties.bind.Name;
  * valid options for an unknown name — lives in {@code BindingResolver} (task
  * 3.2), the single seam that also applies the container-by-default rule (D13).
  *
- * <p>Implements FR14 of add-sandbox-core.
+ * <p>Both components are {@link Level#SANDBOX_BOUNDARY} keys (design D5 of add-project-registry):
+ * a binding decides whether a stage runs in a box at all, and the stage names exist only in one
+ * project's pipeline, so they are read from the project's own file alone.
+ *
+ * <p>Implements FR14 of add-sandbox-core; FR6, NFR-S1 of add-project-registry.
  *
  * @param defaultBinding the binding applied to every stage without an explicit
  *     override ({@code factory.bindings.default}); {@code null} when unset —
@@ -29,7 +35,11 @@ import org.springframework.boot.context.properties.bind.Name;
  *     ({@code factory.bindings.stages.*}); defaults to an empty map when unset
  */
 @ConfigurationProperties("factory.bindings")
-public record BindingProperties(@Name("default") @Nullable String defaultBinding, Map<String, String> stages) {
+public record BindingProperties(
+        @ConfigLevel(Level.SANDBOX_BOUNDARY) @Name("default") @Nullable
+        String defaultBinding,
+
+        @ConfigLevel(Level.SANDBOX_BOUNDARY) Map<String, String> stages) {
 
     // defaultBinding stays @Nullable so BindingResolver owns the container-default rule (D13) in one
     // place; stages is defensively defaulted because Spring's reflective binding can pass null for an

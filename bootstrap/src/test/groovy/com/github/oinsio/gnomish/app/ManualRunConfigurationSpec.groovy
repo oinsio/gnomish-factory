@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryApplication
+import com.github.oinsio.gnomish.FactoryBoot
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
@@ -12,11 +13,12 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
-import org.springframework.beans.factory.annotation.Autowired
+import java.nio.file.Path
 import org.springframework.boot.ApplicationRunner
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.ApplicationContext
+import org.springframework.context.ConfigurableApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * D10 of add-manual-run: {@link ManualRunConfiguration} assembles every {@code gnomish run}
@@ -25,44 +27,69 @@ import spock.lang.Specification
  * booted (mirroring FactoryApplicationSpec) since these beans are component-scanned under it;
  * this also proves the configuration coexists with the untouched no-args bootstrap (task 7.12).
  */
-@SpringBootTest(classes = FactoryApplication)
 class ManualRunConfigurationSpec extends Specification {
 
-    @Autowired
-    ApplicationContext context
+    @Shared
+    @TempDir
+    Path operatorHomeDir
 
-    @Autowired
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
+
+    @Shared
     FilesExistCheckRunner filesExistCheckRunner
 
-    @Autowired
+    @Shared
     ShellCommandCheckRunner shellCommandCheckRunner
 
-    @Autowired
+    @Shared
     InMemoryAttemptPersistence attemptPersistence
 
-    @Autowired
+    @Shared
     SystemClock systemClock
 
-    @Autowired
+    @Shared
     ThreadSleeper threadSleeper
 
-    @Autowired
+    @Shared
     SystemConsoleIO systemConsoleIO
 
-    @Autowired
-    RunArgumentsParser runArgumentsParser
-
-    @Autowired
+    @Shared
     PipelineStartup pipelineStartup
 
-    @Autowired
+    @Shared
     RunExitCodeMapper runExitCodeMapper
 
-    @Autowired
+    @Shared
     AdHocTaskSynthesizer adHocTaskSynthesizer
 
-    @Autowired
+    @Shared
     ManualRunRunner manualRunRunner
+
+    // Design D8 of add-project-registry: booted through the CommandExit argument registration,
+    // against a factory home of the spec's own.
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot()
+        filesExistCheckRunner = context.getBean(FilesExistCheckRunner)
+        shellCommandCheckRunner = context.getBean(ShellCommandCheckRunner)
+        attemptPersistence = context.getBean(InMemoryAttemptPersistence)
+        systemClock = context.getBean(SystemClock)
+        threadSleeper = context.getBean(ThreadSleeper)
+        systemConsoleIO = context.getBean(SystemConsoleIO)
+        pipelineStartup = context.getBean(PipelineStartup)
+        runExitCodeMapper = context.getBean(RunExitCodeMapper)
+        adHocTaskSynthesizer = context.getBean(AdHocTaskSynthesizer)
+        manualRunRunner = context.getBean(ManualRunRunner)
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     def "the context boots with every context-independent EnginePorts collaborator wired"() {
         expect:
@@ -77,7 +104,6 @@ class ManualRunConfigurationSpec extends Specification {
 
     def "the runner-level components (task 7.1-7.9) are present in the same context"() {
         expect:
-        runArgumentsParser != null
         pipelineStartup != null
         runExitCodeMapper != null
         adHocTaskSynthesizer != null

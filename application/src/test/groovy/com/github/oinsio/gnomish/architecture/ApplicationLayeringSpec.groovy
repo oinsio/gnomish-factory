@@ -48,6 +48,7 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.app.port.git',
         'com.github.oinsio.gnomish.app.port.pipeline',
         'com.github.oinsio.gnomish.app.port.run',
+        'com.github.oinsio.gnomish.app.project',
         'com.github.oinsio.gnomish.app.sandboxlifecycle',
         'com.github.oinsio.gnomish.app.serve',
         'com.github.oinsio.gnomish.app.take',

@@ -26,12 +26,13 @@ import spock.lang.TempDir
 class DashboardSandboxHygieneFixtureSpec extends Specification {
 
     @TempDir
-    Path homeDir
+    Path serveDir
 
-    private static final String INSTANCE_NAME = 'fixture-instance'
     private static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
 
-    def renderCycle = new DashboardRenderCycle()
+    private DashboardRenderCycle renderCycle() {
+        new DashboardRenderCycle(serveDir)
+    }
 
     private static String readClasspathResource(String name) {
         DashboardSandboxHygieneFixtureSpec.classLoader.getResourceAsStream(name).withCloseable {
@@ -44,12 +45,12 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
     //     ledger actions, all read from real files on disk in one render pass.
     def "the hygiene section renders all four breakdown groups from a real snapshot, plus recent actions from a real ledger"() {
         given: 'the shared snapshot-v1 reference fixture, whose sweep counts already cover every category'
-        def snapshotFile = ObservabilityPaths.snapshotFile(homeDir, INSTANCE_NAME)
+        def snapshotFile = ObservabilityPaths.snapshotFile(serveDir)
         Files.createDirectories(snapshotFile.parent)
         Files.writeString(snapshotFile, readClasspathResource('snapshot-v1.reference.json'), StandardCharsets.UTF_8)
 
         and: 'a real ledger fixture carrying stop and dispose sweep-action lines plus the tick summary'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(ledgerFile.parent)
         Files.writeString(
                 ledgerFile,
@@ -65,7 +66,7 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
                 StandardCharsets.UTF_8)
 
         when:
-        def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
+        def html = renderCycle().render(new BoardSectionView(null, null, null), NOW, null)
 
         then: 'cleaned = disposedAged(1) + disposedReconstructible(3) = 4, stopped = 1,'
         // 'checked and untouched = checkedAlive(4) + keptUnderThreshold(2) = 6, skipped = 0'

@@ -127,6 +127,10 @@ layering {
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability): the check runners sanitize their log lines through it.
         ':logtext',
+        // The operator-configuration level leaf (design D4 of add-project-registry): runtime-only,
+        // through `:application` and `:sandbox:core`, whose configuration records carry
+        // `@ConfigLevel`. No source in this module names it.
+        ':operatorconfig',
         // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.

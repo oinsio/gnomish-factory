@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -58,12 +59,13 @@ import java.util.List;
  * argument taken from the claim, never derived per medium. A binding that changes on one side and
  * not the other would make the same task read different law in host and container mode.
  *
- * <p>Implements FR9, FR12, D2, D3 of add-tracker-port.
+ * <p>Implements FR9, FR12, D2, D3 of add-tracker-port; FR9 of add-project-registry.
  *
  * @param assembly builds the {@code EnginePorts} bundle for the run; never null
  * @param git the task-git capability set: the run's repository and round persistence, the
  *     revocation protocol's best-effort push, and salvage plus terminal cleanup; never null
- * @param worktreesRoot the worktrees root the task's repository is rooted under; never null
+ * @param registeredClone the registered clone the task's lifecycle repository is rooted at; its worktree
+ *     folder holds the task's worktree (FR9 of add-project-registry); never null
  * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
  *     when the engine returns {@code Aborted}; never null
  * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
@@ -81,7 +83,7 @@ import java.util.List;
 record TakeEngineExecution(
         RunAssembly assembly,
         TaskGit git,
-        Path worktreesRoot,
+        RegisteredClone registeredClone,
         AbortFuse abortFuse,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
@@ -119,7 +121,7 @@ record TakeEngineExecution(
         // The task's repository is the one its law is bound to (D12): the binding is the only
         // owner of that root, so the clone dir is read from it rather than carried twice.
         Path cloneDir = lawBinding.repositoryRoot();
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        var taskRepository = git.store().taskRepository(registeredClone);
         var delegate = git.store().attemptPersistence(worktree, taskId);
         var persistence = new RevocationCheckingAttemptPersistence(
                 delegate, order.tracker(), order.ref(), order.instanceId(), claimLossFlag);

@@ -42,8 +42,12 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
+
+    /** The registered project's serve directory for the configured instance (FR10 of add-project-registry). */
+    private Path serveDir() {
+        homeDir.resolve("projects/${RegisteredCloneFixture.PROJECT}/serve/${INSTANCE_NAME}")
+    }
     /** Every progress payload a beat wrote, in order; appended to from the heartbeat thread. */
     List<String> beatPayloads = Collections.synchronizedList(new ArrayList<String>())
     InMemoryTracker tracker = new InMemoryTracker() {
@@ -62,7 +66,6 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
         // base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
     }
 
@@ -74,7 +77,8 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
 
     private void drain(String scenario) {
         def properties = FakeAgentSupport.propertiesFor(scenario)
-        newDrainCommand(properties, newAssembly(properties), worktreesRoot, homeDir, fakeFactory(tracker))
+        newDrainCommand(properties, newAssembly(properties),
+                RegisteredCloneFixture.unregistered(homeDir, projectDir), fakeFactory(tracker))
                 .run(args('serve', "--dir=$projectDir", '--drain'))
     }
 
@@ -107,7 +111,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Finished
 
         and: 'the slot runner wrote its outcome through the attached ledger writer'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.now(ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.now(ZoneOffset.UTC))
         readLedgerLines(ledgerFile)*.get('type')*.asText().count('taskOutcome') == 1
     }
 
@@ -118,7 +122,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         drain('plain-round')
 
         then: "the snapshot's tracker section records the feed's successful poll"
-        def tracker = readJson(ObservabilityPaths.snapshotFile(homeDir, INSTANCE_NAME)).get('tracker')
+        def tracker = readJson(ObservabilityPaths.snapshotFile(serveDir())).get('tracker')
         !tracker.get('lastSuccessAt').isNull()
         tracker.get('consecutiveFailures').asInt() == 0
     }

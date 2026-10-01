@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.ProjectName
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -25,6 +26,9 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         usage : { Path d -> new UsageArguments(d, 'task-1', false) },
         board : { Path d -> new BoardArguments(d, false, 50) },
         dashboard: { Path d -> new DashboardArguments(d, null, false) },
+        project : { Path d ->
+            new ProjectArguments(ProjectArguments.Verb.ADD, new ProjectName('widgets'), d)
+        },
     ]
 
     def "FR7: the #name arguments record refuses a relative directory, naming it"() {

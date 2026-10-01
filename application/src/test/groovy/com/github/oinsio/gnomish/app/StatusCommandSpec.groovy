@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
@@ -39,11 +40,15 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole())
+        newCommand(registeredClone)
+    }
+
+    private StatusCommand newCommand(RegisteredClone clone) {
+        new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(clone), liveConsole())
     }
 
     private StatusCommand newCommand(ScriptedConsoleIO console) {
-        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), console)
+        new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), console)
     }
 
     def "FR13: text render of a found task prints the status block"() {
@@ -77,7 +82,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         given:
         persistRound('PROJ-3', TaskState.atStageStart('implement'))
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-3')
-        def expectedWorktree = worktreesRoot.resolve('clone').resolve('PROJ-3')
+        def expectedWorktree = worktreeFor('PROJ-3')
 
         when:
         def output = captureStdout { newCommand().run(args) }
@@ -115,7 +120,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR13, UX3, D15: 'Deleted branch after merge' — a branch that existed and was deleted reports not-found the same as a never-existing task"() {
         given: 'a task branch created, its worktree removed, then the branch deleted — mirroring a merged-and-cleaned-up PR'
         persistRound('PROJ-7', TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve('PROJ-7')
+        def worktree = worktreeFor('PROJ-7')
         runner.run(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
         runner.run(cloneDir, 'branch', '-D', 'gnomish/PROJ-7')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-7')
@@ -170,12 +175,13 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     // per-branch degradation stops at the branch — the listing itself failing is the command
     // failing, because "verified: no tasks" and "could not look" are opposite answers.
     def "FR13: a failed enumeration fails the command instead of printing an empty table"() {
-        given: 'a --dir that is not a git repository, so the ref enumeration exits non-zero'
+        given: 'a clone that is not a git repository, so the ref enumeration exits non-zero'
         def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
         def args = new DefaultApplicationArguments('status', '--dir=' + notARepo)
+        def command = newCommand(RegisteredCloneFixture.unregistered(tempDir.resolve('home'), notARepo))
 
         when:
-        def printed = captureStdout { newCommand().run(args) }
+        def printed = captureStdout { command.run(args) }
 
         then: 'the command fails naming the git failure, and prints no table at all'
         def failure = thrown(TaskListingFailedException)
@@ -183,15 +189,19 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         printed == null
     }
 
-    def "UsageException: --dir is required"() {
+    // FR3, D9 of add-project-registry: the loader resolved --dir (and refuses an absent one for
+    // status) before the context existed; the command reads the registered clone, never --dir
+    def "FR3: status reads the registered clone, not the directory --dir names"() {
         given:
-        def args = new DefaultApplicationArguments('status', 'PROJ-1')
+        persistRound('PROJ-8', TaskState.atStageStart('implement'))
+        def elsewhere = Files.createDirectory(tempDir.resolve('elsewhere'))
+        def args = new DefaultApplicationArguments('status', '--dir=' + elsewhere)
 
         when:
-        newCommand().run(args)
+        def output = captureStdout { newCommand().run(args) }
 
         then:
-        thrown(UsageException)
+        output.contains('PROJ-8')
     }
 
     // FR16, UX4 of harden-task-branch-contract: every legal shape renders calmly, and only the
@@ -199,7 +209,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR16: a delivered branch renders as delivered, not as a missing state file"() {
         given: 'a completed task whose cleanup commit stripped .gnomish-task/ from the tip'
         persistRound('DELIVERED-1', TaskState.atStageStart('implement'))
-        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('DELIVERED-1')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'DELIVERED-1')
@@ -217,7 +227,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR16: an unknown state-file version refuses inspection with a diagnosis, no stack trace, nothing mutated"() {
         given: 'a task branch whose state.json declares version 2'
         persistRound('VERSION-2', TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve('VERSION-2')
+        def worktree = worktreeFor('VERSION-2')
         def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":2')
         runner.run(worktree, 'add', '-A')
@@ -241,7 +251,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR16: --json renders the refusing shape as JSON with its diagnosis"() {
         given:
         persistRound('VERSION-3', TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve('VERSION-3')
+        def worktree = worktreeFor('VERSION-3')
         def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
         runner.run(worktree, 'add', '-A')
@@ -263,11 +273,11 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         given: 'one healthy task, one delivered task and one with a broken state file'
         persistRound('MIXED-OK', TaskState.atStageStart('implement'))
         persistRound('MIXED-DONE', TaskState.atStageStart('implement'))
-        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('MIXED-DONE')
         persistRound('MIXED-BAD', TaskState.atStageStart('implement'))
-        def broken = worktreesRoot.resolve('clone').resolve('MIXED-BAD')
+        def broken = worktreeFor('MIXED-BAD')
         new File(broken.toFile(), '.gnomish-task/state.json').text = '{ not json'
         runner.run(broken, 'add', '-A')
         runner.run(broken, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'break')
@@ -327,7 +337,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR5, UX3: the shape --json document goes out on the machine path, byte for byte"() {
         given: 'a branch whose state file declares an unsupported version, so the shape is the answer'
         persistRound('MACHINE-3', TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve('MACHINE-3')
+        def worktree = worktreeFor('MACHINE-3')
         def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
         runner.run(worktree, 'add', '-A')

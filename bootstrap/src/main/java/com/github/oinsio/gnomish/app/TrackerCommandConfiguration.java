@@ -4,11 +4,13 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
  * tracker.
  *
  * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1, FR7 of
- * collapse-composition-roots.
+ * collapse-composition-roots; FR3, FR9, FR10 of add-project-registry.
  */
 @Configuration
 public class TrackerCommandConfiguration {
@@ -43,29 +45,38 @@ public class TrackerCommandConfiguration {
     /**
      * The equipment {@code take} and {@code serve} share, which each command builds its slot wiring
      * from once its tracker is bound (design D9 of collapse-composition-roots). The container
-     * support stamps {@code tracked}: both commands claim through the tracker.
+     * support stamps {@code tracked}: both commands claim through the tracker. The slots work in the
+     * registered clone, read lazily because the bean exists only once a project was resolved (design
+     * D9 of add-project-registry).
      */
     @Bean
     SlotWiringFactory slotWiringFactory(
             ManualRunAssembly manualRunAssembly,
-            FactoryPaths paths,
+            ObjectProvider<RegisteredClone> registeredClone,
             Clock javaTimeClock,
             ContainerSupports containerSupports,
             TrackerWiring trackerWiring) {
         return new SlotWiringFactory(
                 manualRunAssembly,
-                paths.worktreesRoot(),
+                registeredClone,
                 ManualRunRunner.TASK_ID_KEY,
                 javaTimeClock,
                 containerSupports.takeSupport(),
                 trackerWiring.pipelineSource());
     }
 
-    /** The serve daemon's leaf builders over its fixed equipment (design D7 of collapse-composition-roots). */
+    /**
+     * The serve daemon's leaf builders over its fixed equipment (design D7 of
+     * collapse-composition-roots), with the clone the configuration loader resolved, read lazily
+     * because the bean exists only once a project was resolved (design D9 of add-project-registry).
+     */
     @Bean
     ServeAssembly serveAssembly(
-            FactoryProperties factoryProperties, ServeProperties serveProperties, SystemClock systemClock) {
-        return new ServeAssembly(factoryProperties, serveProperties, systemClock);
+            FactoryProperties factoryProperties,
+            ServeProperties serveProperties,
+            SystemClock systemClock,
+            ObjectProvider<RegisteredClone> registeredClone) {
+        return new ServeAssembly(factoryProperties, serveProperties, systemClock, registeredClone);
     }
 
     /**
@@ -77,35 +88,43 @@ public class TrackerCommandConfiguration {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly serveAssembly,
             TaskGit git,
-            FactoryPaths paths,
             Clock javaTimeClock,
             SandboxLifecyclePass sandboxLifecyclePass,
             SandboxProperties sandboxProperties) {
         return new ServeRuntimeAssembly(
-                slotWiringFactory, serveAssembly, git, paths, javaTimeClock, sandboxLifecyclePass, sandboxProperties);
+                slotWiringFactory, serveAssembly, git, javaTimeClock, sandboxLifecyclePass, sandboxProperties);
     }
 
     /**
-     * {@code gnomish take}, with the production seams and the installation's {@link
-     * ServeProperties} for batch mode (FR2 of add-factory-serve: "the N limit applies to batch and
-     * serve").
+     * {@code take}'s production seams, with the installation's {@link ServeProperties} for batch
+     * mode (FR2 of add-factory-serve: "the N limit applies to batch and serve") and the process
+     * clock.
+     */
+    @Bean
+    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, Clock javaTimeClock) {
+        return TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties).withClock(javaTimeClock);
+    }
+
+    /**
+     * {@code gnomish take}, working in the registered clone the configuration loader resolved and
+     * claiming under an instance id that names its project (FR3, FR10 of add-project-registry).
      */
     @Bean
     TakeCommand takeCommand(
             SlotWiringFactory slotWiringFactory,
             TaskGit git,
             FactoryProperties factoryProperties,
-            Clock javaTimeClock,
+            ProjectScope projectScope,
             TrackerWiring trackerWiring,
-            ServeProperties serveProperties,
+            TakeCommandSeams takeCommandSeams,
             SandboxLifecyclePass sandboxLifecyclePass) {
         return new TakeCommand(
                 slotWiringFactory,
                 git,
                 factoryProperties,
-                javaTimeClock,
+                projectScope,
                 trackerWiring,
-                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties),
+                takeCommandSeams,
                 sandboxLifecyclePass);
     }
 
@@ -114,14 +133,14 @@ public class TrackerCommandConfiguration {
     ServeCommand serveCommand(
             ServeRuntimeAssembly serveRuntimeAssembly,
             TaskGit git,
-            FactoryProperties factoryProperties,
+            ProjectScope projectScope,
             ServeProperties serveProperties,
             TrackerWiring trackerWiring,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
         return new ServeCommand(
                 serveRuntimeAssembly,
                 git,
-                factoryProperties,
+                projectScope,
                 serveProperties,
                 trackerWiring,
                 FeedAutomaton::run,

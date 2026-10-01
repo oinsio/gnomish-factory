@@ -34,8 +34,11 @@ logs, nothing more:
   of any path the gnome or its sandbox can read; treat it as no safer than
   the tracker token from a blast-radius standpoint, only cheaper to obtain.
 
-Set the token as an environment variable on the machine running the
-factory, exactly like `GNOMISH_GITHUB_TOKEN` — never in `.gnomish/`
+Set the token on the machine running the factory exactly like
+`GNOMISH_GITHUB_TOKEN` — a file named `GNOMISH_GITHUB_ACTIONS_TOKEN` in the
+project's or the host's secrets folder, or an environment variable (see
+[`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project))
+— never in `.gnomish/`
 (anything under `.gnomish/` is gnome-writable and lands on the task branch;
 see `GithubCheckToken`'s javadoc for the resolution mechanics). The token is
 resolved once at wiring time and never re-read or logged (FR8).

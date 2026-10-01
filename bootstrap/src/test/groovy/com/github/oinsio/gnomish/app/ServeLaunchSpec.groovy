@@ -103,7 +103,8 @@ class ServeLaunchSpec extends ServeCommandSpecBase {
 
         and: 'it carries the overridden slot count and every other configured value'
         String message = starts[0].formattedMessage
-        message.contains("instance=$INSTANCE_NAME-")
+        // FR10 of add-project-registry: the instance id begins with <project>-<instance>-
+        message.contains("instance=${RegisteredCloneFixture.PROJECT}-$INSTANCE_NAME-")
         message.contains('slots=3')
         message.contains('wipLimit=')
         message.contains('idlePoll=PT30S')

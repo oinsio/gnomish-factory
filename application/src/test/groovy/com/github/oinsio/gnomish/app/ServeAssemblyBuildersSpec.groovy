@@ -21,14 +21,13 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Clock
 import java.time.Duration
 import spock.lang.Specification
 /**
- * FR2, FR13, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s three remaining
- * leaf builders. {@code ServeAssemblySpec} covers {@code shutdown}; this covers the rest, to the
+ * FR2, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s remaining leaf
+ * builders (the slot run order moved to {@code ServeArguments}, {@code ServeArgumentsSpec}). {@code ServeAssemblySpec} covers {@code shutdown}; this covers the rest, to the
  * same standard — each scenario proves the returned collaborator is wired over the caller's OWN
  * objects, not merely that something non-null came back.
  *
@@ -42,34 +41,6 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
     2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
 
-    // FR13: the slot runner is built over the caller's tracker, so a slot it runs consults THAT
-    // tracker. Driven here through the fetch that opens every slot — the runner swallows its
-    // failure by design, which makes the call itself the observable.
-    def "builds a slot runner wired over the caller's own tracker"() {
-        given:
-        def tracker = Mock(Tracker)
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
-        def heartbeat = TakeHeartbeat.forRun(tracker, new TrackerConfig('github', 3), { Duration d -> } as Sleeper)
-
-        when:
-        def slotRunner = ServeAssembly.slotRunner(
-                new ServeArguments(CLONE_DIR, null, false), pipeline(), tracker, INSTANCE,
-                slotWiring(assemblyRunning(null), git, tracker, WORKTREES_ROOT, ContainerTakeSupport.hostOnly(),
-                heartbeat.tenure()))
-
-        then:
-        slotRunner != null
-
-        when: 'the runner opens a slot for a claimed ref'
-        slotRunner.run(REF)
-
-        then: "it consulted the caller's tracker, and its own failure did not escape the slot"
-        1 * tracker.fetchTask(REF) >> {
-            throw new IllegalStateException('tracker unreachable')
-        }
-        noExceptionThrown()
-    }
-
     // FR2: the feed automaton enforces the WIP limit from the caller's OWN tracker config — the
     // limit is what decides whether a fresh task may start, so a builder that dropped it would
     // silently uncap the daemon.
@@ -80,7 +51,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def trackerConfig = new TrackerConfig('github', 3, Duration.ofMinutes(5), 3, 7, [:] as Map)
 
         when:
-        def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, clock).feedAutomaton(trackerConfig,
+        def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, clock, null).feedAutomaton(trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
@@ -92,19 +63,19 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     }
 
     // FR14, D10: the janitor disposes through the task-git port's OWN bound disposer, resolved for
-    // the caller's clone and worktrees root — it must never build a git subprocess of its own
-    // (task 4.4 of split-into-modules removed exactly that).
-    def "builds a worktree janitor disposing through the caller's git port"() {
+    // the registered clone (FR9 of add-project-registry) — it must never build a git subprocess of
+    // its own (task 4.4 of split-into-modules removed exactly that).
+    def "builds a worktree janitor disposing through the caller's git port for the registered clone"() {
         given:
         def worktrees = Mock(TaskWorktreeGit)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
 
         when:
-        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, null).worktreeJanitor(
-                new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, new SlotLedger(1), git)
+        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, null, RegisteredCloneFixture.provider(CLONE))
+                .worktreeJanitor(new SlotLedger(1), git)
 
         then:
-        1 * worktrees.environmentDisposal(CLONE_DIR, WORKTREES_ROOT) >> Stub(TaskEnvironmentDisposal)
+        1 * worktrees.environmentDisposal(CLONE) >> Stub(TaskEnvironmentDisposal)
         janitor != null
     }
 
@@ -121,7 +92,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                         new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null).sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null, null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
                 SandboxLifecyclePass.NONE,
                 livenessOracle,
@@ -154,7 +125,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 Duration.ofDays(7), Clock.systemUTC(), 20)
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null).sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null, null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
                 pass,
                 livenessOracle,

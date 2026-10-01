@@ -2,10 +2,12 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.git.state.*
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -28,7 +30,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def runner = new GitProcessRunner()
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     GitTaskRepository repository
 
     def setup() {
@@ -36,8 +38,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
-        repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
     }
 
     private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
@@ -45,7 +47,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     }
 
     private Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     private UntrustedText readTaskJson(String taskId, String ref = 'HEAD') {

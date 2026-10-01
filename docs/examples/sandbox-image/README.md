@@ -30,8 +30,10 @@ image](../../guides/operator-guide-sandbox.md#declared-volumes-in-your-image).
 
 ```bash
 docker build -t my-project-sandbox:1 docs/examples/sandbox-image/
-# then, in factory config:
-#   factory.sandbox.image: my-project-sandbox:1
+# then, in the project file ~/.gnomish/projects/<name>/project.yaml:
+#   factory:
+#     sandbox:
+#       image: my-project-sandbox:1
 ```
 
 Build arguments (all optional):
@@ -56,7 +58,7 @@ The image bakes the stock agent CLI and no credential. The agent logs in with
 or `ANTHROPIC_API_KEY`, set in the **factory's** environment: the factory hands
 it to every agent round and judge vote in the box, and to nothing else, with no
 `env-passthrough` entry. Add `api.anthropic.com` to
-`factory.sandbox.egress-allowlist`. Nothing in the image wraps the `claude`
+`factory.sandbox.egress-allowlist` in the project file. Nothing in the image wraps the `claude`
 binary — the factory passes the permission mode and the MCP exclusion itself.
 See [Agent authentication in the
 box](../../guides/operator-guide-sandbox.md#agent-authentication-in-the-box).

@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -61,17 +62,17 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     LogCaptureSupport capture
     Tracker tracker = Mock(Tracker)
 
     def setup() {
         cloneDir = tempDir.resolve('gnomish-clone')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
         Files.createDirectories(cloneDir)
         // Stands in for the `git worktree add` the real repository would have performed —
         // DirectoryWorkspace refuses a path that is not an existing directory.
-        Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1'))
+        Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
         capture = LogCaptureSupport.attach(AnchorLog)
     }
 
@@ -81,7 +82,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
 
     private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> Stub(TaskLifecycleStore)
+            taskRepository(_) >> Stub(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
         }
@@ -92,7 +93,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(
                 store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
-                slotWiring(assembly, git, tracker, worktreesRoot, ContainerTakeSupport.hostOnly(), heartbeat.tenure()),
+                slotWiring(assembly, git, tracker, registeredClone, ContainerTakeSupport.hostOnly(), heartbeat.tenure()),
                 testProperties(), FIXED_CLOCK,
                 new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 TakeoverConfirmation.UNAVAILABLE)

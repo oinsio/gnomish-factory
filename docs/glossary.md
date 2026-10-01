@@ -661,6 +661,45 @@ trusted/task tier split, and the law-root rule.
   community plugin registry; its five fields are the registry's columns. It
   needs no pull request from the plugin author.
 
+## Operator configuration
+
+Introduced by `add-project-registry`; the levels and the check are ADR 0011.
+
+- **Factory home** — the one folder holding all operator state of an
+  installation: the directory named by `GNOMISH_HOME`, default `~/.gnomish`.
+  It holds the host file, the host secrets, the project-less log and one folder
+  per registered project (`projects/<name>/`: project file, secrets, logs,
+  serve state, worktrees). Only `FactoryHome` and `ProjectLayout` know its
+  folder names. *Not:* the target repository's `.gnomish/` folder, which is the
+  pipeline's law. *Never:* gnomish dir, data dir.
+- **Host file** — `GNOMISH_HOME/factory.yaml`: the installation's own
+  `factory.*` configuration, shared by every project.
+- **Project file** — `GNOMISH_HOME/projects/<name>/project.yaml`: a registered
+  project's clones (`clones:`) and its `factory.*` configuration (`factory:`).
+  The only source of sandbox-boundary keys.
+- **Registered project** — a project the operator declared with `gnomish
+  project add`: a name matching `[a-z0-9][a-z0-9._-]*`, a project file and one
+  or more registered clones. The name keys the project's configuration,
+  secrets, logs, serve state and worktrees.
+- **Registered clone** — one clone directory listed in a project file, found by
+  exact path from `--dir` once per process; the value every project-scoped
+  component takes (`RegisteredClone`). *Not:* the clone directory's folder name,
+  which is only the default clone name.
+- **Clone name** — the name of a registered clone within its project, by
+  default the last segment of its path, unique within the project; it keys the
+  clone's own worktree folder `worktrees/<clone>/`, so two clones of one project
+  never share a worktree.
+- **Configuration level** — where a `factory.*` key may be set: `host` (host
+  file or command line), `project` (project file or command line), `any`, or
+  `sandbox-boundary` (project file only). Declared once per key by
+  `@ConfigLevel` on its definition; a key set where its level forbids stops
+  startup.
+- **Sandbox-boundary key** — a `factory.*` key that selects or widens the
+  sandbox a gnome runs in: `factory.bindings.*`, `factory.sandbox.image`,
+  `factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough`. Read
+  from the resolved project's own project file and nowhere else, the command
+  line included.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                       |

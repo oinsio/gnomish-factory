@@ -70,7 +70,7 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
 
     def "broken pipeline exits 3 before any dialog"() {
         given: 'a fixture whose plan stage references a missing instructions.md'
-        Path brokenRoot = brokenFixtureRoot()
+        Path brokenRoot = E2eFixture.brokenRoot()
 
         when:
         def result = harness.run(
@@ -180,10 +180,5 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
 
         and: 'the checkpoint was reached before the process exited'
         result.stdout().contains("Stage 'work' passed. Manual checkpoint reached.")
-    }
-
-    /** @return the {@code e2e-broken} fixture root, resolved from the test classpath */
-    private static Path brokenFixtureRoot() {
-        Path.of(ExitCodeMatrixSpec.getResource('/.gnomish-fixtures/e2e-broken').toURI())
     }
 }

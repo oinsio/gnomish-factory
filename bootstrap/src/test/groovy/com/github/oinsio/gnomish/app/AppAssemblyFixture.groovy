@@ -21,6 +21,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.FactoryHome
+import com.github.oinsio.gnomish.app.project.ProjectRegistry
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -29,10 +32,16 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.util.function.BooleanSupplier
+import java.util.function.Supplier
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.support.DefaultListableBeanFactory
+import org.springframework.beans.factory.support.RootBeanDefinition
 import org.springframework.boot.DefaultApplicationArguments
+import org.springframework.core.env.StandardEnvironment
 
 /**
  * Shared factory methods for the one construction block twenty-one app-layer
@@ -84,7 +93,9 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                         new FilesExistCheckRunner(),
                         new ShellCommandCheckRunner(),
                         [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                        new EnvFileSecretsProvider(),
+                        // An empty factory home of its own: no secrets folder, so every secret resolves from
+                        // the environment exactly as before the folders existed (FR8 of add-project-registry).
+                        new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null),
                         factoryProperties),
                 new SystemClock(),
                 new ThreadSleeper(),
@@ -126,15 +137,17 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * everything else is the dominant literal every call site used to repeat
      * verbatim.
      *
-     * <p>{@code factoryProperties} and {@code boardCommand} default to the identity literals
+     * <p>{@code factoryProperties} and {@code boardWiring} default to the identity literals
      * every prior call site used inline; a spec that needs a non-default instance name (fed to
      * both the runner and its embedded {@link BoardCommand}/{@link DashboardCommand}) or a
-     * fake {@link BoardCommand} (e.g. one wired to an outage tracker) supplies its own.
+     * board over a fake tracker (e.g. one wired to an outage tracker) supplies its own. The board
+     * itself is built here, over the same registered clone every other command works in (FR3 of
+     * add-project-registry).
      *
      * <p>Implements FR1, FR2 of add-serve-sandbox-lifecycle.
      */
     ManualRunRunner newManualRunRunner(
-            Path worktreesRoot,
+            Path clonePath,
             Path homeDir,
             SandboxProperties sandboxProperties = new SandboxProperties(
                     null, null, null, null, null, null, false, null, null, null, null),
@@ -145,7 +158,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             // tell the runner's own git bundle apart from the identity default supply their own.
             TaskGit git = TaskGitFixture.real(),
             FactoryProperties factoryProperties = testProperties(),
-            BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
+            TrackerWiring boardWiring = new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
             // The tracker registry the dispatch hands `take`/`serve`; empty for the host git-mode
             // specs, which never reach a tracker.
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry = [:],
@@ -153,8 +166,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             // The default reads the developer's real git, as production does; a spec proving the
             // refusal hands in a check over a fake git (GitVersionFloorSpec).
             GitVersionCheck gitVersionCheck = new GitVersionCheck(new GitProcessRunner())) {
-        buildManualRunRunner(worktreesRoot, homeDir, sandboxProperties, bindingProperties, git, factoryProperties,
-                boardCommand, trackerAdapterRegistry, gitVersionCheck, DockerRuntimeProbe.&dockerAvailable as BooleanSupplier)
+        buildManualRunRunner(clonePath, homeDir, sandboxProperties, bindingProperties, git, factoryProperties,
+                boardWiring, trackerAdapterRegistry, gitVersionCheck, DockerRuntimeProbe.&dockerAvailable as BooleanSupplier)
     }
 
     /**
@@ -162,20 +175,37 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * probe (D13 of add-sandbox-core) — the runner a daemon-free container dispatch spec drives,
      * through the test constructor of {@link ContainerSupports} rather than a field write.
      */
-    ManualRunRunner newManualRunRunnerProbing(Path worktreesRoot, Path homeDir, SandboxProperties sandboxProperties,
+    ManualRunRunner newManualRunRunnerProbing(Path clonePath, Path homeDir, SandboxProperties sandboxProperties,
             BindingProperties bindingProperties, BooleanSupplier dockerProbe) {
         def factoryProperties = testProperties()
-        buildManualRunRunner(worktreesRoot, homeDir, sandboxProperties, bindingProperties, TaskGitFixture.real(),
+        buildManualRunRunner(clonePath, homeDir, sandboxProperties, bindingProperties, TaskGitFixture.real(),
                 factoryProperties,
-                new BoardCommand(Clock.systemUTC(), factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
+                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
                 [:], new GitVersionCheck(new GitProcessRunner()), dockerProbe)
     }
 
-    private ManualRunRunner buildManualRunRunner(Path worktreesRoot, Path homeDir, SandboxProperties sandboxProperties,
-            BindingProperties bindingProperties, TaskGit git, FactoryProperties factoryProperties, BoardCommand boardCommand,
+    private ManualRunRunner buildManualRunRunner(Path clonePath, Path homeDir, SandboxProperties sandboxProperties,
+            BindingProperties bindingProperties, TaskGit git, FactoryProperties factoryProperties, TrackerWiring boardWiring,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry, GitVersionCheck gitVersionCheck,
             BooleanSupplier dockerProbe) {
-        def paths = new FactoryPaths(worktreesRoot, homeDir)
+        // FR2, FR4 of add-project-registry: the project registry under a home of the spec's own.
+        def projectHome = FactoryHome.at(homeDir.resolve('.gnomish'))
+        // FR9, FR10 of add-project-registry: the clone the spec's commands work in — its worktree
+        // folder, its serve directory — registered through the production registry on first read,
+        // as the loader resolves --dir only once a command runs (the spec may make clonePath a git
+        // working tree after building the runner).
+        // A spec whose clonePath never becomes a git working tree (an in-place run, a usage error, a
+        // board over a bare .gnomish/ tree) gets the unregistered value: the loader that would refuse
+        // it is not part of this graph.
+        def resolvedClone = RegisteredCloneFixture.lazy {
+            Files.exists(clonePath.resolve('.git'))
+            ? RegisteredCloneFixture.resolvedOrRegistered(projectHome.root(), clonePath)
+            : RegisteredCloneFixture.unregistered(projectHome.root(), clonePath)
+        }
+        // FR3, FR10 of add-project-registry: every project-scoped command takes the clone through
+        // the production ProjectScope, as the context wires it.
+        def scope = new ProjectScope(resolvedClone, factoryProperties)
+        def boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, scope, boardWiring, LiveConsoleIO.onStdout())
         def console = new SystemConsoleIO(System.in, System.out)
         // The error console the composition root binds to System.err (FR6 of
         // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
@@ -207,30 +237,42 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         def serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null)
         def javaTimeClock = Clock.systemUTC()
         def sandboxLifecyclePass = commands.sandboxLifecyclePass(sandboxProperties, factoryProperties, javaTimeClock)
-        def slotWiringFactory = commands.slotWiringFactory(assembly, paths, javaTimeClock, containerSupports, trackerWiring)
+        def slotWiringFactory = commands.slotWiringFactory(assembly, resolvedClone, javaTimeClock, containerSupports, trackerWiring)
         def reportCommands = new ReportCommands(
-                new StatusCommand(TaskGitFixture.realClaimless(), paths, LiveConsoleIO.onStdout()),
-                new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout()),
+                new StatusCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
+                new UsageCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
                 boardCommand,
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), paths, factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())))
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), scope, factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())))
         def dispatch = commands.subcommandDispatch(
                 reportCommands,
-                commands.takeCommand(slotWiringFactory, git, factoryProperties, javaTimeClock, trackerWiring,
-                serveProperties, sandboxLifecyclePass),
+                commands.takeCommand(slotWiringFactory, git, factoryProperties, scope, trackerWiring,
+                commands.takeCommandSeams(serveProperties, javaTimeClock), sandboxLifecyclePass),
                 commands.serveCommand(
                         commands.serveRuntimeAssembly(slotWiringFactory,
-                        commands.serveAssembly(factoryProperties, serveProperties, systemClock), git, paths, javaTimeClock,
+                        commands.serveAssembly(factoryProperties, serveProperties, systemClock, resolvedClone), git, javaTimeClock,
                         sandboxLifecyclePass, sandboxProperties),
-                        git, factoryProperties, serveProperties, trackerWiring, errorConsole))
+                        git, scope, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(
-                new RunArgumentsParser(),
+                scope,
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
                 new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
                 assembly,
                 new InMemoryAttemptPersistence(),
                 console,
-                manualRun.manualRunners(assembly, git, paths, sandboxProperties, factoryProperties, containerSupports, console))
-        new ManualRunRunner(gitVersionCheck, dispatch, drive, errorConsole)
+                lazyRunners {
+                    manualRun.manualRunners(assembly, git, resolvedClone.getObject(), sandboxProperties, factoryProperties,
+                    containerSupports, console)
+                })
+        def projectCommand = new ProjectCommand(projectHome, ProjectRegistry.scan(projectHome), factoryProperties,
+                new StandardEnvironment(), new DefaultListableBeanFactory().getBeanProvider(RegisteredClone), console)
+        new ManualRunRunner(gitVersionCheck, dispatch, projectCommand, drive, errorConsole)
+    }
+
+    /** The runners as the drive's lazily read provider yields them: built on the first git-mode run. */
+    private ObjectProvider<ManualRunners> lazyRunners(Supplier<ManualRunners> runners) {
+        def beans = new DefaultListableBeanFactory()
+        beans.registerBeanDefinition('manualRunners', new RootBeanDefinition(ManualRunners, runners))
+        beans.getBeanProvider(ManualRunners)
     }
 
     /**

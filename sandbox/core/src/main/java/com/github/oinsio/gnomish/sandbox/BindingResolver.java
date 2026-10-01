@@ -75,8 +75,8 @@ public class BindingResolver {
         if (container == null) {
             throw new IllegalArgumentException("the default '" + BindingNames.CONTAINER
                     + "' adapter binding is not available; discovered bindings are " + registry.names()
-                    + " — restore the container backend module on the classpath, or set factory.bindings.default="
-                    + BindingNames.HOST + " if this trusted environment should run unsandboxed");
+                    + " — restore the container backend module on the classpath, or set factory.bindings.default: "
+                    + BindingNames.HOST + " in the project file if this trusted environment should run unsandboxed");
         }
         return container;
     }

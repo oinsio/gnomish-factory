@@ -32,7 +32,7 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
         }
 
         and: 'a 100 ms tail-drain grace'
-        def properties = new FactoryProperties('factory-01', 'claude', Duration.ofMillis(100), [], null, null, null)
+        def properties = new FactoryProperties('factory-01', 'claude', Duration.ofMillis(100), null, null, null)
 
         when:
         def vote = JudgeRoundExecution.run(
@@ -67,7 +67,7 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_) >> handle
         }
-        def properties = new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null)
+        def properties = new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null)
 
         and: 'the round thread carries a pending interrupt'
         Thread.currentThread().interrupt()

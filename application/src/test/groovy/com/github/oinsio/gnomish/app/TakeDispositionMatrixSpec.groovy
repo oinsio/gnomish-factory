@@ -45,7 +45,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new TakeDisposition(slotWiring(Stub(RunAssembly), git, tracker, WORKTREES_ROOT,
+        new TakeDisposition(slotWiring(Stub(RunAssembly), git, tracker, CLONE,
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 // The claim never reaches a fresh-claim base resolution in this spec: every Ready
                 // scenario is stopped at tracker.claim() itself (see disposition() call sites), so any

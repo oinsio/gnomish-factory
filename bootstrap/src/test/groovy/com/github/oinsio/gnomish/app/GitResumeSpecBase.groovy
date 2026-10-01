@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 
 import java.nio.file.Files
-
 /**
  * Shared fixture for the resume specs — bootstrap (task 4.6) and outcome-driven continuation
  * (task 4.7): adds {@link GitResumeRunner}-specific helpers on top of {@link
@@ -30,7 +29,7 @@ abstract class GitResumeSpecBase extends ResumeSpecFixtureBase {
     protected GitResumeRunner newResumeRunner(
             InputStream input, PrintStream output, TaskGit git) {
         def assembly = newAssembly(input, output, testProperties())
-        new GitResumeRunner(assembly, git, worktreesRoot, 'taskId')
+        new GitResumeRunner(assembly, git, registeredClone, 'taskId')
     }
 
     /** Rewrites task.json's outcome field to a Completed marker, without running FR15 cleanup. */

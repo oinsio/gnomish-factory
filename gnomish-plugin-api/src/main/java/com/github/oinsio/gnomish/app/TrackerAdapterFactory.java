@@ -147,7 +147,7 @@ public interface TrackerAdapterFactory {
     /**
      * Declares this adapter's credential environment variable names (design D17, NFR-S1): the
      * agent process launcher removes every declared name from the CLI subprocess's environment
-     * regardless of {@code factory.agent-cli-env-passthrough}, so tracker credentials never reach
+     * regardless of {@code factory.sandbox.env-passthrough}, so tracker credentials never reach
      * the gnome. The default returns an empty list — an adapter with no credentials (e.g. the
      * in-memory reference adapter) needs no
      * override; declaring this is mandatory for any adapter that DOES read a credential from the

@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -51,7 +52,7 @@ class BaseRefBareRemoteIntegrationSpec extends Specification implements BareGitR
 
     Path projectDir
     Path originDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     InMemoryTracker tracker = new InMemoryTracker()
     InMemoryTrackerHarness harness = new InMemoryTrackerHarness(tracker)
 
@@ -72,7 +73,7 @@ advancement: auto
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         originDir = addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     /** Writes config.yaml with the given task-branch section appended verbatim, commits it, and re-pushes it to origin
@@ -91,7 +92,7 @@ advancement: auto
         TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),

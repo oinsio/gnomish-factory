@@ -90,6 +90,9 @@ class ModuleBuildFileSpec extends Specification {
      * (FR2 of own-git-transfer-argv) declares nothing for the same security reason as the text
      * leafs, and for a layering one besides: {@code :adapters:git} and {@code :sandbox:docker}
      * reach it from opposite sides of the module tree, so any edge it acquired would land in both.
+     * {@code :operatorconfig} (FR6, design D4 of add-project-registry) declares nothing for the
+     * same layering reason: the records it annotates live in {@code :application} and in {@code
+     * :sandbox:core}.
      *
      * <p>This map is a named registry: it pins the leafs whose emptiness the layering depends on,
      * whether or not anything reaches them today. {@link DomainLeafPuritySpec} asks the companion
@@ -110,6 +113,7 @@ class ModuleBuildFileSpec extends Specification {
         ] as Set,
         untrustedtext: [] as Set,
         operatorevent: [] as Set,
+        operatorconfig: [] as Set,
         gittransfer: [] as Set,
     ]
 

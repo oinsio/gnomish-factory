@@ -37,7 +37,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
     }
 
     private static FactoryProperties propertiesWithGrace(Duration grace) {
-        new FactoryProperties('factory-01', 'claude', grace, [], null, null, null)
+        new FactoryProperties('factory-01', 'claude', grace, null, null, null)
     }
 
     private TaskExecutionEnvironment environmentOf(ExecHandle handle) {

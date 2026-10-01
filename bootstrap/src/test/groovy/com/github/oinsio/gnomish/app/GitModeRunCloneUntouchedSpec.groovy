@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -31,7 +32,7 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone-untouched-project')
@@ -40,7 +41,7 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         // Operator had a feature branch checked out, not main/master, before starting the task.
         gitExitCode(cloneDir, 'checkout', '-b', 'operator-feature-branch')
         Files.writeString(cloneDir.resolve('operator-work.txt'), 'unrelated uncommitted change\n')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -56,11 +57,11 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
     }
 
     private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
+        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {
-        worktreesRoot.resolve('clone-untouched-project').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     /** Content hash of every tracked file plus its path, so a rewritten-but-same-content file

@@ -767,13 +767,13 @@ exit 0
 
         when:
         def configuredSupport = ContainerSupportFixture.direct(
-                cloneDir, 'T-CFG', segments, sandbox, new FactoryProperties(null, null, null, null, null),
+                cloneDir, 'T-CFG', segments, sandbox, new FactoryProperties(null, null, null, null),
                 OwnershipMode.MANUAL, ClaimEpochSource.NONE, [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
                 ])
         def unconfiguredSupport =
                 ContainerSupportFixture.direct(cloneDir, 'T-UNCFG', segments, sandbox,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
 
         then:
         configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)

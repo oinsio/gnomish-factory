@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.board.BoardComposition;
 import com.github.oinsio.gnomish.board.BoardModel;
@@ -11,7 +12,6 @@ import com.github.oinsio.gnomish.dashboard.DashboardRenderCycle;
 import com.github.oinsio.gnomish.dashboard.DashboardWatchLoop;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
-import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -29,11 +29,15 @@ import org.springframework.stereotype.Component;
  * it once via a fresh {@link DashboardBoardCache} (task 4.3); {@code --watch} hands it to {@link
  * DashboardWatchLoop}, which re-fetches only on its own slower cadence (task 4.4, FR9).
  *
- * <p>The default output path is {@code dashboard.html} in the instance's observability directory
- * (design D8, {@link ObservabilityPaths#directory}); {@code --out} overrides it. Every write goes
- * through {@link AtomicFileWriter} (task 4.2, NFR-R2) via {@link DashboardRenderCycle}'s callers.
+ * <p>The instance's serve directory is computed here, once per invocation, from the registered
+ * clone the configuration loader resolved and the configured instance name — {@code
+ * projects/<name>/serve/<instance>} (design D1 of add-project-registry) — and handed whole to the
+ * render cycle. The default output path is {@code dashboard.html} in that directory (design D8);
+ * {@code --out} overrides it. Every write goes through {@link AtomicFileWriter} (task 4.2, NFR-R2)
+ * via {@link DashboardRenderCycle}'s callers.
  *
- * <p>Implements FR1, FR3, FR7, FR9, NFR-R2 of add-dashboard-page.
+ * <p>Implements FR1, FR3, FR7, FR9, NFR-R2 of add-dashboard-page. Implements FR3, FR10 of
+ * add-project-registry.
  */
 @Component
 final class DashboardCommand {
@@ -42,22 +46,22 @@ final class DashboardCommand {
     private static final int BOARD_READY_LIMIT = 50;
 
     private final DashboardArgumentsParser argumentsParser = new DashboardArgumentsParser();
-    private final DashboardRenderCycle renderCycle = new DashboardRenderCycle();
     private final Clock clock;
     private final Sleeper sleeper;
-    private final FactoryPaths paths;
+    // The clone the configuration loader resolved from --dir (design D9 of add-project-registry).
+    private final ProjectScope scope;
     private final FactoryProperties factoryProperties;
     private final TrackerWiring trackerWiring;
 
     DashboardCommand(
             Clock javaTimeClock,
             Sleeper sleeper,
-            FactoryPaths paths,
+            ProjectScope scope,
             FactoryProperties factoryProperties,
             TrackerWiring trackerWiring) {
         this.clock = javaTimeClock;
         this.sleeper = sleeper;
-        this.paths = paths;
+        this.scope = scope;
         this.factoryProperties = factoryProperties;
         this.trackerWiring = trackerWiring;
     }
@@ -71,29 +75,30 @@ final class DashboardCommand {
      *     one-shot render cannot write its output file
      */
     void run(ApplicationArguments args) throws IOException {
-        DashboardArguments dashboardArguments = argumentsParser.parse(args);
+        RegisteredClone clone = scope.registeredClone();
+        DashboardArguments dashboardArguments = argumentsParser.parse(args, clone);
         TrackerWiring.ReadOnlyTrackerResolution resolution =
-                trackerWiring.resolveReadOnly(dashboardArguments.dir(), factoryProperties);
+                trackerWiring.resolveReadOnly(dashboardArguments.dir(), scope.mintInstanceId());
         TrackerConfig trackerConfig = resolution.trackerConfig();
-        String instanceName = factoryProperties.instanceName();
-        Path outputFile = dashboardArguments.out() != null
-                ? dashboardArguments.out()
-                : ObservabilityPaths.directory(paths.homeDir(), instanceName).resolve(DEFAULT_FILE_NAME);
+        Path serveDir = clone.layout().serveDir(factoryProperties.instanceName());
+        DashboardRenderCycle renderCycle = new DashboardRenderCycle(serveDir);
+        Path outputFile =
+                dashboardArguments.out() != null ? dashboardArguments.out() : serveDir.resolve(DEFAULT_FILE_NAME);
         Supplier<BoardModel> boardFetch = () -> BoardComposition.compose(
                 resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, BOARD_READY_LIMIT);
 
         if (dashboardArguments.watch()) {
-            new DashboardWatchLoop(renderCycle, sleeper, clock)
-                    .run(paths.homeDir(), instanceName, outputFile, boardFetch);
+            new DashboardWatchLoop(renderCycle, sleeper, clock).run(outputFile, boardFetch);
             return;
         }
-        renderOnce(instanceName, outputFile, boardFetch);
+        renderOnce(renderCycle, outputFile, boardFetch);
     }
 
-    private void renderOnce(String instanceName, Path outputFile, Supplier<BoardModel> boardFetch) throws IOException {
+    private void renderOnce(DashboardRenderCycle renderCycle, Path outputFile, Supplier<BoardModel> boardFetch)
+            throws IOException {
         Instant now = clock.instant();
         BoardSectionView boardView = new DashboardBoardCache().refresh(boardFetch, now);
-        String html = renderCycle.render(paths.homeDir(), instanceName, boardView, now, null);
+        String html = renderCycle.render(boardView, now, null);
         AtomicFileWriter.write(outputFile, html);
     }
 }

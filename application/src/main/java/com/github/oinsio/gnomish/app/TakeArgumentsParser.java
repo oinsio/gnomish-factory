@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -9,7 +10,7 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish take}'s command-line flags into a {@link TakeArguments} (task 5.13): a
- * required-nothing {@code --dir} (defaults to {@code .}, like {@link RunArguments#dir()}), {@code
+ * required-nothing {@code --dir} (the registered clone, defaulting to {@code .}), {@code
  * --interactive[=executor|judge]} (identical semantics to {@code gnomish run}'s, via {@link
  * InteractiveModeParser}), {@code --base} (explicit-mode fresh-claim only), {@code --discard-work},
  * and the positional refs — every non-{@code --}, non-{@code take}-token source argument, via
@@ -28,7 +29,8 @@ import org.springframework.boot.ApplicationArguments;
  * ...}, two or more positional refs) additionally rejects {@code --interactive} and {@code --base}
  * (FR2, FR3 of add-factory-serve; spec "take subcommand surface").
  *
- * <p>Implements FR9 of add-tracker-port; FR6 of add-claim-heartbeat; FR2, FR3 of add-factory-serve.
+ * <p>Implements FR9 of add-tracker-port; FR6 of add-claim-heartbeat; FR2, FR3 of add-factory-serve;
+ * FR3 of add-project-registry.
  */
 final class TakeArgumentsParser {
 
@@ -52,15 +54,17 @@ final class TakeArgumentsParser {
 
     /**
      * @param args the raw application arguments, including the leading {@code take} token
+     * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
+     *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
      * @throws UsageException if a rejected flag is present, {@code --base} is given on the bare
      *     form, {@code --interactive} or {@code --base} is given on the batch form (2+ refs), or a
-     *     shared flag ({@code --dir}, {@code --interactive}) fails its own format check
+     *     shared flag ({@code --interactive}) fails its own format check
      */
-    TakeArguments parse(ApplicationArguments args) {
+    TakeArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, TAKE_TOKEN, ACCEPTED, Map.of());
         rejectRunOnlyFlags(args);
-        Path dir = ArgumentsParsingSupport.projectDir(args);
+        Path dir = clone.clonePath();
         List<String> refs = ArgumentsParsingSupport.allPositionalsAfterSubcommand(args, TAKE_TOKEN);
         RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
         String base = ArgumentsParsingSupport.singleValue(args, BASE);

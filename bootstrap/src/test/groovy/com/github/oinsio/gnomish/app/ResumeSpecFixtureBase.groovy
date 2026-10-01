@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -37,7 +38,7 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
 
     /**
@@ -80,7 +81,7 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(cloneDir)
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def cleanup() {
@@ -88,11 +89,11 @@ tracker:
     }
 
     protected GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, taskGit.epochs())
+        new GitTaskRepository(gitRunner, registeredClone, taskGit.epochs())
     }
 
     protected Path expectedWorktree(String taskDir) {
-        worktreesRoot.resolve('my-project').resolve(taskDir)
+        registeredClone.worktrees().resolve(taskDir)
     }
 
     protected static StageDefinition stage(AdvancementMode mode = AdvancementMode.AUTO) {

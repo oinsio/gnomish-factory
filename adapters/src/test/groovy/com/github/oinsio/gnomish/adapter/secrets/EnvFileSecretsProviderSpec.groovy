@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.secrets
 
+import com.github.oinsio.gnomish.app.project.FactoryHome
+import com.github.oinsio.gnomish.app.project.ProjectLayout
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -12,7 +14,8 @@ import spock.lang.TempDir
  * The env/file {@code SecretsProvider} adapter (design D12): resolution order
  * (direct env var, {@code <name>_FILE} indirection), the fail-closed contract
  * (absent/blank/unreadable resolve to empty, never a silent value), and the
- * file-over-env precedence.
+ * file-over-env precedence — here with no secrets folder present; the folders ahead of them are
+ * {@code EnvFileSecretsFolderSpec}'s.
  *
  * <p>Implements FR18, NFR-S1 of add-sandbox-core.
  */
@@ -21,14 +24,22 @@ class EnvFileSecretsProviderSpec extends Specification {
     @TempDir
     Path tempDir
 
-    private static Function<String, String> envOf(Map<String, String> vars) {
-        { String name -> vars.get(name) } as Function
+    FactoryHome home
+
+    def setup() {
+        home = FactoryHome.at(tempDir.resolve('home'))
+    }
+
+    private EnvFileSecretsProvider providerFor(Map<String, String> vars, ProjectLayout project = null) {
+        new EnvFileSecretsProvider(home, project, { String name ->
+            vars.get(name)
+        } as Function)
     }
 
     // FR18: a direct env var resolves by name
     def "resolves a secret from a direct environment variable"() {
         given: 'GNOMISH_GITHUB_TOKEN present in the environment'
-        def provider = new EnvFileSecretsProvider(envOf([GNOMISH_GITHUB_TOKEN: 'ghp_secret']))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'ghp_secret'])
 
         expect: 'find returns its value'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.of('ghp_secret')
@@ -37,7 +48,7 @@ class EnvFileSecretsProviderSpec extends Specification {
     // NFR-S1: an absent secret is empty, never a silent value
     def "an absent secret resolves to empty"() {
         given: 'nothing set for the name'
-        def provider = new EnvFileSecretsProvider(envOf([:]))
+        def provider = providerFor([:])
 
         expect: 'find is empty'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.empty()
@@ -46,7 +57,7 @@ class EnvFileSecretsProviderSpec extends Specification {
     // NFR-S1: a blank direct value is treated as absent (fail-closed)
     def "a blank direct value resolves to empty"() {
         given: 'the name set to whitespace only'
-        def provider = new EnvFileSecretsProvider(envOf([GNOMISH_GITHUB_TOKEN: '   ']))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: '   '])
 
         expect: 'find is empty'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.empty()
@@ -57,7 +68,7 @@ class EnvFileSecretsProviderSpec extends Specification {
         given: 'a secret file with a trailing newline and the _FILE var pointing at it'
         def secretFile = tempDir.resolve('token')
         Files.writeString(secretFile, 'ghp_from_file\n')
-        def provider = new EnvFileSecretsProvider(envOf([GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()]))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()])
 
         expect: 'find returns the stripped file contents'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.of('ghp_from_file')
@@ -68,8 +79,7 @@ class EnvFileSecretsProviderSpec extends Specification {
         given: 'both the direct var and the _FILE var set'
         def secretFile = tempDir.resolve('token')
         Files.writeString(secretFile, 'from_file')
-        def provider = new EnvFileSecretsProvider(
-                envOf([GNOMISH_GITHUB_TOKEN: 'from_env', GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()]))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'from_env', GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()])
 
         expect: 'the file value is used'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.of('from_file')
@@ -78,9 +88,8 @@ class EnvFileSecretsProviderSpec extends Specification {
     // NFR-S1: a referenced-but-unreadable file is empty, never a fall-through to the direct value
     def "a referenced but missing file resolves to empty, never the direct value"() {
         given: 'the _FILE var points at a nonexistent path, with a direct value also set'
-        def provider = new EnvFileSecretsProvider(
-                envOf([GNOMISH_GITHUB_TOKEN: 'from_env',
-                    GNOMISH_GITHUB_TOKEN_FILE: tempDir.resolve('absent').toString()]))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'from_env',
+            GNOMISH_GITHUB_TOKEN_FILE: tempDir.resolve('absent').toString()])
 
         expect: 'find is empty — the misconfigured path fails loudly, not silently'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.empty()
@@ -91,9 +100,8 @@ class EnvFileSecretsProviderSpec extends Specification {
     def "an unreadable secret file warns naming the variable, never the value"() {
         given: 'a secret file that exists but whose path is a directory, so the read fails'
         def unreadable = Files.createDirectory(tempDir.resolve('not-a-file'))
-        def provider = new EnvFileSecretsProvider(
-                envOf([GNOMISH_GITHUB_TOKEN: 'from_env',
-                    GNOMISH_GITHUB_TOKEN_FILE: unreadable.toString()]))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'from_env',
+            GNOMISH_GITHUB_TOKEN_FILE: unreadable.toString()])
 
         when:
         def logs = LogCaptureSupport.attach(EnvFileSecretsProvider)
@@ -120,8 +128,7 @@ class EnvFileSecretsProviderSpec extends Specification {
     // NFR-S1: a blank _FILE value is ignored, falling back to the direct value
     def "a blank _FILE value is ignored and the direct value is used"() {
         given: 'the _FILE var blank and a direct value present'
-        def provider = new EnvFileSecretsProvider(
-                envOf([GNOMISH_GITHUB_TOKEN: 'from_env', GNOMISH_GITHUB_TOKEN_FILE: '  ']))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'from_env', GNOMISH_GITHUB_TOKEN_FILE: '  '])
 
         expect: 'the direct value resolves'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.of('from_env')
@@ -132,7 +139,7 @@ class EnvFileSecretsProviderSpec extends Specification {
         given: 'a secret file holding only whitespace'
         def secretFile = tempDir.resolve('blank')
         Files.writeString(secretFile, '\n  \n')
-        def provider = new EnvFileSecretsProvider(envOf([GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()]))
+        def provider = providerFor([GNOMISH_GITHUB_TOKEN_FILE: secretFile.toString()])
 
         expect: 'find is empty'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.empty()

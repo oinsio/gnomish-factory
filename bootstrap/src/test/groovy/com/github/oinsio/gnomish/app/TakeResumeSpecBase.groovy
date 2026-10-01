@@ -4,22 +4,15 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Clock
 
+import java.time.Clock
 /**
  * Shared fixture for {@link TakeResumeRunner} specs (task 5.6): adds tracker stubbing and
  * {@link TakeResumeRunner}-specific helpers on top of {@link ResumeSpecFixtureBase}'s
@@ -93,8 +86,8 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
     }
 
     /**
-     * The {@link SlotWiring} the take specs over this fixture run with: this fixture's worktrees
-     * root, MDC key {@code taskId}, an abort fuse of {@link #ABORT_THRESHOLD} over {@link
+     * The {@link SlotWiring} the take specs over this fixture run with: this fixture's registered
+     * clone, MDC key {@code taskId}, an abort fuse of {@link #ABORT_THRESHOLD} over {@link
      * #tracker}, a host-only container seam, and a trusted base whose default branch is the
      * clone's actual current branch — read lazily, since {@code cloneDir} only exists once {@code
      * setup()} has run.
@@ -104,7 +97,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
             TaskGit git = taskGit,
             List<String> credentialEnvVarsToScrub = [],
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag())) {
-        new SlotWiring(assembly, git, worktreesRoot, 'taskId',
+        new SlotWiring(assembly, git, registeredClone, 'taskId',
                 new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD),
                 credentialEnvVarsToScrub, ContainerTakeSupport.hostOnly(), tenure,
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
@@ -133,6 +126,6 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
      */
     protected TakeDecisionResume<ResumeBootstrap> newDecisionResume(
             TakeResumeRunner runner, PipelineDefinition definition) {
-        new TakeDecisionResume<>(new HostResumeMechanics(runner, taskGit, worktreesRoot, definition))
+        new TakeDecisionResume<>(new HostResumeMechanics(runner, taskGit, registeredClone, definition))
     }
 }

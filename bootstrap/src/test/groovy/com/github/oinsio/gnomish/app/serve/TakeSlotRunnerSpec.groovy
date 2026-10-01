@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
 import com.github.oinsio.gnomish.app.ClaimTenure
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.SlotWiring
@@ -25,6 +26,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -83,7 +85,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
     // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and over
@@ -123,7 +125,7 @@ tracker:
         // FR2, FR13 of add-base-ref-resolution: a fresh claim resolves and refreshes its base
         // against a real 'origin' remote before it ever reaches branch creation.
         addOrigin(cloneDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def cleanup() {
@@ -159,7 +161,7 @@ tracker:
         // introduce-slot-wiring), so the gate scenario below sees the slot's real refresh.
         def wiring = new SlotWiring(
                 newAssembly(properties), RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
-                worktreesRoot, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
+                registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
@@ -284,14 +286,14 @@ tracker:
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(tempDir.resolve('placeholder'), new LedgerJsonMapper()),
-                tempDir, 'gnomish', Clock.systemUTC())
+                tempDir.resolve('gnomish'), Clock.systemUTC())
         slotRunner.attachLedgerWriter(new TaskOutcomeLedgerWriter(slotLedger, appender, instance, Clock.systemUTC()))
 
         when:
         slotRunner.run(ref)
 
         then:
-        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir, 'gnomish', LocalDate.now(ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir.resolve('gnomish'), LocalDate.now(ZoneOffset.UTC))
         def lines = Files.readString(ledgerFile).split('\n').findAll {
             !it.isBlank()
         }

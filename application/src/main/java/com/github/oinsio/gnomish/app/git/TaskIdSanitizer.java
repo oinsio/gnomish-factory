@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 /**
  * Deterministically sanitizes a tracker taskId into the single core string reused for both the
  * task branch name (FR2: {@code gnomish/<sanitized>}) and the worktree directory name (FR6:
- * {@code ~/.gnomish/worktrees/<project-name>/<sanitized>/}) — one algorithm, two callers, no
+ * {@code projects/<name>/worktrees/<clone>/<sanitized>/} under the factory home) — one algorithm, two callers, no
  * divergence between the two name spaces.
  *
  * <p>Algorithm (design D16), in order: every character outside {@code [A-Za-z0-9._-]} is

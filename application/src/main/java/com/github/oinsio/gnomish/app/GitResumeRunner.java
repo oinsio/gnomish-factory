@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 
@@ -53,13 +54,13 @@ import java.nio.file.Path;
  * error naming the kept working copy. Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
- * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow.
+ * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow; FR9 of add-project-registry.
  */
 final class GitResumeRunner {
 
     private final RunAssembly assembly;
     private final TaskGit git;
-    private final Path worktreesRoot;
+    private final RegisteredClone clone;
     private final TakeResumeBootstrap resumeBootstrap;
 
     /**
@@ -68,18 +69,17 @@ final class GitResumeRunner {
      *     RunnerOutcomeLoop} a live run uses, so resume dialogs are byte-for-byte the same (UX2)
      * @param git the task-git capability set: the run's repository and round persistence, branch
      *     lookup for the resume bootstrap, and salvage/materialization/cleanup
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6); production wiring resolves {@code
-     *     ~/.gnomish/worktrees}, tests pass a temp directory
+     * @param clone the registered clone whose own worktree folder the resumed worktree is
+     *     materialized in (design D6; FR9 of add-project-registry)
      * @param taskIdMdcKey the MDC key to set to the branch's recorded taskId once bootstrap
      *     succeeds (design D9, task 8.2), matching the {@code bootstrap}-module {@code
      *     ManualRunRunner}'s own key
      */
-    GitResumeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, String taskIdMdcKey) {
+    GitResumeRunner(RunAssembly assembly, TaskGit git, RegisteredClone clone, String taskIdMdcKey) {
         this.assembly = assembly;
         this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.resumeBootstrap = new TakeResumeBootstrap(git, worktreesRoot, taskIdMdcKey);
+        this.clone = clone;
+        this.resumeBootstrap = new TakeResumeBootstrap(git, clone, taskIdMdcKey);
     }
 
     /**
@@ -129,8 +129,7 @@ final class GitResumeRunner {
         // no counterpart for.
         return resumeBootstrap
                 .bootstrap(cloneDir, taskId)
-                .orElseThrow(
-                        () -> AbsentEnvelope.task(taskId, TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId)));
+                .orElseThrow(() -> AbsentEnvelope.task(taskId, TaskWorktreePath.resolve(clone, taskId)));
     }
 
     /**
@@ -141,7 +140,7 @@ final class GitResumeRunner {
      */
     private void continueFrom(RunOrder order, ResumeBootstrap bootstrap) {
         Path cloneDir = order.cloneDir();
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        var taskRepository = git.store().taskRepository(clone);
         TaskState finalState = git.store()
                 .readRecordedState(bootstrap.worktreePath())
                 .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), bootstrap.worktreePath()));

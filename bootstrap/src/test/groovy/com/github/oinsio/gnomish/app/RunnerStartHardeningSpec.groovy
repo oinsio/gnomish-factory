@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -45,10 +46,9 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     @TempDir
     Path tempDir
 
-    Path worktreesRoot
-
-    def setup() {
-        worktreesRoot = tempDir.resolve('worktrees-root')
+    /** {@code clone} as the loader would resolve it, registered through the production registry. */
+    private RegisteredClone registered(Path clone) {
+        RegisteredCloneFixture.registered(tempDir.resolve('home'), clone)
     }
 
     private Path freshClone(String name) {
@@ -87,7 +87,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given: 'a clone whose task branch already exists, refusing the run right after hardening'
         Path clone = freshClone('host-fresh')
         gitOutput(clone, 'branch', 'gnomish/H-1', 'HEAD')
-        def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
+        def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), registered(clone), LiveConsoleIO.onStdout())
 
         when:
         runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
@@ -146,7 +146,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         Path clone = freshClone('take-resume')
 
         when:
-        new TakeResumeBootstrap(TaskGitFixture.real(), worktreesRoot, 'taskId').bootstrap(clone, 'absent-task')
+        new TakeResumeBootstrap(TaskGitFixture.real(), registered(clone), 'taskId').bootstrap(clone, 'absent-task')
 
         then:
         thrown(UsageException)
@@ -194,7 +194,7 @@ tracker:
 
         when:
         new TakeFreshClaim(new SlotWiring(
-                        newAssembly(), TaskGitFixture.real(), worktreesRoot, 'taskId',
+                        newAssembly(), TaskGitFixture.real(), registered(clone), 'taskId',
                         new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], ContainerTakeSupport.hostOnly(),
                         new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                         new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(

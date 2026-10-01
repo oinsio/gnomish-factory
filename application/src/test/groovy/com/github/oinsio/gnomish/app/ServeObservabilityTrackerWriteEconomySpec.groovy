@@ -79,11 +79,10 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
     private static final Duration IDLE = Duration.ofSeconds(30)
     private static final int WIP_LIMIT = 2
     private static final TaskRef REF = new TaskRef('github:o/r#1')
-    private static final String INSTANCE_NAME = 'gnomish'
     private static final InstanceInfo INSTANCE_INFO = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
 
     @TempDir
-    Path homeDir
+    Path serveDir
 
     /**
      * A hand-rolled recording {@link Tracker}: unlike a Spock interaction {@code Mock}, the SAME
@@ -191,7 +190,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         // domain Clock FeedAutomaton/SlotLedger/TrackerHealthTracker use; fixed to the same instant.
         def ledgerClock = Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC)
         def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, INSTANCE_NAME, ledgerClock)
+                new LedgerAppender(serveDir.resolve('placeholder'), new LedgerJsonMapper()), serveDir, ledgerClock)
         def ledgerWriter = new TaskOutcomeLedgerWriter(observedLedger, appender, INSTANCE_INFO, ledgerClock)
         def accumulator = new RunSummaryAccumulator()
         def observedAutomaton = FeedAutomatonFixture.feedAutomaton(healthTracker, INSTANCE, observedLedger,
@@ -209,7 +208,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         and: 'the observed run genuinely exercised its collaborators rather than skipping them by construction'
         dirtyCalls.get() > 0
         accumulator.counts().delivered() == 1
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.of(2026, 1, 1))
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir, LocalDate.of(2026, 1, 1))
         Files.readString(ledgerFile).contains('taskOutcome')
     }
 }

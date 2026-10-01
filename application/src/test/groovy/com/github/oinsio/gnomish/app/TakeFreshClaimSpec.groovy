@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Engine
@@ -47,17 +48,17 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     // DirectoryWorkspace refuses a path that is not an existing directory, so the worktree the
     // fresh path resolves to is materialized here — standing in for the `git worktree add` the
     // real TaskRepository would have performed.
     def setup() {
         cloneDir = tempDir.resolve('gnomish-clone')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
         Files.createDirectories(cloneDir)
-        Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1'))
-        Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-9'))
+        Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
+        Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-9'))
     }
 
     // FR1, FR3 of wire-host-mid-round-push (design D3): the host take execution attaches the
@@ -68,7 +69,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
         }
@@ -79,7 +80,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         new TakeFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached), git, tracker, worktreesRoot)).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
@@ -98,7 +99,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
             readTaskRecord(_) >> Optional.of(freshRecord())
@@ -114,7 +115,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         def result = new TakeFreshClaim(slotWiring(
-                        assemblyRunning(executor), git, tracker, worktreesRoot)).claim(
+                        assemblyRunning(executor), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)))
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
@@ -148,7 +149,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> Mock(TaskLifecycleStore)
+            taskRepository(_) >> Mock(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
         }
@@ -160,7 +161,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         def result = new TakeFreshClaim(slotWiring(
-                        assemblyRunning(executor), git, tracker, worktreesRoot)).claim(
+                        assemblyRunning(executor), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(startupOnlyPipeline(), cloneDir)))
 
         then:
@@ -175,7 +176,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
             readTaskRecord(_) >> Optional.of(freshRecord())
@@ -190,7 +191,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         new TakeFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot)).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
                 new RunOrder(cloneDir, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)))
 
@@ -209,7 +210,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> Mock(TaskLifecycleStore)
+            taskRepository(_) >> Mock(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.empty()
         }
@@ -219,14 +220,14 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         new TakeFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot)).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
         def ex = thrown(InternalErrorException)
         ex.message.contains('PROJ-1')
         ex.message.contains('absent at HEAD')
-        ex.message.contains(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1').toString())
+        ex.message.contains(TaskWorktreePath.resolve(registeredClone, 'PROJ-1').toString())
     }
 
     // FR13 of add-base-ref-resolution: once the base is resolved and refreshed, the task tier is
@@ -238,7 +239,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
         }
         def errors = [
             new ConfigError('config.yaml', 'pipeline', 'broken pipeline.yaml')
@@ -255,7 +256,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         def result = new TakeFreshClaim(slotWiring(
-                        invalidAssembly, git, tracker, worktreesRoot)).claim(
+                        invalidAssembly, git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then: 'parked, never having created the branch or reached the engine'

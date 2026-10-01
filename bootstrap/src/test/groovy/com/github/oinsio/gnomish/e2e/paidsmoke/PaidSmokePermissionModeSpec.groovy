@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.e2e.paidsmoke
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.e2e.E2eGitTree
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
 import com.github.oinsio.gnomish.e2e.E2eProcessResult
 import groovy.transform.TypeChecked
@@ -26,6 +27,9 @@ import spock.lang.Timeout
  * standard output: whether {@code dontAsk} denies the judge a sub-agent (proposal Q1, NG2), and
  * which value the CLI honours when a leftover operator wrapper duplicates
  * {@code --permission-mode} ahead of the factory's (design, Migration Plan).
+ *
+ * <p>The run is host-bound through its registered project's file, the one place the
+ * sandbox-boundary key {@code factory.bindings.default} is read from (NFR-S1 of add-project-registry).
  *
  * <p>Runs only under {@code paidSmokeTest}; spends real money.
  *
@@ -56,13 +60,13 @@ class PaidSmokePermissionModeSpec extends Specification {
         if (!preflight.loggedIn) {
             throw new IllegalStateException("paidSmokeTest: claude CLI preflight failed — ${preflight.reason}")
         }
-        project = copyFixture(scratch.resolve('project'))
+        project = E2eGitTree.copyOf('paid-smoke-permission')
+        E2eProcessHarness.projectConfig(project, 'factory:\n  bindings:\n    default: host\n')
         def recorder = ArgvRecorder.create(realBinary, Files.createDirectories(scratch.resolve('recorder')))
         run = new E2eProcessHarness().run(project, [
             "--dir=${project}".toString(),
             '--task=create hello.txt',
             '--mode=in-place',
-            '--factory.bindings.default=host',
             "--factory.agent-cli-binary=${recorder.script}".toString()
         ], [])
         rounds = recorder.rounds()
@@ -141,18 +145,6 @@ class PaidSmokePermissionModeSpec extends Specification {
         }.collect {
             mapper.readValue(it, Map)
         }
-    }
-
-    @TypeChecked
-    private static Path copyFixture(Path target) {
-        Path source = Path.of(PaidSmokePermissionModeSpec.getResource('/.gnomish-fixtures/paid-smoke-permission').toURI())
-        Files.walk(source).withCloseable { paths ->
-            paths.forEach { Path from ->
-                Path to = target.resolve(source.relativize(from).toString())
-                Files.isDirectory(from) ? Files.createDirectories(to) : Files.copy(from, to)
-            }
-        }
-        target
     }
 
     @TypeChecked

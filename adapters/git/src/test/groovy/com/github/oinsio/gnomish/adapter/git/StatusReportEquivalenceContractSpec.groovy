@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -53,14 +55,14 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
     def mapper = new StatusReportJsonMapper()
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def "FR4: StatusReport rendered from state files is equivalent to the live-rendered report, anchored by status-report-v1.reference.json"() {
@@ -73,9 +75,9 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def liveReport = StatusReportReferenceFixture.referenceReport()
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
+        def worktree = registeredClone.worktrees().resolve(taskId)
 
         and: 'the task escalated (recording lastEscalation durably, FR5) and was then resumed with the decision — outcome resets to null while lastEscalation is retained, exactly like the reference fixture (outcome: null, lastEscalation populated)'
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
@@ -121,9 +123,9 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def liveReport = StatusReport.build(context, state, 3, LiveActivity.idle())
 
         and: 'the round committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
+        def worktree = registeredClone.worktrees().resolve(taskId)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 
@@ -155,7 +157,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                 context, state, 3, new LiveActivity(null, escalation, new Outcome.Escalated(escalation)))
 
         and: 'the park committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), state)
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
 

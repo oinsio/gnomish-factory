@@ -68,7 +68,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
                 assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
-                new FactoryProperties(null, null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
+                new FactoryProperties(null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support
                 } as ContainerSupportFactory)
         def originalOut = System.out

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -23,7 +24,7 @@ implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     Path projectDir
     Path origin
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
@@ -51,7 +52,7 @@ tracker:
 ''')
         commitAll(projectDir)
         origin = addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     private List<String> refsOf(Path repo) {
@@ -60,7 +61,7 @@ tracker:
 
     def "NFR-R1: take with an unknown option refuses before any tracker call, branch or worktree (#form)"() {
         given:
-        def command = newTakeCommand(testProperties(), worktreesRoot, [github: fakeFactory(tracker)])
+        def command = newTakeCommand(testProperties(), registeredClone, [github: fakeFactory(tracker)])
         def cloneRefsBefore = refsOf(projectDir)
         def originRefsBefore = refsOf(origin)
 
@@ -77,7 +78,7 @@ tracker:
         0 * tracker._
         refsOf(projectDir) == cloneRefsBefore
         refsOf(origin) == originRefsBefore
-        !Files.exists(worktreesRoot)
+        !Files.exists(registeredClone.worktrees())
 
         where:
         form | refs

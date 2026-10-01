@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -32,20 +34,20 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
 
     def runner = new GitProcessRunner()
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     GitTaskRepository repository
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
-        worktreesRoot = tempDir.resolve('worktrees')
-        repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         repository.createTask(new TaskContext('PROJ-1', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
     }
 
     private Path worktree(String taskId = 'PROJ-1') {
-        worktreesRoot.resolve('clone').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     /**
@@ -163,7 +165,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         def held = { String id ->
             Optional.of(new ClaimEpoch(4711))
         } as ClaimEpochSource
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, held)
+        new GitTaskRepository(runner, registeredClone, held)
                 .createTask(new TaskContext('PROJ-2', UntrustedText.tracker('Fix the other thing'), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))

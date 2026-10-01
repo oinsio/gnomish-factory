@@ -26,7 +26,7 @@ class ServeBackgroundDutiesSpec extends ServeCommandSpecBase {
     // trip and polls for the directory's disappearance.
     def "the worktree janitor is actually started and disposes an aged unheld worktree on startup"() {
         given: 'projectDir is a real git repo with one commit (from setup()), and a registered, aged worktree'
-        def worktreePath = worktreesRoot.resolve('project').resolve('aged-task')
+        def worktreePath = registeredClone.worktrees().resolve('aged-task')
         Files.createDirectories(worktreePath.parent)
         addWorktree(projectDir, worktreePath, 'task/aged-task')
         def aged = FileTime.from(Instant.now() - Duration.ofDays(1))

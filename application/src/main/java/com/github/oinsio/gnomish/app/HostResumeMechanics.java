@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -10,22 +11,23 @@ import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Host-mode {@link ResumeMechanics}: a materialized worktree under {@code worktreesRoot}, its
+ * Host-mode {@link ResumeMechanics}: a materialized worktree in the registered clone's own
+ * worktree folder (FR9 of add-project-registry), its
  * {@code state.json} read at that worktree's {@code HEAD} (design D1 of fix-envelope-medium), and
  * salvage through the worktree salvager — the
  * mechanics {@link TakeResumeRunner} already implements, adapted to the shared seam (design D8 of
  * add-serve-sandbox-lifecycle).
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR3 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR9 of add-project-registry.
  *
  * @param resumeRunner the worktree-backed resume machinery; never null
  * @param git the task-git capability set the store reads and marker write go through; never null
- * @param worktreesRoot the root the task's worktree and lifecycle repository are rooted under
+ * @param registeredClone the registered clone the task's lifecycle repository is rooted at; never null
  * @param definition the pipeline this resume advances through; never null
  */
 record HostResumeMechanics(
-        TakeResumeRunner resumeRunner, TaskGit git, Path worktreesRoot, PipelineDefinition definition)
+        TakeResumeRunner resumeRunner, TaskGit git, RegisteredClone registeredClone, PipelineDefinition definition)
         implements ResumeMechanics<ResumeBootstrap> {
 
     @Override
@@ -53,12 +55,12 @@ record HostResumeMechanics(
 
     @Override
     public void confirmTerminalWrite(Path cloneDir, ResumeBootstrap branch) {
-        git.store().taskRepository(cloneDir, worktreesRoot).confirmTerminalWrite(branch.taskId());
+        git.store().taskRepository(registeredClone).confirmTerminalWrite(branch.taskId());
     }
 
     @Override
     public void finishCleanup(Path cloneDir, ResumeBootstrap branch) {
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        var taskRepository = git.store().taskRepository(registeredClone);
         // Read before the cleanup commit: it removes .gnomish-task/ from the tip, and a read made
         // after it — the reads resolve at HEAD — finds nothing, which the pre-contract fallback
         // in readFinalState would
@@ -76,7 +78,7 @@ record HostResumeMechanics(
     @Override
     public TaskContext appendDecision(
             Path cloneDir, ResumeBootstrap branch, TaskState finalState, TaskState resetState, String decisionText) {
-        return resumeRunner.appendDecision(cloneDir, branch, finalState, resetState, decisionText);
+        return resumeRunner.appendDecision(branch, finalState, resetState, decisionText);
     }
 
     @Override

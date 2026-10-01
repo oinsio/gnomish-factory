@@ -1,14 +1,17 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR6, FR8 of add-git-workflow (design D6): worktree create-or-reuse under
- * {@code <worktreesRoot>/<project-name>/<sanitized-taskId>/}, and materializing the worktree
- * on resume when it is missing locally.
+ * FR6, FR8 of add-git-workflow (design D6): worktree create-or-reuse in the registered clone's own
+ * worktree folder, {@code projects/<name>/worktrees/<clone>/<sanitized-taskId>/} under the factory
+ * home (FR9, NFR-R2 of add-project-registry), and materializing the worktree on resume when it is
+ * missing locally.
  */
 class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixture {
 
@@ -17,17 +20,30 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
 
     def runner = new GitProcessRunner()
 
-    Path worktreesRoot
+    Path home
     Path cloneDir
+    RegisteredClone registeredClone
     def manager
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees-root')
-        cloneDir = initWorkingRepo(tempDir, 'my-project')
-        new File(cloneDir.toFile(), 'a.txt').text = 'first'
-        runner.run(cloneDir, 'add', 'a.txt')
-        runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        manager = new TaskWorktreeManager(runner, worktreesRoot)
+        home = tempDir.resolve('home')
+        cloneDir = seededClone(tempDir, 'my-project')
+        registeredClone = RegisteredCloneFixture.registered(home, cloneDir)
+        manager = new TaskWorktreeManager(runner, registeredClone)
+    }
+
+    private Path seededClone(Path parent, String name) {
+        Files.createDirectories(parent)
+        def clone = initWorkingRepo(parent, name)
+        new File(clone.toFile(), 'a.txt').text = 'first'
+        runner.run(clone, 'add', 'a.txt')
+        runner.run(clone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        clone
+    }
+
+    /** The clone's worktree folder, spelled out from the layout rather than read from the value. */
+    private Path cloneFolder() {
+        home.resolve('projects').resolve('widgets').resolve('worktrees').resolve('my-project')
     }
 
     def "FR6: fresh creation materializes the worktree at the deterministic path"() {
@@ -35,10 +51,10 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         def branchName = createTaskBranch(cloneDir, 'PROJ-1')
 
         when:
-        Path path = manager.ensureWorktree(cloneDir, 'PROJ-1', branchName)
+        Path path = manager.ensureWorktree('PROJ-1', branchName)
 
         then:
-        path == worktreesRoot.resolve('my-project').resolve('PROJ-1')
+        path == cloneFolder().resolve('PROJ-1')
         path.toFile().isDirectory()
 
         and: 'FR6: the branch is checked out there'
@@ -51,10 +67,10 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         def branchName = createTaskBranch(cloneDir, 'PROJ 42: fix/it')
 
         when:
-        def path = manager.ensureWorktree(cloneDir, 'PROJ 42: fix/it', branchName)
+        def path = manager.ensureWorktree('PROJ 42: fix/it', branchName)
 
         then:
-        path == worktreesRoot.resolve('my-project').resolve('PROJ-42-fix-it')
+        path == cloneFolder().resolve('PROJ-42-fix-it')
         !path.toString().contains('gnomish/')
         branchName == 'gnomish/PROJ-42-fix-it'
     }
@@ -62,7 +78,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
     def "FR8: resume without a local worktree materializes it at the standard location"() {
         given: 'a first call creates the worktree, simulating an earlier run'
         def branchName = createTaskBranch(cloneDir, 'PROJ-2')
-        def firstPath = manager.ensureWorktree(cloneDir, 'PROJ-2', branchName)
+        def firstPath = manager.ensureWorktree('PROJ-2', branchName)
         assert firstPath.toFile().isDirectory()
 
         and: 'the worktree is removed, simulating a fresh machine that only has the branch'
@@ -70,7 +86,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         assert !firstPath.toFile().exists()
 
         when: 'resume calls ensureWorktree again with the same taskId/branch'
-        Path resumedPath = manager.ensureWorktree(cloneDir, 'PROJ-2', branchName)
+        Path resumedPath = manager.ensureWorktree('PROJ-2', branchName)
 
         then:
         resumedPath == firstPath
@@ -82,12 +98,12 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
     def "FR6: reuse — calling ensureWorktree twice does not error and returns the same path"() {
         given:
         def branchName = createTaskBranch(cloneDir, 'PROJ-3')
-        def firstPath = manager.ensureWorktree(cloneDir, 'PROJ-3', branchName)
+        def firstPath = manager.ensureWorktree('PROJ-3', branchName)
         def markerFile = firstPath.resolve('marker.txt').toFile()
         markerFile.text = 'still here'
 
         when:
-        def secondPath = manager.ensureWorktree(cloneDir, 'PROJ-3', branchName)
+        def secondPath = manager.ensureWorktree('PROJ-3', branchName)
 
         then:
         noExceptionThrown()
@@ -102,11 +118,11 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
     def "FR6: a stray directory at the deterministic path that is not a registered worktree is not reused"() {
         given: 'an empty directory occupies the deterministic path, never registered via git worktree add'
         def branchName = createTaskBranch(cloneDir, 'PROJ-6')
-        def strayPath = worktreesRoot.resolve('my-project').resolve('PROJ-6')
+        def strayPath = cloneFolder().resolve('PROJ-6')
         Files.createDirectories(strayPath)
 
         when:
-        def path = manager.ensureWorktree(cloneDir, 'PROJ-6', branchName)
+        def path = manager.ensureWorktree('PROJ-6', branchName)
 
         then: 'git worktree add actually ran and registered the path as a real worktree'
         path == strayPath
@@ -121,7 +137,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         def headBefore = runner.run(cloneDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
 
         when:
-        manager.ensureWorktree(cloneDir, 'PROJ-4', branchName)
+        manager.ensureWorktree('PROJ-4', branchName)
 
         then:
         def branchAfter = runner.run(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().forParsing().trim()
@@ -133,18 +149,41 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         status.stdout().forParsing().trim().isEmpty()
     }
 
-    def "FR6: parent directories under the worktrees root are created as needed"() {
-        given:
-        def deepRoot = tempDir.resolve('does').resolve('not').resolve('exist').resolve('yet')
-        def deepManager = new TaskWorktreeManager(runner, deepRoot)
+    def "FR6: parent directories of the clone's worktree folder are created as needed"() {
+        given: 'a factory home whose folders do not exist yet'
+        def deepHome = tempDir.resolve('does').resolve('not').resolve('exist').resolve('yet')
+        def deepClone = RegisteredCloneFixture.unregistered(deepHome, cloneDir)
+        def deepManager = new TaskWorktreeManager(runner, deepClone)
         def branchName = createTaskBranch(cloneDir, 'PROJ-5')
 
         when:
-        def path = deepManager.ensureWorktree(cloneDir, 'PROJ-5', branchName)
+        def path = deepManager.ensureWorktree('PROJ-5', branchName)
 
         then:
         path.toFile().isDirectory()
-        path == deepRoot.resolve('my-project').resolve('PROJ-5')
+        path == deepClone.worktrees().resolve('PROJ-5')
+    }
+
+    def "FR9, NFR-R2 of add-project-registry: same-named clones of different projects do not collide"() {
+        given: '~/work/api registered to billing and ~/oss/api to gateway — two clones with one folder name'
+        def work = seededClone(tempDir.resolve('work'), 'api')
+        def oss = seededClone(tempDir.resolve('oss'), 'api')
+        def billing = new TaskWorktreeManager(runner, RegisteredCloneFixture.registered(home, work, 'billing'))
+        def gateway = new TaskWorktreeManager(runner, RegisteredCloneFixture.registered(home, oss, 'gateway'))
+
+        when: 'both work a task with the same id'
+        def billingPath = billing.ensureWorktree('PROJ-7', createTaskBranch(work, 'PROJ-7'))
+        def gatewayPath = gateway.ensureWorktree('PROJ-7', createTaskBranch(oss, 'PROJ-7'))
+
+        then: 'each worktree lives under its own project'
+        billingPath == home.resolve('projects/billing/worktrees/api/PROJ-7')
+        gatewayPath == home.resolve('projects/gateway/worktrees/api/PROJ-7')
+
+        and: 'each is a worktree of its own clone'
+        runner.run(work, 'worktree', 'list', '--porcelain').stdout().forParsing()
+                .contains(billingPath.toRealPath().toString())
+        runner.run(oss, 'worktree', 'list', '--porcelain').stdout().forParsing()
+                .contains(gatewayPath.toRealPath().toString())
     }
 
     // PIT VoidMethodCallMutator on ensureWorktree's createParentDirectories call: a real `git
@@ -158,12 +197,12 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         given: 'a plain file occupies a path component the worktree\'s parent directory needs'
         def blockerFile = tempDir.resolve('blocker-file')
         Files.writeString(blockerFile, 'not a directory')
-        def blockedRoot = blockerFile.resolve('worktrees-under-a-file')
-        def blockedManager = new TaskWorktreeManager(runner, blockedRoot)
+        def blockedHome = blockerFile.resolve('home-under-a-file')
+        def blockedManager = new TaskWorktreeManager(runner, RegisteredCloneFixture.unregistered(blockedHome, cloneDir))
         def branchName = createTaskBranch(cloneDir, 'PROJ-9')
 
         when:
-        blockedManager.ensureWorktree(cloneDir, 'PROJ-9', branchName)
+        blockedManager.ensureWorktree('PROJ-9', branchName)
 
         then:
         def ex = thrown(UncheckedIOException)

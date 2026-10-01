@@ -1,0 +1,32 @@
+// Build script for the `:operatorconfig` module (FR6, design D4 of add-project-registry): the
+// operator-configuration level vocabulary — `@ConfigLevel(Level)` on every
+// `@ConfigurationProperties` record component, declaring where the `factory.*` key it binds may
+// be set.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring. Like
+// `:operatorevent` and `:untrustedtext`, whose template this file follows, the emptiness is
+// load-bearing: the annotated records sit in `:application` and in `:sandbox:core`, and only a
+// leaf both can reach serves both from one declaration, so any dependency added here would be
+// pushed into each of them. There is no production-scope declaration below because there is
+// nothing to declare, and the layering gate proves it stays that way.
+//
+// What stays outside: deriving the key -> level table with Spring's relaxed names and checking
+// each configuration source against it are the composition root's (`:bootstrap`).
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT
+// mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Operator-configuration levels: where each factory.* key may be set.'
+
+// `:operatorconfig` reaches no other project at all — the same gate `:operatorevent`,
+// `:untrustedtext` and `:gittransfer` carry, for the reason stated above: both layers holding
+// annotated records reach this leaf, so an edge added here lands in both.
+layering {
+    allowedProjects = []
+}

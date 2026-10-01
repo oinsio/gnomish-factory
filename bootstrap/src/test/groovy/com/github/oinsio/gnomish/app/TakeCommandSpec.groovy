@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -35,7 +36,7 @@ class TakeCommandSpec extends Specification implements BareGitRepoFixture, TakeC
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     // FR6 of add-factory-serve: mutable so a test can set open fronts before command.run() runs,
@@ -62,7 +63,7 @@ advancement: auto
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
         // FR6, D5 of add-factory-serve: TakeBareAuto reads the open-front count unconditionally now
         // (FeedPolicy snapshot + OpenFrontGate per-claim re-check); default to no open fronts so
         // specs unconcerned with the WIP limit are unaffected.
@@ -83,7 +84,7 @@ advancement: auto
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
-        newTakeCommand(testProperties(instanceName: INSTANCE_NAME), worktreesRoot, registry)
+        newTakeCommand(testProperties(instanceName: INSTANCE_NAME), registeredClone, registry)
     }
 
     def "no tracker section in config.yaml refuses with UsageException (FR17)"() {
@@ -175,6 +176,9 @@ tracker:
         then:
         def ex = thrown(TakeExitCodeException)
         ex.exitCode() == 0
+
+        and: 'FR10 of add-project-registry: the claim names the project first, then the instance'
+        claimedBy ==~ /^${RegisteredCloneFixture.PROJECT}-${INSTANCE_NAME}-[0-9a-z]{6}$/
     }
 
     // FR9, design D8 of add-tracker-port: a full canonical id whose repo the adapter refuses to

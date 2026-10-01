@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -42,7 +43,7 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
     private static final String DIRTY_LAW = 'DIRTY UNCOMMITTED EDIT: never committed, never a base target.'
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     String mainBranch
 
     def setup() {
@@ -53,7 +54,7 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
         // decides the actual name (often "master" in CI/dev environments) — capture it rather
         // than hard-coding, so this spec proves the same guarantee under either default.
         mainBranch = gitOutput(cloneDir, 'symbolic-ref', '--short', 'HEAD')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private FactoryProperties fakeAgentProperties(String captureStdinPath) {
@@ -66,7 +67,7 @@ exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
+        testProperties(agentCliBinary: wrapper.absolutePath)
     }
 
     private static StageDefinition stage() {
@@ -88,7 +89,7 @@ exec sh '${scriptPath}' "\$@"
         new GitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, fakeAgentProperties(captureStdinPath)),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 LiveConsoleIO.onStdout())
     }
 

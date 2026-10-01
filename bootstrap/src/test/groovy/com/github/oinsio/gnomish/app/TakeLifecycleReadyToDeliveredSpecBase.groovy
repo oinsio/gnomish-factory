@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,7 +55,7 @@ abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification imple
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path argvCapture
     Tracker tracker
     TrackerAdapterFactory trackerFactory
@@ -115,7 +116,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
         argvCapture = tempDir.resolve('fake-agent-argv.txt')
     }
 
@@ -131,7 +132,7 @@ tracker:
         TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),

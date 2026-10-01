@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import java.nio.file.Path;
@@ -14,20 +15,21 @@ import java.nio.file.Path;
  * in-place. "Worktree" here means the isolated working copy a task is executed in, whatever the
  * backend calls it.
  *
- * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules.
+ * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules; FR9,
+ * NFR-R2 of add-project-registry.
  */
 public interface TaskWorktreeGit {
 
     /**
      * Ensures {@code taskId}'s worktree exists for {@code branchName}, creating it if absent.
      *
-     * @param cloneDir the clone the worktree is linked to; never null
-     * @param worktreesRoot the root the task's worktree is materialized under; never null
+     * @param clone the registered clone the worktree is linked to; the worktree is materialized in
+     *     its own worktree folder (FR9, NFR-R2 of add-project-registry); never null
      * @param taskId the tracker's original taskId; never null
      * @param branchName the task branch to check out; never null
      * @return the worktree's path; never null
      */
-    Path ensureWorktree(Path cloneDir, Path worktreesRoot, String taskId, String branchName);
+    Path ensureWorktree(RegisteredClone clone, String taskId, String branchName);
 
     /**
      * Reconciles a task's local branch against its remote-tracking counterpart.
@@ -63,14 +65,14 @@ public interface TaskWorktreeGit {
 
     /**
      * The dispose-shaped seam the {@code serve} worktree janitor hands an eligible environment's
-     * key to (FR14, design D10 of add-factory-serve): one bound disposer for the given clone and
-     * worktrees root, keyed by the sanitized directory name the janitor found while scanning.
+     * key to (FR14, design D10 of add-factory-serve): one bound disposer for the given clone's own
+     * worktree folder, keyed by the sanitized directory name the janitor found while scanning.
      *
-     * @param cloneDir the clone that owns the worktree registrations; never null
-     * @param worktreesRoot the root the per-task worktrees live under; never null
+     * @param clone the registered clone that owns the worktree registrations and whose worktree
+     *     folder the per-task worktrees live in; never null
      * @return the disposer; never null
      */
-    TaskEnvironmentDisposal environmentDisposal(Path cloneDir, Path worktreesRoot);
+    TaskEnvironmentDisposal environmentDisposal(RegisteredClone clone);
 
     /**
      * Prunes worktree registrations whose directories no longer exist.

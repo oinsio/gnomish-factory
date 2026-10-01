@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.usage.json.UsageReportJsonMapper
+import java.nio.file.Files
 import java.nio.file.Path
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -30,8 +31,8 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         setupSeededClone()
     }
 
-    private static UsageCommand newCommand() {
-        new UsageCommand(TaskGitFixture.realClaimless(), liveConsole())
+    private UsageCommand newCommand() {
+        new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole())
     }
 
     def "FR14: text render prints the stage/round table and a totals line"() {
@@ -81,7 +82,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
     def "FR13, UX3, D15: 'Deleted branch after merge' — a branch that existed and was deleted reports not-found the same as a never-existing task"() {
         given: 'a task branch created, its worktree removed, then the branch deleted — mirroring a merged-and-cleaned-up PR'
         persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 10)), 'implement', 0)
-        def worktree = worktreesRoot.resolve('clone').resolve('PROJ-3')
+        def worktree = worktreeFor('PROJ-3')
         runner.run(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
         runner.run(cloneDir, 'branch', '-D', 'gnomish/PROJ-3')
         def args = new DefaultApplicationArguments('usage', '--dir=' + cloneDir, 'PROJ-3')
@@ -95,15 +96,20 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         output.contains('task not found: PROJ-3')
     }
 
-    def "UsageException: --dir is required"() {
+    // FR3, D9 of add-project-registry: the loader resolved --dir (and refuses an absent one for
+    // usage) before the context existed; the command reads the registered clone, never --dir
+    def "FR3: usage reads the registered clone, not the directory --dir names"() {
         given:
-        def args = new DefaultApplicationArguments('usage', 'PROJ-1')
+        def passed = round(0, AttemptRecord.Result.PASSED, 1000, 100)
+        persistRound('PROJ-9', TaskState.atStageStart('implement').recordUnburnedRound(passed), 'implement', 0)
+        def elsewhere = Files.createDirectory(tempDir.resolve('elsewhere'))
+        def args = new DefaultApplicationArguments('usage', '--dir=' + elsewhere, 'PROJ-9')
 
         when:
-        newCommand().run(args)
+        def output = captureStdout { newCommand().run(args) }
 
         then:
-        thrown(UsageException)
+        output.contains('TOTAL')
     }
 
     def "FR14: UsageException: a task id is required"() {
@@ -132,7 +138,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         def args = new DefaultApplicationArguments('usage', '--dir=' + cloneDir, 'MACHINE-1', '--json')
 
         when:
-        new UsageCommand(TaskGitFixture.realClaimless(), console).run(args)
+        new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), console).run(args)
 
         then: "exactly the mapper's own bytes, on the machine path"
         console.printedMachine == [expected]

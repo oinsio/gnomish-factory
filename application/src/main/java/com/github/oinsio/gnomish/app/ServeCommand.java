@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
@@ -53,7 +52,8 @@ import org.springframework.boot.ApplicationArguments;
  * Javadoc for the full sequence.
  *
  * <p>Implements FR2, FR4, FR10, FR11, FR12, FR13, NFR-O2, M3, D3, D7, D9 of add-factory-serve.
- * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability.
+ * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability. Implements FR3, FR10 of
+ * add-project-registry.
  */
 final class ServeCommand {
 
@@ -62,7 +62,7 @@ final class ServeCommand {
     private final ServeArgumentsParser argumentsParser = new ServeArgumentsParser();
     private final ServeRuntimeAssembly runtimeAssembly;
     private final TaskGit git;
-    private final FactoryProperties factoryProperties;
+    private final ProjectScope scope;
     private final ServeProperties serveProperties;
     private final TrackerWiring trackerWiring;
     private final FeedAutomatonStarter starter;
@@ -70,6 +70,8 @@ final class ServeCommand {
     /**
      * @param runtimeAssembly assembles the daemon runtime once the tracker is bound, over the
      *     command's fixed equipment (design D7 of collapse-composition-roots)
+     * @param scope the registered clone {@code --dir} names — the directory the daemon works in — and
+     *     the instance id it claims under, which names the project (FR3, FR10 of add-project-registry)
      * @param errorConsole the console owner bound to {@code stderr} (FR5, FR6 of
      *     harden-untrusted-text-sinks): the two startup-failure sentences go out on its human
      *     path, since each carries a message from a tracker or a git remote
@@ -79,14 +81,14 @@ final class ServeCommand {
     ServeCommand(
             ServeRuntimeAssembly runtimeAssembly,
             TaskGit git,
-            FactoryProperties factoryProperties,
+            ProjectScope scope,
             ServeProperties serveProperties,
             TrackerWiring trackerWiring,
             FeedAutomatonStarter starter,
             ConsoleIO errorConsole) {
         this.runtimeAssembly = runtimeAssembly;
         this.git = git;
-        this.factoryProperties = factoryProperties;
+        this.scope = scope;
         this.serveProperties = serveProperties;
         this.trackerWiring = trackerWiring;
         this.starter = starter;
@@ -108,7 +110,7 @@ final class ServeCommand {
      *     wait for the feed thread to stop, is itself interrupted
      */
     void run(ApplicationArguments args) throws IOException, InterruptedException {
-        ServeArguments serveArguments = argumentsParser.parse(args);
+        ServeArguments serveArguments = argumentsParser.parse(args, scope.registeredClone());
         TrustedTierStartup.StartupLaw startupLaw = bindStartupLaw(serveArguments.dir());
         PipelineDefinition definition = startupLaw.definition();
         // FR13, D15 of add-base-ref-resolution: bound once here, threaded to every slot's fresh
@@ -116,7 +118,7 @@ final class ServeCommand {
         TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         int effectiveSlots = serveArguments.slots() != null ? serveArguments.slots() : serveProperties.slots();
-        InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
+        InstanceId instanceId = scope.mintInstanceId();
         TrackerAdapterFactory factory = trackerWiring.resolveFactory(trackerConfig);
 
         // FR12, D7: the startup smoke test stays here (the command owns the exit-code failure);

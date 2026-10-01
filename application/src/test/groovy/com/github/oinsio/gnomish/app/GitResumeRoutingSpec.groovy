@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -48,7 +49,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path worktree
 
     TaskLifecycleStore lifecycleStore = Mock(TaskLifecycleStore)
@@ -74,14 +75,14 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
     def setup() {
         cloneDir = tempDir.resolve('my-project')
-        worktreesRoot = tempDir.resolve('worktrees')
-        worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
+        worktree = TaskWorktreePath.resolve(registeredClone, 'PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _, _) >> worktree
+        worktrees.ensureWorktree(_, _, _) >> worktree
         worktrees.salvage(_) >> salvager
-        store.taskRepository(_, _) >> lifecycleStore
+        store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
         store.readRecordedState(_) >> { stateRead.call() }
         store.readTaskRecord(_) >> { Optional.ofNullable(record) }
@@ -100,7 +101,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         def runner = new GitResumeRunner(
                 assemblyRunningLoop(executor, new ScriptedConsoleIO(['']),
                 new Verdict.Pass(), attached),
-                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, 'taskId')
+                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, 'taskId')
 
         when:
         runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
@@ -117,7 +118,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     private String resume(List<String> consoleScript = [''], boolean discardWork = false) {
         console = new ScriptedConsoleIO(consoleScript)
         def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
-        new TaskGit(store, branches, worktrees, new ClaimEpochBook()), worktreesRoot, 'taskId')
+        new TaskGit(store, branches, worktrees, new ClaimEpochBook()), registeredClone, 'taskId')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')

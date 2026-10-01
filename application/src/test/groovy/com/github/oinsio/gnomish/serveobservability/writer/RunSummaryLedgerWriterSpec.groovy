@@ -32,17 +32,21 @@ class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedger
     @TempDir
     Path homeDir
 
-    private static final String INSTANCE_NAME = 'gnomish'
+    /** The instance's serve directory, not yet created, inside the temporary folder. */
+    private Path serveDir() {
+        homeDir.resolve('serve')
+    }
+
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
     private static final ObjectMapper JSON = new ObjectMapper()
 
     private RunSummaryLedgerWriter writer(Instant now) {
-        def appender = ledgerAppenderFor(homeDir, INSTANCE_NAME, now)
+        def appender = ledgerAppenderFor(serveDir(), now)
         return new RunSummaryLedgerWriter(appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
     }
 
     private Path fileFor(Instant now) {
-        return ledgerFileFor(homeDir, INSTANCE_NAME, now)
+        return ledgerFileFor(serveDir(), now)
     }
 
     private static TaskState delivered(Map<String, TokenUsage> tokensByModel) {
@@ -82,7 +86,7 @@ class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedger
     def "swallows an IOException from a blocked ledger directory, leaving an ERROR trace"() {
         given:
         def now = Instant.parse('2026-08-03T09:00:00Z')
-        Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(RunSummaryLedgerWriter)
 
         when:

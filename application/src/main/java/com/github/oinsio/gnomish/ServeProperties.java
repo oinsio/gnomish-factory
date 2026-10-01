@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish;
 
+import com.github.oinsio.gnomish.operatorconfig.ConfigLevel;
+import com.github.oinsio.gnomish.operatorconfig.Level;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -25,7 +27,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * fields, {@code 0} is a valid explicit value here (not an "unset" sentinel) — only {@code null}
  * (property absent) means unset.
  *
- * <p>Implements FR1, FR5, FR11, FR14 of add-factory-serve; FR1, FR15 of add-serve-observability.
+ * <p>Every knob is {@link Level#ANY} (design D5 of add-project-registry): the host file sets the
+ * installation's tempo, a project file may override it for that project.
+ *
+ * <p>Implements FR1, FR5, FR11, FR14 of add-factory-serve; FR1, FR15 of add-serve-observability;
+ * FR6 of add-project-registry.
  *
  * @param slots number of concurrent claim/work slots ({@code factory.serve.slots}); defaults to
  *     {@code 2} when unset (FR1, design D3); rejected if non-positive
@@ -57,15 +63,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("factory.serve")
 public record ServeProperties(
-        int slots,
-        Duration idlePollInterval,
-        Duration sigtermGrace,
-        Duration worktreeAgeThreshold,
-        Duration snapshotInterval,
-        Integer ledgerRetentionDays,
-        Duration sandboxSweepInterval,
-        Duration remoteProbeIntervalCap,
-        Duration remoteSustainedOpenThreshold) {
+        @ConfigLevel(Level.ANY) int slots,
+        @ConfigLevel(Level.ANY) Duration idlePollInterval,
+        @ConfigLevel(Level.ANY) Duration sigtermGrace,
+        @ConfigLevel(Level.ANY) Duration worktreeAgeThreshold,
+        @ConfigLevel(Level.ANY) Duration snapshotInterval,
+        @ConfigLevel(Level.ANY) Integer ledgerRetentionDays,
+        @ConfigLevel(Level.ANY) Duration sandboxSweepInterval,
+        @ConfigLevel(Level.ANY) Duration remoteProbeIntervalCap,
+        @ConfigLevel(Level.ANY) Duration remoteSustainedOpenThreshold) {
 
     private static final int DEFAULT_SLOTS = 2;
     private static final Duration DEFAULT_IDLE_POLL_INTERVAL = Duration.ofSeconds(30);

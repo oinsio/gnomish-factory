@@ -20,7 +20,7 @@ import org.slf4j.Logger;
  * the project's file-size target (`.claude/rules/process-invariants.md`).
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
- * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers.
+ * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry.
  */
 final class RunExceptionReporting {
 
@@ -31,7 +31,8 @@ final class RunExceptionReporting {
             InternalErrorException.class,
             DefaultBranchUnboundException.class,
             GitVersionRefusedException.class, // UX2 of own-git-transfer-argv: a precondition, not a crash
-            UnsupportedStateFileVersionException.class); // FR4: clean refusal, no WARN/stack trace
+            UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
+            ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
 
     /** Families that mean the scripted or interactive input ran out. */
     private static final List<Class<? extends Throwable>> INPUT_EXHAUSTED =
