@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
@@ -23,7 +24,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The single worktree cleaner component (design D10, FR14): a virtual thread that, at {@code
- * serve} startup and thereafter every hour, scans this instance's worktrees root for task
+ * serve} startup and thereafter every hour, scans its registered clone's own worktree folder
+ * ({@link RegisteredClone#worktrees()}, {@code projects/<name>/worktrees/<clone>}) for task
  * environments and {@link TaskEnvironmentDisposal#dispose disposes} of every one whose most recent
  * file activity is older than the configured age threshold — except any environment currently
  * occupying a slot of THIS instance ({@code neverTouches}), which is skipped unconditionally
@@ -32,13 +34,15 @@ import org.slf4j.LoggerFactory;
  * once reached): age since last activity, combined with "not currently held here", is the whole
  * policy — deliberately simple, since a disposed-too-early worktree only costs a re-clone on
  * resume (design D10 risk note), never correctness. Worktrees are instance-local, so no
- * cross-instance coordination is needed or attempted.
+ * cross-instance coordination is needed or attempted. Another clone's folder — of this project or
+ * another — is never listed, so a janitor never disposes a sibling clone's worktree (FR9, NFR-R2 of
+ * add-project-registry).
  *
  * <p>Held tasks are read fresh on every tick via {@code heldRefs}, typically {@code
  * SlotLedger::occupiedRefs} — never a snapshot taken once at construction, since a task claimed
  * after the janitor started must still be protected.
  *
- * <p>Implements FR14 of add-factory-serve (design D10).
+ * <p>Implements FR14 of add-factory-serve (design D10); FR9, NFR-R2 of add-project-registry.
  *
  * <p>Kept in sync with {@link SandboxLifecycleTick}: both must keep the same
  * immediate-then-cadence daemon shape — {@code start()} framing a {@code loop()} of {@code
@@ -52,8 +56,7 @@ public final class WorktreeJanitor {
     /** The fixed recurring cadence after the immediate startup tick (design D10). */
     static final Duration TICK_INTERVAL = Duration.ofHours(1);
 
-    private final Path worktreesRoot;
-    private final Path cloneDir;
+    private final Path cloneWorktrees;
     private final Duration ageThreshold;
     private final TaskEnvironmentDisposal disposal;
     private final Clock clock;
@@ -62,10 +65,7 @@ public final class WorktreeJanitor {
     private volatile Instant lastRunAt;
 
     /**
-     * @param worktreesRoot the root directory under which {@code <project-name>/<key>/} worktrees
-     *     are created (design D6)
-     * @param cloneDir the {@code --dir} project clone; only its file name is used, to name the
-     *     project folder under {@code worktreesRoot}
+     * @param clone the registered clone whose own worktree folder is swept, and only that folder
      * @param ageThreshold the minimum time since an environment's last file activity before it is
      *     eligible for disposal ({@code factory.serve.worktree-age-threshold}, design D10)
      * @param disposal the dispose-shaped seam an eligible environment's key is handed to
@@ -75,15 +75,13 @@ public final class WorktreeJanitor {
      *     instance — never disposed regardless of age
      */
     public WorktreeJanitor(
-            Path worktreesRoot,
-            Path cloneDir,
+            RegisteredClone clone,
             Duration ageThreshold,
             TaskEnvironmentDisposal disposal,
             Clock clock,
             Sleeper sleeper,
             Supplier<Set<TaskRef>> heldRefs) {
-        this.worktreesRoot = worktreesRoot;
-        this.cloneDir = cloneDir;
+        this.cloneWorktrees = clone.worktrees();
         this.ageThreshold = ageThreshold;
         this.disposal = disposal;
         this.clock = clock;
@@ -118,25 +116,24 @@ public final class WorktreeJanitor {
 
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
-        Path projectRoot = worktreesRoot.resolve(projectName());
         lastRunAt = clock.now();
-        if (!Files.isDirectory(projectRoot)) {
+        if (!Files.isDirectory(cloneWorktrees)) {
             return;
         }
         Set<String> held = heldEnvironmentKeys();
         Instant now = clock.now();
-        try (Stream<Path> children = Files.list(projectRoot)) {
+        try (Stream<Path> children = Files.list(cloneWorktrees)) {
             children.filter(Files::isDirectory).forEach(dir -> disposeIfAged(dir, held, now));
         } catch (IOException e) {
             log.warn(
                     OperatorEvent.WORKTREE_JANITOR_SCAN_FAILED.head() + "worktree janitor: failed to scan {}",
-                    projectRoot,
+                    cloneWorktrees,
                     e);
         }
     }
 
     /**
-     * The last time a tick completed (whether or not the project's worktree directory existed
+     * The last time a tick completed (whether or not the clone's worktree folder existed
      * yet), or this janitor's construction instant if it has never ticked (task 2.5,
      * add-serve-observability FR7).
      *
@@ -183,10 +180,6 @@ public final class WorktreeJanitor {
             }
         }
         return keys;
-    }
-
-    private String projectName() {
-        return cloneDir.toAbsolutePath().normalize().getFileName().toString();
     }
 
     /**
