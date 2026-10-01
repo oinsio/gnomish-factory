@@ -100,6 +100,30 @@ jacoco {
 // wires `spotlessCheck` into `check`, so misformatted code fails the standard
 // verification lifecycle. palantir-java-format is deterministic and
 // non-configurable — style is never a decision.
+// palantir-java-format pins its Jackson dependencies (2.21.4 in 2.96.0; even
+// 2.100.0 pins the still-affected 2.22.1), and Spotless resolves the formatter
+// in a detached configuration that neither locking nor the catalog's
+// jackson-bom override reaches. Component metadata rules apply to every
+// resolution in the project, detached ones included, so this lifts those
+// edges onto the catalog's fixed `jackson` version — a fix, not an
+// accepted-risk entry in osv-scanner.toml.
+def fixedJackson = libs.findVersion('jackson').get().requiredVersion
+['palantir-java-format', 'palantir-java-format-spi'].each { formatterModule ->
+    dependencies.components.withModule("com.palantir.javaformat:${formatterModule}") {
+        allVariants {
+            withDependencies { deps ->
+                // jackson-annotations carries no patch number (`2.22`); the
+                // jackson-bom the lifted modules bring aligns it.
+                deps.findAll {
+                    it.group.startsWith('com.fasterxml.jackson') && it.name != 'jackson-annotations'
+                }.each {
+                    it.version { require fixedJackson }
+                }
+            }
+        }
+    }
+}
+
 spotless {
     java {
         target 'src/*/java/**/*.java'

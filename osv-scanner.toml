@@ -69,63 +69,64 @@ id = "GHSA-r4gv-qr8j-p3pg"
 ignoreUntil = 2026-11-01
 reason = "Test-scope only (WireMock 3.13.2 templating, localhost, never shipped, developer-authored templates). Fix 4.5.2 removes NumberHelper and breaks WireMock 3.13.2 at startup; WireMock 4.x still beta. Re-review 2026-11-01."
 
-# --- Accepted risk: Spotless-internal jackson-databind, resolved by the
-# Spotless Gradle plugin's own formatter tool classpath ---
-# `spotlessJava`/`spotlessGroovy` resolve the Spotless formatter engine's own
-# dependency graph (google-java-format / dev.equo.ide:solstice and friends) at
-# execution time, the same way japicmp resolves its hardcoded JAXB/Guava worker
-# runtime (see build-logic/build.gradle) — outside this build's own dependency
-# graph and its jackson-bom security override (gradle/libs.versions.toml),
-# which only reaches modules that declare `platform(libs.jackson.bom)`.
-# Verified (2026-08-20): every module's compileClasspath/testRuntimeClasspath
-# resolves jackson-databind to 2.22.1 (`./gradlew <module>:dependencyInsight
-# --configuration <cfg> --dependency com.fasterxml.jackson.core:jackson-databind`);
-# deleting the cached 2.21.4 jar and re-running `spotlessJava`/`spotlessGroovy`
-# alone re-downloads it, isolating the Spotless formatter classpath as the sole
-# source. Never on any production or test classpath, never shipped. No
-# adoptable fix: the version is pinned inside Spotless's own tool resolution,
-# not a dependency this build declares. Re-review 2026-11-01.
+# --- Accepted risk: jackson 2.21.4 superseded conflict candidates,
+# metadata-only ---
+# Spring Boot 4.1.0's jackson-2-bom manages the 2.x line at 2.21.4 (4.1.1, the
+# latest patch on Maven Central 2026-10-01, moves only to the still-affected
+# 2.21.5). The project's jackson-bom override (gradle/libs.versions.toml) wins
+# with 2.22.3 on every classpath, so `gradle/verification-metadata.xml` records
+# only the losing candidates' `.module` files — no `.jar` — as described for
+# httpclient5 below. Until 2026-10-01 the jars were real: Spotless resolved
+# palantir-java-format's pinned 2.21.4 Jackson on its formatter tool
+# classpath. A component metadata rule in java-conventions.gradle now lifts
+# those edges onto the catalog version, so no 2.21.4 jar is resolved anywhere
+# (verified: with every 2.21.4 entry removed from the metadata, `spotlessCheck`
+# passes and `--write-verification-metadata` re-adds `.module` files only).
+# Re-review 2026-11-01, or drop once a Boot release manages a fixed 2.x line.
 [[IgnoredVulns]]
 id = "GHSA-5gvw-p9qm-jgwh"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-5jmj-h7xm-6q6v"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-mhm7-754m-9p8w"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-gx83-3vf8-gh7j"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-q4xh-88c3-wmh7"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-vvgp-rfg2-7rr6"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-wjgm-6hv5-3cvf"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format 2.96.0; no released palantir version, up to 2.100.0, uses a databind newer than 2.22.1, which is still affected), never on any production or test classpath (resolves to 2.22.2 everywhere the project declares it). Re-review 2026-11-01."
-# Added 2026-10-01: the two advisories 2.22.3 fixes on the project's own line. The
-# project resolves 2.22.3 everywhere it declares jackson-databind; with the
-# 2.21.4 entries removed from verification-metadata.xml, `spotlessCheck` fails
-# verification on `detachedConfiguration2` naming jackson-databind-2.21.4.jar,
-# so the Spotless tool classpath is still the sole source.
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-cxp5-3px4-pw24"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format), never on any production or test classpath (resolves to 2.22.3 everywhere the project declares it). Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 [[IgnoredVulns]]
 id = "GHSA-wv8q-qhhj-9h54"
 ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (palantir-java-format), never on any production or test classpath (resolves to 2.22.3 everywhere the project declares it). Re-review 2026-11-01."
+reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-7hhh-6rmp-j9qf"
+ignoreUntil = 2026-11-01
+reason = "jackson-core 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-p6pp-m3f8-5c89"
+ignoreUntil = 2026-11-01
+reason = "jackson-core 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
 
 # --- Accepted risk: httpclient5/httpcore5(-h2) superseded conflict candidates,
 # metadata-only ---
