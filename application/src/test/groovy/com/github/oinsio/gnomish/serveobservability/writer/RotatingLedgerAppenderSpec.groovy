@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -18,14 +19,13 @@ import spock.lang.TempDir
  * appends to the new day's file while the previous day's file is left untouched, never
  * renamed.
  *
- * <p>Implements FR14 of add-serve-observability.
+ * <p>Implements FR14 of add-serve-observability; FR10 of add-project-registry (the files land in
+ * the serve directory the appender is handed).
  */
 class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineFixture {
 
     @TempDir
-    Path homeDir
-
-    private static final String INSTANCE_NAME = 'instance-1'
+    Path serveDir
 
     def "first append picks today's UTC date-named ledger file"() {
         given:
@@ -36,7 +36,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         appender.append(lifecycleLine('started'))
 
         then:
-        def expected = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.parse('2026-08-03'))
+        def expected = ObservabilityPaths.ledgerFile(serveDir, LocalDate.parse('2026-08-03'))
         Files.exists(expected)
         Files.readString(expected).contains('started')
     }
@@ -54,7 +54,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         appender.append(lifecycleLine('stopped'))
 
         then:
-        def file = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.parse('2026-08-03'))
+        def file = ObservabilityPaths.ledgerFile(serveDir, LocalDate.parse('2026-08-03'))
         def lines = Files.readString(file).split('\n')
         lines.length == 2
     }
@@ -72,8 +72,8 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         appender.append(lifecycleLine('stopped'))
 
         then:
-        def dayOne = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.parse('2026-08-03'))
-        def dayTwo = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.parse('2026-08-04'))
+        def dayOne = ObservabilityPaths.ledgerFile(serveDir, LocalDate.parse('2026-08-03'))
+        def dayTwo = ObservabilityPaths.ledgerFile(serveDir, LocalDate.parse('2026-08-04'))
         Files.exists(dayOne)
         Files.readString(dayOne).contains('started')
         !Files.readString(dayOne).contains('stopped')
@@ -86,7 +86,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         // The delegate's initial target is a placeholder: rotateIfNeeded always fires on
         // the very first append (no prior UTC day recorded yet), so it is retargeted
         // before anything is ever written to it.
-        def placeholder = homeDir.resolve('ledger-uninitialized.jsonl')
-        new RotatingLedgerAppender(new LedgerAppender(placeholder, new LedgerJsonMapper()), homeDir, INSTANCE_NAME, clock)
+        def placeholder = serveDir.resolve('ledger-uninitialized.jsonl')
+        new RotatingLedgerAppender(new LedgerAppender(placeholder, new LedgerJsonMapper()), serveDir, clock)
     }
 }

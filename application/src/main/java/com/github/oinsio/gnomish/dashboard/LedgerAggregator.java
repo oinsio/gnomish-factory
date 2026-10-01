@@ -32,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * (e.g. an outcome a newer factory version introduced) is skipped too, not
  * counted and never raised — the render must survive it (FR6, NFR-R1).
  *
- * <p>Implements FR6 of add-dashboard-page (design D5).
+ * <p>Implements FR6 of add-dashboard-page (design D5). Implements FR10 of add-project-registry.
  */
 public final class LedgerAggregator {
 
@@ -49,33 +49,30 @@ public final class LedgerAggregator {
     /**
      * Aggregates the {@link #DEFAULT_WINDOW_DAYS}-day window ending at {@code today}.
      *
-     * @param homeDir the user's home directory; never null
-     * @param instanceName the configured instance name; never null
+     * @param serveDir the instance's serve directory the ledger files live in; never null
      * @param today the reference UTC date the window ends at (inclusive); never null
      * @return the aggregated history view
      * @throws IOException if a ledger file within the window has a malformed non-tail line (NFR-R2)
      */
-    public LedgerHistoryView aggregate(Path homeDir, String instanceName, LocalDate today) throws IOException {
-        return aggregate(homeDir, instanceName, today, DEFAULT_WINDOW_DAYS);
+    public LedgerHistoryView aggregate(Path serveDir, LocalDate today) throws IOException {
+        return aggregate(serveDir, today, DEFAULT_WINDOW_DAYS);
     }
 
     /**
      * Aggregates the {@code windowDays}-day window ending at {@code today}.
      *
-     * @param homeDir the user's home directory; never null
-     * @param instanceName the configured instance name; never null
+     * @param serveDir the instance's serve directory the ledger files live in; never null
      * @param today the reference UTC date the window ends at (inclusive); never null
      * @param windowDays how many trailing days to include; must be positive
      * @return the aggregated history view, oldest day first
      * @throws IOException if a ledger file within the window has a malformed non-tail line (NFR-R2)
      */
-    public LedgerHistoryView aggregate(Path homeDir, String instanceName, LocalDate today, int windowDays)
-            throws IOException {
+    public LedgerHistoryView aggregate(Path serveDir, LocalDate today, int windowDays) throws IOException {
         List<DayOutcomeCounts> perDay = new ArrayList<>();
         Map<String, LedgerTokenUsage> tokensByModel = new LinkedHashMap<>();
         for (int offset = windowDays - 1; offset >= 0; offset--) {
             LocalDate date = today.minusDays(offset);
-            Path file = ObservabilityPaths.ledgerFile(homeDir, instanceName, date);
+            Path file = ObservabilityPaths.ledgerFile(serveDir, date);
             if (!Files.exists(file)) {
                 continue;
             }

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,7 +39,7 @@ class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
@@ -71,7 +72,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
         tracker.listOpen() >> []
     }
 
@@ -84,7 +85,7 @@ tracker:
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry, ServeProperties serveProperties) {
-        newTakeCommand(testProps(), worktreesRoot, registry, TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
+        newTakeCommand(testProps(), registeredClone, registry, TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
     }
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref

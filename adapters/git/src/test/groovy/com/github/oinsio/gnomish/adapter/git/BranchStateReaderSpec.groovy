@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -33,22 +35,22 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     def runner = new GitProcessRunner()
     def reader = new BranchStateReader(runner)
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
     }
 
     private Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     private void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
@@ -157,16 +159,16 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
-        def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(
+        def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(
                 new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
+        new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
                 .persist('PROJ-6', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(seedWorktrees.resolve('seed-clone').resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
+        runner.run(seedRegistered.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
@@ -300,16 +302,16 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
-        def seedWorktrees = tempDir.resolve('ro-seed-worktrees')
-        new GitTaskRepository(runner, seedRepo, seedWorktrees, ClaimEpochSource.NONE).createTask(
+        def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('ro-seed-worktrees'), seedRepo)
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(
                 new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        new GitAttemptPersistence(runner, seedWorktrees.resolve('ro-seed-clone').resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
+        new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
                 .persist('PROJ-9', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(seedWorktrees.resolve('ro-seed-clone').resolve('PROJ-9'), 'push', 'origin', 'gnomish/PROJ-9')
+        runner.run(seedRegistered.worktrees().resolve('PROJ-9'), 'push', 'origin', 'gnomish/PROJ-9')
 
         def observerClone = tempDir.resolve('ro-observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')

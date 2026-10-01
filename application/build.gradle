@@ -78,6 +78,11 @@ dependencies {
     // constant. `implementation`, not `api`: the enum is named only inside log calls,
     // never in a signature this module exports.
     implementation project(':operatorevent')
+    // The operator-configuration level leaf (FR6, design D4 of add-project-registry): every
+    // component of `FactoryProperties` and `ServeProperties` declares its key's level with
+    // `@ConfigLevel`. `api` for the reason `:sandbox:core` gives: the annotation sits on the
+    // records' public components, so their consumers compile against its class too.
+    api project(':operatorconfig')
     // The untrusted-text leaf (FR2, FR3, design D2/D7 of type-untrusted-text): `TrackerFence` is a
     // facade over `TextSafety.forComment`, the comment exit the carrier renders through too, and
     // the `status.json`, `board --json` and `usage.json` mappers carry `@UntrustedExit`, the marker
@@ -94,6 +99,10 @@ dependencies {
     // config-properties types to their consumers). `api` because those runtime
     // annotations sit on public types the composition root reads.
     api libs.spring.boot.asProvider()
+    // `ObjectProvider` (spring-beans): the registered clone is read lazily through it, so a
+    // project-less command never resolves one (`ProjectScope`, design D1 of add-project-registry).
+    // Named in method bodies and composition-root parameters only, hence `implementation`.
+    implementation libs.spring.beans
 
     // The observability projections and the `status --json` / `usage --json` /
     // board / dashboard renderers serialize through Jackson. Reading the
@@ -138,6 +147,10 @@ layering {
         ':gitobjects',
         ':gnomish-plugin-api',
         ':logtext',
+        // The operator-configuration level leaf (design D4 of add-project-registry): declared
+        // directly above — the configuration records carry `@ConfigLevel`; also reached through
+        // `:sandbox:core`, whose records carry it too.
+        ':operatorconfig',
         // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
@@ -150,4 +163,17 @@ layering {
         // exit, and transitively via `:logtext`, whose `LogText` is a facade over it too.
         ':untrustedtext',
     ]
+}
+
+// `:operatorconfig` is exported as `api` although DAGP advises `implementation`: its ABI reading
+// does not count a runtime-retained annotation on a public record component as surface, while
+// javac does — a module compiling against these records without the leaf reports each
+// `@ConfigLevel(Level.X)` as an "unknown enum constant" (design D4 of add-project-registry).
+// Excluded for that one edge only; every other configuration advice here still fails the build.
+dependencyAnalysis {
+    issues {
+        onIncorrectConfiguration {
+            exclude(':operatorconfig')
+        }
+    }
 }

@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
@@ -106,13 +107,13 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         commit(cloneDir, 'instructions.md', 'build it\n')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -130,7 +131,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     private TakeSlotRunner newSlotRunner() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def wiring = new SlotWiring(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, 'taskId', new AbortFuse(abortHandler, 3), [],
+                newAssembly(), TaskGitFixture.real(), registeredClone, 'taskId', new AbortFuse(abortHandler, 3), [],
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
         new TakeSlotRunner(
@@ -214,7 +215,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(tempDir.resolve("placeholder${suffix}"), new LedgerJsonMapper()),
-                tempDir, ledgerPrefix, clock)
+                tempDir.resolve(ledgerPrefix), clock)
         snapshotWriter.start()
         new ObservabilityWiring(
                 lifecycleTracker, snapshotWriter, new LedgerWriters(appender, new SlotLedger(1), instance, clock), clock)
@@ -280,7 +281,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
         and: 'a runSummary line and a stopped lifecycle line both landed in the ledger'
         def ledgerFile = ObservabilityPaths.ledgerFile(
-                tempDir, 'gnomish', LocalDate.now(ZoneOffset.UTC))
+                tempDir.resolve('gnomish'), LocalDate.now(ZoneOffset.UTC))
         def lines = Files.readString(ledgerFile)
         lines.contains('"type":"runSummary"')
         lines.contains('"event":"stopped"')
@@ -485,7 +486,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
         and:
         def ledgerFile = ObservabilityPaths.ledgerFile(
-                tempDir, 'gnomish-recording', LocalDate.now(ZoneOffset.UTC))
+                tempDir.resolve('gnomish-recording'), LocalDate.now(ZoneOffset.UTC))
         Files.readString(ledgerFile).contains('"reason":"signal"')
     }
 

@@ -120,8 +120,8 @@ beating.
 gnomish dashboard --watch --dir=/srv/acme/widgets
 ```
 
-Open the output file in a browser tab once (`file:///home/you/.gnomish/serve/
-<instance-name>/dashboard.html` by default) and leave the tab open. The
+Open the output file in a browser tab once (`file:///home/you/.gnomish/projects/
+<name>/serve/<instance>/dashboard.html` by default) and leave the tab open. The
 command re-renders the file every **10 s** and bakes a matching
 `<meta http-equiv="refresh">`, so the tab reloads itself from disk — no
 JavaScript polling, no server, nothing but the browser's own `file://` reload.
@@ -177,11 +177,12 @@ capture, not a live view that can go stale.
 ## Output location
 
 Default output is `dashboard.html` inside the instance's observability
-directory, `~/.gnomish/serve/<instance-name>/` — the same directory the
+directory, `~/.gnomish/projects/<name>/serve/<instance>/` — the same directory the
 daemon writes `snapshot.json` and the ledger into (see
 [`operator-guide-observability.md`](operator-guide-observability.md#where-the-files-live)).
-`--out <path>` overrides it. `--dir <clone>` resolves configuration (tracker,
-instance name) exactly as `gnomish board` and `gnomish take` do.
+`--out <path>` overrides it. `--dir <clone>` must name a registered clone; it
+resolves the project, and with it the configuration (tracker, instance name),
+exactly as `gnomish board` and `gnomish take` do.
 
 ## Documented constants
 

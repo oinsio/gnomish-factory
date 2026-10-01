@@ -139,7 +139,7 @@ class CliJudgeVoterSpec extends Specification {
     def "agent process failing to start yields Vote(CannotVerify)"() {
         given: 'a FactoryProperties pointing at a binary path that cannot be executed'
         def missingBinary = workspaceDir.resolve('no-such-binary-here').toString()
-        def properties = new FactoryProperties('factory-01', missingBinary, [], null, null)
+        def properties = new FactoryProperties('factory-01', missingBinary, null, null)
         def voter = new CliJudgeVoter(properties, clock, LAW)
 
         when:

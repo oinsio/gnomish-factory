@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -32,26 +34,24 @@ class WorktreeJanitorSpec extends Specification {
     @TempDir
     Path tempDir
 
-    Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     List<String> disposed = []
     def disposal = { String key -> disposed << key } as TaskEnvironmentDisposal
     def clock = { -> NOW } as Clock
     def sleeper = Mock(Sleeper)
 
     def setup() {
-        cloneDir = Files.createDirectory(tempDir.resolve('my-project'))
-        worktreesRoot = Files.createDirectory(tempDir.resolve('worktrees'))
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('my-project'))
     }
 
     private WorktreeJanitor janitor(Set<TaskRef> held = Set.of()) {
-        new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, clock, sleeper, {
+        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, clock, sleeper, {
             -> held
         })
     }
 
     private Path environment(String key, Instant lastActivity) {
-        Path dir = Files.createDirectories(worktreesRoot.resolve('my-project').resolve(key))
+        Path dir = Files.createDirectories(registeredClone.worktrees().resolve(key))
         Path marker = dir.resolve('.gnomish-task').resolve('task.json')
         Files.createDirectories(marker.parent)
         Files.writeString(marker, '{}')
@@ -88,7 +88,7 @@ class WorktreeJanitorSpec extends Specification {
         } as TaskEnvironmentDisposal
 
         when:
-        new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, scopedDisposal, clock, sleeper, {
+        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, scopedDisposal, clock, sleeper, {
             -> Set.of()
         }).tick()
 
@@ -167,7 +167,7 @@ class WorktreeJanitorSpec extends Specification {
     //     return a real, usable Instant, not null, since the age comparison depends on it.
     def "reads age from the directory's own timestamp when it contains no regular files"() {
         given: 'an empty worktree directory (no nested files at all) aged past the threshold'
-        Path dir = Files.createDirectories(worktreesRoot.resolve('my-project').resolve('task-empty'))
+        Path dir = Files.createDirectories(registeredClone.worktrees().resolve('task-empty'))
         Files.setLastModifiedTime(dir, FileTime.from(NOW - AGE_THRESHOLD - Duration.ofDays(1)))
 
         when:
@@ -182,7 +182,7 @@ class WorktreeJanitorSpec extends Specification {
     //     ignored or always treated as "old enough".
     def "keeps an empty worktree directory whose own timestamp is fresh"() {
         given:
-        Path dir = Files.createDirectories(worktreesRoot.resolve('my-project').resolve('task-empty-fresh'))
+        Path dir = Files.createDirectories(registeredClone.worktrees().resolve('task-empty-fresh'))
         Files.setLastModifiedTime(dir, FileTime.from(NOW - Duration.ofDays(1)))
 
         when:
@@ -199,7 +199,7 @@ class WorktreeJanitorSpec extends Specification {
     def "ignores a stray regular file in the project folder, even if it looks aged"() {
         given:
         environment('task-real', NOW - AGE_THRESHOLD - Duration.ofDays(1))
-        Path stray = worktreesRoot.resolve('my-project').resolve('stray.txt')
+        Path stray = registeredClone.worktrees().resolve('stray.txt')
         Files.writeString(stray, 'not a worktree')
         Files.setLastModifiedTime(stray, FileTime.from(NOW - AGE_THRESHOLD - Duration.ofDays(30)))
 
@@ -210,7 +210,7 @@ class WorktreeJanitorSpec extends Specification {
         disposed == ['task-real']
     }
 
-    // FR14, D10: a project folder that does not exist yet (a fresh worktreesRoot before any task
+    // FR14, D10: a project folder that does not exist yet (a fresh factory home before any task
     //     ever ran) is a no-op, not an error.
     def "does nothing when the project has no worktrees yet"() {
         when:
@@ -233,7 +233,7 @@ class WorktreeJanitorSpec extends Specification {
 
         when: 'a tick completes on a clock set one minute later'
         def laterClock = { -> NOW + Duration.ofMinutes(1) } as Clock
-        def later = new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, laterClock, sleeper, {
+        def later = new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, laterClock, sleeper, {
             -> Set.of()
         })
         later.tick()
@@ -255,7 +255,7 @@ class WorktreeJanitorSpec extends Specification {
     def "a project folder that cannot be listed leaves a coded WARN naming the folder"() {
         given:
         environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
-        def projectRoot = worktreesRoot.resolve('my-project')
+        def projectRoot = registeredClone.worktrees()
         def original = Files.getPosixFilePermissions(projectRoot)
         // Execute-only: Files.isDirectory still succeeds, but Files.list needs read too.
         Files.setPosixFilePermissions(projectRoot, EnumSet.of(PosixFilePermission.OWNER_EXECUTE))

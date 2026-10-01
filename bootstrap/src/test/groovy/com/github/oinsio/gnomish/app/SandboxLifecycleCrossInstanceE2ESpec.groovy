@@ -103,7 +103,7 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         def project = cloneWithOrigin('cross-instance-project')
         taskId = "CTN-SIBLING-${System.nanoTime() % 100000}"
         def support = ContainerSupportFixture.direct(project, taskId, segments(), tinyAges,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         // These specs point origin at an unreachable host on purpose — the URL is what project
         // identity is derived from, and nothing here pushes. The branch's own first push is
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone
@@ -118,7 +118,7 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         // Docker timestamps have sub-second precision but the host clock may lag; a real sleep puts
         // the box reliably past the 1ms thresholds, so the age guard cannot be what spares it.
         Thread.sleep(1500)
-        def pass = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), Clock.systemUTC())
 
         when: "instance A's tick runs with a verdict naming the sibling's claim as fresh"
         def spared = pass.run(project, new LivenessVerdict.Live(Set.of(taskId)))

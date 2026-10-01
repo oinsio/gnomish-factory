@@ -50,7 +50,6 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
     InMemoryTracker tracker = new InMemoryTracker()
     ClaimWatchingTrackerFactory claimWatcher
@@ -62,7 +61,6 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
         // base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
         claimWatcher = new ClaimWatchingTrackerFactory(fakeFactory(tracker))
         new InMemoryTrackerHarness(tracker).seed(
@@ -75,7 +73,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         ServeCommands.of(
                 newAssembly(properties),
                 TaskGitFixture.real(),
-                new FactoryPaths(worktreesRoot, homeDir),
+                RegisteredCloneFixture.unregistered(homeDir, projectDir),
                 'taskId',
                 properties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),

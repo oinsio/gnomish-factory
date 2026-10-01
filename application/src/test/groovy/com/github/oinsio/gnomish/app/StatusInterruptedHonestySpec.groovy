@@ -35,7 +35,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.realClaimless(), FactoryPathsFixture.worktreesAt(worktreesRoot), liveConsole())
+        new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole())
     }
 
     /** Records exactly one round commit and, deliberately, never calls {@code recordOutcome} —
@@ -85,7 +85,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
     def "NFR-R2: a task with a recorded outcome is distinguishable from the interrupted case"() {
         given: 'contrast fixture — same shape, but recordOutcome was actually called (Paused, not Completed, so FR15 cleanup does not remove .gnomish-task/ before this read)'
         recordInterruptedRound('PROJ-INT-3')
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).recordOutcome('PROJ-INT-3',
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE).recordOutcome('PROJ-INT-3',
                 new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-INT-3', '--json')
 

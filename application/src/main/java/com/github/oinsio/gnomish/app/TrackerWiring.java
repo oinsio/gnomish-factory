@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker;
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
@@ -35,7 +34,7 @@ import org.springframework.stereotype.Component;
  * over its own tenure record, exactly as before this owner existed.
  *
  * <p>Implements FR1, FR4, NFR-S1 of collapse-composition-roots; FR9, FR17 of add-tracker-port;
- * FR4 of fix-claim-epoch-fence; FR13 of add-base-ref-resolution.
+ * FR4 of fix-claim-epoch-fence; FR13 of add-base-ref-resolution; FR10 of add-project-registry.
  */
 @Component
 final class TrackerWiring implements RefResolution {
@@ -114,9 +113,10 @@ final class TrackerWiring implements RefResolution {
 
     /**
      * Everything a read-only tracker command ({@code board}, {@code dashboard}) needs from {@code
-     * --dir}: load the working-tree pipeline, require its {@code tracker:} section, mint the
-     * throwaway {@link InstanceId} (design D8 of add-board-command — never written anywhere) and
-     * resolve a plain {@link Tracker}. A reader is left unwrapped: it holds no tenure record and
+     * --dir}: load the working-tree pipeline, require its {@code tracker:} section and resolve a
+     * plain {@link Tracker} under {@code readerId} — the throwaway id the command minted through
+     * {@link ProjectScope#mintInstanceId} (design D8 of add-board-command — never written anywhere;
+     * FR10 of add-project-registry). A reader is left unwrapped: it holds no tenure record and
      * never claims, so an {@link EpochRecordingTracker} would record nothing.
      *
      * @throws UsageException if the project has no {@code tracker:} section, or names an
@@ -124,12 +124,10 @@ final class TrackerWiring implements RefResolution {
      * @throws PipelineLoadFailedException if {@code .gnomish/} fails to load
      * @throws IOException if {@code .gnomish/} cannot be read (a genuine I/O fault)
      */
-    ReadOnlyTrackerResolution resolveReadOnly(Path dir, FactoryProperties factoryProperties) throws IOException {
+    ReadOnlyTrackerResolution resolveReadOnly(Path dir, InstanceId readerId) throws IOException {
         PipelineDefinition definition = TakeCommandSupport.loadPipeline(dir, pipelineSource);
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
-        String instanceId =
-                InstanceId.generate(factoryProperties.instanceName()).value();
-        Tracker tracker = resolveFactory(trackerConfig).create(secrets, trackerConfig, instanceId);
+        Tracker tracker = resolveFactory(trackerConfig).create(secrets, trackerConfig, readerId.value());
         return new ReadOnlyTrackerResolution(trackerConfig, tracker);
     }
 

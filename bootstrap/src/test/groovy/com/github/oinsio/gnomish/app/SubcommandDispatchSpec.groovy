@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -39,20 +40,30 @@ import spock.lang.TempDir
 class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
-    Path worktreesRoot
+    Path projectDir
 
     @TempDir
     Path homeDir
 
     private TakeCommand newTakeCommand() {
         TakeCommands.of(
-                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, 'taskId',
+                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), registeredClone(), 'taskId',
                 testProperties(), Clock.systemUTC(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+    }
+
+    /**
+     * The clone the project-scoped commands work in: its serve directory (FR10) and worktree folder
+     * (FR9 of add-project-registry). Built directly, since {@code projectDir} becomes a git working
+     * tree only inside the features that need one.
+     */
+    private RegisteredClone registeredClone() {
+        RegisteredCloneFixture.unregistered(homeDir, projectDir)
     }
 
     private ServeCommand newServeCommand() {
         ServeCommands.of(
-                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), new FactoryPaths(worktreesRoot, homeDir), 'taskId',
+                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
+                registeredClone(), 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE,
@@ -60,17 +71,23 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     }
 
     private BoardCommand newBoardCommand() {
-        new BoardCommand(Clock.systemUTC(), testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), LiveConsoleIO.onStdout())
+        new BoardCommand(Clock.systemUTC(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
+                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), LiveConsoleIO.onStdout())
     }
 
     private DashboardCommand newDashboardCommand() {
-        new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), new FactoryPaths(worktreesRoot, homeDir), testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
+        new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), RegisteredCloneFixture.scope(registeredClone()),
+                testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
     }
 
     def statusCommand = new StatusCommand(
-    TaskGitFixture.realClaimless(), new FactoryPaths(worktreesRoot, homeDir), LiveConsoleIO.onStdout())
+    TaskGitFixture.realClaimless(), RegisteredCloneFixture.lazyScope {
+        registeredClone()
+    }, LiveConsoleIO.onStdout())
 
-    def usageCommand = new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout())
+    def usageCommand = new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.lazyScope {
+        registeredClone()
+    }, LiveConsoleIO.onStdout())
 
     def dispatch = new SubcommandDispatch(
     new ReportCommands(statusCommand, usageCommand, newBoardCommand(), newDashboardCommand()),
@@ -83,8 +100,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         // git refuses fails the listing instead of rendering as a verified "no tasks", so the
         // dispatch target needs a directory git will actually enumerate.
         given: 'a clone with no task branches in it'
-        assert gitExitCode(worktreesRoot, 'init') == 0
-        def args = new DefaultApplicationArguments('status', "--dir=${worktreesRoot}".toString())
+        assert gitExitCode(projectDir, 'init') == 0
+        def args = new DefaultApplicationArguments('status', "--dir=${projectDir}".toString())
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
@@ -105,7 +122,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // invocation as handled.
     def "dispatchNonRun() routes to UsageCommand for the 'usage' subcommand and returns true"() {
         given:
-        def args = new DefaultApplicationArguments('usage', "--dir=${worktreesRoot}".toString(), 'task-1')
+        def args = new DefaultApplicationArguments('usage', "--dir=${projectDir}".toString(), 'task-1')
 
         when:
         dispatch.dispatchNonRun(args)
@@ -120,19 +137,26 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // actually reaches and returns `true`.
     def "dispatchNonRun() returns true for a 'usage' subcommand that completes without error"() {
         given: 'a real git clone carrying one task branch, so UsageCommand#run finds it and returns normally'
-        def cloneDir = initWorkingRepo(worktreesRoot, 'clone')
+        def cloneDir = initWorkingRepo(projectDir, 'clone')
         def runner = new GitProcessRunner()
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
-        new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), TaskGitFixture.real().epochs())
+        def clone = RegisteredCloneFixture.registered(homeDir, cloneDir)
+        new GitTaskRepository(runner, clone, TaskGitFixture.real().epochs())
                 .createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
+        // FR3 of add-project-registry: usage reads the clone the loader resolved for --dir
+        def usageDispatch = new SubcommandDispatch(
+                new ReportCommands(statusCommand,
+                new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(clone), LiveConsoleIO.onStdout()),
+                newBoardCommand(), newDashboardCommand()),
+                dispatch.takeCommand(), dispatch.serveCommand())
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
         def originalOut = System.out
         System.out = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
 
         when:
-        def handled = dispatch.dispatchNonRun(args)
+        def handled = usageDispatch.dispatchNonRun(args)
 
         then:
         noExceptionThrown()
@@ -173,16 +197,16 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // at all fails pipeline load, never StatusCommand's/UsageCommand's own error shapes).
     def "dispatchNonRun() routes to TakeCommand for the 'take' subcommand and returns true"() {
         given: 'a real git repo with a real origin (FR5, FR13 of add-base-ref-resolution), but no .gnomish/ tree at all'
-        assert gitExitCode(worktreesRoot, 'init') == 0
-        Files.writeString(worktreesRoot.resolve('README.md'), 'placeholder\n')
-        commitAll(worktreesRoot)
-        addOrigin(worktreesRoot, homeDir)
-        def args = new DefaultApplicationArguments('take', "--dir=${worktreesRoot}".toString())
+        assert gitExitCode(projectDir, 'init') == 0
+        Files.writeString(projectDir.resolve('README.md'), 'placeholder\n')
+        commitAll(projectDir)
+        addOrigin(projectDir, homeDir)
+        def args = new DefaultApplicationArguments('take', "--dir=${projectDir}".toString())
 
         when:
         dispatch.dispatchNonRun(args)
 
-        then: 'no .gnomish/ tree under worktreesRoot: pipeline load fails, proving TakeCommand#run ran'
+        then: 'no .gnomish/ tree under projectDir: pipeline load fails, proving TakeCommand#run ran'
         thrown(IOException)
     }
 
@@ -205,18 +229,19 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // complete normally, exercising dispatchNonRun's `return true` for SERVE (BooleanFalseReturnValsMutator survivor).
     def "dispatchNonRun() routes to ServeCommand for the 'serve' subcommand and returns true"() {
         given: 'a serve-only dispatch, wired with a reachable tracker factory and a starter that records invocation'
-        assert gitExitCode(worktreesRoot, 'init') == 0
-        writeMinimalPipeline(worktreesRoot)
+        assert gitExitCode(projectDir, 'init') == 0
+        writeMinimalPipeline(projectDir)
         // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
         // base against a real 'origin' remote, never the clone's local HEAD.
-        commitAll(worktreesRoot)
-        addOrigin(worktreesRoot, homeDir)
+        commitAll(projectDir)
+        addOrigin(projectDir, homeDir)
         def starterInvoked = new AtomicBoolean(false)
         def trackerStub = Stub(Tracker)
         def serveDispatch = new SubcommandDispatch(
                 dispatch.reportCommands(), dispatch.takeCommand(),
                 ServeCommands.of(
-                        newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), new FactoryPaths(worktreesRoot, homeDir), 'taskId',
+                        newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
+                        registeredClone(), 'taskId',
                         testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                         new SystemClock(), new TrackerWiring([github: new FixedTrackerAdapterFactory({
                                 trackerStub
@@ -224,7 +249,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                             starterInvoked.set(true)
                         } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                         LiveConsoleIO.onStderr()))
-        def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
+        def args = new DefaultApplicationArguments('serve', "--dir=${projectDir}".toString())
 
         when:
         def handled = serveDispatch.dispatchNonRun(args)
@@ -236,12 +261,12 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     }
 
     // FR1 of add-board-command (design D1), task 3.1/3.2: 'board' reaches BoardCommand#run —
-    // proven by its own distinct failure mode (worktreesRoot has no .gnomish/, so pipeline load
+    // proven by its own distinct failure mode (projectDir has no .gnomish/, so pipeline load
     // fails with an IOException, distinct from every other subcommand's failure shape here); the
     // real board behavior itself is BoardCommandSpec's job, not this routing spec's.
     def "dispatchNonRun() routes to BoardCommand for the 'board' subcommand"() {
         given:
-        def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
+        def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
 
         when:
         dispatch.dispatchNonRun(args)
@@ -257,18 +282,18 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // returns `true`.
     def "dispatchNonRun() returns true for a 'board' subcommand that completes without error"() {
         given: 'a board-only dispatch with a valid pipeline and a tracker returning empty listings'
-        writeMinimalPipeline(worktreesRoot)
+        writeMinimalPipeline(projectDir)
         def boardTrackerStub = Stub(Tracker)
         def boardDispatch = new SubcommandDispatch(
                 new ReportCommands(statusCommand, usageCommand,
-                new BoardCommand(Clock.systemUTC(), testProperties(),
+                new BoardCommand(Clock.systemUTC(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         boardTrackerStub
                     })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 LiveConsoleIO.onStdout()),
                 newDashboardCommand()),
                 dispatch.takeCommand(), dispatch.serveCommand())
-        def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
+        def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
         def originalOut = System.out
         System.out = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
 
@@ -284,11 +309,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     }
 
     // FR1 of add-dashboard-page (design D8): 'dashboard' reaches DashboardCommand#run — proven by
-    // its own distinct failure mode (worktreesRoot has no .gnomish/, so pipeline load fails with
+    // its own distinct failure mode (projectDir has no .gnomish/, so pipeline load fails with
     // an IOException, the same shape 'board' fails with but via a genuinely distinct call path).
     def "dispatchNonRun() routes to DashboardCommand for the 'dashboard' subcommand"() {
         given:
-        def args = new DefaultApplicationArguments('dashboard', "--dir=${worktreesRoot}".toString())
+        def args = new DefaultApplicationArguments('dashboard', "--dir=${projectDir}".toString())
 
         when:
         dispatch.dispatchNonRun(args)
@@ -304,16 +329,17 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // execution actually reaches and returns `true`.
     def "dispatchNonRun() returns true for a 'dashboard' subcommand that completes without error"() {
         given: 'a dashboard-only dispatch with a valid pipeline and a tracker returning empty listings'
-        writeMinimalPipeline(worktreesRoot)
+        writeMinimalPipeline(projectDir)
         def dashboardTrackerStub = Stub(Tracker)
         def dashboardDispatch = new SubcommandDispatch(
                 new ReportCommands(statusCommand, usageCommand, newBoardCommand(),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), new FactoryPaths(worktreesRoot, homeDir), testProperties(),
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), RegisteredCloneFixture.scope(registeredClone()),
+                testProperties(),
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         dashboardTrackerStub
                     })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))),
                 dispatch.takeCommand(), dispatch.serveCommand())
-        def args = new DefaultApplicationArguments('dashboard', "--dir=${worktreesRoot}".toString())
+        def args = new DefaultApplicationArguments('dashboard', "--dir=${projectDir}".toString())
 
         when:
         def handled = dashboardDispatch.dispatchNonRun(args)

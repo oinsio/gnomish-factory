@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -36,7 +37,7 @@ class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, Ta
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
@@ -57,7 +58,7 @@ advancement: auto
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
         // FR6, D5 of add-factory-serve: TakeBareAuto reads the open-front count unconditionally now
         // (FeedPolicy snapshot + OpenFrontGate per-claim re-check); default to no open fronts so
         // specs unconcerned with the WIP limit are unaffected.
@@ -90,7 +91,7 @@ tracker:
         // to the real System.in (which a mutated confirm() would block on). Behaviour is identical: no
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
         newTakeCommand(
-                testProperties(instanceName: INSTANCE_NAME), worktreesRoot, registry,
+                testProperties(instanceName: INSTANCE_NAME), registeredClone, registry,
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(new ThreadSleeper())
                 .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))

@@ -14,32 +14,34 @@ import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.status.Status
 import ch.qos.logback.core.util.FileSize
 import ch.qos.logback.core.util.StatusPrinter2
+import com.github.oinsio.gnomish.config.OperatorLogFile
+import com.github.oinsio.gnomish.logging.SpringJoran
 import java.nio.charset.StandardCharsets
 import spock.lang.Specification
 
 /**
  * `logback-spring.xml` is instance-local logging config (task 8.1 of add-manual-run, design D9,
- * hardened by tasks 2.1/2.2/2.5 of harden-logging-observability): a rolling file under
- * {@code ~/.gnomish/logs/} behind an asynchronous appender, a WARN+ stdout console appender and a
+ * hardened by tasks 2.1/2.2/2.5 of harden-logging-observability): a rolling file at the path the
+ * operator configuration loader publishes (task 6.1 of add-project-registry) behind an asynchronous appender, a WARN+ stdout console appender and a
  * dedicated ERROR-to-stderr one, all UTF-8, wired onto a root logger whose level an operator can
  * raise for one run.
  *
  * <p>Each feature configures a <b>fresh</b> {@link LoggerContext} from the production file rather
  * than asserting against the JVM's live one. Two reasons, both consequences of this change:
  * `logback-test.xml` (task 2.3) now takes the test suite off the production configuration
- * entirely, so a booted context no longer carries it; and pointing {@code user.home} at a
- * temporary directory <em>through the context's own property scope</em> is what lets this spec
- * exercise a real {@code RollingFileAppender} without creating a file in the operator's home —
- * which is the very pollution task 2.3 exists to end. Nothing in the file uses a Spring-only tag
- * ({@code springProfile}/{@code springProperty}), so Joran reads it directly; the {@code -spring}
- * suffix governs who <em>discovers</em> the file, not who can parse it.
+ * entirely, so a booted context no longer carries it; and publishing a log file under a
+ * temporary directory <em>through a Spring environment of the spec's own</em> is what lets this
+ * spec exercise a real {@code RollingFileAppender} without creating a file in the operator's home —
+ * which is the very pollution task 2.3 exists to end. The file reads its location with the
+ * Spring-only {@code <springProperty>} tag, so it is parsed by Spring Boot's own Joran
+ * configurator, exactly as a booted factory parses it.
  *
  * <p>Proportionate to a config file: confirms the appenders/policy/pattern/levels/charset are
  * wired as designed without asserting actual file-rolling behavior (impractical and flaky in a
  * fast unit test).
  *
  * <p>Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run and FR8, FR10, NFR-P1 of
- * harden-logging-observability.
+ * harden-logging-observability; FR11 of add-project-registry.
  */
 class LogbackConfigSpec extends Specification {
 
@@ -67,27 +69,33 @@ class LogbackConfigSpec extends Specification {
         home.deleteDir()
     }
 
-    // NFR-S1, NFR-S2: the log file lives under the operator home, outside any workspace or git tree
-    def "the file appender writes gnomish.log under the operator home directory"() {
+    // FR11 of add-project-registry: the file is the one the operator configuration loader
+    // published from the factory home — this configuration computes no path of its own
+    def "the file appender writes the log file the loader published"() {
         given:
-        RollingFileAppender<?> fileAppender = fileAppender(configure())
-
-        expect:
-        fileAppender.file == "${home.absolutePath}/.gnomish/logs/gnomish.log"
-    }
-
-    // FR10: the log directory is overridable for one run, which is what takes the E2E layer's
-    // spawned production binary off the operator's file (task 2.3)
-    def "GNOMISH_LOG_DIR redirects the file away from the operator home with no rebuild"() {
-        given:
-        File elsewhere = new File(home, 'redirected')
+        String published = "${home.absolutePath}/projects/widgets/logs/default.log"
 
         when:
-        RollingFileAppender<?> fileAppender = fileAppender(configure(GNOMISH_LOG_DIR: elsewhere.absolutePath))
+        RollingFileAppender<?> fileAppender = fileAppender(configure([:], published))
 
         then:
-        fileAppender.file == "${elsewhere.absolutePath}/gnomish.log"
-        fileAppender.rollingPolicy.fileNamePattern.startsWith(elsewhere.absolutePath)
+        fileAppender.file == published
+
+        and: 'rolled segments sit beside it, named after it and keeping its .log extension'
+        fileAppender.rollingPolicy.fileNamePattern ==
+                "${home.absolutePath}/projects/widgets/logs/default.%d{yyyy-MM-dd}.%i.log"
+    }
+
+    // FR11 of add-project-registry, design D1: the old derivations are gone — no home lookup and
+    // no log-directory variable remain in the file
+    def "the production configuration reads neither user.home nor GNOMISH_LOG_DIR"() {
+        given:
+        String xml = configSource(PRODUCTION_CONFIG).replaceAll(/(?s)<!--.*?-->/, '')
+
+        expect:
+        !xml.contains('user.home')
+        !xml.contains('GNOMISH_LOG_DIR')
+        xml.contains("source=\"${OperatorLogFile.PROPERTY}\"")
     }
 
     // NFR-O1: daily/size roll, ~7 days history, total size cap
@@ -273,20 +281,20 @@ class LogbackConfigSpec extends Specification {
     }
 
     /**
-     * Configures a fresh context from the production file. {@code user.home} is seeded as a
-     * context property — the scope Logback consults before system properties — so the default
-     * log location resolves under a temporary directory and this spec never writes a byte into
-     * the operator's own log.
+     * Configures a fresh context from the production file, through Spring Boot's own configurator
+     * over an environment carrying the published log file — under a temporary directory, so this
+     * spec never writes a byte into the operator's own log. {@code properties} are seeded as
+     * context properties, the scope Logback consults first.
      */
-    private LoggerContext configure(Map<String, String> properties = [:]) {
+    private LoggerContext configure(
+            Map<String, String> properties = [:], String logFile = "${home.absolutePath}/logs/factory.log") {
         LoggerContext context = new LoggerContext()
         context.name = 'logback-config-spec'
         configured << context
-        context.putProperty('user.home', home.absolutePath)
         properties.each { String key, String value ->
             context.putProperty(key, value)
         }
-        JoranConfigurator configurator = new JoranConfigurator()
+        JoranConfigurator configurator = SpringJoran.publishing(logFile)
         configurator.context = context
         configurator.doConfigure(getClass().getResource(PRODUCTION_CONFIG))
         List<Status> problems = context.statusManager.copyOfStatusList.findAll {

@@ -35,7 +35,6 @@ import spock.util.concurrent.PollingConditions
  */
 class DashboardWatchLoopSpec extends Specification {
 
-    private static final String INSTANCE_NAME = 'watch-instance'
     private static final Instant T0 = Instant.parse('2026-08-06T00:00:00Z')
 
     @TempDir
@@ -50,7 +49,7 @@ class DashboardWatchLoopSpec extends Specification {
     }
 
     private DashboardWatchLoop newLoop(List<Instant> instants) {
-        new DashboardWatchLoop(new DashboardRenderCycle(), Stub(Sleeper), new StepClock(instants))
+        new DashboardWatchLoop(new DashboardRenderCycle(homeDir), Stub(Sleeper), new StepClock(instants))
     }
 
     def "a render cycle between board refreshes reuses the cached model without refetching"() {
@@ -60,8 +59,8 @@ class DashboardWatchLoopSpec extends Specification {
         def fetch = { -> fetchCount++; model }
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
 
         then:
         fetchCount == 1
@@ -74,8 +73,8 @@ class DashboardWatchLoopSpec extends Specification {
         def fetch = { -> fetchCount++; model }
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
 
         then:
         fetchCount == 2
@@ -92,7 +91,7 @@ class DashboardWatchLoopSpec extends Specification {
 
         when: 'every render cycle in the hour runs'
         cycles.times {
-            loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
+            loop.renderOnce(outputFile, fetch)
         }
 
         then: 'tracker reads stay within the board-cadence budget: one fetch per board interval, not per render'
@@ -109,7 +108,7 @@ class DashboardWatchLoopSpec extends Specification {
         def logs = LogCaptureSupport.attach(DashboardWatchLoop)
 
         when: 'a cycle renders but the atomic write cannot place its file'
-        loop.renderOnce(homeDir, INSTANCE_NAME, unwritable, { -> model })
+        loop.renderOnce(unwritable, { -> model })
 
         then: 'the write failure never propagates — the loop survives to render the next cycle'
         noExceptionThrown()
@@ -134,10 +133,10 @@ class DashboardWatchLoopSpec extends Specification {
         def sleeper = { Duration d ->
             sleptDurations << d; throw new RuntimeException('stop after one cycle')
         } as Sleeper
-        def loop = new DashboardWatchLoop(new DashboardRenderCycle(), sleeper, new StepClock([T0]))
+        def loop = new DashboardWatchLoop(new DashboardRenderCycle(homeDir), sleeper, new StepClock([T0]))
 
         when:
-        loop.run(homeDir, INSTANCE_NAME, outputFile, { -> model })
+        loop.run(outputFile, { -> model })
 
         then:
         thrown(RuntimeException)
@@ -151,11 +150,11 @@ class DashboardWatchLoopSpec extends Specification {
     def "run() exits when the calling thread is interrupted"() {
         given: 'a loop on the production sleeper, whose real 10s sleep only an interrupt can cut short'
         def loop = new DashboardWatchLoop(
-                new DashboardRenderCycle(), new ThreadSleeper(), new StepClock([T0, T0.plusSeconds(10)]))
+                new DashboardRenderCycle(homeDir), new ThreadSleeper(), new StepClock([T0, T0.plusSeconds(10)]))
 
         and: 'the loop runs on its own thread, exactly like gnomish dashboard --watch'
         def thread = new Thread({
-            loop.run(homeDir, INSTANCE_NAME, outputFile, {
+            loop.run(outputFile, {
                 -> model
             })
         })
@@ -177,7 +176,7 @@ class DashboardWatchLoopSpec extends Specification {
         def loop = newLoop([T0])
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, { -> model })
+        loop.renderOnce(outputFile, { -> model })
 
         then:
         Files.exists(outputFile)
@@ -191,7 +190,7 @@ class DashboardWatchLoopSpec extends Specification {
         def loop = newLoop([T0])
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, { -> model })
+        loop.renderOnce(outputFile, { -> model })
 
         then: 'the mode the static script reads to arm its stale degradation (FR3, FR10 of redesign-dashboard)'
         def html = Files.readString(outputFile)
@@ -208,7 +207,7 @@ class DashboardWatchLoopSpec extends Specification {
         def loop = newLoop([T0])
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, {
+        loop.renderOnce(outputFile, {
             -> throw new RuntimeException('tracker down')
         })
 
@@ -232,8 +231,8 @@ class DashboardWatchLoopSpec extends Specification {
         }
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
+        loop.renderOnce(outputFile, fetch)
 
         then:
         attempt == 2

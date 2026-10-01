@@ -54,7 +54,6 @@ class HealthyServeCycleLogSpec extends Specification implements BareGitRepoFixtu
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
     InMemoryTracker tracker = new InMemoryTracker()
 
@@ -88,7 +87,6 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
         // base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
         new InMemoryTrackerHarness(tracker).seed(
                 REF, new TaskSnapshot(REF.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please add widgets')),
@@ -100,7 +98,7 @@ tracker:
         ServeCommands.of(
                 newAssembly(properties),
                 TaskGitFixture.real(),
-                new FactoryPaths(worktreesRoot, homeDir),
+                RegisteredCloneFixture.unregistered(homeDir, projectDir),
                 'taskId',
                 properties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),

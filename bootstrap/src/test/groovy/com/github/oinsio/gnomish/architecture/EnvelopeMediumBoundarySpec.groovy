@@ -56,12 +56,18 @@ class EnvelopeMediumBoundarySpec extends Specification {
      *   <li>{@code DirectoryWorkspace} — {@code isDirectory} on the workspace root;
      *   <li>{@code WorktreeJanitor} — {@code isDirectory}/{@code list}/{@code walk} over workspace
      *       roots;
-     *   <li>{@code AdHocTaskSynthesizer} — {@code readString} of an operator's task file.
+     *   <li>{@code AdHocTaskSynthesizer} — {@code readString} of an operator's task file;
+     *   <li>{@code OperatorFile}, {@code ProjectFolders}, {@code ProjectRegistry} — the operator's
+     *       configuration and project files under the factory home, never a task branch
+     *       (add-project-registry, design D3).
      * </ul>
      */
     private static final List<String> NON_ENVELOPE_READERS = [
         'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/TaskWorktreeManager.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/AdHocTaskSynthesizer.java',
+        'application/src/main/java/com/github/oinsio/gnomish/app/project/OperatorFile.java',
+        'application/src/main/java/com/github/oinsio/gnomish/app/project/ProjectFolders.java',
+        'application/src/main/java/com/github/oinsio/gnomish/app/project/ProjectRegistry.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/serve/WorktreeJanitor.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/workspace/DirectoryWorkspace.java',
     ]

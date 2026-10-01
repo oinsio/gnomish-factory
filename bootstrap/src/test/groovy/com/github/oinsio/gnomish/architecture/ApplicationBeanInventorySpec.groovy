@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.architecture
 
-import com.github.oinsio.gnomish.FactoryApplication
-import org.springframework.beans.factory.annotation.Autowired
+import com.github.oinsio.gnomish.FactoryBoot
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import java.nio.file.Path
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ConfigurableApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
-
+import spock.lang.TempDir
 /**
  * The first-party bean inventory of the booted context: every bean whose definition the factory's
  * own code contributes — a scanned or imported first-party class, or a {@code @Bean} method on a
@@ -15,10 +16,22 @@ import spock.lang.Specification
  * "the context boots" check unnoticed.
  *
  * <p>Implements NFR-R2 of collapse-composition-roots: the context gains only the beans that
- * change names in NFR-R2, and it loses none but the ones that requirement sanctions.
+ * change names in NFR-R2, and it loses none but the ones that requirement sanctions. FR3, FR10 of
+ * add-project-registry: {@code projectScope} joins (the clone every project-scoped command works
+ * in), {@code takeCommandSeams} joins (take's clock moved into its seams), and {@code
+ * runArgumentsParser} leaves (the run drive builds its parser over the clone).
  */
-@SpringBootTest(classes = FactoryApplication)
 class ApplicationBeanInventorySpec extends Specification {
+
+    @Shared
+    @TempDir
+    Path operatorHomeDir
+
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
 
     private static final String PRODUCTION_ROOT = 'com.github.oinsio.gnomish.'
 
@@ -42,7 +55,6 @@ class ApplicationBeanInventorySpec extends Specification {
         'factory.sandbox-com.github.oinsio.gnomish.sandbox.SandboxProperties',
         'factory.serve-com.github.oinsio.gnomish.ServeProperties',
         'factoryApplication',
-        'factoryPaths',
         'filesExistCheckRunner',
         'gitProcessRunner',
         'gitVersionCheck',
@@ -54,8 +66,9 @@ class ApplicationBeanInventorySpec extends Specification {
         'manualRunners',
         'pipelineSource',
         'pipelineStartup',
+        'projectCommand',
+        'projectScope',
         'reportCommands',
-        'runArgumentsParser',
         'runExitCodeMapper',
         'sandboxLifecyclePass',
         'secretsProvider',
@@ -70,6 +83,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'systemClock',
         'systemConsoleIO',
         'takeCommand',
+        'takeCommandSeams',
         'takeExitCodeExceptionMapper',
         'taskGit',
         'taskIdRandom',
@@ -81,8 +95,17 @@ class ApplicationBeanInventorySpec extends Specification {
         'usageCommand',
     ]
 
-    @Autowired
-    ConfigurableApplicationContext context
+    // Design D8 of add-project-registry: booted through the CommandExit argument registration,
+    // against a factory home of the spec's own.
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot()
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // NFR-R2 of collapse-composition-roots: the inventory is exactly the declared list
     def "the context holds exactly the declared first-party beans"() {

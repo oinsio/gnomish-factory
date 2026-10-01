@@ -12,6 +12,95 @@ Where gnome processes actually execute — the container sandbox, host mode, the
 egress allowlist — is
 [`docs/operator-guide-sandbox.md`](operator-guide-sandbox.md)'s territory.
 
+## Setting up a project
+
+<!-- implements FR1, FR2, FR5, FR6, FR8 of add-project-registry -->
+
+Everything the factory keeps on the operator's machine lives in one folder, the
+**factory home**: `~/.gnomish`, or the directory named by the `GNOMISH_HOME`
+environment variable. Relocating it moves everything at once.
+
+```
+~/.gnomish/
+  factory.yaml                 # host file: settings shared by every project
+  secrets/                     # host secrets, one file per secret
+  logs/factory.log             # commands that run with no project (project add, project list)
+  projects/<name>/
+    project.yaml               # project file: clones + this project's settings
+    secrets/                   # this project's secrets
+    logs/<instance>.log        # one log per project and instance (default instance: default)
+    serve/<instance>/          # serve snapshot, ledger, dashboard
+    worktrees/<clone>/<task>/  # host-mode task worktrees, per clone
+```
+
+Every command that takes `--dir` works only in a **registered clone**. Register
+each clone once:
+
+```bash
+gnomish project add widgets --dir=~/src/widgets        # creates projects/widgets/project.yaml
+gnomish project add widgets --dir=~/src/widgets-demo   # a second clone of the same project
+gnomish project list                                   # every project and its clones
+gnomish project show widgets                           # paths, and every setting with its origin
+```
+
+A project name matches `[a-z0-9][a-z0-9._-]*`; a clone is named by its folder,
+and each clone keeps its own worktrees. Running a command in an unregistered
+directory stops with the `gnomish project add … --dir=…` line to paste; a
+directory *inside* a registered clone stops naming the clone to use instead.
+
+A sample project file, `~/.gnomish/projects/widgets/project.yaml`:
+
+```yaml
+clones:
+  widgets: /home/op/src/widgets              # written by `gnomish project add`
+  widgets-demo: /home/op/src/widgets-demo
+factory:
+  sandbox:
+    image: widgets-sandbox:1                 # sandbox-boundary: only here
+    egress-allowlist:
+      - api.anthropic.com
+      - repo.maven.apache.org
+    env-passthrough:
+      - GH_TOKEN
+  bindings:
+    default: container                       # or host, for a trusted environment
+  git-network-timeout: 10m                   # any level: overrides factory.yaml
+```
+
+**Where a setting may go.** `factory.*` settings come from four places, each
+overriding the one before: built-in defaults, the host file, the project file,
+the command line (`--factory.<key>=<value>`). Every key has a declared level —
+host-only, project-only, anywhere, or **sandbox-boundary** — and a key in a
+place its level forbids stops startup. The sandbox-boundary keys
+(`factory.bindings.*`, `factory.sandbox.image`,
+`factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough`) are read
+from the project file and nowhere else, the command line included, so a
+project's whole sandbox boundary is in one file. `gnomish project show` prints
+each key's level and where its value came from. The policy is
+[ADR 0011](../adr/0011-operator-configuration-levels.md).
+
+**What stops startup.** A misplaced key, an unknown or misspelled key (removed
+keys such as `factory.agent-cli-env-passthrough` included), any `FACTORY_*`
+environment variable, and a configuration file writable by group or others. The
+factory lists every problem at once, each with its file and line and the fix,
+and exits with code 2 before touching the tracker, a branch or a box:
+
+```
+gnomish did not start: 1 configuration problem (fix every line, then run the command again)
+  - factory.sandbox.egress-allowlist is not allowed here — found in /home/op/.gnomish/factory.yaml:4 — it is a sandbox-boundary key, read only from a project's own file — move it to /home/op/.gnomish/projects/<name>/project.yaml (registered: widgets)
+```
+
+**Secrets.** A secret named `N` (for example `GNOMISH_GITHUB_TOKEN`) is read
+from the first of: `projects/<name>/secrets/N`, `~/.gnomish/secrets/N`, the file
+named by the `N_FILE` environment variable, the `N` environment variable. The
+file name is the variable name exactly. A secret file readable or writable by
+group or others is refused with the `chmod` that fixes it:
+
+```bash
+install -m 600 /dev/null ~/.gnomish/projects/widgets/secrets/GNOMISH_GITHUB_TOKEN
+$EDITOR ~/.gnomish/projects/widgets/secrets/GNOMISH_GITHUB_TOKEN
+```
+
 ## Quick Start
 
 Three places carry configuration, each with a different owner and a different
@@ -19,9 +108,9 @@ reason for existing.
 
 ```mermaid
 flowchart LR
-    Env["Environment<br/>GNOMISH_GITHUB_TOKEN"]
+    Env["Secret<br/>GNOMISH_GITHUB_TOKEN"]
     ProjectConfig[".gnomish/config.yaml<br/>tracker: type, abort-threshold, github"]
-    FactoryConfig["factory.* properties<br/>instance-name, backoff tuning"]
+    FactoryConfig["factory.* settings<br/>instance-name, backoff tuning"]
 
     Env --> Take["gnomish take"]
     ProjectConfig --> Take
@@ -72,8 +161,10 @@ flowchart LR
    for more concurrency at the cost of a longer TTL before a dead instance's
    task comes back.
 
-2. **`GNOMISH_GITHUB_TOKEN`** is an environment variable on the machine running
-   the factory — never in yaml, never visible to the gnome. Give it a
+2. **`GNOMISH_GITHUB_TOKEN`** is a secret on the machine running the factory —
+   a file in the project's or the host's secrets folder, or an environment
+   variable (see [Setting up a project](#setting-up-a-project)) — never in
+   yaml, never visible to the gnome. Give it a
    personal access token (or GitHub App token) with issue read/write and label
    write access on the target repo. If it's missing or blank, `take` fails
    fast at startup with a named error, before any task is touched.
@@ -93,22 +184,22 @@ flowchart LR
    **`GH_TOKEN`**, which the gnome's process reads. Do not reuse
    `GNOMISH_GITHUB_TOKEN` for it: give it a fine-grained token on the target
    repo with **contents: read and write** and **pull requests: read and write**,
-   nothing more, and pass it into the stage's environment with
-   `factory.sandbox.env-passthrough=GH_TOKEN` (see
+   nothing more, and pass it into the stage's environment by listing it under
+   `factory.sandbox.env-passthrough` in the project file (see
    [`operator-guide-sandbox.md`](operator-guide-sandbox.md#environment-passthrough)).
    Every process of the stage can read a passed-through variable, so this token
    is scoped as if the gnome held it — which it does.
    <!-- implements FR9 of fix-operator-blockers -->
 
-3. **`factory.*` properties** are per-instance/installation tuning, set the
-   same way as the existing `factory.instance-name`/`factory.agent-cli-binary`
-   properties (Spring `--key=value` or `application.yaml`):
+3. **`factory.*` settings** are per-instance/installation tuning, set in the
+   host file, the project file or on the command line (`--key=value`), like
+   every other `factory.*` key (see [Setting up a project](#setting-up-a-project)):
 
-   | Property                             | Default           | Meaning                                                                                                           |
-   |--------------------------------------|-------------------|-------------------------------------------------------------------------------------------------------------------|
-   | `factory.instance-name`              | `gnomish-factory` | diagnostic name folded into this instance's identity; shows up in public issue comments, so keep it non-sensitive |
-   | `factory.tracker.abort-backoff-base` | `2m`              | base delay before a task that just aborted becomes eligible again for bare `take`                                 |
-   | `factory.tracker.abort-backoff-cap`  | `1h`              | ceiling on the exponential backoff                                                                                |
+   | Property                             | Default   | Meaning                                                                                                                                                                                                                    |
+   |--------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   | `factory.instance-name`              | `default` | names this instance within its project: its log file, its serve folder, and — after the project name — its identity (`<project>-<instance>-<suffix>`), which shows up in public issue comments, so keep both non-sensitive |
+   | `factory.tracker.abort-backoff-base` | `2m`      | base delay before a task that just aborted becomes eligible again for bare `take`                                                                                                                                          |
+   | `factory.tracker.abort-backoff-cap`  | `1h`      | ceiling on the exponential backoff                                                                                                                                                                                         |
 
 ## Handing Off a Task
 
@@ -634,7 +725,7 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 |------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0    | delivered, or a clean bare-mode no-op (empty queue)                                                                                                                                                                 |
 | 1    | failure outside a claimed run (tracker unreachable at startup, label provisioning failure)                                                                                                                          |
-| 2    | usage error                                                                                                                                                                                                         |
+| 2    | usage error — including an unregistered `--dir` or a configuration violation, reported before any tracker call                                                                                                      |
 | 3    | pipeline load failure                                                                                                                                                                                               |
 | 10   | parked as escalation — a decision is needed                                                                                                                                                                         |
 | 11   | parked as a manual checkpoint                                                                                                                                                                                       |

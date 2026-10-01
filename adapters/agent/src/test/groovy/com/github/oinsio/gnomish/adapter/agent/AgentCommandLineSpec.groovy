@@ -36,7 +36,7 @@ class AgentCommandLineSpec extends Specification {
 
     private static AgentRoundEquipment equipment() {
         new AgentRoundEquipment(
-                new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null),
+                new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                 new VirtualClock(),
                 { event -> },
                 new AgentRoundResultExtractor())

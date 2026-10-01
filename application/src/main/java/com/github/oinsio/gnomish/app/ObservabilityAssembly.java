@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
@@ -45,7 +44,12 @@ import java.time.ZoneOffset;
  * ServeCommand} already builds: the shared {@link InstanceHeartbeat}, the {@link StandingReaper},
  * and the {@link WorktreeJanitor} — no placeholder remains.
  *
- * <p>Implements FR1, FR4, FR7, FR9, FR12 of add-serve-observability.
+ * <p><b>Where the files go.</b> Every file lands in the instance's serve directory, handed in whole
+ * by {@link ServeAssembly}, which computes it from the registered clone and the configured instance
+ * name (design D1 of add-project-registry); this class derives no directory of its own.
+ *
+ * <p>Implements FR1, FR4, FR7, FR9, FR12 of add-serve-observability. Implements FR10 of
+ * add-project-registry.
  */
 final class ObservabilityAssembly {
 
@@ -54,14 +58,12 @@ final class ObservabilityAssembly {
     /**
      * Assembles the observability wiring for one {@code serve} invocation.
      *
-     * @param factoryProperties supplies the instance name the observability directory is keyed by
-     *     (FR9, design D2); never null
      * @param serveProperties supplies the snapshot interval and ledger retention (design D10);
      *     never null
      * @param instanceId this process's full instance id, carried in the snapshot/ledger data only,
      *     never the path (FR9); never null
-     * @param homeDir the user's home directory the observability files live under (FR9, design
-     *     D2); injected (not read inline) so tests can substitute a temp directory; never null
+     * @param serveDir the instance's serve directory, {@code projects/<name>/serve/<instance>},
+     *     the snapshot and ledger files live in (FR10 of add-project-registry); never null
      * @param dirtyNotifier the caller's {@link ForwardingDirtyNotifier}, already handed to the
      *     slot ledger and the feed automaton at their own construction; {@link
      *     ForwardingDirtyNotifier#bind} is called here once the real writer exists
@@ -72,20 +74,18 @@ final class ObservabilityAssembly {
      * @return the daemon-lifetime observability handle; never null
      */
     static ObservabilityWiring assemble(
-            FactoryProperties factoryProperties,
             ServeProperties serveProperties,
             InstanceId instanceId,
-            Path homeDir,
+            Path serveDir,
             ForwardingDirtyNotifier dirtyNotifier,
             Clock clock,
             SnapshotSources sources) {
-        String instanceName = factoryProperties.instanceName();
         InstanceInfo instance = new InstanceInfo(instanceId.value(), resolveHost(), resolveFactoryVersion());
         Instant startedAt = clock.instant();
         LifecycleStateTracker lifecycleTracker = new LifecycleStateTracker(startedAt, dirtyNotifier);
 
         SnapshotWriter writer = new SnapshotWriter(
-                ObservabilityPaths.snapshotFile(homeDir, instanceName),
+                ObservabilityPaths.snapshotFile(serveDir),
                 () -> sources.snapshot(instance, lifecycleTracker, startedAt, serveProperties.sandboxSweepInterval()),
                 new SnapshotJsonMapper(),
                 serveProperties.snapshotInterval(),
@@ -96,9 +96,9 @@ final class ObservabilityAssembly {
         dirtyNotifier.bind(writer::markDirty);
 
         Path initialLedgerFile =
-                ObservabilityPaths.ledgerFile(homeDir, instanceName, LocalDate.ofInstant(startedAt, ZoneOffset.UTC));
+                ObservabilityPaths.ledgerFile(serveDir, LocalDate.ofInstant(startedAt, ZoneOffset.UTC));
         RotatingLedgerAppender ledgerAppender = new RotatingLedgerAppender(
-                new LedgerAppender(initialLedgerFile, new LedgerJsonMapper()), homeDir, instanceName, clock);
+                new LedgerAppender(initialLedgerFile, new LedgerJsonMapper()), serveDir, clock);
         // NFR-O2 of add-serve-sandbox-lifecycle; NFR-O1, NFR-O3 of add-base-ref-resolution: every
         // write point shares this instance's appender, so each line rotates and is retained exactly
         // like every other ledger line.

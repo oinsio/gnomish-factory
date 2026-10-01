@@ -28,16 +28,17 @@ class DashboardRenderCycleSpec extends Specification {
 
 
     @TempDir
-    Path homeDir
+    Path serveDir
 
-    private static final String INSTANCE_NAME = 'render-cycle-instance'
     private static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
 
-    def renderCycle = new DashboardRenderCycle()
+    private DashboardRenderCycle renderCycle() {
+        new DashboardRenderCycle(serveDir)
+    }
 
     def "a malformed non-tail ledger line degrades the history section to empty rather than failing the render"() {
         given: 'a non-last line that is not valid JSON at all -- a genuine error per the reader contract'
-        def file = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
+        def file = ObservabilityPaths.ledgerFile(serveDir, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(file.parent)
         Files.writeString(file, 'not json at all\n{"version":1,"type":"taskOutcome","outcome":"delivered","tokensByModel":{}}\n', StandardCharsets.UTF_8)
 
@@ -45,7 +46,7 @@ class DashboardRenderCycleSpec extends Specification {
         def logs = LogCaptureSupport.attach(DashboardRenderCycle)
 
         when:
-        def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
+        def html = renderCycle().render(new BoardSectionView(null, null, null), NOW, null)
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -73,7 +74,7 @@ class DashboardRenderCycleSpec extends Specification {
     def "sweep actions from the ledger reach the hygiene section without any snapshot"() {
         given:
         def file = ObservabilityPaths.ledgerFile(
-                homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
+                serveDir, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(file.parent)
         Files.writeString(
                 file,
@@ -83,7 +84,7 @@ class DashboardRenderCycleSpec extends Specification {
                 StandardCharsets.UTF_8)
 
         when:
-        def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
+        def html = renderCycle().render(new BoardSectionView(null, null, null), NOW, null)
 
         then: 'the action raises the dead-instance incident, now as an alarm line in the status card (UX2)'
         html.contains('an instance died or hung: stopped zombie-box of task task-9')

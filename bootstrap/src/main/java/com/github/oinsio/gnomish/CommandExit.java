@@ -5,7 +5,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.bootstrap.BootstrapRegistry.InstanceSupplier;
 import org.springframework.boot.context.logging.LoggingApplicationListener;
 import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -34,7 +37,10 @@ import org.springframework.context.ConfigurableApplicationContext;
  * forever path {@code serve} blocks inside its runner until a signal arrives, so {@code run} has
  * not returned by the time the shutdown hook needs the context to close.
  *
- * <p>Implements FR9, NFR-R1 of harden-logging-observability.
+ * <p>Before the run, the command line is registered in the bootstrap registry for the
+ * configuration loader ({@link #registerArguments}).
+ *
+ * <p>Implements FR9, NFR-R1 of harden-logging-observability; FR3, FR5 of add-project-registry.
  */
 @NullMarked
 final class CommandExit {
@@ -76,11 +82,29 @@ final class CommandExit {
     static void start(
             SpringApplication application, String[] args, Runnable stopLogging, Consumer<Thread> hookRegistrar) {
         AtomicReference<ConfigurableApplicationContext> contextRef = new AtomicReference<>();
+        registerArguments(application, args);
         application.setRegisterShutdownHook(false);
         application.addInitializers(contextRef::set);
         OrderedExit.install(() -> close(contextRef.get()), stopLogging);
         hookRegistrar.accept(new Thread(OrderedExit::onSignal, SIGNAL_HOOK_THREAD_NAME));
         application.run(args);
+    }
+
+    /**
+     * Registers the raw command line as {@link ApplicationArguments} in the bootstrap registry, where
+     * the configuration loader reads it while the environment is prepared — before Spring Boot
+     * builds its own {@code ApplicationArguments} bean (design D9 of add-project-registry). The one
+     * way a context gets its command line to the loader: a boot that skips it is refused at startup.
+     *
+     * <p>Implements FR3, FR5 of add-project-registry.
+     *
+     * @param application the application to run, not yet started
+     * @param args the raw command-line arguments
+     */
+    static void registerArguments(SpringApplication application, String[] args) {
+        ApplicationArguments arguments = new DefaultApplicationArguments(args);
+        application.addBootstrapRegistryInitializer(
+                registry -> registry.register(ApplicationArguments.class, InstanceSupplier.of(arguments)));
     }
 
     /**

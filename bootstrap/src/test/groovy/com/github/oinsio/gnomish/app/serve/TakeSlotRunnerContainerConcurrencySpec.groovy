@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.ContainerE2eDocker
 import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.SlotWiring
@@ -20,6 +21,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -81,7 +83,7 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     // The real adapter, not a Mock(): two slot threads drive this tracker concurrently (Spock's
     // mock controller is single-thread territory), and only a real tracker records the terminal
@@ -129,7 +131,7 @@ autonomy:
         // against a real 'origin' and never falls back to the clone's local state, so a slot
         // dispatched without one parks before any container is started.
         addOrigin(cloneDir, attemptRoot)
-        worktreesRoot = attemptRoot.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(attemptRoot.resolve('home'), cloneDir)
         // Both tasks already claimed by THIS instance — the state a slot is dispatched in.
         TASK_IDS.each {
             harness.seedWorkingWithClaim(tracker, new TaskRef(it), INSTANCE.value())
@@ -171,7 +173,7 @@ autonomy:
                 ContainerSupportFixture.tracked(git.epochs()))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def wiring = new SlotWiring(
-                newAssembly(properties), git, worktreesRoot, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
+                newAssembly(properties), git, registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 containerTakeSupport, new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(

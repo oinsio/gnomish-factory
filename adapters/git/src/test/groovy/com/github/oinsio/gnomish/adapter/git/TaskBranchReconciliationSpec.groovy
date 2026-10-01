@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -44,7 +45,8 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     }
 
     private TaskRepository undecoratedHostRepository() {
-        new GitTaskRepository(runner, cloneDir, tempDir.resolve('worktrees'), ClaimEpochSource.NONE)
+        new GitTaskRepository(
+                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE)
     }
 
     private String localTip() {

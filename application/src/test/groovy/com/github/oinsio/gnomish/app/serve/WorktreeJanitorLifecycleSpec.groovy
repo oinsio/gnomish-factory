@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -30,15 +32,13 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     @TempDir
     Path tempDir
 
-    Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     def ticks = new AtomicInteger()
     def sleeper = new BlockingSleeper()
     def clock = { -> Instant.now() } as Clock
 
     def setup() {
-        cloneDir = Files.createDirectory(tempDir.resolve('my-project'))
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('my-project'))
     }
 
     // FR14, D10: the daemon-startup tick runs before any sleep — a fresh instance cleans up
@@ -48,7 +48,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         def disposal = { String key ->
             ticks.incrementAndGet()
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
             -> Set.of()
         })
 
@@ -66,13 +66,13 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     //     directly by the test.
     def "the startup tick actually runs and disposes an aged unheld environment"() {
         given: 'a real aged, unheld worktree directory on disk, and a disposal seam that records keys'
-        Path projectDir = Files.createDirectories(worktreesRoot.resolve('my-project').resolve('task-aged'))
+        Path projectDir = Files.createDirectories(registeredClone.worktrees().resolve('task-aged'))
         Files.setLastModifiedTime(projectDir, FileTime.from(Instant.now() - Duration.ofDays(30)))
         List<String> disposedKeys = Collections.synchronizedList(new ArrayList<String>())
         def disposal = { String key ->
             disposedKeys << key
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
             -> Set.of()
         })
 
@@ -90,7 +90,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         def disposal = { String key ->
             ticks.incrementAndGet()
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
             -> Set.of()
         })
         janitor.start()
@@ -111,11 +111,11 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     //     janitor thread — the next tick, one interval later, tries again.
     def "a failing tick does not kill the janitor thread"() {
         given: 'one aged, unheld environment whose disposal always throws'
-        Files.createDirectories(worktreesRoot.resolve('my-project').resolve('boom'))
+        Files.createDirectories(registeredClone.worktrees().resolve('boom'))
         def disposal = { String key ->
             throw new IllegalStateException('disposal boom')
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofSeconds(0), disposal, clock, sleeper, {
+        def janitor = new WorktreeJanitor(registeredClone, Duration.ofSeconds(0), disposal, clock, sleeper, {
             -> Set.of()
         })
         def logs = LogCaptureSupport.attach(WorktreeJanitor)

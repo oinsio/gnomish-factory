@@ -37,17 +37,17 @@ class LawRootBoundarySpec extends Specification {
      *
      * <ul>
      *   <li>{@code LawBinding} — the law root itself, the one owner of the rule (D12);</li>
-     *   <li>{@code ObservabilityPaths}, {@code FactoryPaths} — the operator's {@code ~/.gnomish}
-     *       <em>home</em> directory (serve state, worktrees root; {@code FactoryPaths} took the
-     *       worktrees root over from {@code ManualRunConfiguration} in design D4 of
-     *       collapse-composition-roots), which is a different directory that happens to share a
-     *       name and is no law root at all.</li>
+     *   <li>{@code FactoryHome} — the owner of the operator's <em>home</em> directory under design
+     *       D1 of add-project-registry (the default {@code <user.home>/.gnomish}), a different
+     *       directory that happens to share a name and is no law root at all. {@code
+     *       ObservabilityPaths} left this list when the serve directory moved to the registered
+     *       project (FR10), and {@code FactoryPaths} when the worktree folder did (FR9 of
+     *       add-project-registry).</li>
      * </ul>
      */
     private static final List<String> LAW_ROOT_SPELLINGS = [
-        'FactoryPaths.java',
+        'FactoryHome.java',
         'LawBinding.java',
-        'ObservabilityPaths.java',
     ]
 
     // M5, D12: law and pin come from one commit. A "HEAD" literal here is the pre-D12 bug: it names

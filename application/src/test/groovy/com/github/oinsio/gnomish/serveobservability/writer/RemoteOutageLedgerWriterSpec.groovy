@@ -19,17 +19,21 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
 
     static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
     static final InstanceInfo INSTANCE = new InstanceInfo('gnome-1', 'host1', '1.0.0')
-    static final String INSTANCE_NAME = 'gnome-1'
 
     @TempDir
     Path homeDir
 
+    /** The instance's serve directory, not yet created, inside the temporary folder. */
+    private Path serveDir() {
+        homeDir.resolve('serve')
+    }
+
     private RemoteOutageLedgerWriter writer() {
-        new RemoteOutageLedgerWriter(ledgerAppenderFor(homeDir, INSTANCE_NAME, NOW), INSTANCE)
+        new RemoteOutageLedgerWriter(ledgerAppenderFor(serveDir(), NOW), INSTANCE)
     }
 
     private List<String> ledgerLines() {
-        def file = ledgerFileFor(homeDir, INSTANCE_NAME, NOW)
+        def file = ledgerFileFor(serveDir(), NOW)
         Files.exists(file) ? Files.readAllLines(file) : []
     }
 
@@ -54,7 +58,7 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
     // NFR-R3: an append failure never reaches the gate that already closed.
     def "an append failure is swallowed, not propagated, and leaves one ERROR carrying the catalog code"() {
         given: 'a regular file where the ledger directory belongs, so every append fails'
-        Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(RemoteOutageLedgerWriter)
         def outage = new RemoteOutageClosedOutage(
                 'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 1, 0, 'boom')

@@ -115,6 +115,6 @@ class SandboxBindingDiscoverySpec extends Specification {
         def failure = thrown(IllegalArgumentException)
         failure.message.contains(BindingNames.CONTAINER)
         failure.message.contains('[host]')
-        failure.message.contains('factory.bindings.default=host')
+        failure.message.contains('factory.bindings.default: host in the project file')
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 
@@ -22,23 +23,26 @@ final class ManualRunners {
     private final ContainerGitModeRunner containerGitModeRunner;
     private final ContainerResumeRunner containerResumeRunner;
     private final ContainerSupports containerSupports;
+    private final RegisteredClone registeredClone;
 
     ManualRunners(
             GitModeRunner gitModeRunner,
             GitResumeRunner gitResumeRunner,
             ContainerGitModeRunner containerGitModeRunner,
             ContainerResumeRunner containerResumeRunner,
-            ContainerSupports containerSupports) {
+            ContainerSupports containerSupports,
+            RegisteredClone registeredClone) {
         this.gitModeRunner = gitModeRunner;
         this.gitResumeRunner = gitResumeRunner;
         this.containerGitModeRunner = containerGitModeRunner;
         this.containerResumeRunner = containerResumeRunner;
         this.containerSupports = containerSupports;
+        this.registeredClone = registeredClone;
     }
 
     /** A fresh {@code GIT} mode run (design D8 of add-git-workflow) of the synthesized task. */
     void run(RunOrder order, TaskContext context, TaskState initialState) {
-        var plan = containerSupports.plan(order.definition());
+        var plan = containerSupports.plan(order.definition(), registeredClone);
         switch (plan.mode()) {
             case HOST -> gitModeRunner.run(order, context, initialState);
             case CONTAINER -> containerGitModeRunner.run(order, plan.segments(), context, initialState);
@@ -47,7 +51,7 @@ final class ManualRunners {
 
     /** {@code --resume} (FR8 of add-git-workflow): the resolved bindings decide the resume shape (D13). */
     void resume(RunOrder order, String resume) {
-        var plan = containerSupports.plan(order.definition());
+        var plan = containerSupports.plan(order.definition(), registeredClone);
         switch (plan.mode()) {
             case HOST -> gitResumeRunner.run(order, resume);
             case CONTAINER -> containerResumeRunner.run(order, resume, plan.segments());

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TrackerTaskSynthesizer;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -41,7 +42,7 @@ import java.nio.file.Path;
  * through {@link TakeOrder#withDefinition} (D6 of introduce-take-order).
  *
  * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
- * add-base-ref-resolution; FR5 of introduce-slot-wiring.
+ * add-base-ref-resolution; FR5 of introduce-slot-wiring; FR9 of add-project-registry.
  */
 final class TakeFreshClaim {
 
@@ -83,7 +84,7 @@ final class TakeFreshClaim {
      */
     private TakeResult claimAt(TakeOrder order, FreshClaimBaseBinding.Bound baseBound) {
         TaskGit git = wiring.git();
-        Path worktreesRoot = wiring.worktreesRoot();
+        RegisteredClone clone = wiring.registeredClone();
         // FR13, D14 of add-base-ref-resolution: the task runs under the definition read from ITS
         // resolved base's law binding, never under the startup one.
         var law = TaskTierLaw.bind(wiring.assembly(), baseBound.lawBinding(), order);
@@ -94,12 +95,11 @@ final class TakeFreshClaim {
         // D6 of introduce-take-order: from here on only the order re-bound to the task's law is
         // used — the one this method was handed still carries the startup definition.
         TakeOrder lawBound = order.withDefinition(bound.definition());
-        Path cloneDir = lawBound.run().cloneDir();
         String taskId = lawBound.taskId();
 
         var synthesized = TrackerTaskSynthesizer.synthesize(
                 lawBound.trackerTask().snapshot(), lawBound.run().definition());
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        var taskRepository = git.store().taskRepository(clone);
         // FR15, D12 of add-base-ref-resolution: the branch starts at the very commit the task's law
         // was peeled at — the refreshed base — and the resolved ref travels beside it as the pin.
         GitFreshTaskSupport.createTask(
@@ -110,7 +110,7 @@ final class TakeFreshClaim {
                 baseBound.pin(),
                 synthesized.initialState());
 
-        Path worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
+        Path worktree = TaskWorktreePath.resolve(clone, taskId);
         TaskRecord content =
                 git.store().readTaskRecord(worktree).orElseThrow(() -> AbsentEnvelope.task(taskId, worktree));
         String branchName = TaskIdSanitizer.branchName(taskId);
@@ -128,7 +128,7 @@ final class TakeFreshClaim {
         var execution = new TakeEngineExecution(
                 wiring.assembly(),
                 git,
-                worktreesRoot,
+                clone,
                 wiring.abort(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),

@@ -114,7 +114,7 @@ advancement: auto
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def runner = newManualRunRunner(
-                tempDir.resolve('worktrees'),
+                projectRoot,
                 tempDir.resolve('home'),
                 new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null),
                 new BindingProperties(null, [:]),
@@ -156,7 +156,7 @@ advancement: auto
                 'instructions.md', [], new AutonomyLimits(3),
                 AdvancementMode.AUTO)
         def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(stage), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(

@@ -328,18 +328,17 @@ class UntrustedTextSinkInvariantSpec extends Specification {
     }
 
     /**
-     * Configures a fresh context from one of the real files. {@code user.home} is seeded as a
-     * context property — the scope Logback consults before system properties — so the production
-     * file's rolling appender resolves under a temporary directory and this spec never writes a
-     * byte into the operator's own log.
+     * Configures a fresh context from one of the real files through Spring Boot's own configurator,
+     * as a booted factory parses them: the production file names its log file through {@code
+     * <springProperty>}, published here under a temporary directory, so this spec writes no byte
+     * into the operator's own log.
      */
     private LoggerContext configure(String config) {
         LoggerContext context = new LoggerContext()
         context.name = "untrusted-text-sink-invariant-${configured.size()}"
         context.setMDCAdapter(new LogbackMDCAdapter())
         configured << context
-        context.putProperty('user.home', home.absolutePath)
-        JoranConfigurator configurator = new JoranConfigurator()
+        JoranConfigurator configurator = SpringJoran.publishing(new File(home, 'factory.log').absolutePath)
         configurator.context = context
         configurator.doConfigure(getClass().getResource(config))
         List<Status> problems = context.statusManager.copyOfStatusList.findAll {

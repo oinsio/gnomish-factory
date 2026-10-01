@@ -27,6 +27,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -61,15 +62,15 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     @TempDir
     Path tempDir
 
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     private Path worktree = Path.of('/tmp/gnomish-worktrees/PROJ-1')
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), CLONE_DIR)
         // DirectoryWorkspace refuses a path that is not an existing directory, so the worktree a
         // completing run resolves to is materialized here — standing in for `git worktree add`.
-        Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, CLONE_DIR, 'PROJ-1'))
+        Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
     }
 
     /** Records the register/unregister the heartbeat lifecycle is anchored on. */
@@ -145,7 +146,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> Stub(TaskLifecycleStore) {
+            taskRepository(_) >> Stub(TaskLifecycleStore) {
                 createTask(_, _, _, _) >> {
                     throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', UntrustedText.factory('x'))
                 }
@@ -189,8 +190,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         result instanceof TakeResult.Aborted
 
         and: 'neither route ran: no branch was created and no worktree was materialized'
-        0 * store.taskRepository(_, _)
-        0 * worktrees.ensureWorktree(_, _, _, _)
+        0 * store.taskRepository(_)
+        0 * worktrees.ensureWorktree(_, _, _)
     }
 
     // FR9, D3: a held claim with an EXISTING branch is a resume — the disposition-resume chain
@@ -216,7 +217,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly)), tracker)
 
         then: 'the existing branch was materialized and reconciled — never created'
-        1 * worktrees.ensureWorktree(CLONE_DIR, WORKTREES_ROOT, 'PROJ-1', 'gnomish/PROJ-1') >> worktree
+        1 * worktrees.ensureWorktree(CLONE, 'PROJ-1', 'gnomish/PROJ-1') >> worktree
         1 * worktrees.reconcile(worktree, 'PROJ-1', 'gnomish/PROJ-1')
 
         and:
@@ -299,7 +300,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), book),
-                tracker, Stub(RunAssembly), ClaimBeat.NONE, new ClaimLossFlag(), WORKTREES_ROOT), tracker)
+                tracker, Stub(RunAssembly), ClaimBeat.NONE, new ClaimLossFlag(), CLONE), tracker)
 
         then:
         thrown(UsageException)
@@ -436,7 +437,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
         }
@@ -452,7 +453,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def beat = new RecordingBeat()
         def subject = claimAndWork(git,
                 tracker, assemblyRunning(new ScriptedExecutor([completedRound()])), beat,
-                new ClaimLossFlag(), worktreesRoot)
+                new ClaimLossFlag(), registeredClone)
 
         when: 'the first take hits the still-down remote and releases the claim'
         def first = subject.claimAndWork(takeOrder(readyTask(), tracker, runOrder(completingPipeline())))
@@ -547,7 +548,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
         }
@@ -559,7 +560,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         when:
         def result = claimAndRun(claimAndWork(git,
                 tracker, assemblyRunning(new ScriptedExecutor([completedRound()])), beat,
-                new ClaimLossFlag(), worktreesRoot), tracker)
+                new ClaimLossFlag(), registeredClone), tracker)
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -585,10 +586,10 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def branches = Mock(TaskBranchGit)
         def worktrees = Mock(TaskWorktreeGit)
-        def resumedWorktree = worktreesRoot.resolve('resumed')
+        def resumedWorktree = tempDir.resolve('worktrees').resolve('resumed')
         Files.createDirectories(resumedWorktree)
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> lifecycleStore
+            taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_) >> Optional.of(freshRecord())
             readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
@@ -601,7 +602,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         when:
         def result = claimAndRun(claimAndWork(git, tracker,
                 assemblyRunning(new ScriptedExecutor([completedRound()])), ClaimBeat.NONE,
-                new ClaimLossFlag(), worktreesRoot), tracker)
+                new ClaimLossFlag(), registeredClone), tracker)
 
         then: 'the branch is located and bootstrapped, never created'
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -610,7 +611,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         // resume bootstrap then locates the ref it materializes the worktree from.
         1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.InProgress()
         1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
-        1 * worktrees.ensureWorktree(CLONE_DIR, worktreesRoot, 'PROJ-1', 'gnomish/PROJ-1') >> resumedWorktree
+        1 * worktrees.ensureWorktree(registeredClone, 'PROJ-1', 'gnomish/PROJ-1') >> resumedWorktree
         1 * worktrees.reconcile(resumedWorktree, 'PROJ-1', 'gnomish/PROJ-1')
         0 * lifecycleStore.createTask(_, _, _, _)
 

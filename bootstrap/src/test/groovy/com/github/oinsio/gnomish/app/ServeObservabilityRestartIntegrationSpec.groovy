@@ -15,7 +15,7 @@ import spock.lang.Timeout
 /**
  * Integration-level proof of M3 of add-serve-observability (the "restart" half of FR9): TWO
  * separate {@link ServeCommand} lifetimes — simulating a daemon restart — driven over the SAME
- * temp {@code homeDir} and the SAME configured instance name each write to the SAME {@code
+ * temp factory home and project and the SAME configured instance name each write to the SAME {@code
  * snapshot.json} path and the SAME daily ledger file (design D2: the directory is keyed by the
  * stable instance NAME), while the {@code instance.instanceId} carried inside the written data
  * differs between the two runs — each process mints its own {@code InstanceId} suffix (design D6
@@ -29,14 +29,19 @@ class ServeObservabilityRestartIntegrationSpec extends Specification
 implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
 
     private static final String INSTANCE_NAME = 'gnomish-observability-restart'
-    private static final String INSTANCE_ID_PATTERN = /^gnomish-observability-restart-[0-9a-z]{6}$/
+    // FR10 of add-project-registry: the id begins with the project name, then the instance name
+    private static final String INSTANCE_ID_PATTERN = /^widgets-gnomish-observability-restart-[0-9a-z]{6}$/
 
     @TempDir
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
+
+    /** The registered project's serve directory for the configured instance (FR10 of add-project-registry). */
+    private Path serveDir() {
+        homeDir.resolve("projects/${RegisteredCloneFixture.PROJECT}/serve/${INSTANCE_NAME}")
+    }
     Tracker tracker = Mock()
 
     def setup() {
@@ -46,13 +51,13 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
         writeMinimalProject(projectDir)
         commitAll(projectDir)
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
     }
 
     private ServeCommand newCommand() {
         def factoryProperties = testProperties(instanceName: INSTANCE_NAME)
-        newDrainCommand(factoryProperties, newAssembly(factoryProperties), worktreesRoot, homeDir, fakeFactory(tracker))
+        newDrainCommand(factoryProperties, newAssembly(factoryProperties),
+                RegisteredCloneFixture.unregistered(homeDir, projectDir), fakeFactory(tracker))
     }
 
     private static String snapshotInstanceId(Path snapshotFile) {
@@ -61,12 +66,12 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
 
     @Timeout(10)
     def "a restart against the same instance name keeps both paths and writes a new suffix into the data (M3)"() {
-        given: 'two ServeCommand instances over the SAME homeDir/instance name, simulating two process lifetimes'
+        given: 'two ServeCommand instances over the SAME project/instance name, simulating two process lifetimes'
         def firstRun = newCommand()
         def secondRun = newCommand()
         def today = LocalDate.now(ZoneOffset.UTC)
-        def snapshotFile = ObservabilityPaths.snapshotFile(homeDir, INSTANCE_NAME)
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, today)
+        def snapshotFile = ObservabilityPaths.snapshotFile(serveDir())
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), today)
 
         when: 'the first run drains to completion'
         firstRun.run(new DefaultApplicationArguments('serve', "--dir=$projectDir", '--drain'))
@@ -81,7 +86,7 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
         linesAfterFirstRun.size() == 3
         firstInstanceId ==~ INSTANCE_ID_PATTERN
 
-        when: '"restarting" — a second process, over the same homeDir/instance name, also drains'
+        when: '"restarting" — a second process, over the same project/instance name, also drains'
         secondRun.run(new DefaultApplicationArguments('serve', "--dir=$projectDir", '--drain'))
 
         then:

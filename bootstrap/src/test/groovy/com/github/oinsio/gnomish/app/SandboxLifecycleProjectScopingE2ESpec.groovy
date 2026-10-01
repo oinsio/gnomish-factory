@@ -101,7 +101,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     private String materializeRunningBox(Path cloneDir, String taskId, SandboxProperties sandboxProps, OwnershipMode mode) {
         taskIds << taskId
         def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), mode, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), mode, ClaimEpochSource.NONE)
         // These specs point origin at an unreachable host on purpose — the URL is what project
         // identity is derived from, and nothing here pushes. The branch's own first push is
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone
@@ -133,7 +133,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def boxB = materializeRunningBox(projectB, taskB, tinyMinAge, OwnershipMode.TRACKED)
 
         when: 'project A alone runs a sweep tick, its oracle omitting every task (worst case for both)'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), Clock.systemUTC())
         pass.run(projectA, new LivenessVerdict.Live(Set.of()))
 
         then: 'A stopped its own unowned running box'
@@ -156,7 +156,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def box = materializeRunningBox(project, taskId, tinyMinAge, OwnershipMode.MANUAL)
 
         when: 'a sweep tick evaluates the host with an empty liveness verdict'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), Clock.systemUTC())
         pass.run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the manual box is untouched — its own 24h age threshold governs it, not the oracle'

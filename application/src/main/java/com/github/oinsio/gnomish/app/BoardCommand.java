@@ -17,8 +17,10 @@ import org.springframework.stereotype.Component;
  * {@code gnomish board [--dir] [--json] [--limit]} (FR1, NFR-S1 of add-board-command; design D8):
  * the read-only tracker board. Resolves the pipeline and {@code tracker:} section from {@code
  * --dir} exactly as {@link TakeCommand}/{@link ServeCommand} do (via {@link TakeCommandSupport}),
- * mints a throwaway {@link InstanceId} solely to satisfy {@link TrackerAdapterFactory#create}'s
- * constructor contract (design D8 — the id is never written anywhere), then calls only {@link
+ * the directory being the registered clone the configuration loader resolved ({@link ProjectScope},
+ * FR3 of add-project-registry), mints a throwaway {@link InstanceId} solely to satisfy {@link
+ * TrackerAdapterFactory#create}'s constructor contract (design D8 — the id is never written
+ * anywhere; it names the project all the same, FR10 of add-project-registry), then calls only {@link
  * Tracker#listReady(int)} and {@link Tracker#listOpen()} — never a write method (NG3) — to build
  * one {@link BoardModel}.
  *
@@ -26,7 +28,8 @@ import org.springframework.stereotype.Component;
  * is rendered by {@link BoardJsonMapper} (task 4.2) — both are projections of the same {@link
  * BoardModel} (UX4).
  *
- * <p>Implements FR1, NFR-S1 of add-board-command; FR5 of harden-untrusted-text-sinks.
+ * <p>Implements FR1, NFR-S1 of add-board-command; FR5 of harden-untrusted-text-sinks; FR3, FR10 of
+ * add-project-registry.
  */
 @Component
 final class BoardCommand {
@@ -36,13 +39,19 @@ final class BoardCommand {
     private final BoardJsonMapper jsonMapper = new BoardJsonMapper();
     private final Clock clock;
     private final FactoryProperties factoryProperties;
+    private final ProjectScope scope;
     private final TrackerWiring trackerWiring;
     private final ConsoleIO console;
 
     BoardCommand(
-            Clock javaTimeClock, FactoryProperties factoryProperties, TrackerWiring trackerWiring, ConsoleIO console) {
+            Clock javaTimeClock,
+            FactoryProperties factoryProperties,
+            ProjectScope scope,
+            TrackerWiring trackerWiring,
+            ConsoleIO console) {
         this.clock = javaTimeClock;
         this.factoryProperties = factoryProperties;
+        this.scope = scope;
         this.trackerWiring = trackerWiring;
         this.console = console;
     }
@@ -55,9 +64,9 @@ final class BoardCommand {
      * @throws IOException if {@code .gnomish/} cannot be read (a genuine I/O fault)
      */
     void run(ApplicationArguments args) throws IOException {
-        BoardArguments boardArguments = argumentsParser.parse(args);
+        BoardArguments boardArguments = argumentsParser.parse(args, scope.registeredClone());
         TrackerWiring.ReadOnlyTrackerResolution resolution =
-                trackerWiring.resolveReadOnly(boardArguments.dir(), factoryProperties);
+                trackerWiring.resolveReadOnly(boardArguments.dir(), scope.mintInstanceId());
         TrackerConfig trackerConfig = resolution.trackerConfig();
 
         BoardModel model = BoardComposition.compose(

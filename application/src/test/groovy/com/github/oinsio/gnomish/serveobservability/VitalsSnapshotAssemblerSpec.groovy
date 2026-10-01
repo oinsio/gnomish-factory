@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.lease.ClaimLostSink
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.HeartbeatWorkerState
@@ -56,8 +57,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
 
     private WorktreeJanitor newJanitor() {
         new WorktreeJanitor(
-                tempDir.resolve('worktrees'),
-                tempDir.resolve('clone'),
+                RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('clone')),
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 clock,

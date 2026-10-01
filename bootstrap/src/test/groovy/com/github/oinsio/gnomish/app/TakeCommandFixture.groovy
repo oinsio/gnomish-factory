@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -31,13 +31,13 @@ import java.time.ZoneOffset
 trait TakeCommandFixture implements AppAssemblyFixture {
 
     TakeCommand newTakeCommand(
-            FactoryProperties factoryProperties, Path worktreesRoot, Map<String, TrackerAdapterFactory> trackerFactories,
+            FactoryProperties factoryProperties, RegisteredClone clone, Map<String, TrackerAdapterFactory> trackerFactories,
             TakeCommandSeams seams = TakeCommandSeams.DEFAULTS,
             SandboxLifecyclePass sandboxLifecyclePass = SandboxLifecyclePass.NONE) {
         TakeCommands.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                clone,
                 'taskId',
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),

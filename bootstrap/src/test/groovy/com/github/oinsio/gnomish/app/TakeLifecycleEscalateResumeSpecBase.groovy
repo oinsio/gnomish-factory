@@ -8,7 +8,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * The second M3 lifecycle end to end, driven by two independently constructed {@link TakeCommand}
  * instances against a REAL tracker adapter and a real local git repo: ready -> claim -> escalate
@@ -33,11 +32,11 @@ import spock.lang.TempDir
  * <p>Two entirely separate {@link TakeCommand}/{@link ManualRunAssembly}/{@code FactoryProperties}
  * trios simulate "instance A" and "instance B": no field or object built for instance A is ever
  * reused for instance B (NFR-R3) — only the {@link Tracker} instance (standing in for the shared
- * tracker service, exactly as two real factory processes would share one) and the {@code
- * worktreesRoot}/project directory (standing in for the one machine-local {@code
- * ~/.gnomish/worktrees} convention every factory instance on a box shares, per the
+ * tracker service, exactly as two real factory processes would share one) and the registered
+ * clone's worktree folder (standing in for the one machine-local {@code
+ * projects/<name>/worktrees/<clone>} folder every factory instance on a box shares, per the
  * git-task-persistence spec) cross between them. Both instances therefore share one {@code
- * worktreesRoot}: git itself (not this test) is what actually enforces that a task branch can be
+ * registeredClone}: git itself (not this test) is what actually enforces that a task branch can be
  * checked out in only one worktree at a time — instance B locates and reuses the SAME worktree
  * instance A already created, purely by reading the branch/state file, never any in-process state
  * instance A held.
@@ -145,18 +144,18 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
     /**
      * Instance B's retry must actually pass so the run can reach {@code Delivered}: writes the
      * file the {@code build} stage's {@code files_exist} check requires directly into the task's
-     * worktree — the same deterministic path ({@code <worktreesRoot>/project/PROJ-1}, {@code
+     * worktree — the same deterministic path ({@code <clone worktree folder>/PROJ-1}, {@code
      * TaskWorktreeManager}'s own resolution) that instance A's worktree already occupies and that
      * instance B's own {@code ensureWorktree} call resolves to and reuses as-is (it does NOT
      * re-check-out from the branch tip on reuse, so a fix committed on the branch from outside
      * that worktree would never surface inside it). This mirrors what "fixing the environment"
      * means for a working-copy-based CLI factory: a human (or another process) edits files in the
      * SAME shared working copy. Not a channel between instance A and B's in-process state
-     * (NFR-R3): both instances share only the tracker and the one {@code worktreesRoot}/project
-     * directory convention, exactly as two real factory processes on the same machine would.
+     * (NFR-R3): both instances share only the tracker and the one registered clone's worktree
+     * folder, exactly as two real factory processes on the same machine would.
      */
     private void fixMissingFileInSharedWorktree() {
-        Path worktree = worktreesRoot.resolve('project').resolve('PROJ-1')
+        Path worktree = registeredClone.worktrees().resolve('PROJ-1')
         Files.writeString(worktree.resolve('missing-file.txt'), 'now it exists\n')
     }
 }

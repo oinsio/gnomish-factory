@@ -77,7 +77,7 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
     /** Drives one claimed pickup of a branch classifying to {@code shape}, capturing its repair log. */
     private List<ILoggingEvent> pickup(Tracker tracker, BranchShape shape, AbortFacts facts, TaskStoreGit store) {
         def subject = claimAndWork(gitClassifying(shape, store), tracker, Stub(RunAssembly), ClaimBeat.NONE,
-                new ClaimLossFlag(), WORKTREES_ROOT)
+                new ClaimLossFlag(), CLONE)
         return capture {
             subject.claimAndWork(takeOrder(taskWith(facts), tracker))
         }

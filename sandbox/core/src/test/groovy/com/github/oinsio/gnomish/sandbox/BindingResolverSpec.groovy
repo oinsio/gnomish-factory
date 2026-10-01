@@ -89,7 +89,7 @@ class BindingResolverSpec extends Specification {
         def failure = thrown(IllegalArgumentException)
         failure.message.contains('container')
         failure.message.contains('[host]')
-        failure.message.contains('factory.bindings.default=host')
+        failure.message.contains('factory.bindings.default: host in the project file')
     }
 
     // FR4/D4: the default is resolved eagerly — explicit host stage bindings do not mask its absence

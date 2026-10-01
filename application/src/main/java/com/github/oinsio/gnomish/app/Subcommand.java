@@ -5,7 +5,7 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * The entrypoint's top-level dispatch: {@code gnomish run} | {@code status} | {@code usage} |
- * {@code take} | {@code serve} | {@code board} | {@code dashboard} (FR13, FR14 of add-git-workflow;
+ * {@code take} | {@code serve} | {@code board} | {@code dashboard} | {@code project} (FR13, FR14 of add-git-workflow;
  * FR9 of add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command; FR1 of
  * add-dashboard-page). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
@@ -19,7 +19,8 @@ import org.springframework.boot.ApplicationArguments;
  * token is equivalent. Any other first positional token is a usage error, mapped by {@link
  * RunExitCodeMapper} to exit code 2 like every other {@link UsageException}.
  *
- * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port.
+ * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2, FR4 of
+ * add-project-registry.
  */
 enum Subcommand {
     /** {@code gnomish run ...} or no subcommand at all — the pre-existing manual-run flow. */
@@ -35,7 +36,9 @@ enum Subcommand {
     /** {@code gnomish board [--dir] [--json] [--limit]} — read-only tracker board. */
     BOARD,
     /** {@code gnomish dashboard [--dir] [--out] [--watch]} — renders the HTML dashboard page. */
-    DASHBOARD;
+    DASHBOARD,
+    /** {@code gnomish project add|list|show} — the project registry (FR2, FR4 of add-project-registry). */
+    PROJECT;
 
     private static final String RUN_TOKEN = "run";
     private static final String STATUS_TOKEN = "status";
@@ -44,12 +47,14 @@ enum Subcommand {
     private static final String SERVE_TOKEN = "serve";
     private static final String BOARD_TOKEN = "board";
     private static final String DASHBOARD_TOKEN = "dashboard";
+    private static final String PROJECT_TOKEN = "project";
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
      * @return the requested subcommand, or {@link #RUN} when no positional token is present
      * @throws UsageException if the first positional token is present but names none of {@code
-     *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}, {@code board}
+     *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}, {@code board}, {@code
+     *     dashboard}, {@code project}
      */
     static Subcommand parse(ApplicationArguments args) {
         String token = firstPositionalToken(args);
@@ -64,10 +69,11 @@ enum Subcommand {
             case SERVE_TOKEN -> SERVE;
             case BOARD_TOKEN -> BOARD;
             case DASHBOARD_TOKEN -> DASHBOARD;
+            case PROJECT_TOKEN -> PROJECT;
             default ->
                 throw new UsageException("'" + token + "' is not a gnomish subcommand: accepted forms are"
                         + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', 'gnomish serve',"
-                        + " 'gnomish board', or 'gnomish dashboard'");
+                        + " 'gnomish board', 'gnomish dashboard', or 'gnomish project'");
         };
     }
 

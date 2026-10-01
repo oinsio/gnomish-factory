@@ -3,8 +3,8 @@
   Test-only logging configuration (task 2.3 of harden-logging-observability,
   design D7). Implements FR11, M4.
 
-  Why it exists: `logback-spring.xml` writes to `~/.gnomish/logs/gnomish.log`,
-  the operator's own durable record. Every `@SpringBootTest` in this module
+  Why it exists: `logback-spring.xml` writes to the operator's own durable
+  record under the factory home (`~/.gnomish` by default). Every `@SpringBootTest` in this module
   boots a real context, Boot applies that production configuration, and the
   suite's output — including deliberately provoked stack traces — lands in the
   file an operator later greps as evidence (observed live before this change).
@@ -24,9 +24,11 @@
   a rolling appender: a build directory is not a retention problem.
 
   The out-of-process E2E layer is not covered here: `E2eProcessHarness` spawns
-  the packaged jar, which carries the production configuration by design, so it
-  is redirected by the `GNOMISH_LOG_DIR` environment variable the harness sets
-  instead. `OperatorLogIsolationSpec` guards both halves.
+  the packaged jar, which carries the production configuration by design. That
+  configuration writes where the operator configuration loader publishes
+  (`gnomish.internal.log-file`, under the factory home), so the temporary
+  `GNOMISH_HOME` the harness sets redirects it instead.
+  `OperatorLogIsolationSpec` guards both halves.
 -->
 <configuration>
 

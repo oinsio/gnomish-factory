@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -24,7 +25,8 @@ import java.time.Clock
  *
  * <p>Also owns {@link #newDrainCommand}, the {@link ServeCommand} construction the two specs
  * above built identically before this extraction: a single-attempt drain over the given
- * factory properties, assembly, worktrees/home directories, and tracker adapter factory. Takes
+ * factory properties, assembly, worktrees directory, registered clone (whose project's serve
+ * directory receives the files, FR10 of add-project-registry), and tracker adapter factory. Takes
  * the assembly and factory properties as parameters — rather than implementing {@code
  * AppAssemblyFixture} itself — because both specs already mix that trait in directly; a second,
  * transitive implementation here would make Groovy see two independent copies of its default
@@ -56,13 +58,12 @@ trait ServeObservabilityFixture {
     ServeCommand newDrainCommand(
             FactoryProperties factoryProperties,
             ManualRunAssembly assembly,
-            Path worktreesRoot,
-            Path homeDir,
+            RegisteredClone clone,
             TrackerAdapterFactory trackerFactory) {
         ServeCommands.of(
                 assembly,
                 TaskGitFixture.real(),
-                new FactoryPaths(worktreesRoot, homeDir),
+                clone,
                 'taskId',
                 factoryProperties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),

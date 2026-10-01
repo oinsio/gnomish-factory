@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -39,14 +40,14 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'hygiene-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'Do the thing.\n')
         commitAll(cloneDir, 'init')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -63,11 +64,11 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
 
     private GitModeRunner newRunner(FactoryProperties factoryProperties) {
         def assembly = newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProperties)
-        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
+        new GitModeRunner(assembly, TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {
-        worktreesRoot.resolve('hygiene-project').resolve(taskId)
+        registeredClone.worktrees().resolve(taskId)
     }
 
     // NFR-S2: a real agent round's commit contains exactly the gnome's own file plus

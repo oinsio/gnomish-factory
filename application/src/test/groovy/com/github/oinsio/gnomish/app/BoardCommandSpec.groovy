@@ -45,18 +45,20 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
     // TrackerValidatorStub; this spec's own trackerAdapterRegistry below overrides which adapter
     // actually backs 'github' for the run, resolving RecordingReadOnlyTracker instead of a real
     // GitHub adapter.
-    private static BoardCommand newCommand(RecordingReadOnlyTracker tracker) {
+    private BoardCommand newCommand(RecordingReadOnlyTracker tracker) {
         commandBackedBy(new RecordingTrackerAdapterFactory(tracker))
     }
 
-    private static BoardCommand commandBackedBy(RecordingTrackerAdapterFactory factory) {
+    private BoardCommand commandBackedBy(RecordingTrackerAdapterFactory factory) {
         commandBackedBy(factory, liveConsole())
     }
 
-    private static BoardCommand commandBackedBy(RecordingTrackerAdapterFactory factory, ConsoleIO console) {
+    private BoardCommand commandBackedBy(RecordingTrackerAdapterFactory factory, ConsoleIO console) {
         new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                RegisteredCloneFixture.scope(
+                        RegisteredCloneFixture.unregistered(tempDir.resolve('gnomish-home'), projectDir), INSTANCE_NAME),
                 new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 console)
     }
@@ -78,7 +80,8 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
 
         then: 'the tracker was resolved with a minted, non-blank instance id — never used to write'
         factory.capturedInstanceId != null
-        factory.capturedInstanceId.startsWith(INSTANCE_NAME)
+        // FR10 of add-project-registry: the id names the project first, then the instance
+        factory.capturedInstanceId.startsWith("${RegisteredCloneFixture.PROJECT}-${INSTANCE_NAME}-")
 
         and: 'exactly one listReady and one listOpen call were made (NFR-P1), nothing else'
         tracker.listReadyCalls == 1

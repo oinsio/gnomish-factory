@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -46,7 +47,8 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
      */
     private TaskLifecycleStore repositoryFor(String mode, Path clone) {
         if (mode == 'host') {
-            return new GitTaskStore(git, ClaimEpochSource.NONE).taskRepository(clone, tempDir.resolve("worktrees-${clone.fileName}"))
+            return new GitTaskStore(git, ClaimEpochSource.NONE).taskRepository(
+                    RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve("home-${clone.fileName}"), clone))
         }
         Path indexDir = tempDir.resolve("index-${clone.fileName}")
         Files.createDirectories(indexDir)

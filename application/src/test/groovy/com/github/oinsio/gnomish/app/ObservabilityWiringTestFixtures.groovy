@@ -52,9 +52,9 @@ class ObservabilityWiringTestFixtures {
         TaskOutcomeLedgerWriter taskOutcomeLedgerWriter
     }
 
-    static Built build(Path homeDir, String instanceName, InstanceInfo instance, Clock clock,
+    static Built build(Path serveDir, InstanceInfo instance, Clock clock,
             LifecycleStateTracker lifecycleTracker, Duration snapshotInterval, boolean startSnapshotWriter) {
-        def snapshotFile = homeDir.resolve('snapshot.json')
+        def snapshotFile = serveDir.resolve('snapshot.json')
         def snapshotWriter = new SnapshotWriter(
                 snapshotFile,
                 { -> fixtureSnapshot(lifecycleTracker, instance) },
@@ -63,7 +63,7 @@ class ObservabilityWiringTestFixtures {
                 clock,
                 0)
         def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, instanceName, clock)
+                new LedgerAppender(serveDir.resolve('placeholder'), new LedgerJsonMapper()), serveDir, clock)
         def ledgerWriters = new LedgerWriters(appender, new SlotLedger(1), instance, clock)
         if (startSnapshotWriter) {
             snapshotWriter.start()

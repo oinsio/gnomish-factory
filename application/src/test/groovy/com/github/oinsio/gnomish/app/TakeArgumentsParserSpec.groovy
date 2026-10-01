@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -14,13 +15,17 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     private final TakeArgumentsParser parser = new TakeArgumentsParser()
 
+
+    /** The clone the configuration loader resolved: the {@code dir} every parse fills (FR3, D9 of add-project-registry). */
+    private static final RegisteredClone CLONE =
+    RegisteredCloneFixture.unregistered(Path.of('/tmp/gnomish-home'), Path.of('/tmp/registered-clone'))
     def "explicit ref parses into TakeArguments.ref"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42'))
+        TakeArguments result = parser.parse(args('take', '42'), CLONE)
 
         then:
         result.ref() == '42'
-        result.dir() == Path.of('').toAbsolutePath() // FR7 of fix-operator-blockers: absolute
+        result.dir() == CLONE.clonePath() // FR3 of add-project-registry
         result.interactiveMode() == RunArguments.InteractiveMode.NONE
         result.base() == null
         !result.discardWork()
@@ -29,23 +34,23 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "bare take (no positional ref) parses ref as null"() {
         when:
-        TakeArguments result = parser.parse(args('take'))
+        TakeArguments result = parser.parse(args('take'), CLONE)
 
         then:
         result.ref() == null
     }
 
-    def "--dir is parsed like gnomish run's"() {
+    def "FR3: an explicit --dir is accepted and dir is still the registered clone's path"() {
         when:
-        TakeArguments result = parser.parse(args('take', '--dir=/tmp/workspace', '42'))
+        TakeArguments result = parser.parse(args('take', '--dir=/tmp/workspace', '42'), CLONE)
 
         then:
-        result.dir() == Path.of('/tmp/workspace')
+        result.dir() == CLONE.clonePath()
     }
 
     def "--base is accepted on the explicit form"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '--base=main'))
+        TakeArguments result = parser.parse(args('take', '42', '--base=main'), CLONE)
 
         then:
         result.base() == 'main'
@@ -53,7 +58,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "--discard-work is parsed as a bare flag"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '--discard-work'))
+        TakeArguments result = parser.parse(args('take', '42', '--discard-work'), CLONE)
 
         then:
         result.discardWork()
@@ -63,7 +68,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // explicit-mode Working takeover, parsed as a bare boolean flag like --discard-work.
     def "--takeover is parsed as a bare flag on the explicit form"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '--takeover'))
+        TakeArguments result = parser.parse(args('take', '42', '--takeover'), CLONE)
 
         then:
         result.takeover()
@@ -73,7 +78,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // as it rejects --base (spec "Headless takeover needs the flag" applies to explicit mode only).
     def "bare take rejects --takeover"() {
         when:
-        parser.parse(args('take', '--takeover'))
+        parser.parse(args('take', '--takeover'), CLONE)
 
         then:
         thrown(UsageException)
@@ -83,7 +88,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     def "--interactive#suffix parses to #expected"(String suffix, List<String> flags, RunArguments.InteractiveMode expected) {
         when:
         String[] tokens = (['take', '42'] + flags) as String[]
-        TakeArguments result = parser.parse(args(tokens))
+        TakeArguments result = parser.parse(args(tokens), CLONE)
 
         then:
         result.interactiveMode() == expected
@@ -106,7 +111,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
             '42',
             "--$flag=x".toString()
         ]
-        parser.parse(args(*tokens))
+        parser.parse(args(*tokens), CLONE)
 
         then:
         thrown(UsageException)
@@ -129,7 +134,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
             'take',
             "--$flag=x".toString()
         ]
-        parser.parse(args(*tokens))
+        parser.parse(args(*tokens), CLONE)
 
         then:
         thrown(UsageException)
@@ -147,7 +152,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "--resume is rejected even given as a bare flag with no value"() {
         when:
-        parser.parse(args('take', '42', '--resume'))
+        parser.parse(args('take', '42', '--resume'), CLONE)
 
         then:
         thrown(UsageException)
@@ -156,7 +161,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // Spec requirement text: "the bare form SHALL reject start modifiers (--base)".
     def "bare take rejects --base"() {
         when:
-        parser.parse(args('take', '--base=main'))
+        parser.parse(args('take', '--base=main'), CLONE)
 
         then:
         thrown(UsageException)
@@ -164,7 +169,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "explicit take (with ref) accepts --base without error"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '--base=main'))
+        TakeArguments result = parser.parse(args('take', '42', '--base=main'), CLONE)
 
         then:
         noExceptionThrown()
@@ -175,7 +180,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // batch form, parsed without error and carrying every ref in order.
     def "batch take accepts two or more refs"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '43', '44'))
+        TakeArguments result = parser.parse(args('take', '42', '43', '44'), CLONE)
 
         then:
         result.refs() == ['42', '43', '44']
@@ -184,7 +189,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "single explicit ref still parses as a one-element refs list"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42'))
+        TakeArguments result = parser.parse(args('take', '42'), CLONE)
 
         then:
         result.refs() == ['42']
@@ -192,7 +197,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "bare take parses refs as an empty list"() {
         when:
-        TakeArguments result = parser.parse(args('take'))
+        TakeArguments result = parser.parse(args('take'), CLONE)
 
         then:
         result.refs() == []
@@ -203,7 +208,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // tracker (FR3 of add-factory-serve).
     def "batch take rejects --interactive"() {
         when:
-        parser.parse(args('take', '42', '43', '--interactive'))
+        parser.parse(args('take', '42', '43', '--interactive'), CLONE)
 
         then:
         thrown(UsageException)
@@ -211,7 +216,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     def "batch take rejects --interactive=executor"() {
         when:
-        parser.parse(args('take', '42', '43', '--interactive=executor'))
+        parser.parse(args('take', '42', '43', '--interactive=executor'), CLONE)
 
         then:
         thrown(UsageException)
@@ -221,7 +226,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // meaningless once two or more refs are being worked.
     def "batch take rejects --base"() {
         when:
-        parser.parse(args('take', '42', '43', '--base=main'))
+        parser.parse(args('take', '42', '43', '--base=main'), CLONE)
 
         then:
         thrown(UsageException)
@@ -231,7 +236,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // it stays available so a headless batch run can take over Working refs without a TTY prompt.
     def "batch take accepts --takeover without error"() {
         when:
-        TakeArguments result = parser.parse(args('take', '42', '43', '--takeover'))
+        TakeArguments result = parser.parse(args('take', '42', '43', '--takeover'), CLONE)
 
         then:
         noExceptionThrown()

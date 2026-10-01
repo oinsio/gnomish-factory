@@ -133,7 +133,7 @@ class CheckProviderSeamSpec extends Specification {
     // FR4: valid configuration passes the gate and yields the registry the composition root uses.
     def "the startup gate passes valid configuration"() {
         given:
-        def properties = new FactoryProperties(null, null, null, null, [github: GITHUB_SUBSECTION])
+        def properties = new FactoryProperties(null, null, null, [github: GITHUB_SUBSECTION])
 
         when:
         def registry = new CheckClientConfiguration().checkClientRegistry(properties)

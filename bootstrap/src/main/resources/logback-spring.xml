@@ -1,40 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Instance-local logging (task 8.1 of add-manual-run, design D9; hardened by
-  tasks 2.1/2.2/2.5 of harden-logging-observability, design D7/D10).
-  Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run and FR8, FR10,
-  NFR-P1 of harden-logging-observability.
+  tasks 2.1/2.2/2.5 of harden-logging-observability, design D7/D10; placed per
+  project by task 6.1 of add-project-registry).
+  Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run, FR8, FR10,
+  NFR-P1 of harden-logging-observability and FR11, UX3 of add-project-registry.
 
-  One rolling file under the operator's home directory, independent of any
-  workspace (the project flag) and independent of this repository's own git
-  tree (NFR-S1: log location outside any workspace/git). The file is never a path
-  a `git add` in either tree could reach, and it is not listed in this
+  One rolling file per project and instance under the factory home, independent
+  of any workspace (the project flag) and independent of this repository's own
+  git tree (NFR-S1: log location outside any workspace/git). The file is never a
+  path a `git add` in either tree could reach, and it is not listed in this
   project's own working set, so NFR-S2 (never committed to git) holds by
   construction alone — no .gitignore entry is needed for a path that can
   never be inside a git working tree in the first place.
 
-  `${user.home}` is Logback's own property lookup (a JVM system property),
-  resolved by Logback's parser independently of Spring Boot's `${...}`
-  placeholder resolution — both syntaxes share the delimiter but are handled
-  by different property sources; `user.home` is not a Spring/Boot property,
-  so Logback's own OS-environment/system-property lookup is what resolves it
-  here, and it works the same in a plain `logback.xml` or a `logback-spring.xml`.
+  Where the file is (FR11, UX3 of add-project-registry, design D1, D6): this
+  configuration does not compute it. The operator configuration loader
+  (`OperatorConfigLoader`, through `OperatorLogFile`) runs before Logback starts
+  and publishes the internal property `gnomish.internal.log-file` from
+  `FactoryHome`, the one owner of operator paths:
+  `<home>/projects/<name>/logs/<instance>.log` for a command resolved to a
+  registered project, `<home>/logs/factory.log` for a project-less one. Two
+  projects on one host therefore never share a file. Rolled segments take the
+  same path without `.log` from `gnomish.internal.log-archive-base` and append
+  `.<date>.<n>.log`, so they keep the extension. `<springProperty>` reads
+  both from the Spring environment; the loader always publishes it before this
+  file is read, so it carries no default — a default here would be a second
+  place that knows where logs live. Test isolation follows from the same fact:
+  the E2E layer spawns this jar against a temporary `GNOMISH_HOME`, so its log
+  lands there.
 
-  Two documented overrides, both resolved by that same lookup (context property,
-  then system property, then environment variable) so an operator changes them
-  for one run with no rebuild (FR10):
+  One documented override, resolved by Logback's own lookup (context property,
+  then system property, then environment variable) so an operator changes it
+  for one run with no rebuild (FR10 of harden-logging-observability):
     - GNOMISH_LOG_LEVEL — the root level, default INFO. `logging.level.*` from
       Spring Boot still applies on top of it for finer, per-logger grain. A value
       Logback does not recognize resolves to DEBUG, not to the INFO default —
       Level.toLevel's own fallback — so a typo makes the run louder rather than
       leaving the operator with a level they did not ask for. Pinned by
       LogbackConfigSpec.
-    - GNOMISH_LOG_DIR — the log directory, default `~/.gnomish/logs`. Its
-      operational use is test isolation (FR11, M4): the E2E layer spawns this
-      very jar as a real process, and that process's own log belongs in the
-      build's temp space, not in the operator's file. Pointing it inside a
-      workspace or a git tree gives up NFR-S1/NFR-S2, which is why the default
-      is the operator home and the override is an explicit act.
 
   Rolling policy numbers (D9: "daily/size roll, ~7 days history, total size
   cap" — no exact numbers pinned in the design, chosen here):
@@ -81,16 +85,17 @@
     <conversionRule conversionWord="safeX"
                     class="com.github.oinsio.gnomish.logging.SafeMdcConverter"/>
 
-    <property name="GNOMISH_LOG_DIR" value="${GNOMISH_LOG_DIR:-${user.home}/.gnomish/logs}"/>
+    <springProperty scope="context" name="GNOMISH_LOG_FILE" source="gnomish.internal.log-file"/>
+    <springProperty scope="context" name="GNOMISH_LOG_ARCHIVE_BASE" source="gnomish.internal.log-archive-base"/>
     <property name="GNOMISH_LOG_PATTERN"
               value="%d{ISO8601} [%thread] %-5level [taskId=%safeX{taskId}, stage=%safeX{stage}, attempt=%safeX{attempt}, component=%safeX{component}] %logger{36} - %safeMsg%n%safeEx"/>
 
     <!-- Durable diagnostic record: broad INFO level, the only consumer is a
          days-horizon post-mortem grep (D9); DEBUG has no consumer here. -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${GNOMISH_LOG_DIR}/gnomish.log</file>
+        <file>${GNOMISH_LOG_FILE}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${GNOMISH_LOG_DIR}/gnomish.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${GNOMISH_LOG_ARCHIVE_BASE}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
             <totalSizeCap>100MB</totalSizeCap>

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
@@ -21,9 +22,9 @@ import java.time.ZoneOffset
  * abort-threshold} of {@code #ABORT_THRESHOLD}, plus {@link #newCommand}, which builds a brand-new
  * {@link TakeCommand}/{@link ManualRunAssembly}/{@link FactoryProperties} trio positioned at a
  * caller-chosen {@code Instant} (design D10's backoff clock) — only the shared {@link Tracker},
- * {@link TrackerAdapterFactory}, and {@code worktreesRoot} fields cross between calls, exactly as
- * two real factory processes on one machine would share the tracker service and the machine-local
- * {@code ~/.gnomish/worktrees} convention.
+ * {@link TrackerAdapterFactory}, and {@code registeredClone} fields cross between calls, exactly as
+ * two real factory processes on one machine would share the tracker service and the registered
+ * clone's machine-local worktree folder.
  *
  * <p>Split out of the spec base purely to respect the file-size guidance
  * (`.claude/rules/process-invariants.md`) — a plain trait, not a reusable port abstraction.
@@ -39,7 +40,7 @@ trait AbortLifecycleFixture implements BareGitRepoFixture, AppAssemblyFixture {
     abstract Path getTempDir()
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker
     TrackerAdapterFactory trackerFactory
 
@@ -83,7 +84,7 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     private FactoryProperties factoryProperties() {
@@ -97,7 +98,7 @@ tracker:
         TakeCommands.of(
                 newAssembly(factoryProperties()),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 'taskId',
                 factoryProperties(),
                 Clock.fixed(now, ZoneOffset.UTC),

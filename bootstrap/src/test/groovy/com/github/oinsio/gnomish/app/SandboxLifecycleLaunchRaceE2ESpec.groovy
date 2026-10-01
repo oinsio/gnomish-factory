@@ -97,14 +97,14 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         // exact protection this spec is proving, not something to bypass.
         def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task entirely'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), Clock.systemUTC())
         pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the launching box is untouched — still running, nothing stopped or disposed'

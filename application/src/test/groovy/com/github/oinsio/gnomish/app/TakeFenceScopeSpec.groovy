@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -36,7 +37,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
     @TempDir
     Path tempDir
 
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path worktree
 
     /** The round journal the store hands the run; assignable, since setup() stubs the port once. */
@@ -49,14 +50,14 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
     TaskStoreGit store = Stub(TaskStoreGit)
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees')
-        worktree = worktreesRoot.resolve('PROJ-1')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), CLONE_DIR)
+        worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _, _) >> worktree
+        worktrees.ensureWorktree(_, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
-        store.taskRepository(_, _) >> lifecycleStore
+        store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
         store.readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
@@ -67,8 +68,8 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
     private TakeDispositionResume chain() {
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
         def runner = new TakeResumeRunner(
-                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, worktreesRoot))
-        def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
+                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone))
+        def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 

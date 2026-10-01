@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -45,7 +46,7 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
 
     Path cloneDir
     Path bareRepo
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -53,7 +54,7 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
         commit(cloneDir, '.gnomish/instructions.md', 'build it\n')
         bareRepo = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bareRepo.toString())
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -115,10 +116,10 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
         Path observedRemoteTip = tempDir.resolve('observed-remote-tip')
         Path committedTip = tempDir.resolve('committed-tip')
         def properties = testProperties(
-                agentCliBinary: gnomeScript(observedRemoteTip, committedTip).toString(), agentCliEnvPassthrough: [])
+                agentCliBinary: gnomeScript(observedRemoteTip, committedTip).toString())
         def output = new ByteArrayOutputStream()
         def runner = new GitModeRunner(
-                newAssembly(null, new PrintStream(output, true, 'UTF-8'), properties), taskGit(), worktreesRoot,
+                newAssembly(null, new PrintStream(output, true, 'UTF-8'), properties), taskGit(), registeredClone,
                 LiveConsoleIO.onStdout())
         def operatorPlane = LogCaptureSupport.attach(Logger.ROOT_LOGGER_NAME, Level.WARN)
 

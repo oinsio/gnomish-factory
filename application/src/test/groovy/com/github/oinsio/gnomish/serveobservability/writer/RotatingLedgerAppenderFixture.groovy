@@ -11,19 +11,19 @@ import java.time.ZoneOffset
 
 /**
  * Shared test fixture for the ledger-writer specs: builds a fixed-clock {@link
- * RotatingLedgerAppender} over a temp home directory and resolves the ledger file it will write
- * to for a given instant, so each writer spec only supplies its own instance name and writer
- * construction.
+ * RotatingLedgerAppender} over an instance's serve directory and resolves the ledger file it will
+ * write to for a given instant, so each writer spec only supplies its own serve directory and
+ * writer construction.
  */
 trait RotatingLedgerAppenderFixture {
 
-    RotatingLedgerAppender ledgerAppenderFor(Path homeDir, String instanceName, Instant now) {
+    RotatingLedgerAppender ledgerAppenderFor(Path serveDir, Instant now) {
         new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()),
-                homeDir, instanceName, Clock.fixed(now, ZoneOffset.UTC))
+                new LedgerAppender(serveDir.resolveSibling('placeholder'), new LedgerJsonMapper()),
+                serveDir, Clock.fixed(now, ZoneOffset.UTC))
     }
 
-    Path ledgerFileFor(Path homeDir, String instanceName, Instant now) {
-        ledgerFile(homeDir, instanceName, LocalDate.ofInstant(now, ZoneOffset.UTC))
+    Path ledgerFileFor(Path serveDir, Instant now) {
+        ledgerFile(serveDir, LocalDate.ofInstant(now, ZoneOffset.UTC))
     }
 }

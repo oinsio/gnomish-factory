@@ -12,15 +12,29 @@ adapter** (the pre-sandbox behavior, explicit opt-in). Sandbox setup is factory
 config only — no target-repo changes are needed to sandbox an existing
 pipeline (UX1).
 
+Every setting on this page lives in the factory home (see
+[`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project)).
+The ones that shape the sandbox — `factory.bindings.*`, `factory.sandbox.image`,
+`factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough` — are
+**sandbox-boundary keys**: they are read from the project's own
+`~/.gnomish/projects/<name>/project.yaml` and nowhere else. Set on the command
+line, in the host file or as a `FACTORY_*` environment variable, they stop
+startup with a line naming the project file to move them to, so a project's
+whole boundary is in one file you can review.
+
 ## Quick start (container mode)
 
-Container is the default binding. On a machine with Docker, three properties
-are enough:
+Container is the default binding. On a machine with Docker, two keys in the
+project file are enough:
 
-```properties
-# application.properties (or -D flags / environment) of the factory instance
-factory.sandbox.image=my-project-sandbox:1
-factory.sandbox.egress-allowlist=api.anthropic.com,repo.maven.apache.org
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml
+factory:
+  sandbox:
+    image: my-project-sandbox:1
+    egress-allowlist:
+      - api.anthropic.com
+      - repo.maven.apache.org
 ```
 
 Build the image from the reference recipe in
@@ -55,9 +69,13 @@ whose protection cannot be demonstrated.
 
 ## Binding stages
 
-```properties
-factory.bindings.default=container      # the default even when unset
-factory.bindings.stages.review=container # per-stage override, operator-only
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml
+factory:
+  bindings:
+    default: container    # the default even when unset
+    stages:
+      review: container   # per-stage override, operator-only
 ```
 
 A per-stage override may not mix modes today: every stage of one pipeline must
@@ -102,7 +120,7 @@ One consequence worth knowing: `container` is contributed by the Docker backend
 module. In a distribution built without it, the default binding is
 unsatisfiable, and startup says so — naming the bindings that *are* available
 and your two ways out (restore the module, or set
-`factory.bindings.default=host` deliberately). It never quietly falls back to
+`factory.bindings.default: host` in the project file deliberately). It never quietly falls back to
 host: silently weakening isolation is the one thing binding resolution will not
 do.
 
@@ -137,8 +155,13 @@ base set (host: `PATH`, `HOME`, `TMPDIR`, locale, `TERM`, `USER`, `SHELL`;
 container: empty — the image's own `ENV` supplies the runtime), plus the
 variables you pass through by exact name:
 
-```properties
-factory.sandbox.env-passthrough=JAVA_HOME,SSH_AUTH_SOCK
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml
+factory:
+  sandbox:
+    env-passthrough:
+      - JAVA_HOME
+      - SSH_AUTH_SOCK
 ```
 
 Values are read live from the factory's environment at exec time — the config
@@ -176,8 +199,12 @@ export CLAUDE_CODE_OAUTH_TOKEN=...   # from `claude setup-token`
 # export ANTHROPIC_API_KEY=...       # pay-as-you-go API key
 ```
 
-```properties
-factory.sandbox.egress-allowlist=api.anthropic.com
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml
+factory:
+  sandbox:
+    egress-allowlist:
+      - api.anthropic.com
 ```
 
 That is the whole setup. `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY`
@@ -216,8 +243,14 @@ done yet; treat a change to that file in a gnome's diff as a finding.
 The allowlist is default-deny and operator-owned; a repo may *ask* for
 entries in its docs, only you grant them:
 
-```properties
-factory.sandbox.egress-allowlist=api.anthropic.com,repo.maven.apache.org,registry.npmjs.org
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml — a list is replaced whole, never merged
+factory:
+  sandbox:
+    egress-allowlist:
+      - api.anthropic.com
+      - repo.maven.apache.org
+      - registry.npmjs.org
 ```
 
 Every denial is logged as structured metadata (host, path, method — never
@@ -266,17 +299,21 @@ allowlisted-pass probe skips when the list holds only wildcards.
 
 ## Resource limits
 
-```properties
-factory.sandbox.limits.cpus=2        # default 2
-factory.sandbox.limits.memory=2g     # default 2g
-factory.sandbox.limits.pids=512      # default 512
-factory.sandbox.limits.disk=10g      # default 10g (volume size, see below)
+```yaml
+# the host file ~/.gnomish/factory.yaml, or a project file to size one project
+factory:
+  sandbox:
+    limits:
+      cpus: 2        # default 2
+      memory: 2g     # default 2g
+      pids: 512      # default 512
+      disk: 10g      # default 10g (volume size, see below)
 ```
 
 A build that exceeds a limit dies inside the box and surfaces as an ordinary
 quality failure with attempt mechanics — tune limits up when legitimate builds
 hit them, not preemptively. The disk quota is opt-in
-(`factory.sandbox.enforce-disk-quota=true`): `--storage-opt size=` needs a
+(`factory.sandbox.enforce-disk-quota: true`, in the host file): `--storage-opt size=` needs a
 quota-capable storage driver (overlay2 on xfs with `pquota`) most dev daemons
 lack, so defaulting it on would fail every container start.
 
@@ -351,7 +388,7 @@ supported ladder (NG5):
 - **Step 1 — change D:** factory-run neighbor-service stacks from a filtered
   declaration (no privileged, no host mounts outside the workspace, no
   published ports).
-- `factory.sandbox.runtime=sysbox-runc` exists for Linux operators who accept
+- `factory.sandbox.runtime: sysbox-runc` (host file) exists for Linux operators who accept
   running nested-Docker runtimes themselves; the factory passes it through
   without endorsement.
 
@@ -409,12 +446,22 @@ lifetime.
   read-back format is comma- and equals-delimited, so any other character is
   rejected at startup rather than corrupting the label machinery.
 
-```properties
-factory.serve.sandbox-sweep-interval=5m     # default 5m — serve's tick cadence
-factory.sandbox.minimum-age=2m              # default 2m
-factory.sandbox.kept-reap-age=7d            # default 7d
-factory.sandbox.manual-running-stop-age=24h # default 24h
-factory.sandbox.project-id=my-project       # [A-Za-z0-9._-]+; default: derived (see above)
+```yaml
+# the host file ~/.gnomish/factory.yaml — the sweep ages are host-wide
+factory:
+  serve:
+    sandbox-sweep-interval: 5m     # default 5m — serve's tick cadence (any file)
+  sandbox:
+    minimum-age: 2m                # default 2m
+    kept-reap-age: 7d              # default 7d
+    manual-running-stop-age: 24h   # default 24h
+```
+
+```yaml
+# ~/.gnomish/projects/<name>/project.yaml — the scope override is per project
+factory:
+  sandbox:
+    project-id: my-project         # [A-Za-z0-9._-]+; default: derived (see above)
 ```
 
 **Which `origin` URLs count as the same project.** The derived identity is a

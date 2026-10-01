@@ -5,17 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
-import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -25,12 +15,12 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-
 /**
  * FR9, UX2 of add-tracker-port (task 5.9): {@link TakeDisposition#dispose} — the explicit-mode
  * {@code take <ref>} disposition matrix over the logical task-state dictionary. Each spec method
@@ -131,7 +121,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // deleted outside git no longer appears in `git worktree list` after the claim.
     def "Ready with no existing branch prunes stale worktree registrations before claiming"() {
         given: 'a worktree directory registered then deleted outside git, leaving a stale registration'
-        def staleWorktree = worktreesRoot.resolve('my-project').resolve('STALE-1')
+        def staleWorktree = registeredClone.worktrees().resolve('STALE-1')
         addWorktree(cloneDir, staleWorktree, 'stale-branch')
         staleWorktree.toFile().deleteDir()
         def before = gitOutput(cloneDir, 'worktree', 'list', '--porcelain')

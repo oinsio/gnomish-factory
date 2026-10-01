@@ -27,7 +27,8 @@ import spock.lang.TempDir
  * them from the instance, so each scenario proves the built collaborator carries the instance's
  * own equipment.
  *
- * Implements D7, FR1 of collapse-composition-roots.
+ * Implements D7, FR1 of collapse-composition-roots. FR10 of add-project-registry: the observability
+ * builder is where the registered clone and the configured instance name meet.
  */
 class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes {
 
@@ -42,7 +43,21 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     @TempDir
     Path homeDir
 
-    private final builders = new ServeAssembly(testProperties(instanceName: INSTANCE_NAME), SERVE_PROPERTIES, ENGINE_CLOCK)
+    private ServeAssembly builders
+
+    def setup() {
+        builders = assemblyFor('widgets', INSTANCE_NAME)
+    }
+
+    private ServeAssembly assemblyFor(String project, String instanceName) {
+        def clone = RegisteredCloneFixture.unregistered(homeDir, homeDir.resolve("clones/${project}"), project)
+        new ServeAssembly(testProperties(instanceName: instanceName), SERVE_PROPERTIES, ENGINE_CLOCK,
+        RegisteredCloneFixture.provider(clone))
+    }
+
+    private static SnapshotSources sourcesOver(SlotLedger slotLedger) {
+        new SnapshotSources(null, slotLedger, 1, null, null, null, null, null, null, null)
+    }
 
     // FR8, D12 of add-serve-observability: the decorator records health on the instance's engine clock.
     def "the tracker-health decorator stamps a success on the engine clock"() {
@@ -72,28 +87,55 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
         !gate.health().open()
     }
 
-    // FR9 of add-serve-observability: the ledger lands under the given home, named after the
-    // instance's own factory properties.
-    def "the observability wiring writes its ledger under the home, for the configured instance"() {
+    // FR9 of add-serve-observability; FR10 of add-project-registry: the ledger lands in the
+    // registered project's serve directory, named after the instance's own factory properties.
+    def "the observability wiring writes its ledger in the project's serve directory, for the configured instance"() {
         given:
         def clock = Clock.fixed(NOW, ZoneOffset.UTC)
         def slotLedger = new SlotLedger(1, ENGINE_CLOCK)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)
-        def sources = new SnapshotSources(null, slotLedger, 1, null, null, null, null, null, null, null)
+        def sources = sourcesOver(slotLedger)
 
         when:
-        def observability = builders.observability(INSTANCE, homeDir, new ForwardingDirtyNotifier(), clock, sources)
+        def observability = builders.observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sources)
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(
                         new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done'))
 
         then:
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(NOW, ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(
+                homeDir.resolve("projects/widgets/serve/${INSTANCE_NAME}"), LocalDate.ofInstant(NOW, ZoneOffset.UTC))
         // The append is synchronous (LedgerAppender writes, flushes and closes before returning).
         Files.exists(ledgerFile)
 
         cleanup:
         slotLedger.release(ref)
+    }
+
+    def "FR10 of add-project-registry: two projects with the default instance name write to separate serve directories"() {
+        given: 'daemons for projects widgets and gateway, both with the default instance name'
+        def clock = Clock.fixed(NOW, ZoneOffset.UTC)
+        def ref = new TaskRef('github:o/r#1')
+        def delivered = new TakeResult.Delivered(new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done')
+        def widgetsLedger = new SlotLedger(1, ENGINE_CLOCK)
+        def gatewayLedger = new SlotLedger(1, ENGINE_CLOCK)
+        [widgetsLedger, gatewayLedger].each { it.acquire(); it.assign(ref) }
+        def widgets = assemblyFor('widgets', null)
+                .observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sourcesOver(widgetsLedger))
+        def gateway = assemblyFor('gateway', null)
+                .observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sourcesOver(gatewayLedger))
+
+        when: 'each records one outcome'
+        widgets.taskOutcomeLedgerWriter().write(ref, delivered)
+        gateway.taskOutcomeLedgerWriter().write(ref, delivered)
+
+        then: 'each ledger holds exactly its own line, under its own project'
+        def today = LocalDate.ofInstant(NOW, ZoneOffset.UTC)
+        Files.readAllLines(ObservabilityPaths.ledgerFile(homeDir.resolve('projects/widgets/serve/default'), today)).size() == 1
+        Files.readAllLines(ObservabilityPaths.ledgerFile(homeDir.resolve('projects/gateway/serve/default'), today)).size() == 1
+
+        cleanup:
+        [widgetsLedger, gatewayLedger].each { it.release(ref) }
     }
 }

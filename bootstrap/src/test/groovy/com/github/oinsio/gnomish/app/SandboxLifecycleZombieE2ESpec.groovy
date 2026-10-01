@@ -169,7 +169,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         Thread.sleep(1500)
 
         and: 'the sweep evaluates the host with a liveness verdict that omits this task — the oracle already judged it unowned'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), Clock.systemUTC())
         def summary = pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the zombie box was stopped — not disposed — volume and network retained'

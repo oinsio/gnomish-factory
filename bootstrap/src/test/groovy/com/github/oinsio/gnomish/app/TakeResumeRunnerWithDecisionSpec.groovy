@@ -42,7 +42,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         when:
-        def decided = runner.appendDecision(cloneDir, bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
+        def decided = runner.appendDecision(bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
         runner.resumeDecided(
                 resumeOrder(pipeline(), taskId), bootstrap, decided, escalatedState.resetAttempts())
 
@@ -84,7 +84,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         def limitOnePipeline = new PipelineDefinition('1', new AutonomyLimits(1), [stage()])
 
         when:
-        def decided = runner.appendDecision(cloneDir, bootstrap, exhaustedState, exhaustedState.resetAttempts(), 'try again')
+        def decided = runner.appendDecision(bootstrap, exhaustedState, exhaustedState.resetAttempts(), 'try again')
         def result = runner.resumeDecided(
                 resumeOrder(limitOnePipeline, taskId), bootstrap, decided, exhaustedState.resetAttempts())
 
@@ -111,7 +111,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         when:
-        def decided = runner.appendDecision(cloneDir, bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
+        def decided = runner.appendDecision(bootstrap, escalatedState, escalatedState.resetAttempts(), 'go ahead')
         def result = runner.resumeDecided(
                 resumeOrder(pipeline(), taskId), bootstrap, decided, escalatedState.resetAttempts())
 

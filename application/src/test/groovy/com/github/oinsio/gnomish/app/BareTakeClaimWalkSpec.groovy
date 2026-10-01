@@ -101,7 +101,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     def "stops at the first candidate it wins and dispatches that one"() {
         given: 'the claim chain is stopped at its first git call, so the dispatch is observable'
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> {
+            taskRepository(_) >> {
                 throw new UsageException('dispatched')
             }
         }
@@ -133,7 +133,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     def "emits the claim anchor before dispatching the claimed task"() {
         given: 'the claim chain is stopped at its first git call, as above'
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> {
+            taskRepository(_) >> {
                 throw new UsageException('dispatched')
             }
         }
@@ -170,7 +170,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     def "falls through to the next candidate after losing a claim race"() {
         given:
         def store = Stub(TaskStoreGit) {
-            taskRepository(_, _) >> {
+            taskRepository(_) >> {
                 throw new UsageException('dispatched')
             }
         }

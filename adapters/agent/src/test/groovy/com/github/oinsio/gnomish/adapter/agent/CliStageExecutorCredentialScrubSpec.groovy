@@ -51,7 +51,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, [], null, null)
+        new FactoryProperties('factory-01', wrapper.absolutePath, null, null)
     }
 
     // Delegates to FakeAgentSupport#requestFor, the single owner of this fixture shape.

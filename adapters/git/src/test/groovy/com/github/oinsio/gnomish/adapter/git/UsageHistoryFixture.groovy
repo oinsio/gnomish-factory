@@ -5,10 +5,9 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import java.nio.file.Path
+
 import java.time.Duration
 import java.time.Instant
-
 /**
  * Shared fixture for {@code UsageHistoryWalker} specs (FR14, NFR-C1 of add-git-workflow): the
  * seeded-clone setup and round builder come from {@link SeededCloneFixture} (test-fixtures,
@@ -27,11 +26,7 @@ trait UsageHistoryFixture implements SeededCloneFixture {
     }
 
     GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-    }
-
-    Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
     }
 
     GitAttemptPersistence persistenceFor(String taskId) {

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -7,12 +8,12 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish board}'s command-line flags into a {@link BoardArguments} (task 3.2):
- * {@code --dir} (defaults to {@code .}, mirroring {@link ServeArgumentsParser}), {@code --json},
+ * {@code --dir} (the registered clone, defaulting to {@code .}), {@code --json},
  * and a positive-only {@code --limit} (defaults to 50, design D4 of add-board-command — the
  * {@code listReady} window size). Reuses {@link ArgumentsParsingSupport#singleValue} for the
  * shared single-valued-flag idiom.
  *
- * <p>Implements FR1 of add-board-command.
+ * <p>Implements FR1 of add-board-command; FR3 of add-project-registry.
  */
 final class BoardArgumentsParser {
 
@@ -27,12 +28,14 @@ final class BoardArgumentsParser {
 
     /**
      * @param args the raw application arguments, including the leading {@code board} token
+     * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
+     *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
      * @throws UsageException if {@code --limit} is given but is not a positive integer
      */
-    BoardArguments parse(ApplicationArguments args) {
+    BoardArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, BOARD_TOKEN, ACCEPTED, Map.of());
-        Path dir = ArgumentsParsingSupport.projectDir(args);
+        Path dir = clone.clonePath();
         boolean json = args.containsOption(JSON);
         int limit = parseLimit(args);
         return new BoardArguments(dir, json, limit);

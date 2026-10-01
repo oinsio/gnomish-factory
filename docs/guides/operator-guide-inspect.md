@@ -13,7 +13,10 @@ tracker) is covered in [`operator-guide.md`](operator-guide.md), and
 [`operator-guide-dashboard.md`](operator-guide-dashboard.md).
 
 Unlike `run`, `--dir=<path>` has **no default** for either subcommand — omitting
-it is a usage error (exit code 2).
+it is a usage error (exit code 2). The path must be a registered clone (see
+[`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project));
+a symlink to one resolves to it, and an unregistered path exits 2 with the
+`gnomish project add` line to paste.
 
 ## `gnomish status`
 
@@ -23,13 +26,13 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
 
 - **List mode** (`<task>` omitted): prints a table over all `gnomish/*` branches, local and remote-tracking alike, deduplicated per task (the local tip wins when both exist).
 
-  | Column   | Meaning                                                   |
-  |----------|-----------------------------------------------------------|
+  | Column   | Meaning                                                    |
+  |----------|------------------------------------------------------------|
   | task     | task id (the branch name for a branch with no readable id) |
   | shape    | the branch's classified shape (see below)                  |
   | stage    | current pipeline stage                                     |
   | attempts | attempts recorded so far                                   |
-  | outcome  | last recorded outcome, or the diagnosis of a bad branch     |
+  | outcome  | last recorded outcome, or the diagnosis of a bad branch    |
 
   Every `gnomish/*` branch produces exactly one row whatever state it is in — a
   delivered branch whose cleanup commit stripped `.gnomish-task/`, a freshly

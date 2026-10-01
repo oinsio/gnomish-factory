@@ -1,24 +1,37 @@
 package com.github.oinsio.gnomish
 
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
 import com.github.oinsio.gnomish.app.OrderedExit
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
+import java.nio.file.Path
+import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.Banner
 import org.springframework.boot.SpringApplication
+import org.springframework.boot.bootstrap.BootstrapRegistry
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent
 import org.springframework.boot.logging.LoggingSystem
 import org.springframework.context.ApplicationListener
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Configuration
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * {@link CommandExit}: the shared exit path {@code run} / {@code take} / {@code dashboard} return
  * through — Spring's own shutdown hook off, the application context closed, and only then the
  * logging system stopped so the asynchronous FILE appender flushes what the command wrote.
  *
- * <p>FR9, NFR-R1 of harden-logging-observability.
+ * <p>Every boot here runs the configuration loader, so it runs against a factory home of the
+ * spec's own (design D8 of add-project-registry).
+ *
+ * <p>FR9, NFR-R1 of harden-logging-observability; FR3, FR5 of add-project-registry.
  */
 class CommandExitSpec extends Specification {
+
+    @TempDir
+    Path tmp
+
+    OperatorHomeFixture operatorHome
 
     @Configuration
     static class EmptyContext {}
@@ -28,13 +41,37 @@ class CommandExitSpec extends Specification {
 
     def setup() {
         ShutdownPhase.reset()
+        operatorHome = OperatorHomeFixture.install(tmp.resolve('home'))
     }
 
     def cleanup() {
+        operatorHome.close()
         ShutdownPhase.reset()
         OrderedExit.install({}, {})
         hooks.clear()
         System.clearProperty(LoggingSystem.SYSTEM_PROPERTY)
+    }
+
+    // D9 of add-project-registry: the configuration loader reads the command line from the
+    // bootstrap context, where it is registered before Spring Boot builds its own
+    def "FR3: start registers the raw command line in the bootstrap registry"() {
+        given:
+        def application = application()
+        ApplicationArguments registered = null
+        application.addBootstrapRegistryInitializer({ BootstrapRegistry registry ->
+            registry.addCloseListener({ event ->
+                registered = event.bootstrapContext.get(ApplicationArguments)
+            })
+        })
+
+        when:
+        CommandExit.start(application, ['project', 'list'] as String[], {}, hooks.&add)
+
+        then:
+        registered.sourceArgs.toList() == ['project', 'list']
+
+        cleanup:
+        CommandExit.finish()
     }
 
     // Spring's hook closes the context on a thread of its own, concurrently with a serve drain that

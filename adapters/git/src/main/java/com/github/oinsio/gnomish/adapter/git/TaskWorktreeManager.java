@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -9,11 +11,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Creates, or reuses, the task worktree at the deterministic path {@code
- * <worktreesRoot>/<project-name>/<sanitized-taskId>/} (design D6): {@code project-name} is the
- * clone directory's own folder name (never read from a remote URL or git config), and {@code
- * sanitized-taskId} reuses {@link TaskIdSanitizer#sanitize} — the bare core string, without the
- * {@code gnomish/} branch prefix, so the directory and branch name spaces never collide.
+ * Creates, or reuses, the task worktree at the deterministic path {@link TaskWorktreePath} names —
+ * {@code <clone worktree folder>/<sanitized-taskId>/} (design D6): the folder is the registered
+ * clone's own {@link RegisteredClone#worktrees()}, named by the project registry rather than by the
+ * clone directory's folder name (FR9, NFR-R2 of add-project-registry), and {@code sanitized-taskId}
+ * reuses {@link TaskIdSanitizer#sanitize} — the bare core string, without the {@code gnomish/}
+ * branch prefix, so the directory and branch name spaces never collide.
  *
  * <p>{@link #ensureWorktree} serves both first-creation (right after {@link
  * TaskBranchCreator#createBranch}) and resume-without-local-worktree (FR8) through the same code
@@ -22,36 +25,28 @@ import java.nio.file.Path;
  * clone's own checked-out branch, HEAD, and working tree are untouched — {@code git worktree add}
  * only registers a new worktree and creates its directory.
  *
- * <p>The worktrees root is an injected {@link Path} rather than hardcoded to {@code
- * System.getProperty("user.home")}: production wiring passes the real home directory, tests pass
- * a temp directory, so specs never write into a developer's or CI machine's actual home.
- *
- * <p>Implements FR6, FR8 of add-git-workflow (design D6).
+ * <p>Implements FR6, FR8 of add-git-workflow (design D6); FR9, NFR-R2 of add-project-registry.
  */
 @UntrustedParser
 public final class TaskWorktreeManager {
 
     private final GitProcessRunner runner;
-    private final Path worktreesRoot;
+    private final RegisteredClone clone;
 
     /**
      * @param runner the git subprocess runner
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created, e.g. {@code Path.of(System.getProperty("user.home"),
-     *     ".gnomish", "worktrees")} in production, or a temp directory in tests
+     * @param clone the registered clone that owns the repository — {@code git worktree add} runs in
+     *     its path — and whose worktree folder the task worktrees are created in
      */
-    public TaskWorktreeManager(GitProcessRunner runner, Path worktreesRoot) {
+    public TaskWorktreeManager(GitProcessRunner runner, RegisteredClone clone) {
         this.runner = runner;
-        this.worktreesRoot = worktreesRoot;
+        this.clone = clone;
     }
 
     /**
      * Returns the deterministic worktree path for {@code taskId}, creating it via {@code git
      * worktree add} if it does not already exist there, or reusing it as-is if it does.
      *
-     * @param cloneDir the working directory of an existing git clone that owns the repository;
-     *     {@code git worktree add} runs here, since a worktree add must run inside a directory
-     *     that belongs to the target repository
      * @param taskId the tracker's original taskId; sanitized via {@link TaskIdSanitizer#sanitize}
      *     for the directory name
      * @param branchName the task branch to check out into the worktree, e.g. from {@link
@@ -62,10 +57,9 @@ public final class TaskWorktreeManager {
      * @throws WorktreeCreationFailedException if the worktree does not already exist and {@code
      *     git worktree add} fails
      */
-    public Path ensureWorktree(Path cloneDir, String taskId, String branchName) {
-        String projectName = cloneDir.toAbsolutePath().normalize().getFileName().toString();
-        String taskDir = TaskIdSanitizer.sanitize(taskId);
-        Path worktreePath = worktreesRoot.resolve(projectName).resolve(taskDir);
+    public Path ensureWorktree(String taskId, String branchName) {
+        Path cloneDir = clone.clonePath();
+        Path worktreePath = TaskWorktreePath.resolve(clone, taskId);
 
         if (isRegisteredWorktree(cloneDir, worktreePath)) {
             return worktreePath;

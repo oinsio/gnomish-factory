@@ -17,7 +17,8 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
  * reference back to its owner (D2 of introduce-slot-wiring).
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle;
- * FR6, NFR-O1 of harden-task-branch-contract; FR5 of introduce-slot-wiring.
+ * FR6, NFR-O1 of harden-task-branch-contract; FR5 of introduce-slot-wiring; FR9 of
+ * add-project-registry.
  */
 final class TakeWorkRouter {
 
@@ -90,7 +91,7 @@ final class TakeWorkRouter {
         ResumeMechanics<? extends ResumedBranch> mechanics =
                 switch (plan.mode()) {
                     case HOST ->
-                        new HostResumeMechanics(resumeRunner, wiring.git(), wiring.worktreesRoot(), definition);
+                        new HostResumeMechanics(resumeRunner, wiring.git(), wiring.registeredClone(), definition);
                     case CONTAINER -> new ContainerResumeMechanics(containerResumeRunner, plan.segments(), definition);
                 };
         return routingTable(mechanics, wiring.git()).resumeExisting(order, shape);
@@ -108,6 +109,7 @@ final class TakeWorkRouter {
                 containerTakeSupport.bindingProperties(),
                 containerTakeSupport.sandboxProperties(),
                 containerTakeSupport.bindingRegistry(),
-                containerTakeSupport.dockerProbe());
+                containerTakeSupport.dockerProbe(),
+                wiring.registeredClone());
     }
 }

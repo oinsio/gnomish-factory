@@ -18,7 +18,7 @@ import spock.lang.TempDir
 class CliEntrypointContractSpec extends Specification implements AppAssemblyFixture {
 
     @TempDir
-    Path worktreesRoot
+    Path clonePath
 
     @TempDir
     Path homeDir
@@ -27,7 +27,7 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
     def "FR8: the entrypoint rejects an unknown option of #subcommand, naming it and the subcommand"() {
         given:
         String token = subcommand.name().toLowerCase(Locale.ROOT)
-        def runner = newManualRunRunner(worktreesRoot, homeDir)
+        def runner = newManualRunRunner(clonePath, homeDir)
 
         when:
         runner.run(new DefaultApplicationArguments(token, '--no-such-option=1'))
@@ -43,7 +43,7 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
     // FR8 of fix-operator-blockers, FR12 of add-manual-run: the empty command line reaches no parser
     def "FR8: an empty command line is a no-op that prints nothing"() {
         given:
-        def runner = newManualRunRunner(worktreesRoot, homeDir)
+        def runner = newManualRunRunner(clonePath, homeDir)
         def originalOut = System.out
         def originalErr = System.err
         def out = new ByteArrayOutputStream()

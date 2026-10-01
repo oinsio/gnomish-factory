@@ -208,7 +208,7 @@ Interactive and real adapters SHALL pass the same port-level contract suites the
 - **THEN** every suite scenario passes without modification
 
 ### Requirement: Instance-local logging
-Logging SHALL go to a single rolling file under `~/.gnomish/logs/` (daily/size roll, bounded history and total size) with `taskId`, `stage`, `attempt` MDC on every line — `taskId` set by the runner, `stage`/`attempt` maintained by an event-listener adapter on the engine thread. The console appender SHALL pass WARN and above only, with ERROR duplicated to stderr; engine events SHALL be logged as structured INFO lines. Logs SHALL never be committed to git.
+Logging SHALL go to a single rolling file (daily/size roll, bounded history and total size) — `GNOMISH_HOME/projects/<name>/logs/<instance>.log` for a command resolved to a registered project, `GNOMISH_HOME/logs/factory.log` for a command that runs with no project — with `taskId`, `stage`, `attempt` MDC on every line — `taskId` set by the runner, `stage`/`attempt` maintained by an event-listener adapter on the engine thread. The file location SHALL be decided by the same owner that computes every other operator path; no separate log-directory variable exists. The console appender SHALL pass WARN and above only, with ERROR duplicated to stderr; engine events SHALL be logged as structured INFO lines. Logs SHALL never be committed to git.
 
 A manual run SHALL end with the canonical per-task summary line — outcome,
 stage, attempts used, wall time, token usage by model — assembled from the
@@ -218,6 +218,7 @@ mode: the summary and the engine-event INFO lines together SHALL let the
 operator see where a run stalled without raising verbosity.
 <!-- implements NFR-O1, NFR-O2, NFR-S2 of add-manual-run -->
 <!-- implements FR3 of harden-logging-observability -->
+<!-- implements FR11, UX3 of add-project-registry -->
 
 #### Scenario: Quiet dialog
 - **WHEN** a stage executes and verifies successfully
@@ -227,6 +228,10 @@ operator see where a run stalled without raising verbosity.
 - **WHEN** a manual run reaches any terminal outcome
 - **THEN** the log's last line for that task is the canonical summary carrying
   outcome, stage, attempts, wall time, and token usage
+
+#### Scenario: Two projects keep separate logs
+- **WHEN** `take` runs for project `widgets` while `serve` runs for project `gateway` on one host
+- **THEN** their lines land in `~/.gnomish/projects/widgets/logs/default.log` and `~/.gnomish/projects/gateway/logs/default.log` respectively — each path the operator uses daily fits on one line
 
 ### Requirement: English dialog with forgiving input
 All prompts, renders, and summaries SHALL be English; unrecognized input SHALL re-prompt listing the accepted answers; Ctrl-D SHALL always exit cleanly — farewell line, correct exit code, no stack trace.

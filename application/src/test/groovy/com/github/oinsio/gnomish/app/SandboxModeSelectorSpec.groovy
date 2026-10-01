@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -11,6 +12,7 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.HostBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import java.nio.file.Path
 import java.util.function.BooleanSupplier
 import spock.lang.Specification
 
@@ -19,8 +21,16 @@ import spock.lang.Specification
  * run-shape selector — host only when the operator names it, fail-closed
  * refusals for unmet needs, mixed bindings, and missing container
  * prerequisites, each with one clear error naming the way out.
+ *
+ * <p>FR6, NFR-S1 of add-project-registry: the way out is a line in the run's own project file,
+ * named by its path — the bindings and the image are read from nowhere else.
  */
 class SandboxModeSelectorSpec extends Specification implements SandboxBindingFixtures {
+
+    private static final RegisteredClone CLONE =
+    RegisteredCloneFixture.unregistered(Path.of('/srv/gnomish'), Path.of('/src/widgets'))
+
+    private static final Path PROJECT_FILE = CLONE.layout().config()
 
     private static StageDefinition stage(String name, Sandbox sandbox = Sandbox.none()) {
         new StageDefinition(
@@ -59,7 +69,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         when:
         def plan = SandboxModeSelector.plan(
                 pipeline(stage('a'), stage('b')), new BindingProperties('host', [:]), sandbox(null),
-                registry(), { false } as BooleanSupplier)
+                registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         plan.mode() == SandboxModeSelector.Plan.Mode.HOST
@@ -69,12 +79,12 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     def "D13: the container default without an image refuses naming both ways out, never silent host"() {
         when:
         SandboxModeSelector.plan(pipeline(stage('a')), new BindingProperties(null, [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier)
+        registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
-        e.message.contains('factory.sandbox.image')
-        e.message.contains('factory.bindings.default=host')
+        e.message.contains("set the sandbox image in ${PROJECT_FILE}")
+        e.message.contains("factory.bindings.default: host in ${PROJECT_FILE}")
     }
 
     def "FR14/UX2: an unmet stage need refuses fail-closed naming the stage and the need"() {
@@ -83,12 +93,13 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
 
         when:
         SandboxModeSelector.plan(pipeline(needy), new BindingProperties('host', [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier)
+        registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
         e.message.contains('"a"')
         e.message.contains('egress-control')
+        e.message.contains("factory.bindings.* in ${PROJECT_FILE}")
     }
 
     def "mixed host and container bindings within one pipeline are refused honestly"() {
@@ -97,21 +108,23 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
                 pipeline(stage('a'), stage('b')),
                 new BindingProperties('host', [b: 'container']),
                 sandbox('img:1'),
-                registry(), { false } as BooleanSupplier)
+                registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
         e.message.contains('mixed host/container')
+        e.message.contains("factory.bindings.* in ${PROJECT_FILE}")
     }
 
-    def "an unknown binding name is a usage error naming the configuration"() {
+    def "an unknown binding name is a usage error naming the configuration and its file"() {
         when:
         SandboxModeSelector.plan(pipeline(stage('a')), new BindingProperties('vm', [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier)
+        registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
-        e.message.contains('factory.bindings')
+        e.message.contains("invalid factory.bindings configuration in ${PROJECT_FILE}")
+        e.message.contains("in the project file's factory.bindings.*")
     }
 
     // G2, D13: with both prerequisites met (image + reachable runtime, scripted probe) the default
@@ -122,7 +135,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
                 pipeline(stage('a'), stage('b')),
                 new BindingProperties(null, [:]),
                 sandbox('img:1'),
-                registry(), { true } as BooleanSupplier)
+                registry(), { true } as BooleanSupplier, CLONE)
 
         then:
         plan.mode() == SandboxModeSelector.Plan.Mode.CONTAINER
@@ -134,7 +147,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         when:
         SandboxModeSelector.plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('   '),
-                registry(), { true } as BooleanSupplier)
+                registry(), { true } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
@@ -146,12 +159,12 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         when:
         SandboxModeSelector.plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('img:1'),
-                registry(), { false } as BooleanSupplier)
+                registry(), { false } as BooleanSupplier, CLONE)
 
         then:
         def e = thrown(UsageException)
         e.message.contains('Docker runtime is unreachable')
-        e.message.contains('factory.bindings.default=host')
+        e.message.contains("factory.bindings.default: host in ${PROJECT_FILE}")
     }
 
     // FR6 of open-adapter-binding-registry: reconciliation is unchanged by the registry — the
@@ -164,7 +177,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         when: 'the default (container) bindings are planned'
         SandboxModeSelector.plan(
                 pipeline(needy), new BindingProperties(null, [:]), sandbox('img:1'),
-                registry(), { true } as BooleanSupplier)
+                registry(), { true } as BooleanSupplier, CLONE)
 
         then: 'the refusal names the stage, the bound adapter and the unmet need — before any stage runs'
         def e = thrown(UsageException)
@@ -180,13 +193,14 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         when: 'a registry without the container binding is planned against'
         SandboxModeSelector.plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('img:1'),
-                hostOnlyRegistry(), { true } as BooleanSupplier)
+                hostOnlyRegistry(), { true } as BooleanSupplier, CLONE)
 
         then: 'the refusal names the missing default, what was discovered, and the explicit opt-out'
         def e = thrown(UsageException)
         e.message.contains('factory.bindings')
         e.message.contains('container')
         e.message.contains('[host]')
-        e.message.contains('factory.bindings.default=host')
+        e.message.contains("invalid factory.bindings configuration in ${PROJECT_FILE}")
+        e.message.contains('factory.bindings.default: host in the project file')
     }
 }

@@ -151,8 +151,11 @@ public final class ProcessSupervisor {
         // tell apart from taking it. Re-snapshot while the root still lives: a child forked between
         // the snapshot above and the signal is reachable only here.
         List<ProcessHandle> forked = root.descendants().toList();
-        forked.forEach(ProcessHandle::destroyForcibly);
+        // The primaries are forced before the tree below them: a parent that outlives its children
+        // even briefly sees them exit and runs on — it can fork a replacement no snapshot holds, or
+        // finish on its own and report an exit code of its choosing instead of the forced one.
         primary.forEach(ProcessHandle::destroyForcibly);
+        forked.forEach(ProcessHandle::destroyForcibly);
         // Descendants that ignored the cooperative signal — including any orphaned by a parent that
         // took it — are forced from the original snapshot, which survives the parent's death.
         tree.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);

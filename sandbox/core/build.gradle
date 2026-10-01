@@ -48,6 +48,13 @@ dependencies {
     // `:bootstrap`'s concern (design D3).
     implementation libs.spring.boot.asProvider()
 
+    // The operator-configuration level leaf (FR6, design D4 of add-project-registry): every
+    // component of the three configuration records declares its key's level with
+    // `@ConfigLevel`. JDK-only, so the port layer stays free of anything new. `api`, not
+    // `implementation`: the annotation is runtime-retained on the records' public components, so
+    // every module compiling against them needs its class, or javac reports its constants unknown.
+    api project(':operatorconfig')
+
     // No `:test-fixtures` edge (unlike `:domain` / `:gitobjects`): the port
     // layer's specs construct their subjects directly and need no shared fake,
     // and the dependency-analysis gate fails an unused declaration.
@@ -59,6 +66,9 @@ dependencies {
 layering {
     allowedProjects = [
         ':domain',
+        // The operator-configuration level leaf (design D4 of add-project-registry): declared
+        // directly above — the configuration records carry `@ConfigLevel`.
+        ':operatorconfig',
         // The operator-event catalog leaf (FR11, design D9 of split-logtext-leaves): transitive
         // via `:domain`, whose engine emitters take their `[GFnnn]` head from it. No production
         // source in this module names it; the layering gate walks the transitive graph, so the
@@ -69,4 +79,17 @@ layering {
         // carrier, so this module's own signatures name it.
         ':untrustedtext',
     ]
+}
+
+// `:operatorconfig` is exported as `api` although DAGP advises `implementation`: its ABI reading
+// does not count a runtime-retained annotation on a public record component as surface, while
+// javac does — a module compiling against these records without the leaf reports each
+// `@ConfigLevel(Level.X)` as an "unknown enum constant" (design D4 of add-project-registry).
+// Excluded for that one edge only; every other configuration advice here still fails the build.
+dependencyAnalysis {
+    issues {
+        onIncorrectConfiguration {
+            exclude(':operatorconfig')
+        }
+    }
 }

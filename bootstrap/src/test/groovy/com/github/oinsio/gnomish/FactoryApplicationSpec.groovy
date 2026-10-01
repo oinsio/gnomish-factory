@@ -1,15 +1,17 @@
 package com.github.oinsio.gnomish
 
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import java.nio.file.Path
 import java.util.zip.ZipFile
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.ApplicationContext
+import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * FactoryApplication bootstrap at context level (design D10): the real Spring
- * context boots with {@code application.yaml}, the typed properties bean is
+ * context boots, the typed properties bean is
  * populated, and the runtime is a headless outbound-only worker. FR2's
  * headless guarantee is proven at the strongest layer available to a unit
  * gate: with spring-boot-starter only, the classpath is the headless set, so
@@ -22,15 +24,36 @@ import spock.lang.Specification
  * is the witness that the collapsed composition roots still assemble a context that boots the same
  * commands; the rest of the suite passing unedited carries the behavior-preservation half. The
  * bean inventory itself (NFR-R2) is pinned by {@code ApplicationBeanInventorySpec}.
+ *
+ * <p>Design D8 of add-project-registry: the context boots through {@link FactoryBoot} — the
+ * {@code CommandExit} argument registration the configuration loader reads — against a factory
+ * home of the spec's own.
  */
-@SpringBootTest(classes = FactoryApplication)
 class FactoryApplicationSpec extends Specification {
 
-    @Autowired
-    ApplicationContext context
+    @Shared
+    @TempDir
+    Path tmp
 
-    @Autowired
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
+
+    @Shared
     FactoryProperties factoryProperties
+
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(tmp.resolve('home'))
+        context = FactoryBoot.boot()
+        factoryProperties = context.getBean(FactoryProperties)
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // FR2: clean boot — the Spring context initializes without errors
     def "spring context boots without errors"() {
@@ -38,10 +61,11 @@ class FactoryApplicationSpec extends Specification {
         context != null
     }
 
-    // FR3: valid configuration binds — the bean carries the application.yaml value
-    def "factory properties bean is populated from application.yaml"() {
-        expect: 'the instance name equals the value declared in application.yaml'
-        factoryProperties.instanceName() == 'gnomish-factory'
+    // FR3: valid configuration binds; FR6 (design D5) of add-project-registry: the built-in default
+    // lives on the record, not in a bundled application.yaml
+    def "factory properties bean is populated with the record's built-in defaults"() {
+        expect: 'the instance name is the record default, with no bundled factory block behind it'
+        factoryProperties.instanceName() == 'default'
     }
 
     // FR2: headless runtime — the booted context is a plain annotation-config context

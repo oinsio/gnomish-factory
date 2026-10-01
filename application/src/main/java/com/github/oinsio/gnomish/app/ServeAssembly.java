@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.ObservedSandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
@@ -31,13 +32,13 @@ import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Random;
 import java.util.function.Consumer;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * The leaf builders {@link ServeRuntimeAssembly} composes into the {@code serve} daemon runtime,
@@ -46,24 +47,33 @@ import java.util.function.Consumer;
  * (design D7 of collapse-composition-roots, Fowler's <em>Combine Functions into Class</em>). Each
  * builder takes only its per-call job, and a builder fed from the {@link BoundTracker} takes
  * exactly the members it uses. Split from {@link ServeRuntimeAssembly} so the specs can drive each
- * builder in isolation.
+ * builder in isolation. The registered clone and the configured instance name meet here: the
+ * observability builder computes the serve directory from the two (D1 of add-project-registry), and
+ * the janitor sweeps the clone's own worktree folder (D2 of add-project-registry).
  *
- * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve; D7 of collapse-composition-roots.
+ * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve; D7 of collapse-composition-roots; FR9,
+ * FR10, NFR-R2 of add-project-registry.
  */
 final class ServeAssembly {
 
     private final FactoryProperties factoryProperties;
     private final ServeProperties serveProperties;
     private final com.github.oinsio.gnomish.domain.engine.port.Clock feedClock;
+    private final ObjectProvider<RegisteredClone> resolvedClone;
 
-    /** The engine clock is the one the feed, the slot ledger and the tracker-health decorator read. */
+    /**
+     * The engine clock is the one the feed, the slot ledger and the tracker-health decorator read;
+     * the clone (D9 of add-project-registry) is read lazily: its bean exists once a project resolved.
+     */
     ServeAssembly(
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock) {
+            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
+            ObjectProvider<RegisteredClone> resolvedClone) {
         this.factoryProperties = factoryProperties;
         this.serveProperties = serveProperties;
         this.feedClock = feedClock;
+        this.resolvedClone = resolvedClone;
     }
 
     /** FR8, D12 of add-serve-observability: the health decorator every downstream caller shares. */
@@ -92,32 +102,14 @@ final class ServeAssembly {
                 ledgerSink);
     }
 
-    /** FR1, FR4, FR7, FR9, FR12 of add-serve-observability: the snapshot writer and ledger. */
-    ObservabilityWiring observability(
-            InstanceId instanceId,
-            Path homeDir,
-            ForwardingDirtyNotifier dirtyNotifier,
-            Clock clock,
-            SnapshotSources sources) {
-        return ObservabilityAssembly.assemble(
-                factoryProperties, serveProperties, instanceId, homeDir, dirtyNotifier, clock, sources);
-    }
-
     /**
-     * FR13: the one slot runner every slot shares, over the daemon's one {@code wiring} — so the
-     * heartbeat's {@code ClaimBeat}/{@code ClaimLossFlag} in its tenure are shared by every slot.
+     * FR1, FR4, FR7, FR9, FR12 of add-serve-observability: the snapshot writer and ledger, in the
+     * registered project's {@code serve/<instance>} directory (FR10 of add-project-registry).
      */
-    static TakeSlotRunner slotRunner(
-            ServeArguments serveArguments,
-            PipelineDefinition definition,
-            Tracker tracker,
-            InstanceId instanceId,
-            SlotWiring wiring) {
-        // The serve arguments become the slots' run order here and nowhere else (D1 of
-        // introduce-take-order): serve is unconditionally non-interactive (FR4 of
-        // add-factory-serve), takes no --base, and always salvages.
-        var run = new RunOrder(serveArguments.dir(), null, definition, RunArguments.InteractiveMode.NONE, false);
-        return new TakeSlotRunner(wiring, run, tracker, instanceId);
+    ObservabilityWiring observability(
+            InstanceId instanceId, ForwardingDirtyNotifier dirtyNotifier, Clock clock, SnapshotSources sources) {
+        Path serveDir = resolvedClone.getObject().layout().serveDir(factoryProperties.instanceName());
+        return ObservabilityAssembly.assemble(serveProperties, instanceId, serveDir, dirtyNotifier, clock, sources);
     }
 
     FeedAutomaton feedAutomaton(
@@ -154,19 +146,17 @@ final class ServeAssembly {
     }
 
     /**
-     * FR14, D10: the worktree janitor, disposing through the task-git port's own bound disposer
-     * (task 4.4 of split-into-modules — it used to build the git-subprocess one here). Held tasks
-     * are read fresh from {@code slotLedger} every tick, so a task claimed after the janitor starts
-     * is still protected.
+     * FR14, D10: the worktree janitor over the registered clone's own worktree folder (FR9, NFR-R2
+     * of add-project-registry), disposing through the task-git port's own bound disposer (task 4.4
+     * of split-into-modules). Held tasks are read fresh from {@code slotLedger} every tick, so a
+     * task claimed after the janitor starts is still protected.
      */
-    WorktreeJanitor worktreeJanitor(
-            ServeArguments serveArguments, Path worktreesRoot, SlotLedger slotLedger, TaskGit git) {
-        var disposal = git.worktrees().environmentDisposal(serveArguments.dir(), worktreesRoot);
+    WorktreeJanitor worktreeJanitor(SlotLedger slotLedger, TaskGit git) {
+        RegisteredClone clone = resolvedClone.getObject();
         return new WorktreeJanitor(
-                worktreesRoot,
-                serveArguments.dir(),
+                clone,
                 serveProperties.worktreeAgeThreshold(),
-                disposal,
+                git.worktrees().environmentDisposal(clone),
                 new SystemClock(),
                 new ThreadSleeper(),
                 slotLedger::occupiedRefs);

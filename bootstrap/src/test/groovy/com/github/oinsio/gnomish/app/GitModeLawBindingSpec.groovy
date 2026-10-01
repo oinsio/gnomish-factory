@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -23,7 +24,7 @@ import spock.lang.TempDir
  * test SHALL enforce the source in git modes". Unlike {@code PipelineLawReaderSpec}, which is
  * mode-agnostic (one directory, an in-place edit of the same file it froze), this drives a real
  * {@link GitModeRunner} where the law source (the factory clone's working tree, {@code cloneDir})
- * and the gnome's working copy (the task {@code worktree} under {@code worktreesRoot}) are two
+ * and the gnome's working copy (the task {@code worktree} under {@code registeredClone}) are two
  * physically distinct directories — exactly the git-mode split {@link ManualRunAssembly#assemble}
  * wires by passing {@code cloneDir} as the law source while rooting the workspace at the worktree.
  *
@@ -47,13 +48,13 @@ class GitModeLawBindingSpec extends Specification implements BareGitRepoFixture,
     private static final String TAMPERED_MARKER = 'TAMPERED LAW'
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'law-binding-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         commit(cloneDir, '.gnomish/instructions.md', ORIGINAL_LAW + '\n')
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     /** A fake-agent wrapper pinned to a scenario, with per-invocation stdin (the round prompt) captured. */
@@ -67,7 +68,7 @@ exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
+        testProperties(agentCliBinary: wrapper.absolutePath)
     }
 
     private static StageDefinition stage() {
@@ -96,7 +97,7 @@ exec sh '${scriptPath}' "\$@"
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out,
                 fakeAgentProperties('law-tamper-then-plain', captureFile.absolutePath)),
                 TaskGitFixture.real(),
-                worktreesRoot,
+                registeredClone,
                 LiveConsoleIO.onStdout())
         def context = new TaskContext('LAW-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 

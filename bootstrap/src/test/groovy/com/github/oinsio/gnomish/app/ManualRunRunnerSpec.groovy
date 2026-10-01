@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -23,6 +24,7 @@ import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.util.function.UnaryOperator
+import org.slf4j.MDC
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -45,16 +47,18 @@ class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, M
     Path projectRoot
 
     @TempDir
-    Path worktreesRoot
-
-    @TempDir
     Path homeDir
 
     // FR1, FR2, UX3 of refactor-app-spec-fixtures: delegates to the shared 21-collaborator
     // factory on AppAssemblyFixture (also used by ManualRunRunnerContainerOwnershipSpec),
     // taking every default so this reads exactly like the pre-extraction host git-mode wiring.
     private ManualRunRunner newRunner() {
-        newManualRunRunner(worktreesRoot, homeDir)
+        newManualRunRunner(projectRoot, homeDir)
+    }
+
+    /** The clone the runner works in, as the fixture registers it for {@code --dir=projectRoot}. */
+    private RegisteredClone registeredClone() {
+        RegisteredCloneFixture.resolvedOrRegistered(homeDir.resolve('.gnomish'), projectRoot)
     }
 
     // D10: the starting stage's own attemptLimit (7), not the pipeline default (3)
@@ -185,6 +189,22 @@ autonomy:
         captured.toString('UTF-8').isEmpty()
     }
 
+    // FR8 of harden-logging-observability: a run that ends without TaskFinished leaves no attempt
+    // scope behind on the runner thread
+    def "run() clears the attempt scope on the way out, even on a failure"() {
+        given:
+        MDC.put('stage', 'plan')
+        MDC.put('attempt', '2')
+
+        when:
+        newRunner().run(new DefaultApplicationArguments('frobnicate'))
+
+        then:
+        thrown(UsageException)
+        MDC.get('stage') == null
+        MDC.get('attempt') == null
+    }
+
     // FR13, FR14: an unrecognized subcommand is a usage error (exit code 2 family)
     def "run() throws UsageException for an unrecognized subcommand"() {
         given:
@@ -221,7 +241,8 @@ autonomy:
         given: '--dir pointing at a plain file, not a directory, so DirectoryWorkspace throws'
         def notADirectory = projectRoot.resolve('not-a-directory.txt')
         Files.writeString(notADirectory, 'x')
-        def runner = newRunner()
+        // FR3 of add-project-registry: the directory a run works in is the clone the loader resolved
+        def runner = newManualRunRunner(notADirectory, homeDir)
         def args = new DefaultApplicationArguments(
                 "--dir=${notADirectory}".toString(),
                 '--task=fix the thing',
@@ -411,7 +432,7 @@ advancement: auto
         def source = Stub(RoundEnvironmentSource)
 
         when: 'the runner is built over that bundle'
-        def runner = newManualRunRunner(worktreesRoot, homeDir,
+        def runner = newManualRunRunner(projectRoot, homeDir,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), git)
 
@@ -452,7 +473,7 @@ advancement: auto
         branchLine != null
         branchLine.contains('gnomish/manual-test-git')
         worktreeLine != null
-        worktreeLine.contains(worktreesRoot.toString())
+        worktreeLine.contains(registeredClone().worktrees().toString())
         output.indexOf(branchLine) <output.indexOf('do the thing')
         !output.contains('in-place mode')
 
@@ -516,7 +537,7 @@ advancement: auto
 
         then:
         noExceptionThrown()
-        def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-git-complete')
+        def worktree = registeredClone().worktrees().resolve('manual-test-git-complete')
         !Files.exists(worktree)
 
         and: 'the branch still exists in the clone, with completed task.json reachable in history'
@@ -569,10 +590,10 @@ advancement: auto
     /** Bootstraps a real git task branch directly (no full fresh run), as a crashed run would leave it. */
     private void bootstrapGitTask(String taskId) {
         def gitRunner = new GitProcessRunner()
-        def repository = new GitTaskRepository(gitRunner, projectRoot, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(gitRunner, registeredClone(), ClaimEpochSource.NONE)
         def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         repository.createTask(context, TaskStart.commit(projectRoot, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve(taskId)
+        def worktree = registeredClone().worktrees().resolve(taskId)
         def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def state = TaskState.atStageStart('build')
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
@@ -616,7 +637,7 @@ advancement: auto
 
         and: 'the task reached completion, and the worktree was cleaned up'
         gitExitCode(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-resume') == 0
-        def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-resume')
+        def worktree = registeredClone().worktrees().resolve('manual-test-resume')
         !Files.exists(worktree)
     }
 
@@ -628,7 +649,7 @@ advancement: auto
         makeProjectRootAGitClone(projectRoot)
         writeOneStagePipeline(projectRoot)
         bootstrapGitTask('manual-test-badversion')
-        def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-badversion')
+        def worktree = registeredClone().worktrees().resolve('manual-test-badversion')
         def taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
         def rewritten = Files.readString(taskJson).replaceFirst(/"version"\s*:\s*1/, '"version":2')
         Files.writeString(taskJson, rewritten)

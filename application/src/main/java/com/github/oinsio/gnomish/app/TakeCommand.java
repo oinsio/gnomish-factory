@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.status.MdcEventListener;
 import java.io.IOException;
-import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -35,7 +34,7 @@ import org.springframework.boot.ApplicationArguments;
  * around dispatch, so it runs for the whole invocation regardless of how it ends (fix-reaper-idle-
  * liveness FR1, FR5).
  *
- * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port.
+ * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port; FR3, FR10 of add-project-registry.
  */
 final class TakeCommand {
 
@@ -45,7 +44,7 @@ final class TakeCommand {
     private final SlotWiringFactory slotWiringFactory;
     private final TaskGit git;
     private final FactoryProperties factoryProperties;
-    private final Clock clock;
+    private final ProjectScope scope;
     private final TrackerWiring trackerWiring;
     private final TakeCommandSeams seams;
     private final SandboxLifecyclePass sandboxLifecyclePass;
@@ -58,16 +57,18 @@ final class TakeCommand {
      *     bound — the equipment {@code take} shares with {@code serve} (design D9 of
      *     collapse-composition-roots)
      * @param git the task-branch git port shared with the manual-run path; never null
-     * @param factoryProperties supplies the instance-name half of the minted {@link InstanceId} and
-     *     the abort-backoff base/cap defaults (design D5, D6, D10); never null
-     * @param clock supplies "now" for bare-mode backoff and takeover; never null
+     * @param factoryProperties supplies the abort-backoff base/cap defaults (design D5, D6, D10);
+     *     never null
+     * @param scope the registered clone {@code --dir} names — the directory the invocation works in
+     *     — and the minted {@link InstanceId}, which names the project (FR3, FR10 of
+     *     add-project-registry); never null
      * @param trackerWiring the one owner of the adapter registry, the credential seam and the
      *     definition source (design D2 of collapse-composition-roots): binds the startup law from the
      *     refreshed default branch and resolves the invocation's tracker
      * @param seams the heartbeat and reaper sleepers (FR1; fix-reaper-idle-liveness FR5), the
      *     reaper's monotonic time (FR4, M2), the takeover confirmation (FR6, D9) and batch mode's
      *     {@link ServeProperties} (FR2 of add-factory-serve: "the N limit applies to batch and
-     *     serve")
+     *     serve") and the clock that supplies "now" for bare-mode backoff and takeover
      * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
      *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
      */
@@ -75,14 +76,14 @@ final class TakeCommand {
             SlotWiringFactory slotWiringFactory,
             TaskGit git,
             FactoryProperties factoryProperties,
-            Clock clock,
+            ProjectScope scope,
             TrackerWiring trackerWiring,
             TakeCommandSeams seams,
             SandboxLifecyclePass sandboxLifecyclePass) {
         this.slotWiringFactory = slotWiringFactory;
         this.git = git;
         this.factoryProperties = factoryProperties;
-        this.clock = clock;
+        this.scope = scope;
         this.trackerWiring = trackerWiring;
         this.seams = seams;
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -104,7 +105,7 @@ final class TakeCommand {
      */
     void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
-            TakeArguments takeArguments = argumentsParser.parse(args);
+            TakeArguments takeArguments = argumentsParser.parse(args, scope.registeredClone());
             // FR13, D14/D15 of add-base-ref-resolution: the definition comes from the refreshed
             // default branch of origin, read from git objects — never from the clone's checkout.
             TrustedTierStartup.StartupLaw startupLaw =
@@ -114,7 +115,7 @@ final class TakeCommand {
             // claim this invocation makes — never re-read per claim.
             TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
-            InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
+            InstanceId instanceId = scope.mintInstanceId();
             TrackerAdapterFactory factory = trackerWiring.resolveFactory(trackerConfig);
             // FR4, design D2 of fix-claim-epoch-fence: the one funnel a claiming command resolves
             // through — the adapter stamps from the bundle's book and the decorator fills the same
@@ -159,7 +160,7 @@ final class TakeCommand {
                             heartbeat.livenessOracle().evaluate(),
                             log);
                     var dispatcher = new TakeDispatcher(
-                            wiring, factoryProperties, clock, trackerWiring, seams.takeoverConfirmation());
+                            wiring, factoryProperties, seams.clock(), trackerWiring, seams.takeoverConfirmation());
                     TakeRefDispatch.run(dispatcher, takeArguments, bound, seams.serveProperties(), log);
                 } finally {
                     heartbeat.standingReaper().stop();

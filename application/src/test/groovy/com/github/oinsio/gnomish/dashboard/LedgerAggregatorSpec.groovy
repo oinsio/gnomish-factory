@@ -26,7 +26,6 @@ class LedgerAggregatorSpec extends Specification {
 
     def aggregator = new LedgerAggregator()
 
-    private static final String INSTANCE = 'gnome-1'
     private static final LocalDate TODAY = LocalDate.parse('2026-08-06')
 
     def "aggregates outcome counts per day and sums tokens by model across the whole window"() {
@@ -42,7 +41,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+        def view = aggregator.aggregate(tempDir, TODAY, 2)
 
         then:
         view.perDay().size() == 2
@@ -63,7 +62,7 @@ class LedgerAggregatorSpec extends Specification {
                 taskOutcomeLine('delivered', [:]) + '\n' + '{"version":1,"type":"taskOutcome","tas')
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def view = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         view.perDay().size() == 1
@@ -83,7 +82,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when: 'a 2-day window ending at today'
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+        def view = aggregator.aggregate(tempDir, TODAY, 2)
 
         then: 'only today and the day before are in range; the file two days back is excluded'
         view.perDay()*.date() == [TODAY.minusDays(1), TODAY]
@@ -97,7 +96,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def view = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         view.tokensByModel()['claude'].cacheCreation() == 107
@@ -111,7 +110,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY)
+        def view = aggregator.aggregate(tempDir, TODAY)
 
         then:
         view.perDay().size() == 1
@@ -126,7 +125,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def view = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         view.perDay()[0].counts() == new OutcomeCounts(1, 0, 0, 0)
@@ -141,7 +140,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when: 'FR6: skip the unrecognized line and process the rest, without throwing (FR3, NFR-R1)'
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def view = aggregator.aggregate(tempDir, TODAY, 1)
 
         then: 'only the recognized outcome is counted and its tokens summed; the window survives'
         view.perDay().size() == 1
@@ -168,7 +167,7 @@ class LedgerAggregatorSpec extends Specification {
         ])
 
         when:
-        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+        def view = aggregator.aggregate(tempDir, TODAY, 2)
 
         then:
         view.perDay()[0].outageCount() == 0
@@ -189,7 +188,7 @@ class LedgerAggregatorSpec extends Specification {
     }
 
     private void writeLedgerFileRaw(LocalDate date, String content) {
-        Path file = ObservabilityPaths.ledgerFile(tempDir, INSTANCE, date)
+        Path file = ObservabilityPaths.ledgerFile(tempDir, date)
         Files.createDirectories(file.parent)
         Files.writeString(file, content, StandardCharsets.UTF_8)
     }

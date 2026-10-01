@@ -12,10 +12,8 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR10, design D8 of own-git-transfer-argv, at the command layer: the floor check sits in {@code
  * ManualRunRunner.run} before any subcommand dispatches, so {@code run}, {@code take} and {@code
@@ -30,7 +28,7 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
     Path projectDir
 
     @TempDir
-    Path worktreesRoot
+    Path clonePath
 
     @TempDir
     Path homeDir
@@ -56,13 +54,13 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
         and: 'the command runner over that git and that tracker'
         def properties = testProperties()
         def runner = newManualRunRunner(
-                worktreesRoot,
+                clonePath,
                 homeDir,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(git),
                 properties,
-                new BoardCommand(Clock.systemUTC(), properties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), LiveConsoleIO.onStdout()),
+                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
                 [github: fakeFactory(tracker)],
                 new GitVersionCheck(git))
 

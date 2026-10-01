@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -18,9 +20,10 @@ import java.time.Instant
  * {@link #getCloneDir}, then persists one {@code implement} attempt against the worktree {@link
  * #worktreeFor} names for it.
  *
- * <p>Implementing classes supply {@code runner}, {@code cloneDir} and {@code worktreesRoot} as
+ * <p>Implementing classes supply {@code runner}, {@code cloneDir} and {@code registeredClone} as
  * plain Groovy properties (the {@code def field = value} shape every caller already uses) — the
- * trait only reads them.
+ * trait only reads them. The clone is obtained through the production registry ({@code
+ * RegisteredCloneFixture.registered}, FR9 of add-project-registry).
  */
 trait TaskSeedFixture {
 
@@ -28,11 +31,11 @@ trait TaskSeedFixture {
 
     abstract Path getCloneDir()
 
-    abstract Path getWorktreesRoot()
+    abstract RegisteredClone getRegisteredClone()
 
-    /** The worktree path a task's own branch is checked out into, under {@code worktreesRoot}. */
+    /** The worktree path a task's own branch is checked out into, by the production formula. */
     Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
+        TaskWorktreePath.resolve(registeredClone, taskId)
     }
 
     /**
@@ -41,7 +44,7 @@ trait TaskSeedFixture {
      */
     TaskState seedTask(String taskId, String title = 'T') {
         TaskState state = TaskState.atStageStart('implement')
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE).createTask(
                 new TaskContext(taskId, UntrustedText.tracker(title), UntrustedText.tracker('B'), []),
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),

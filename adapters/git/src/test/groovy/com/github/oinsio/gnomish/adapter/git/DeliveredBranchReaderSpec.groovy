@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -30,7 +32,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
 
     def runner = new GitProcessRunner()
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     GitTaskRepository repository
     DeliveredBranchReader reader
 
@@ -39,8 +41,8 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
-        repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         reader = new DeliveredBranchReader(runner)
     }
 
@@ -50,7 +52,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     private void persistOneRound(String taskId, TaskState state) {
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
+        def worktree = registeredClone.worktrees().resolve(taskId)
         def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0),
                 [
@@ -92,7 +94,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         persistOneRound('PROJ-6', finalState)
         repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
         repository.finishCleanup('PROJ-6')
-        runner.run(worktreesRoot.resolve('clone').resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
+        runner.run(registeredClone.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
@@ -141,7 +143,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         persistOneRound('PROJ-3', finalState)
         repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState))
         repository.finishCleanup('PROJ-3')
-        commit(worktreesRoot.resolve('clone').resolve('PROJ-3'), 'later.txt', 'work landed after the cleanup')
+        commit(registeredClone.worktrees().resolve('PROJ-3'), 'later.txt', 'work landed after the cleanup')
 
         when:
         def delivered = reader.read(cloneDir, 'PROJ-3')
@@ -161,7 +163,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         def deliveredState = TaskState.atStageStart('review')
         // The lifecycle commit stages the whole worktree, so this write lands in the Completed
         // commit itself — the same way the STARTED commit carries StateFileWrite's initial state.
-        StateFileWrite.write(runner, worktreesRoot.resolve('clone').resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
+        StateFileWrite.write(runner, registeredClone.worktrees().resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
         repository.recordOutcome('PROJ-4', new TaskOutcome.Completed(deliveredState))
         assert runner.run(cloneDir, 'show', 'gnomish/PROJ-4:.gnomish-task/task.json').exitCode() == 0
 

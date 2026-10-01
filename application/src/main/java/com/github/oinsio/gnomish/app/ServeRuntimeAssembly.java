@@ -29,14 +29,15 @@ import java.time.Clock;
  * ServeShutdownWiringSpec} drive it end to end.
  *
  * <p>Implements FR13 of add-factory-serve. Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of
- * add-serve-observability. Implements FR8 of collapse-composition-roots.
+ * add-serve-observability. Implements FR8 of collapse-composition-roots. Implements FR9, FR10 of
+ * add-project-registry: neither the serve directory nor the janitor's worktree folder is relayed
+ * through here — both come from the registered clone {@link ServeAssembly} reads.
  */
 final class ServeRuntimeAssembly {
 
     private final SlotWiringFactory slotWiringFactory;
     private final ServeAssembly builders;
     private final TaskGit git;
-    private final FactoryPaths paths;
     private final Clock clock;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final SandboxProperties sandboxProperties;
@@ -46,7 +47,6 @@ final class ServeRuntimeAssembly {
      *     shares with {@code take} (design D9 of collapse-composition-roots)
      * @param builders the leaf builders over the daemon's properties and engine clock
      * @param git the task-git port, decorated here with the remote-outage gate
-     * @param paths the worktrees root the janitor sweeps and the home the observability files live in
      * @param clock supplies "now" for the sweep tick log and the observability wiring
      * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam; {@link SandboxLifecyclePass#NONE}
      *     on a host-only install
@@ -57,14 +57,12 @@ final class ServeRuntimeAssembly {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly builders,
             TaskGit git,
-            FactoryPaths paths,
             Clock clock,
             SandboxLifecyclePass sandboxLifecyclePass,
             SandboxProperties sandboxProperties) {
         this.slotWiringFactory = slotWiringFactory;
         this.builders = builders;
         this.git = git;
-        this.paths = paths;
         this.clock = clock;
         this.sandboxLifecyclePass = sandboxLifecyclePass;
         this.sandboxProperties = sandboxProperties;
@@ -111,8 +109,10 @@ final class ServeRuntimeAssembly {
         // is this root's decision, not the slot's.
         var wiring =
                 slotWiringFactory.slotWiring(served, RemoteOutageGates.signaling(git, remoteOutageGate), heartbeat);
-        TakeSlotRunner slotRunner = ServeAssembly.slotRunner(
-                serveArguments, served.definition(), served.tracker(), served.instanceId(), wiring);
+        // FR13: the one slot runner every slot shares, over the daemon's one wiring — so the
+        // heartbeat's ClaimBeat/ClaimLossFlag in its tenure are shared by every slot.
+        TakeSlotRunner slotRunner = new TakeSlotRunner(
+                wiring, serveArguments.slotRunOrder(served.definition()), served.tracker(), served.instanceId());
         FeedAutomaton automaton = builders.feedAutomaton(
                 served.trackerConfig(),
                 served.tracker(),
@@ -122,8 +122,7 @@ final class ServeRuntimeAssembly {
                 dirtyNotifier,
                 remoteOutageGate);
         ServeShutdown shutdown = builders.shutdown(slotLedger, heartbeat.flag(), heartbeat.standingReaper());
-        WorktreeJanitor worktreeJanitor =
-                builders.worktreeJanitor(serveArguments, paths.worktreesRoot(), slotLedger, git);
+        WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git);
         // NFR-O1 of add-serve-sandbox-lifecycle: built before the observability wiring, which reads
         // it for `vitals.sweep`, and before the tick, which writes it — the log, not the tick
         // thread, is what the two share, so neither construction waits on the other. The reap
@@ -135,7 +134,6 @@ final class ServeRuntimeAssembly {
         // FR1, FR4, FR7, FR9, FR12 of add-serve-observability (task 5.1, task 2.5).
         ObservabilityWiring observability = builders.observability(
                 served.instanceId(),
-                paths.homeDir(),
                 dirtyNotifier,
                 clock,
                 new SnapshotSources(

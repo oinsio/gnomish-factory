@@ -22,14 +22,11 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
     Path projectRoot
 
     @TempDir
-    Path worktreesRoot
-
-    @TempDir
     Path homeDir
 
     private ManualRunRunner newContainerRunner() {
         newManualRunRunnerProbing(
-                worktreesRoot,
+                projectRoot,
                 homeDir,
                 new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null),
                 // Container by default (D13): no explicit binding, image configured.

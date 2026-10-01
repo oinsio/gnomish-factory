@@ -7,7 +7,7 @@ import spock.lang.Specification
  * FR13, FR14 of add-git-workflow: the entrypoint recognizes exactly three subcommands —
  * {@code run}, {@code status}, {@code usage} — from the first non-option (non {@code --...})
  * source argument. Absent entirely, {@code run} is implicit, preserving the pre-existing
- * flag-only invocation ({@code gnomish --dir=... --task=...}) that {@link ManualRunRunner}
+ * flag-only invocation ({@code gnomish --dir=... --task=...}) that {@code ManualRunRunner}
  * already supported before subcommand dispatch existed. Any other first positional token is a
  * usage error (exit code 2 via {@link RunExitCodeMapper}).
  */
@@ -67,6 +67,15 @@ class SubcommandSpec extends Specification {
         Subcommand.parse(args) == Subcommand.BOARD
     }
 
+    // FR2, FR4 of add-project-registry: a 'project' token dispatches to PROJECT
+    def "parse() recognizes a 'project' token"() {
+        given:
+        def args = new DefaultApplicationArguments('project', 'list')
+
+        expect:
+        Subcommand.parse(args) == Subcommand.PROJECT
+    }
+
     // FR13, FR14: an unrecognized first positional token is a usage error (exit 2 family)
     def "parse() rejects an unrecognized subcommand"() {
         given:
@@ -81,6 +90,7 @@ class SubcommandSpec extends Specification {
         ex.message.contains('run')
         ex.message.contains('status')
         ex.message.contains('usage')
+        ex.message.contains("'gnomish project'")
     }
 
     // FR13, FR14: a flag-only invocation with no subcommand token still defaults to RUN, even

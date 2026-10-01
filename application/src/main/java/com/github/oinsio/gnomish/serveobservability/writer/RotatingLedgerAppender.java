@@ -28,13 +28,15 @@ import org.jspecify.annotations.Nullable;
  * single-responsibility ("append safely to a path"); this class adds "which path,
  * based on the day".
  *
- * <p>Implements FR14 of add-serve-observability.
+ * <p>The instance's serve directory is handed in whole, computed once by the composition point
+ * from the registered project (design D1 of add-project-registry); this class never derives it.
+ *
+ * <p>Implements FR14 of add-serve-observability. Implements FR10 of add-project-registry.
  */
 public final class RotatingLedgerAppender {
 
     private final LedgerAppender delegate;
-    private final Path homeDir;
-    private final String instanceName;
+    private final Path serveDir;
     private final Clock clock;
     private @Nullable LocalDate currentDate;
 
@@ -43,16 +45,14 @@ public final class RotatingLedgerAppender {
      *     needed retarget; its initial target is a placeholder — the first {@link
      *     #append} call always retargets before writing, since no UTC day has been
      *     recorded yet; never null
-     * @param homeDir the user's home directory passed to {@link
-     *     ObservabilityPaths#ledgerFile}; never null
-     * @param instanceName the configured instance name (design D2); never null
+     * @param serveDir the instance's serve directory the daily ledger files live in, passed to
+     *     {@link ObservabilityPaths#ledgerFile}; never null
      * @param clock supplies the current instant used to compute "today" in UTC on every
      *     append; never null
      */
-    public RotatingLedgerAppender(LedgerAppender delegate, Path homeDir, String instanceName, Clock clock) {
+    public RotatingLedgerAppender(LedgerAppender delegate, Path serveDir, Clock clock) {
         this.delegate = delegate;
-        this.homeDir = homeDir;
-        this.instanceName = instanceName;
+        this.serveDir = serveDir;
         this.clock = clock;
     }
 
@@ -70,7 +70,7 @@ public final class RotatingLedgerAppender {
         LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
         if (!today.equals(currentDate)) {
             currentDate = today;
-            delegate.retarget(ObservabilityPaths.ledgerFile(homeDir, instanceName, today));
+            delegate.retarget(ObservabilityPaths.ledgerFile(serveDir, today));
         }
         delegate.append(line);
     }

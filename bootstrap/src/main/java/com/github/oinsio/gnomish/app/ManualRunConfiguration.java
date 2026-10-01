@@ -20,16 +20,19 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.project.FactoryHome;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Random;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 
 /**
@@ -81,10 +84,15 @@ public class ManualRunConfiguration {
      * zero-infrastructure env/file adapter, the sole implementation in this change. The tracker
      * registry injects it so {@code GNOMISH_GITHUB_TOKEN} resolves through the port, not a direct
      * environment read; Vault-class and OIDC adapters arrive later behind the same bean.
+     *
+     * <p>The project's and the host's secrets folders come first (FR8, design D7 of
+     * add-project-registry), from the home the configuration loader resolved against; a command
+     * that resolved no project consults the host folder alone.
      */
     @Bean
-    public SecretsProvider secretsProvider() {
-        return new EnvFileSecretsProvider();
+    public SecretsProvider secretsProvider(FactoryHome factoryHome, ObjectProvider<RegisteredClone> registeredClone) {
+        RegisteredClone clone = registeredClone.getIfAvailable();
+        return new EnvFileSecretsProvider(factoryHome, clone == null ? null : clone.layout());
     }
 
     /**
@@ -261,13 +269,17 @@ public class ManualRunConfiguration {
      * The manual runners (design D6, D11 of collapse-composition-roots): {@code gnomish run}'s four
      * git-mode control flows over the summary-carrying assembly, with the host-or-container choice
      * they make over {@link ContainerSupports#plan}. The container pair gets {@code run}'s own
-     * {@code manual} support.
+     * {@code manual} support. The host pair works in the registered clone {@code --dir} names (FR9
+     * of add-project-registry); that bean exists only once the configuration loader resolved a
+     * project (D9), so this bean is lazy and {@link #manualRunDrive} reads it only when a git-mode
+     * run starts.
      */
     @Bean
+    @Lazy
     ManualRunners manualRunners(
             ManualRunAssembly manualRunAssembly,
             TaskGit git,
-            FactoryPaths paths,
+            RegisteredClone registeredClone,
             SandboxProperties sandboxProperties,
             FactoryProperties factoryProperties,
             ContainerSupports containerSupports,
@@ -275,8 +287,8 @@ public class ManualRunConfiguration {
         ManualRunAssembly assembly = manualRunAssembly.withRunSummary();
         ContainerSupportFactory containerSupport = containerSupports.manualSupport();
         return new ManualRunners(
-                new GitModeRunner(assembly, git, paths.worktreesRoot(), systemConsoleIO),
-                new GitResumeRunner(assembly, git, paths.worktreesRoot(), ManualRunRunner.TASK_ID_KEY),
+                new GitModeRunner(assembly, git, registeredClone, systemConsoleIO),
+                new GitResumeRunner(assembly, git, registeredClone, ManualRunRunner.TASK_ID_KEY),
                 new ContainerGitModeRunner(
                         assembly, git, sandboxProperties, factoryProperties, containerSupport, systemConsoleIO),
                 new ContainerResumeRunner(
@@ -286,7 +298,8 @@ public class ManualRunConfiguration {
                         factoryProperties,
                         ManualRunRunner.TASK_ID_KEY,
                         containerSupport),
-                containerSupports);
+                containerSupports,
+                registeredClone);
     }
 
     /**
@@ -296,15 +309,15 @@ public class ManualRunConfiguration {
      */
     @Bean
     ManualRunDrive manualRunDrive(
-            RunArgumentsParser runArgumentsParser,
+            ProjectScope projectScope,
             PipelineStartup pipelineStartup,
             AdHocTaskSynthesizer adHocTaskSynthesizer,
             ManualRunAssembly manualRunAssembly,
             InMemoryAttemptPersistence attemptPersistence,
             SystemConsoleIO systemConsoleIO,
-            ManualRunners manualRunners) {
+            ObjectProvider<ManualRunners> manualRunners) {
         return new ManualRunDrive(
-                runArgumentsParser,
+                projectScope,
                 pipelineStartup,
                 adHocTaskSynthesizer,
                 manualRunAssembly.withRunSummary(),
@@ -326,17 +339,5 @@ public class ManualRunConfiguration {
     @Bean
     public AdHocTaskSynthesizer adHocTaskSynthesizer(Clock javaTimeClock, Random taskIdRandom) {
         return new AdHocTaskSynthesizer(javaTimeClock, taskIdRandom);
-    }
-
-    /**
-     * The installation directories (FR3, FR5, design D4 of collapse-composition-roots): the
-     * per-task worktree root ({@code ~/.gnomish/worktrees}, FR6 of add-git-workflow, design D6) and
-     * the home directory {@code serve}'s observability files resolve against (task 5.1, FR9, design
-     * D2 of add-serve-observability) — one bean with two named accessors, replacing the two bare
-     * {@code Path} beans every consumer used to tell apart by parameter name.
-     */
-    @Bean
-    public FactoryPaths factoryPaths() {
-        return FactoryPaths.underHome(Path.of(System.getProperty("user.home")));
     }
 }

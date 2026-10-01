@@ -107,6 +107,9 @@ dependencies {
     // test classpath call that fixture, so `:domain` / `:gitobjects` stay clear
     // of it.
     implementation libs.spring.boot.asProvider()
+    // `RegisteredCloneFixture` returns the composition root's `ObjectProvider<RegisteredClone>`
+    // (add-project-registry), so a consuming spec compiles against spring-beans: `api`.
+    api libs.spring.beans
 
     // `GiteaAvailability` probes the Docker daemon through Testcontainers'
     // `DockerClientFactory` so every Docker-dependent spec — the Gitea E2E layer

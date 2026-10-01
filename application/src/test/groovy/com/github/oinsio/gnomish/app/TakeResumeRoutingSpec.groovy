@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -60,7 +61,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     @TempDir
     Path tempDir
 
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Path worktree
 
     /** The state.json a scenario wants read back; assignable, since setup() stubs the port once. */
@@ -83,17 +84,17 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     BaseRefGit baseRefGit = resumingBaseRefGit()
 
     def setup() {
-        worktreesRoot = tempDir.resolve('worktrees')
-        worktree = worktreesRoot.resolve('PROJ-1')
+        registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), CLONE_DIR)
+        worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
         // FR4 of fix-lifecycle-push: the park path runs the delivery fence; a sealed verdict has no
         // Spock dummy, so the routing specs state the delivered case explicitly.
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
-        worktrees.ensureWorktree(_, _, _, _) >> worktree
+        worktrees.ensureWorktree(_, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
-        store.taskRepository(_, _) >> lifecycleStore
+        store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
         store.readRecordedState(_) >> { stateRead.call() }
     }
@@ -104,13 +105,13 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
 
     /** The real routing chain, over the ports above. */
     private TakeDispositionResume resumeChain(ScriptedExecutor executor = new ScriptedExecutor([completedRound()])) {
-        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git(), tracker, worktreesRoot))
+        def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git(), tracker, registeredClone))
         chainOver(runner, git())
     }
 
     /** The shared routing table (TakeDispositionResume) over HOST mechanics — design D8. */
     private TakeDispositionResume chainOver(TakeResumeRunner runner, TaskGit git) {
-        def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
+        def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 
@@ -357,14 +358,14 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def salvager = Mock(WorktreeSalvager)
         def ownWorktrees = Stub(TaskWorktreeGit) {
-            ensureWorktree(_, _, _, _) >> worktree
+            ensureWorktree(_, _, _) >> worktree
             salvage(worktree) >> salvager
         }
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(
-                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), ownGit, tracker, worktreesRoot))
+                slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), ownGit, tracker, registeredClone))
         def chain = chainOver(runner, ownGit)
 
         when:
@@ -438,7 +439,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        git(), tracker, worktreesRoot, ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
+        git(), tracker, registeredClone, ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
 
         when:
         def result = resume(chainOver(runner, git()))
@@ -460,7 +461,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
                             completedRound(),
                             completedRound()
                         ]), new Verdict.Fail([])),
-                        git(), tracker, worktreesRoot))
+                        git(), tracker, registeredClone))
 
         when:
         def result = resume(chainOver(runner, git()))

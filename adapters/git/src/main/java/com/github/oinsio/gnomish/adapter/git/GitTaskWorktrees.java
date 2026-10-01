@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import java.nio.file.Path;
@@ -14,12 +15,13 @@ import java.nio.file.Path;
  * delegation-only facade over this package's existing collaborators, all sharing one {@link
  * GitProcessRunner}.
  *
- * <p>{@link TaskWorktreeManager} and {@link ReplicaPairReconciler} take their root as a
- * constructor argument, so this facade builds one per call rather than holding a field: both are
- * cheap, stateless wrappers over the shared runner, and hoisting the root into the method
+ * <p>{@link TaskWorktreeManager} and {@link ReplicaPairReconciler} take their clone or worktree as
+ * a constructor argument, so this facade builds one per call rather than holding a field: both are
+ * cheap, stateless wrappers over the shared runner, and hoisting the clone into the method
  * signature is what lets a single bound instance serve every concurrent slot.
  *
- * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules.
+ * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules; FR9,
+ * NFR-R2 of add-project-registry.
  */
 public final class GitTaskWorktrees implements TaskWorktreeGit {
 
@@ -40,8 +42,8 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     }
 
     @Override
-    public Path ensureWorktree(Path cloneDir, Path worktreesRoot, String taskId, String branchName) {
-        return new TaskWorktreeManager(runner, worktreesRoot).ensureWorktree(cloneDir, taskId, branchName);
+    public Path ensureWorktree(RegisteredClone clone, String taskId, String branchName) {
+        return new TaskWorktreeManager(runner, clone).ensureWorktree(taskId, branchName);
     }
 
     @Override
@@ -60,8 +62,8 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     }
 
     @Override
-    public TaskEnvironmentDisposal environmentDisposal(Path cloneDir, Path worktreesRoot) {
-        return new WorktreeEnvironmentDisposal(runner, cloneDir, worktreesRoot);
+    public TaskEnvironmentDisposal environmentDisposal(RegisteredClone clone) {
+        return new WorktreeEnvironmentDisposal(runner, clone);
     }
 
     @Override

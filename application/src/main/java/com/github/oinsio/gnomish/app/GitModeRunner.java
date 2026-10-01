@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -21,7 +22,7 @@ import java.util.List;
  *
  * <p>Sequence, per FR6/FR7/UX1: prune stale worktree registrations, print the deterministic
  * branch name and worktree path <em>before</em> anything else runs (UX1 — "the operator always
- * knows where the work lives"; both names are pure functions of {@code cloneDir}/{@code taskId},
+ * knows where the work lives"; both names are pure functions of the registered clone and {@code taskId},
  * computed without any git call, see {@link #branchName}/{@link #worktreePath}), then record task
  * start via {@code GitTaskRepository#createTask} — the single call that actually creates the
  * branch off {@code --base} (or the clone's current {@code HEAD} when absent, design D7) and
@@ -41,8 +42,8 @@ import java.util.List;
  * anchored outside any workspace root by construction, unchanged by this class: {@code
  * CliStageExecutor}'s {@code DecisionFileTransport} always roots each round's temp directory
  * under {@code java.io.tmpdir} (never under the {@link DirectoryWorkspace} it is handed), and
- * {@code logback-spring.xml} writes the instance's rolling log file under {@code
- * ~/.gnomish/logs/} — both independent of {@code --dir}/worktree/workspace entirely. See {@code
+ * {@code logback-spring.xml} writes the instance's rolling log file under the factory home's {@code
+ * projects/<name>/logs/} — both independent of {@code --dir}/worktree/workspace entirely. See {@code
  * GitModeWorkspaceHygieneSpec} for the regression proof: a real round's commit tree contains only
  * the gnome's own change and {@code .gnomish-task/}.
  *
@@ -78,17 +79,16 @@ import java.util.List;
  * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
  * media differ (host worktree here, task environment there); the recipe and its order must not.
  *
- * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow.
+ * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow; FR9 of add-project-registry.
  *
  * @param assembly the shared engine/ports assembly, reused from the in-place path with a
  *     git-backed {@code AttemptPersistence}
  * @param console the console owner the banner is written through (FR5, FR6 of
  *     harden-untrusted-text-sinks)
- * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/} worktrees
- *     are created (design D6); production wiring resolves {@code ~/.gnomish/worktrees}, tests
- *     pass a temp directory
+ * @param registeredClone the registered clone whose own worktree folder the task worktree is created in
+ *     (design D6; FR9 of add-project-registry)
  */
-record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, ConsoleIO console) {
+record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone registeredClone, ConsoleIO console) {
 
     /**
      * Runs one fresh git-mode task to a terminal boundary this class can observe (see class
@@ -112,10 +112,10 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
         git.branches().harden(cloneDir);
 
         String branchName = branchName(taskId);
-        Path worktree = worktreePath(cloneDir, taskId);
+        Path worktree = worktreePath(taskId);
         printBanner(branchName, worktree);
 
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        var taskRepository = git.store().taskRepository(registeredClone);
         // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
         // first, and the branch starts at that very commit — the manual tier's own way of keeping a
         // base name out of the repository port.
@@ -171,8 +171,8 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, Cons
      * GitTaskRepository#createTask} materializes. {@code status} (task 5.3) shares the same
      * formula for its worktree-path display.
      */
-    private Path worktreePath(Path cloneDir, String taskId) {
-        return TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
+    private Path worktreePath(String taskId) {
+        return TaskWorktreePath.resolve(registeredClone, taskId);
     }
 
     /**

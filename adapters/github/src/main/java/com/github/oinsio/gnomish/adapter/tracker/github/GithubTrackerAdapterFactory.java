@@ -195,7 +195,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     /**
      * Declares this adapter's sole credential environment variable (design D17, NFR-S1): the agent
      * process launcher scrubs it from the gnome's CLI subprocess environment regardless of {@code
-     * agent-cli-env-passthrough}. The name is {@link #TOKEN_ENV_VAR} unless the resolved {@code
+     * factory.sandbox.env-passthrough}. The name is {@link #TOKEN_ENV_VAR} unless the resolved {@code
      * tracker.github} connection renames it through {@code credential} — which a named connection
      * profile may (FR16, design D8/D11 of add-plugin-architecture) — so a profile-renamed credential
      * is scrubbed exactly like the default one.

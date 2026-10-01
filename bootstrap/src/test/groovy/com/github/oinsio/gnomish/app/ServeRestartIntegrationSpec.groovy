@@ -58,7 +58,6 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
     InMemoryTracker tracker = new InMemoryTracker()
     InMemoryTrackerHarness harness = new InMemoryTrackerHarness(tracker)
@@ -71,7 +70,6 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
         writeMinimalProject(projectDir, '100ms')
         commitAll(projectDir)
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
 
         // The "previous life": two claims held by a now-dead instance id, seeded directly —
         // never through claim() — exactly like RestartCleanlinessSpec's own setup.
@@ -84,7 +82,7 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
         def command = ServeCommands.of(
                 newAssembly(testProperties(instanceName: 'gnomish-factory')),
                 TaskGitFixture.real(),
-                new FactoryPaths(worktreesRoot, homeDir),
+                RegisteredCloneFixture.unregistered(homeDir, projectDir),
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
                 new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null),

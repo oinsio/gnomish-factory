@@ -1,56 +1,68 @@
 package com.github.oinsio.gnomish
 
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.ApplicationContextInitializer
-import org.springframework.context.ConfigurableApplicationContext
+import com.github.oinsio.gnomish.app.ConfigurationViolationsException
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import java.nio.file.Path
 import org.springframework.core.env.StandardEnvironment
 import org.springframework.core.env.SystemEnvironmentPropertySource
-import org.springframework.test.context.ContextConfiguration
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
- * Environment-variable override of application.yaml values (FR3 scenario
- * "Environment override", design D10). A real OS environment variable cannot
- * be set from inside the running JVM, so this spec models one faithfully with
- * a {@link SystemEnvironmentPropertySource} inserted at the system-environment
- * precedence tier. That exercises exactly the two mechanisms a real env var
- * relies on: relaxed name mapping (FACTORY_INSTANCE_NAME -> factory.instance-name,
- * applied by Spring Boot only to system-environment sources, i.e. sources of
- * that type named "systemEnvironment" or "*-systemEnvironment") and property
- * source precedence above config data (application.yaml). True OS-process
- * verification belongs to the fresh-clone/manual layer, not the unit gate.
- * Implements FR3 of add-project-skeleton.
+ * A {@code FACTORY_*} environment variable is refused at startup (FR7 of add-project-registry,
+ * scenario "Environment variable is refused with the equivalent line"). This spec once asserted
+ * the opposite — that {@code FACTORY_INSTANCE_NAME} overrode the bundled value through Spring's
+ * relaxed binding (FR3 of add-project-skeleton); the configuration levels close that source, since
+ * any variable in the operator's shell could otherwise widen the sandbox.
+ *
+ * <p>A real OS environment variable cannot be set from inside the running JVM, so the spec hands
+ * the application an environment whose {@code systemEnvironment} source carries the variable — the
+ * source Spring builds from the OS environment, under the name it gives it. The boot goes through
+ * {@link FactoryBoot}, as the packaged jar's does.
+ *
+ * <p>Implements FR7, NFR-S1 of add-project-registry.
  */
-@SpringBootTest(classes = FactoryApplication)
-@ContextConfiguration(initializers = EnvironmentVariableStub)
 class FactoryEnvironmentOverrideSpec extends Specification {
 
-    @Autowired
-    FactoryProperties factoryProperties
+    @TempDir
+    Path tmp
 
-    // FR3: environment override — the env-tier value wins over application.yaml
-    def "environment variable FACTORY_INSTANCE_NAME overrides the application.yaml value"() {
-        expect: 'the bound instance name is the environment value, not the yaml one'
-        factoryProperties.instanceName() == EnvironmentVariableStub.ENVIRONMENT_INSTANCE_NAME
+    OperatorHomeFixture operatorHome
+
+    def setup() {
+        operatorHome = OperatorHomeFixture.install(tmp.resolve('home'))
     }
-}
 
-/**
- * Injects FACTORY_INSTANCE_NAME as a simulated OS environment variable, placed
- * directly below the real systemEnvironment source — the exact precedence tier
- * OS env vars occupy, above all config-data (application.yaml) sources.
- */
-class EnvironmentVariableStub implements ApplicationContextInitializer<ConfigurableApplicationContext> {
+    def cleanup() {
+        operatorHome.close()
+    }
 
-    static final String ENVIRONMENT_INSTANCE_NAME = 'gnomish-from-environment'
-
-    @Override
-    void initialize(ConfigurableApplicationContext context) {
-        context.environment.propertySources.addAfter(
+    // FR7: "Environment variable is refused with the equivalent line"
+    def "FACTORY_INSTANCE_NAME stops startup and names the equivalent file line"() {
+        given:
+        def environment = new StandardEnvironment()
+        environment.propertySources.replace(
                 StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
                 new SystemEnvironmentPropertySource(
-                        'test-systemEnvironment',
-                        [FACTORY_INSTANCE_NAME: ENVIRONMENT_INSTANCE_NAME] as Map<String, Object>))
+                        StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                        [FACTORY_INSTANCE_NAME: 'from-environment'] as Map<String, Object>))
+        def application = FactoryBoot.application()
+        application.setEnvironment(environment)
+        def home = operatorHome.home
+
+        when:
+        application.run()
+
+        then:
+        def refused = thrown(ConfigurationViolationsException)
+        refused.exitCode == 2
+        refused.violations() == [
+            'environment variable FACTORY_INSTANCE_NAME is not allowed — found in the environment' +
+            ' — factory.* settings are not read from environment variables' +
+            " — set 'factory.instance-name: from-environment' in" +
+            " ${home.projects().resolve('<name>').resolve('project.yaml')}" +
+            ' (no project is registered yet: gnomish project add <name> --dir=<clone>)' +
+            " or ${home.hostConfig()}, or pass --factory.instance-name=from-environment"
+        ]*.toString()
     }
 }

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -45,8 +46,9 @@ tracker:
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
     Path homeDir
+    /** The clone the loader would resolve for {@code --dir=projectDir}, registered through the registry. */
+    RegisteredClone registeredClone
     Tracker tracker = Mock()
 
     def setup() {
@@ -67,8 +69,8 @@ advancement: auto
 ''')
         commitAll(projectDir, 'init')
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
+        registeredClone = RegisteredCloneFixture.registered(homeDir, projectDir)
     }
 
     protected void writeConfig(String trackerSection = '') {
@@ -98,7 +100,7 @@ advancement: auto
         ServeCommands.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 TaskGitFixture.real(),
-                new FactoryPaths(worktreesRoot, homeDir),
+                registeredClone,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,

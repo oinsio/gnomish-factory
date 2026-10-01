@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.e2e
 
+import com.github.oinsio.gnomish.app.project.FactoryHome
+import com.github.oinsio.gnomish.app.project.ProjectName
+import com.github.oinsio.gnomish.app.project.ProjectRegistry
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,19 +41,18 @@ final class E2eProcessHarness {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(120)
 
     /**
-     * The spawned factory's log directory, overriding the operator's own
-     * {@code ~/.gnomish/logs} for the lifetime of the build (task 2.3 of
-     * harden-logging-observability, FR11/M4). The spawned process is the packaged
-     * production binary and carries the production Logback configuration by
-     * design, so the module's {@code logback-test.xml} — a test-classpath file —
-     * cannot reach it; the configuration's documented {@code GNOMISH_LOG_DIR}
-     * variable can. One directory for the whole JVM, created on first use: the
-     * point is that it is not the operator's file, not that each spawn gets its own.
+     * The spawned factory's home, named through {@code GNOMISH_HOME} (design D8 of
+     * add-project-registry): one temporary folder for the whole JVM, so the operator's own
+     * {@code ~/.gnomish} — its host file, its projects — never reaches a spec. Every {@code --dir} a
+     * spec runs against is registered here through the production {@link ProjectRegistry#add}.
+     *
+     * <p>It is also what keeps the spawned factory's log off the operator's file (FR11, M4 of
+     * harden-logging-observability): the packaged binary carries the production Logback
+     * configuration by design, which a test-classpath file cannot reach, and that configuration
+     * writes where the operator configuration loader decides — under this home (FR11 of
+     * add-project-registry).
      */
-    static final Path LOG_DIR = Files.createTempDirectory('gnomish-e2e-logs')
-
-    /** The environment variable {@link #LOG_DIR} is passed through. */
-    static final String LOG_DIR_VARIABLE = 'GNOMISH_LOG_DIR'
+    static final FactoryHome HOME = FactoryHome.at(Files.createTempDirectory('gnomish-e2e-home'))
 
     private final Path jarPath = resolveJarPath()
 
@@ -97,18 +99,38 @@ final class E2eProcessHarness {
             List<String> scriptedInputLines,
             boolean keepStdinOpen = false,
             Map<String, String> extraEnv = [:]) {
+        execute('run', workingDirectory, extraArgs, scriptedInputLines, keepStdinOpen, extraEnv)
+    }
+
+    /**
+     * {@link #run}, for any subcommand: spawns {@code java -jar <jar> <subcommand> <extraArgs...>}
+     * — the seam a spec uses to drive {@code serve} or {@code take} out of process.
+     *
+     * @param subcommand the gnomish subcommand, e.g. {@code serve}
+     */
+    E2eProcessResult execute(
+            String subcommand,
+            Path workingDirectory,
+            List<String> extraArgs,
+            List<String> scriptedInputLines,
+            boolean keepStdinOpen = false,
+            Map<String, String> extraEnv = [:]) {
         List<String> command = new ArrayList<>([
             'java',
             '-jar',
             jarPath.toAbsolutePath().toString(),
-            'run'
+            subcommand
         ])
         command.addAll(extraArgs)
 
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
-        // Before extraEnv, so a spec that wants its own log location still wins.
-        builder.environment().put(LOG_DIR_VARIABLE, LOG_DIR.toAbsolutePath().toString())
+        builder.environment().put(FactoryHome.HOME_VARIABLE, HOME.root().toString())
+        extraArgs.findAll {
+            it.startsWith('--dir=')
+        }.each {
+            register(Path.of(it.substring('--dir='.length())))
+        }
         builder.environment().putAll(extraEnv)
 
         Process process = builder.start()
@@ -133,12 +155,45 @@ final class E2eProcessHarness {
             if (!finished) {
                 process.destroyForcibly()
                 throw new IllegalStateException(
-                "gnomish run did not exit within ${DEFAULT_TIMEOUT} — command: ${command}")
+                "gnomish ${subcommand} did not exit within ${DEFAULT_TIMEOUT} — command: ${command}")
             }
             return new E2eProcessResult(process.exitValue(), stdoutFuture.get(), stderrFuture.get())
         } finally {
             pumps.shutdownNow()
         }
+    }
+
+    /**
+     * Registers {@code dir} in {@link #HOME} as the one clone of a project of its own, unless it
+     * already is: the spawned factory refuses an unregistered clone (FR3 of add-project-registry).
+     */
+    private static synchronized void register(Path dir) {
+        ProjectRegistry registry = ProjectRegistry.scan(HOME)
+        Path clone = dir.toAbsolutePath().normalize()
+        boolean registered = registry.projects().any { project ->
+            project.clones().any { it.clonePath() == clone }
+        }
+        if (!registered) {
+            registry.add(new ProjectName("e2e-${registry.projects().size() + 1}"), clone)
+        }
+    }
+
+    /**
+     * Registers {@code dir} like {@link #run} does and writes {@code factoryBlock} as its project's
+     * {@code factory:} configuration — the only place a sandbox-boundary key such as {@code
+     * factory.bindings.default} is accepted from (design D8, NFR-S1 of add-project-registry). The
+     * block is appended to the {@code project.yaml} the production registry wrote; a project that
+     * already carries one is refused, so two specs never merge their keys by accident.
+     *
+     * @param dir the clone a later {@link #run} passes as {@code --dir}
+     * @param factoryBlock YAML whose top-level key is {@code factory:}
+     */
+    static synchronized void projectConfig(Path dir, String factoryBlock) {
+        register(dir)
+        Path file = ProjectRegistry.scan(HOME).resolve(dir.toAbsolutePath().normalize()).layout().config()
+        String text = Files.readString(file)
+        assert !(text =~ /(?m)^factory:/): "${file} already carries a factory: block"
+        Files.writeString(file, (text.endsWith('\n') ? text : text + '\n') + factoryBlock)
     }
 
     private static void writeStdin(Process process, List<String> lines, boolean keepOpen) {

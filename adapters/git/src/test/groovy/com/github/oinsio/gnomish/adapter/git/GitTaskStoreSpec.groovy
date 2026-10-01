@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -39,18 +41,18 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
     GitProcessRunner runner = new GitProcessRunner()
     def store = new GitTaskStore(runner, ClaimEpochSource.NONE)
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def "taskRepository hands out a lifecycle store bound to this clone"() {
         when:
-        TaskLifecycleStore repository = store.taskRepository(cloneDir, worktreesRoot)
+        TaskLifecycleStore repository = store.taskRepository(registeredClone)
 
         then: 'it is bound, not merely non-null: creating a task through it lands on this clone'
         repository.createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -63,7 +65,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         addRemote(cloneDir, 'origin', origin.toString())
 
         when:
-        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        store.taskRepository(registeredClone).createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         then:
         new RemoteBranchTip(runner).read(cloneDir, 'gnomish/PROJ-9')
@@ -127,7 +129,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         given: 'FR1 of fix-envelope-medium: a completed task whose tip carries the Completed envelope'
         def state = seedTask('PROJ-6', 'Fix it')
         def worktree = worktreeFor('PROJ-6')
-        store.taskRepository(cloneDir, worktreesRoot).recordOutcome('PROJ-6', new TaskOutcome.Completed(state))
+        store.taskRepository(registeredClone).recordOutcome('PROJ-6', new TaskOutcome.Completed(state))
 
         and: 'a cleanup killed between its staged removal and its commit: the worktree lost the envelope, the tip kept it'
         assert runner.run(worktree, 'rm', '-r', EnvelopePaths.DIR_NAME).exitCode() == 0

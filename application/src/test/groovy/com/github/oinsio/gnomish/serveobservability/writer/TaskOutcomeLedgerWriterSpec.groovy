@@ -36,7 +36,11 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     @TempDir
     Path homeDir
 
-    private static final String INSTANCE_NAME = 'gnomish'
+    /** The instance's serve directory, not yet created, inside the temporary folder. */
+    private Path serveDir() {
+        homeDir.resolve('serve')
+    }
+
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
     private static final ObjectMapper JSON = new ObjectMapper()
 
@@ -44,12 +48,12 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     private SlotLedger slotLedger = new SlotLedger(2, slotClock)
 
     private TaskOutcomeLedgerWriter writer(Instant now) {
-        def appender = ledgerAppenderFor(homeDir, INSTANCE_NAME, now)
+        def appender = ledgerAppenderFor(serveDir(), now)
         return new TaskOutcomeLedgerWriter(slotLedger, appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
     }
 
     private Path ledgerFile(Instant now) {
-        return ledgerFileFor(homeDir, INSTANCE_NAME, now)
+        return ledgerFileFor(serveDir(), now)
     }
 
     private static TaskState finalState(Position position) {
@@ -174,7 +178,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
-        Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(TaskOutcomeLedgerWriter)
 
         when:

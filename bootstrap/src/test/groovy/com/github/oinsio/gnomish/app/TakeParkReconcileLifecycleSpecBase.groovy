@@ -16,7 +16,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * The deferred-PARK reconcile proof for the {@code take} run (task 6.5 of add-claim-heartbeat, FR10,
  * D10, NFR-C1), driven by {@link TakeCommand} against a REAL tracker adapter and a real local git
@@ -138,7 +137,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * state.json} left by the first run.
      */
     private void markParkPending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, orphanedHolderEpochs)
+        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs)
         repository.recordOutcome(
                 taskId, new TaskOutcome.Escalated(TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(1)))
     }
@@ -151,7 +150,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * TakePauseExit}.
      */
     private void markPausePending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, orphanedHolderEpochs)
+        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs)
         repository.recordOutcome(taskId, new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
     }
 
@@ -162,14 +161,14 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      */
     private Boolean pendingMarker(String taskId) {
         def sanitized = TaskIdSanitizer.sanitize(taskId)
-        Files.walk(worktreesRoot).withCloseable { stream ->
+        Files.walk(registeredClone.worktrees()).withCloseable { stream ->
             def taskJson = stream
             .filter {
                 it.fileName.toString() == 'task.json' && it.toString().contains(sanitized)
             }
             .findFirst()
             .orElseThrow {
-                new IllegalStateException("no task.json for ${taskId} under ${worktreesRoot}")
+                new IllegalStateException("no task.json for ${taskId} under ${registeredClone.worktrees()}")
             }
             TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).trackerWritePending()
         }

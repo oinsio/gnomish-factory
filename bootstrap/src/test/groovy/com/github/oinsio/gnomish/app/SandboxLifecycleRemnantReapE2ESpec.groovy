@@ -98,7 +98,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         def project = cloneWithOrigin('remnant-project')
         taskId = "CTN-REMNANT-${System.nanoTime() % 100000}"
         def support = ContainerSupportFixture.direct(project, taskId, segments(), tinyAges,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         // These specs point origin at an unreachable host on purpose — the URL is what project
         // identity is derived from, and nothing here pushes. The branch's own first push is
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone
@@ -120,7 +120,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         Thread.sleep(1500)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task'
-        def summary = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
+        def summary = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), Clock.systemUTC())
                 .run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the network is gone, and the pass reported the verdict that removed it'

@@ -194,7 +194,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // No check provider is configured in this spec, so the SPI-declared check-credential set
         // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerSupportFixture.direct(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
         support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'

@@ -18,7 +18,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     // FR17/D5/D10: tracker abort-backoff base/cap default to 2m/1h when unset
     def "tracker abort-backoff base and cap default to 2m/1h when unset"() {
         when: 'a properties record is created without an explicit tracker section'
-        def properties = new FactoryProperties('factory-01', 'claude', [], null, null)
+        def properties = new FactoryProperties('factory-01', 'claude', null, null)
 
         then: 'the accessor returns the design D5 defaults'
         properties.tracker().abortBackoffBase() == Duration.ofMinutes(2)
@@ -29,7 +29,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     def "tracker abort-backoff base and cap of #base/#cap are exposed unchanged"() {
         when: 'a properties record is created with an explicit tracker section'
         def properties = new FactoryProperties(
-                'factory-01', 'claude', [], new FactoryProperties.Tracker(base, cap), null)
+                'factory-01', 'claude', new FactoryProperties.Tracker(base, cap), null)
 
         then: 'the accessor returns exactly the configured values'
         properties.tracker().abortBackoffBase() == base
@@ -46,7 +46,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     def "tracker abort-backoff base defaults when only cap is configured"() {
         when: 'a properties record is created with only the cap explicitly set'
         def properties = new FactoryProperties(
-                'factory-01', 'claude', [], new FactoryProperties.Tracker(null, Duration.ofHours(3)), null)
+                'factory-01', 'claude', new FactoryProperties.Tracker(null, Duration.ofHours(3)), null)
 
         then: 'the base still defaults, the cap is the configured value'
         properties.tracker().abortBackoffBase() == Duration.ofMinutes(2)
@@ -57,7 +57,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     //     empty section, not a vendor-shaped record with every key unset
     def "check section defaults to no configured provider"() {
         expect:
-        new FactoryProperties(null, null, null, null, null).check().isEmpty()
+        new FactoryProperties(null, null, null, null).check().isEmpty()
     }
 
     // FR5, design D12 of add-plugin-architecture: the section is an open-ended map of provider
@@ -65,7 +65,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     //     heard of binds exactly like the bundled one
     def "a configured provider subsection is carried through verbatim"() {
         when:
-        def properties = new FactoryProperties(null, null, null, null,
+        def properties = new FactoryProperties(null, null, null,
                 [github: [('api-url'): 'https://api.github.com', repo: 'acme/widgets'],
                     sonar: [('api-url'): 'https://sonar.example']])
 
@@ -79,7 +79,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     //     than a null the providers would each have to defend against
     def "a provider subsection with no content binds to an empty map"() {
         when:
-        def properties = new FactoryProperties(null, null, null, null, [github: null])
+        def properties = new FactoryProperties(null, null, null, [github: null])
 
         then:
         properties.check()['github'] == [:]
@@ -90,7 +90,7 @@ class FactoryPropertiesSectionsSpec extends Specification {
     def "the bound check section is immutable"() {
         given:
         Map<String, Map<String, Object>> source = [github: [('api-url'): 'https://api.github.com']]
-        def properties = new FactoryProperties(null, null, null, null, source)
+        def properties = new FactoryProperties(null, null, null, source)
 
         when:
         source['sonar'] = [:] as Map<String, Object>

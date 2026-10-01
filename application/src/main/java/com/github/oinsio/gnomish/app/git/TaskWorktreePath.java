@@ -1,33 +1,35 @@
 package com.github.oinsio.gnomish.app.git;
 
+import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 
 /**
  * The deterministic task worktree path formula (FR6, design D6):
- * {@code <worktreesRoot>/<project-name>/<sanitized-taskId>/}, computed purely with no git call
- * and no filesystem access — {@code project-name} is the clone directory's own file name,
- * {@code sanitized-taskId} is {@link TaskIdSanitizer#sanitize(String)}. Shared by every caller
- * that needs to name a task's worktree without materializing it: {@code GitModeRunner}'s UX1
- * banner, {@code status}'s single-task rendering (FR6).
+ * {@code <clone worktree folder>/<sanitized-taskId>/}, computed purely with no git call and no
+ * filesystem access. The clone's worktree folder is {@link RegisteredClone#worktrees()} — {@code
+ * projects/<name>/worktrees/<clone>} under the factory home, named by the project registry, never
+ * derived from the clone directory's own name (FR9, NFR-R2 of add-project-registry); {@code
+ * sanitized-taskId} is {@link TaskIdSanitizer#sanitize(String)}. The one formula every caller
+ * that names a task's worktree goes through: the worktree manager that materializes it, the
+ * janitor's disposal, {@code GitModeRunner}'s UX1 banner, {@code status}'s single-task rendering.
  *
- * <p>Implements FR6 of add-git-workflow.
+ * <p>Implements FR6 of add-git-workflow; FR9, NFR-R2 of add-project-registry.
  */
 public final class TaskWorktreePath {
 
     private TaskWorktreePath() {}
 
     /**
-     * Computes the deterministic worktree path for {@code taskId} under {@code cloneDir}.
+     * Computes the deterministic worktree path for {@code taskId} in {@code clone}'s worktree
+     * folder.
      *
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6)
-     * @param cloneDir the {@code --dir} project clone; only its file name is used
+     * @param clone the registered clone the task works in
      * @param taskId the tracker's original taskId
      * @return the deterministic worktree path; not checked for existence
      * @throws InvalidTaskIdException if {@code taskId} sanitizes to an empty or invalid name
      */
-    public static Path resolve(Path worktreesRoot, Path cloneDir, String taskId) {
-        String projectName = cloneDir.toAbsolutePath().normalize().getFileName().toString();
-        return worktreesRoot.resolve(projectName).resolve(TaskIdSanitizer.sanitize(taskId));
+    public static Path resolve(RegisteredClone clone, String taskId) {
+        return clone.worktrees().resolve(TaskIdSanitizer.sanitize(taskId));
     }
 }

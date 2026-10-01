@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.BranchTipFactsReader
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.RefTipSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -22,9 +23,9 @@ import java.nio.file.Path
  * the first attempt), plus {@link #newCommand}, which builds a brand-new {@link TakeCommand}/
  * {@link ManualRunAssembly}/{@link FactoryProperties} trio sharing no field or object with any
  * other command built by a prior call (NFR-R3) — only the shared {@link Tracker}, {@link
- * TrackerAdapterFactory}, and {@code worktreesRoot} fields cross between instances, exactly as two
- * real factory processes on one machine would share the tracker service and the machine-local
- * {@code ~/.gnomish/worktrees} convention.
+ * TrackerAdapterFactory}, and {@code registeredClone} fields cross between instances, exactly as two
+ * real factory processes on one machine would share the tracker service and the registered clone's
+ * machine-local worktree folder.
  *
  * <p>Split out of the spec base purely to respect the file-size guidance
  * (`.claude/rules/process-invariants.md`) — a plain trait, not a reusable port abstraction.
@@ -36,7 +37,7 @@ trait TwoInstanceTakeFixture implements BareGitRepoFixture, TakeCommandFixture {
     abstract Path getTempDir()
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker
     TrackerAdapterFactory trackerFactory
 
@@ -93,18 +94,19 @@ tracker:
         // refreshes its base against a real 'origin' remote (never the clone's local HEAD), so this
         // shared project fixture needs one too.
         addOrigin(projectDir, tempDir)
-        // One shared worktrees root (matching the one machine-local ~/.gnomish/worktrees every
-        // factory instance on a box shares, per the git-task-persistence spec) — git itself, not
+        // One registered clone, hence one worktree folder (matching the one machine-local
+        // projects/<name>/worktrees/<clone> folder every factory instance on a box shares, per the
+        // git-task-persistence spec) — git itself, not
         // this fixture, is what actually prevents a task branch from being checked out twice; NFR-R3
         // is about instance B needing no IN-PROCESS state from instance A, not a distinct directory.
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     /**
      * Builds a brand-new {@link TakeCommand}, simulating a fresh factory instance: no field or
      * object here is ever shared with any other command built by this method (NFR-R3) — a fresh
      * {@link ManualRunAssembly}, a fresh {@link FactoryProperties} (own {@code instanceName}), and
-     * a fresh clock; only {@link #worktreesRoot} and {@link #tracker}/{@link
+     * a fresh clock; only {@link #registeredClone} and {@link #tracker}/{@link
      * #trackerFactory} (which stand in for the one shared machine-local worktrees convention and
      * the external tracker service respectively) cross into it. {@code agentCliBinary} points at
      * the fake-agent {@code plain-round} scenario wrapper (task 6.1's own technique) so both
@@ -114,7 +116,7 @@ tracker:
     TakeCommand newCommand(String instanceName) {
         String fakeAgentBinary = FakeAgentSupport.propertiesFor('plain-round').agentCliBinary()
         def factoryProperties = testProperties(instanceName: instanceName, agentCliBinary: fakeAgentBinary)
-        newTakeCommand(factoryProperties, worktreesRoot, [github: trackerFactory])
+        newTakeCommand(factoryProperties, registeredClone, [github: trackerFactory])
     }
 
     /**

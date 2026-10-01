@@ -80,6 +80,13 @@ include 'untrustedtext'
 // the domain and the published plugin contract both reach it, so any edge added here would
 // land in both.
 include 'operatorevent'
+// The operator-configuration level leaf (FR6, design D4 of add-project-registry): the
+// `@ConfigLevel(Level)` annotation every `@ConfigurationProperties` record component carries,
+// declaring where the `factory.*` key it binds may be set. A leaf because the annotated records
+// live in `:application` and in `:sandbox:core`, and only a module both can reach serves both
+// from one declaration. Dependency-free for `:operatorevent`'s reason: an edge added here would
+// land in both layers.
+include 'operatorconfig'
 include 'logtext'
 include 'gitobjects'
 // The git-transfer leaf (FR1, FR2, design D1 of own-git-transfer-argv): the one owner of

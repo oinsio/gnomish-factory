@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import java.nio.file.Path;
@@ -12,24 +13,25 @@ import java.util.Optional;
  * history of a task.
  *
  * <p>The first two are factory methods rather than plain calls because both existing ports carry
- * per-run identity — a repository is rooted at one clone and worktrees root, a persistence at one
+ * per-run identity — a repository is rooted at one registered clone, a persistence at one
  * worktree and taskId. Binding that identity here is what lets a use case ask for the port it needs
  * without naming the backend that implements it (FR12b, design D12 of split-into-modules); it is
  * also what keeps a run's collaborators coherent, since one bound instance hands out collaborators
  * that all share the same underlying backend.
  *
- * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules.
+ * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules; FR3, FR9 of
+ * add-project-registry.
  */
 public interface TaskStoreGit {
 
     /**
-     * The lifecycle repository rooted at {@code cloneDir}.
+     * The lifecycle repository rooted at {@code clone}.
      *
-     * @param cloneDir the clone that holds the task branches; never null
-     * @param worktreesRoot the root task worktrees are materialized under; never null
+     * @param clone the registered clone that holds the task branches; its worktree folder is where
+     *     task worktrees are materialized (FR9, NFR-R2 of add-project-registry); never null
      * @return the repository; never null
      */
-    TaskLifecycleStore taskRepository(Path cloneDir, Path worktreesRoot);
+    TaskLifecycleStore taskRepository(RegisteredClone clone);
 
     /**
      * The round persistence for the task executing in {@code worktree}.

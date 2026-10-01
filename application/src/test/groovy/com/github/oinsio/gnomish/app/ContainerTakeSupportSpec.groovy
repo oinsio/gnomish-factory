@@ -22,7 +22,7 @@ class ContainerTakeSupportSpec extends Specification {
 
     def "hostOnly(factoryProperties) carries the given factory properties through"() {
         given:
-        def properties = new FactoryProperties(null, null, null, null, null, null)
+        def properties = new FactoryProperties(null, null, null, null, null)
 
         expect:
         ContainerTakeSupport.hostOnly(properties).factoryProperties().is(properties)

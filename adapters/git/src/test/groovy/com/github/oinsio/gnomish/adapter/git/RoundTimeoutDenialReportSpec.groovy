@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Engine
@@ -65,14 +67,14 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
     def mapper = new StatusReportJsonMapper()
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     def "M1: a round killed on its round timeout shows its egress denial under the escalation in both documents"() {
@@ -84,7 +86,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         when: 'the engine runs that round and parks the task on the branch'
         def outcome = runRoundKilledBy(
                 new ExecutorFailure(new RuntimeException('round timed out after PT15M'), [denial]), context)
-        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         repository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(TASK_ID, outcome)
 
@@ -128,7 +130,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
     }
 
     private String committedTaskJson() {
-        worktreesRoot.resolve('clone').resolve(TASK_ID).resolve('.gnomish-task').resolve('task.json').toFile().text
+        registeredClone.worktrees().resolve(TASK_ID).resolve('.gnomish-task').resolve('task.json').toFile().text
     }
 
     private static PipelineDefinition pipeline() {

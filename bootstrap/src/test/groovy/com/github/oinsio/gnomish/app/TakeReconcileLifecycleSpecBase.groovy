@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -40,7 +41,7 @@ abstract class TakeReconcileLifecycleSpecBase extends Specification implements B
     Path tempDir
 
     Path projectDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
     Tracker tracker
     TrackerAdapterFactory trackerFactory
 
@@ -90,11 +91,11 @@ tracker:
         // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
-        worktreesRoot = tempDir.resolve('worktrees')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
-        newTakeCommand(factoryProperties, worktreesRoot, [github: trackerFactory])
+        newTakeCommand(factoryProperties, registeredClone, [github: trackerFactory])
     }
 
     def "M4: a delivered branch with a missing tracker finish reconciles without running any stage"() {

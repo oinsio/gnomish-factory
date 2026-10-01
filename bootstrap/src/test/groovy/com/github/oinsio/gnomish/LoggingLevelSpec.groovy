@@ -4,9 +4,13 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import java.nio.file.Path
 import org.slf4j.LoggerFactory
-import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.ConfigurableApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * Log level is configurable without recompilation (FR4 scenario "Log level
@@ -36,10 +40,33 @@ import spock.lang.Specification
  * Spring Boot applies {@code logging.level.*} at context startup: relying on
  * "no property set" would leak whichever level a previously started test
  * context configured, making the suite order-dependent.
+ *
+ * <p>Design D8 of add-project-registry: each context boots through {@link FactoryBoot} — the
+ * {@code CommandExit} argument registration — against a factory home of its own, with the level
+ * as a default property (on the command line it would make the boot a {@code run}).
  * Implements FR4 of add-project-skeleton.
  */
-@SpringBootTest(classes = FactoryApplication, properties = 'logging.level.com.github.oinsio.gnomish=DEBUG')
 class LoggingLevelSpec extends Specification {
+
+    @Shared
+    @TempDir
+    Path operatorHomeDir
+
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
+
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot(['logging.level.com.github.oinsio.gnomish': 'DEBUG'])
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // FR4: DEBUG messages appear when the configured level is DEBUG
     def "a DEBUG event emitted through the SLF4J API reaches the Logback output"() {
@@ -64,8 +91,27 @@ class LoggingLevelSpec extends Specification {
  * the DEBUG visibility above is driven by configuration alone — same
  * bytecode, no recompilation. Implements FR4 of add-project-skeleton.
  */
-@SpringBootTest(classes = FactoryApplication, properties = 'logging.level.com.github.oinsio.gnomish=INFO')
 class LoggingLevelSuppressedSpec extends Specification {
+
+    @Shared
+    @TempDir
+    Path operatorHomeDir
+
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
+
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot(['logging.level.com.github.oinsio.gnomish': 'INFO'])
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // FR4: the same DEBUG emission is filtered out when the level is INFO
     def "a DEBUG event emitted through the SLF4J API is suppressed at INFO"() {

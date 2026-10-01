@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -76,7 +77,8 @@ import java.util.function.UnaryOperator
 trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
 
     static final Path CLONE_DIR = Path.of('/tmp/gnomish-clone')
-    static final Path WORKTREES_ROOT = Path.of('/tmp/gnomish-worktrees')
+    /** The registered clone the take chain works in: {@link #CLONE_DIR} under a factory home of its own. */
+    static final RegisteredClone CLONE = RegisteredCloneFixture.unregistered(Path.of('/tmp/gnomish-home'), CLONE_DIR)
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
     static final TaskRef REF = new TaskRef('github:o/r#1')
     /** The law commit the fake task-tier reads report — any well-formed id, never resolved. */
@@ -380,9 +382,9 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     TakeClaimAndWork claimAndWork(TaskGit git, Tracker tracker, RunAssembly assembly,
             ClaimBeat beat = ClaimBeat.NONE, ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
-            Path root = WORKTREES_ROOT,
+            RegisteredClone clone = CLONE,
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        new TakeClaimAndWorkFactory(slotWiring(assembly, git, tracker, root, ContainerTakeSupport.hostOnly(),
+        new TakeClaimAndWorkFactory(slotWiring(assembly, git, tracker, clone, ContainerTakeSupport.hostOnly(),
                 new ClaimTenure(beat, claimLossFlag), trustedBase)).forSlot()
     }
 
@@ -391,11 +393,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * no credential names to scrub, MDC key {@code taskId}, and by default a host-only seam and a
      * beat-less tenure over a fresh flag.
      */
-    SlotWiring slotWiring(RunAssembly assembly, TaskGit git, Tracker tracker, Path root = WORKTREES_ROOT,
+    SlotWiring slotWiring(RunAssembly assembly, TaskGit git, Tracker tracker, RegisteredClone clone = CLONE,
             ContainerTakeSupport containerTakeSupport = ContainerTakeSupport.hostOnly(),
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        new SlotWiring(assembly, git, root, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
+        new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
         containerTakeSupport, tenure, trustedBase)
     }
 

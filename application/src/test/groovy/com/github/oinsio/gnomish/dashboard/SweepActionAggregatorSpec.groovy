@@ -20,7 +20,6 @@ import spock.lang.TempDir
  */
 class SweepActionAggregatorSpec extends Specification {
 
-    static final String INSTANCE = 'gnome-1'
     static final LocalDate TODAY = LocalDate.parse('2026-08-06')
 
     @TempDir
@@ -36,7 +35,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         window.total() == 1
@@ -54,7 +53,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         expect:
-        aggregator.aggregate(tempDir, INSTANCE, TODAY, 1).rows()[0].category() == category
+        aggregator.aggregate(tempDir, TODAY, 1).rows()[0].category() == category
 
         where:
         wire | category
@@ -75,7 +74,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+        def window = aggregator.aggregate(tempDir, TODAY, 2)
 
         then:
         window.rows()*.objectName() == [
@@ -94,7 +93,7 @@ class SweepActionAggregatorSpec extends Specification {
         })
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         window.rows().size() == SweepActionAggregator.MAX_ACTIONS
@@ -114,7 +113,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         window.rows()*.objectName() == ['box-1']
@@ -135,7 +134,7 @@ class SweepActionAggregatorSpec extends Specification {
         def logs = LogCaptureSupport.attach(SweepActionAggregator, Level.DEBUG)
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -159,7 +158,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         window.rows()[0].ageSeconds() == null
@@ -172,7 +171,7 @@ class SweepActionAggregatorSpec extends Specification {
                 actionLine('stoppedOrphan', 'box-1', 'tracked', 'task-1', 5) + '\n{"version":1,"type":"sweepAc')
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def window = aggregator.aggregate(tempDir, TODAY, 1)
 
         then:
         window.rows()*.objectName() == ['box-1']
@@ -185,7 +184,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 7)
+        def window = aggregator.aggregate(tempDir, TODAY, 7)
 
         then:
         window.rows().size() == 1
@@ -193,7 +192,7 @@ class SweepActionAggregatorSpec extends Specification {
 
     def "a window with no readable file at all comes back empty"() {
         expect:
-        aggregator.aggregate(tempDir, INSTANCE, TODAY, 7) == SweepActionWindow.EMPTY
+        aggregator.aggregate(tempDir, TODAY, 7) == SweepActionWindow.EMPTY
     }
 
     // NFR-O3: the window is exactly windowDays long, so an older file cannot leak in.
@@ -207,7 +206,7 @@ class SweepActionAggregatorSpec extends Specification {
         ])
 
         when:
-        def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+        def window = aggregator.aggregate(tempDir, TODAY, 2)
 
         then:
         window.rows()*.objectName() == ['in-range']
@@ -218,7 +217,7 @@ class SweepActionAggregatorSpec extends Specification {
     }
 
     private void writeLedgerFileRaw(LocalDate date, String content) {
-        Path file = ObservabilityPaths.ledgerFile(tempDir, INSTANCE, date)
+        Path file = ObservabilityPaths.ledgerFile(tempDir, date)
         Files.createDirectories(file.parent)
         Files.writeString(file, content, StandardCharsets.UTF_8)
     }

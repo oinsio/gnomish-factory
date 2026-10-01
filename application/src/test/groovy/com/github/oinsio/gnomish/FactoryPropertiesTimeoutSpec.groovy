@@ -18,7 +18,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     // FR7/D2 of fix-round-stdout-drain: the tail-drain grace defaults to 5 seconds
     def "agent-cli-tail-drain-grace defaults to five seconds when unset"() {
         when: 'a properties record is created through a constructor that predates the grace'
-        def properties = new FactoryProperties('factory-01', 'claude', [], null, null)
+        def properties = new FactoryProperties('factory-01', 'claude', null, null)
 
         then: 'the accessor returns the safe default'
         properties.agentCliTailDrainGrace() == Duration.ofSeconds(5)
@@ -28,7 +28,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     def "agent-cli-tail-drain-grace of an explicit value is exposed unchanged"() {
         when:
         def properties = new FactoryProperties(
-                'factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null)
+                'factory-01', 'claude', Duration.ofSeconds(30), null, null, null)
 
         then:
         properties.agentCliTailDrainGrace() == Duration.ofSeconds(30)
@@ -37,7 +37,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     // FR7/D2: a non-positive grace is a startup error, before any dialog
     def "agent-cli-tail-drain-grace of #description is rejected with the property name"() {
         when:
-        new FactoryProperties('factory-01', 'claude', grace, [], null, null, null)
+        new FactoryProperties('factory-01', 'claude', grace, null, null, null)
 
         then:
         def failure = thrown(IllegalArgumentException)
@@ -53,7 +53,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     // installation property with a documented default
     def "#property defaults to #expected when unset"() {
         when: 'a properties record is created through a constructor that predates the deadlines'
-        def properties = new FactoryProperties('factory-01', 'claude', null, [], null, null, null)
+        def properties = new FactoryProperties('factory-01', 'claude', null, null, null, null)
 
         then: 'the accessor returns the documented default'
         accessor(properties) == expected
@@ -85,17 +85,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
             'factory.docker-command-timeout',
             'factory.check-command-timeout'
         ]
-        build << [
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, d, null, null)
-            },
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, null, d, null)
-            },
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, null, null, d)
-            }
-        ]
+        build << deadlineBuilders()
         accessor << [
             { it.gitNetworkTimeout() },
             { it.dockerCommandTimeout() },
@@ -126,15 +116,26 @@ class FactoryPropertiesTimeoutSpec extends Specification {
             'factory.docker-command-timeout',
             'factory.check-command-timeout'
         ]
-        build << [
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, d, null, null)
+        build << deadlineBuilders()
+    }
+
+    // one builder per deadline knob: git-network, docker-command, check-command
+    static List<Closure<FactoryProperties>> deadlineBuilders() {
+        Duration none = null
+        FactoryProperties.Tracker noTracker = null
+        Map<String, Map<String, Object>> noSections = null
+        [
+            { Duration d ->
+                new FactoryProperties(
+                'factory-01', 'claude', none, noTracker, noSections, noSections, d, none, none)
             },
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, null, d, null)
+            { Duration d ->
+                new FactoryProperties(
+                'factory-01', 'claude', none, noTracker, noSections, noSections, none, d, none)
             },
-            { d ->
-                new FactoryProperties('factory-01', 'claude', null, [], null, null, null, null, null, d)
+            { Duration d ->
+                new FactoryProperties(
+                'factory-01', 'claude', none, noTracker, noSections, noSections, none, none, d)
             }
         ]
     }

@@ -57,12 +57,11 @@ dependencies {
 }
 
 // Retain formal parameter names in the bytecode. Spring resolves an ambiguous
-// injection point by parameter name — two `Path` beans (`worktreesRoot`,
-// `homeDir`) are told apart that way — and the Boot plugin used to supply this
-// flag implicitly, back when the composition root and every injected class were
-// one module. Library modules apply no Boot plugin (design D9), so the flag
-// belongs here, where it holds for every module (task 4.5 of
-// split-into-modules).
+// injection point by parameter name — beans of one type are told apart that
+// way — and the Boot plugin used to supply this flag implicitly, back when the
+// composition root and every injected class were one module. Library modules
+// apply no Boot plugin (design D9), so the flag belongs here, where it holds for
+// every module (task 4.5 of split-into-modules).
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-parameters'
 }

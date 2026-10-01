@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish;
 
+import com.github.oinsio.gnomish.operatorconfig.ConfigLevel;
+import com.github.oinsio.gnomish.operatorconfig.Level;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -25,8 +26,14 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  * lands in public issue comments, so a hostname-derived default is rejected — design D6).
  * {@code tracker} carries the abort-backoff policy Duration defaults (design D5, D10).
  *
+ * <p>Every component declares where its key may be set with {@link ConfigLevel} (FR6, design D5 of
+ * add-project-registry); {@code tracker} is a nested record, so its own components carry the
+ * level instead.
+ *
  * @param instanceName diagnostic name of this factory instance ({@code factory.instance-name});
- *     defaults to {@code "gnomish-factory"} when unset; rejected if explicitly set to blank
+ *     defaults to {@code "default"} when unset (design D5 of add-project-registry — the built-in
+ *     default lives here, not in a bundled {@code application.yaml}); rejected if explicitly set
+ *     to blank
  * @param agentCliBinary path or name of the agent CLI binary ({@code factory.agent-cli-binary});
  *     defaults to {@code "claude"} (resolved from {@code PATH}) when unset
  * @param agentCliTailDrainGrace how long a round waits after the agent process exits for its
@@ -35,11 +42,6 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     {@code agentCliBinary}, since it characterizes the host rather than the repo's pipeline
  *     (FR7, design D2 of fix-round-stdout-drain); documented in the installation-properties table
  *     of {@code docs/guides/operator-guide-run.md} (UX3 of fix-round-stdout-drain)
- * @param agentCliEnvPassthrough superseded and ignored: the operator passthrough of the layered
- *     child-environment allowlist is {@code factory.sandbox.env-passthrough} (D6, FR9 of
- *     add-sandbox-core). This knob was documentation-only under the replaced
- *     inherit-everything-minus-scrub behavior and is kept solely so existing configs still bind;
- *     defaults to an empty list when unset
  * @param tracker the tracker abort-backoff policy defaults ({@code factory.tracker.*}); defaults
  *     to {@link Tracker#Tracker(Duration, Duration)}'s own defaults when unset
  * @param check the check providers' operator subsections ({@code factory.check.<provider>.*}),
@@ -63,16 +65,15 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  */
 @ConfigurationProperties("factory")
 public record FactoryProperties(
-        String instanceName,
-        String agentCliBinary,
-        Duration agentCliTailDrainGrace,
-        List<String> agentCliEnvPassthrough,
+        @ConfigLevel(Level.ANY) String instanceName,
+        @ConfigLevel(Level.ANY) String agentCliBinary,
+        @ConfigLevel(Level.HOST) Duration agentCliTailDrainGrace,
         Tracker tracker,
-        Map<String, Map<String, Object>> check,
-        Map<String, Map<String, Object>> connections,
-        Duration gitNetworkTimeout,
-        Duration dockerCommandTimeout,
-        Duration checkCommandTimeout) {
+        @ConfigLevel(Level.PROJECT) Map<String, Map<String, Object>> check,
+        @ConfigLevel(Level.ANY) Map<String, Map<String, Object>> connections,
+        @ConfigLevel(Level.ANY) Duration gitNetworkTimeout,
+        @ConfigLevel(Level.HOST) Duration dockerCommandTimeout,
+        @ConfigLevel(Level.ANY) Duration checkCommandTimeout) {
 
     // Every component is resolved through FactoryPropertyDefaults rather than inline: Spring's
     // reflective constructor binding can pass null for any component despite the compile-time
@@ -87,7 +88,6 @@ public record FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
             @Nullable Duration agentCliTailDrainGrace,
-            @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections,
@@ -97,7 +97,6 @@ public record FactoryProperties(
         this.instanceName = FactoryPropertyDefaults.instanceName(instanceName);
         this.agentCliBinary = FactoryPropertyDefaults.agentCliBinary(agentCliBinary);
         this.agentCliTailDrainGrace = FactoryPropertyDefaults.tailDrainGrace(agentCliTailDrainGrace);
-        this.agentCliEnvPassthrough = FactoryPropertyDefaults.envPassthrough(agentCliEnvPassthrough);
         this.tracker = FactoryPropertyDefaults.tracker(tracker);
         this.check = FactoryPropertyDefaults.subsections(check);
         this.connections = FactoryPropertyDefaults.subsections(connections);
@@ -122,21 +121,10 @@ public record FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
             @Nullable Duration agentCliTailDrainGrace,
-            @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
-        this(
-                instanceName,
-                agentCliBinary,
-                agentCliTailDrainGrace,
-                agentCliEnvPassthrough,
-                tracker,
-                check,
-                connections,
-                null,
-                null,
-                null);
+        this(instanceName, agentCliBinary, agentCliTailDrainGrace, tracker, check, connections, null, null, null);
     }
 
     /**
@@ -149,10 +137,9 @@ public record FactoryProperties(
     public FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
-            @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check) {
-        this(instanceName, agentCliBinary, agentCliEnvPassthrough, tracker, check, null);
+        this(instanceName, agentCliBinary, tracker, check, null);
     }
 
     /**
@@ -163,11 +150,10 @@ public record FactoryProperties(
     public FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
-            @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
-        this(instanceName, agentCliBinary, null, agentCliEnvPassthrough, tracker, check, connections);
+        this(instanceName, agentCliBinary, null, tracker, check, connections);
     }
 
     /**
@@ -186,7 +172,9 @@ public record FactoryProperties(
      *     defaults to {@code 1h} when unset, mirroring {@link
      *     com.github.oinsio.gnomish.app.take.BackoffPolicy#DEFAULT_CAP} (same hand-sync note)
      */
-    public record Tracker(Duration abortBackoffBase, Duration abortBackoffCap) {
+    public record Tracker(
+            @ConfigLevel(Level.ANY) Duration abortBackoffBase,
+            @ConfigLevel(Level.ANY) Duration abortBackoffCap) {
 
         private static final Duration DEFAULT_ABORT_BACKOFF_BASE = Duration.ofMinutes(2);
         private static final Duration DEFAULT_ABORT_BACKOFF_CAP = Duration.ofHours(1);

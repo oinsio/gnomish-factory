@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.RecoveryDisposition;
 import com.github.oinsio.gnomish.status.StatusReport;
@@ -21,8 +22,8 @@ import org.springframework.stereotype.Component;
  * single-task case and {@code TaskBranchLister} (task 5.4) for list mode; rendering reuses the
  * status-report v1 text/JSON machinery verbatim for the single-task case (FR13), mirroring {@code
  * ConsoleStatusRenderer#render}'s json-flag dispatch, and {@link TaskListRenderer} for list mode.
- * The worktree path (FR6, UX1) is printed via {@link TaskWorktreePath}'s pure formula — never
- * materialized, never touched.
+ * The worktree path (FR6, UX1) is printed via {@link TaskWorktreePath}'s pure formula over the
+ * registered clone (FR9 of add-project-registry) — never materialized, never touched.
  *
  * <p>"Task not found" for the single-task case (task 5.7, FR13, UX3, design D15): a merged PR's
  * branch deletion is a normal end state, not a tool failure, so the reader's {@link
@@ -48,7 +49,8 @@ import org.springframework.stereotype.Component;
  * machine path, byte for byte, because their reader is a parser (UX3 of that change).
  *
  * <p>Implements FR13, FR6, UX3 of add-git-workflow; FR16, UX4 of harden-task-branch-contract;
- * FR13 of harden-logging-observability; FR5 of harden-untrusted-text-sinks.
+ * FR13 of harden-logging-observability; FR5 of harden-untrusted-text-sinks; FR3, FR9 of
+ * add-project-registry.
  */
 @Component
 final class StatusCommand {
@@ -59,12 +61,16 @@ final class StatusCommand {
     private final StatusReportJsonMapper jsonMapper = new StatusReportJsonMapper();
     private final TaskListRenderer taskListRenderer = new TaskListRenderer();
     private final BranchShapeReportRenderer shapeRenderer = new BranchShapeReportRenderer();
-    private final FactoryPaths paths;
+    private final ProjectScope scope;
     private final ConsoleIO console;
 
-    StatusCommand(TaskGit git, FactoryPaths paths, ConsoleIO console) {
+    /**
+     * @param scope the registered clone {@code --dir} names: the directory the branches are read in
+     *     and the worktree path is formed from (FR3, D9 of add-project-registry)
+     */
+    StatusCommand(TaskGit git, ProjectScope scope, ConsoleIO console) {
         this.git = git;
-        this.paths = paths;
+        this.scope = scope;
         this.console = console;
     }
 
@@ -79,13 +85,14 @@ final class StatusCommand {
      *     enumeration failed; nothing is printed, since an empty table would be a false answer
      */
     void run(ApplicationArguments args) {
-        StatusArguments statusArguments = argumentsParser.parse(args);
+        RegisteredClone clone = scope.registeredClone();
+        StatusArguments statusArguments = argumentsParser.parse(args, clone);
         String taskId = statusArguments.task();
         if (taskId == null) {
             runList(statusArguments.dir(), statusArguments.json());
             return;
         }
-        runForTask(statusArguments.dir(), taskId, statusArguments.json());
+        runForTask(statusArguments.dir(), clone, taskId, statusArguments.json());
     }
 
     private void runList(Path dir, boolean json) {
@@ -97,11 +104,11 @@ final class StatusCommand {
         }
     }
 
-    private void runForTask(Path dir, String taskId, boolean json) {
+    private void runForTask(Path dir, RegisteredClone clone, String taskId, boolean json) {
         BranchStateResult result = git.branches().readState(dir, taskId);
         switch (result) {
             case BranchStateResult.NotFound ignored -> reportNotFound(taskId);
-            case BranchStateResult.Found found -> printFound(dir, taskId, found.report(), json);
+            case BranchStateResult.Found found -> printFound(clone, taskId, found.report(), json);
             case BranchStateResult.Shaped(BranchShape shape) -> printShape(taskId, shape, json);
         }
     }
@@ -131,8 +138,8 @@ final class StatusCommand {
         }
     }
 
-    private void printFound(Path dir, String taskId, StatusReport report, boolean json) {
-        Path worktree = TaskWorktreePath.resolve(paths.worktreesRoot(), dir, taskId);
+    private void printFound(RegisteredClone clone, String taskId, StatusReport report, boolean json) {
+        Path worktree = TaskWorktreePath.resolve(clone, taskId);
         if (json) {
             console.printMachine(jsonMapper.serialize(report) + ConsoleIO.LINE_END);
         } else {

@@ -64,14 +64,14 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             builtSupport
         } as ContainerSupportFactory
         def containerTakeSupport = new ContainerTakeSupport(
-                new FactoryProperties(null, null, null, null, null, null),
+                new FactoryProperties(null, null, null, null, null),
                 new BindingProperties(null, [:]),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
                 { false },
                 containerSupportFactory)
         def resumeRunner = new TakeContainerResumeRunner(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, WORKTREES_ROOT,
+                        assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE,
                         containerTakeSupport))
         def mechanics = new ContainerResumeMechanics(
                 resumeRunner, [] as List<Segment>, completingPipeline())

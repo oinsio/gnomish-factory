@@ -18,26 +18,31 @@ script you own and adapt.
 ## Where the files live
 
 ```
-~/.gnomish/serve/<instance-name>/
+~/.gnomish/projects/<name>/serve/<instance>/
   snapshot.json              # overwritten in place, one file, current state
   ledger-2026-08-02.jsonl    # append-only, one file per UTC day
   ledger-2026-08-03.jsonl
 ```
 
-The directory is keyed by the *configured instance name*
-(`factory.instance-name`), not by the full per-process instance id — the
-name is stable across restarts, so the path an operator or a cron job
+`<name>` is the registered project the daemon serves (`--dir` resolves it; see
+[`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project)),
+and `~/.gnomish` is the factory home, moved as a whole by `GNOMISH_HOME`. The
+directory is keyed by the *configured instance name*
+(`factory.instance-name`, default `default`), not by the full per-process
+instance id — the name is stable across restarts, so the path an operator or a cron job
 points at never moves (FR9). The full instance id (with its per-process
 suffix) appears only inside the written data, alongside the host and
 factory version, so restarts are still distinguishable by content (design
 D2). One `cat`/`jq` of this predictable path answers "alive? busy?" without
 touching daemon config or logs (UX1).
 
-Because the path is keyed by the configured name, running two daemons with
-the same `factory.instance-name` on one host is a documented misconfiguration
+Because the path is keyed by the project and the configured name, running two
+daemons for one project with the same `factory.instance-name` on one host is a
+documented misconfiguration
 — they would write the same `snapshot.json` and ledger files, and there is no
-cross-process locking to stop them (design D2, FR9). Give every daemon on a
-host a distinct configured name.
+cross-process locking to stop them (design D2, FR9). Give every daemon of one
+project a distinct configured name (`--factory.instance-name=second`); daemons
+of different projects never share a folder.
 
 ## `snapshot.json` — the gauge
 
@@ -128,7 +133,7 @@ records. Overnight totals are one `jq` aggregation away:
 ```bash
 jq -sr '[.[] | select(.type=="taskOutcome")] | group_by(.outcome)
         | map({outcome: .[0].outcome, count: length}) | .[]' \
-  ~/.gnomish/serve/my-instance/ledger-2026-08-0[23].jsonl
+  ~/.gnomish/projects/widgets/serve/default/ledger-2026-08-0[23].jsonl
 ```
 
 **Retention.** The snapshot writer's tick also sweeps `ledger-*.jsonl`
@@ -145,22 +150,25 @@ The snapshot and the ledgers above are the *durable* record — they survive a
 source for automation (ADR [0004](../adr/0004-logging-policy.md)). This
 section is the operator's map of it.
 
-**Where it is.** One rolling file per host, outside every workspace and
-every git tree:
+**Where it is.** One rolling file per project and instance, under the
+factory home, outside every workspace and every git tree:
 
 ```
-~/.gnomish/logs/gnomish.log            # current
-~/.gnomish/logs/gnomish.2026-09-02.0.log   # rolled, 10MB or one UTC day
+~/.gnomish/projects/widgets/logs/default.log                # current
+~/.gnomish/projects/widgets/logs/default.2026-09-02.0.log   # rolled, 10MB or one UTC day
+~/.gnomish/logs/factory.log                                 # commands with no project (project add, project list)
 ```
 
-Rolling keeps ~7 days and at most 100MB in total; older segments are deleted
-oldest-first. Two environment variables move or change it for one run, with
-no rebuild:
+Two projects on one host therefore never share a file, and the file is chosen
+before the first line is written, by the same owner that places the project's
+worktrees and serve folder. Rolling keeps ~7 days and at most 100MB in total;
+older segments are deleted oldest-first. Moving the whole factory home
+(`GNOMISH_HOME`) moves the logs with it; one environment variable changes the
+level for one run, with no rebuild:
 
 | Variable            | Default           | Meaning                                                                                                                                                                                                               |
 |---------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GNOMISH_LOG_LEVEL` | `INFO`            | root level for the file and the consoles. A value Logback does not recognize resolves to `DEBUG` — a typo makes the run louder, never quieter. Spring's `logging.level.<logger>` still applies on top for finer grain |
-| `GNOMISH_LOG_DIR`   | `~/.gnomish/logs` | log directory. Exists for test isolation; pointing it inside a workspace or a git tree gives up the "never in a git tree" guarantee                                                                                   |
 
 **What reaches the terminal.** The console carries `WARN` and above only —
 `ERROR` goes to both stdout and stderr, `WARN` to stdout. Everything from
@@ -179,7 +187,7 @@ So the whole story of one task — including the daemon work done on its
 behalf — is one grep:
 
 ```bash
-grep 'taskId=42' ~/.gnomish/logs/gnomish.log
+grep 'taskId=42' ~/.gnomish/projects/widgets/logs/default.log
 ```
 
 `stage` and `attempt` narrow it to one pipeline step. `component` names the
@@ -196,8 +204,9 @@ wording may be rewritten at any time, the code may not, and a retired code is
 never reused. Alert rules and greps therefore key on the code:
 
 ```bash
-grep -c '\[GF072\]' ~/.gnomish/logs/gnomish.log   # tracker outage suspected
-grep -o '\[GF[0-9]\{3\}\]' ~/.gnomish/logs/gnomish.log | sort | uniq -c | sort -rn
+LOG=~/.gnomish/projects/widgets/logs/default.log
+grep -c '\[GF072\]' "$LOG"   # tracker outage suspected
+grep -o '\[GF[0-9]\{3\}\]' "$LOG" | sort | uniq -c | sort -rn
 ```
 
 `INFO` and `DEBUG` lines never carry a code — extending the catalog downward
@@ -282,14 +291,15 @@ Each rule reads only snapshot fields; none requires daemon config access
 
 ```bash
 #!/usr/bin/env bash
-# dms-check.sh <instance-name> <healthchecks-ping-url>
+# dms-check.sh <project> <instance-name> <healthchecks-ping-url>
 # Dead-man's-switch monitor over serve's snapshot.json (design D9, UX3).
 # Requires: bash, jq, curl, GNU date (or gdate on macOS — adjust DATE below).
 set -euo pipefail
 
-INSTANCE_NAME="${1:?usage: dms-check.sh <instance-name> <ping-url>}"
-PING_URL="${2:?usage: dms-check.sh <instance-name> <ping-url>}"
-DIR="$HOME/.gnomish/serve/${INSTANCE_NAME}"
+PROJECT="${1:?usage: dms-check.sh <project> <instance-name> <ping-url>}"
+INSTANCE_NAME="${2:?usage: dms-check.sh <project> <instance-name> <ping-url>}"
+PING_URL="${3:?usage: dms-check.sh <project> <instance-name> <ping-url>}"
+DIR="${GNOMISH_HOME:-$HOME/.gnomish}/projects/${PROJECT}/serve/${INSTANCE_NAME}"
 SNAPSHOT="${DIR}/snapshot.json"
 STATE_FILE="${DIR}/.dms-monitor-state.json"   # this script's own scratch file, not a daemon file
 K=3                                            # design D10 staleness multiplier
@@ -384,7 +394,7 @@ curl -fsS -m 10 --retry 3 "$PING_URL" >/dev/null
 
 ```bash
 # crontab: every 5 minutes, well inside the default 30s * k = 90s staleness window
-*/5 * * * * /path/to/dms-check.sh my-instance https://hc-ping.com/<uuid> >>/var/log/gnomish-dms.log 2>&1
+*/5 * * * * /path/to/dms-check.sh widgets default https://hc-ping.com/<uuid> >>/var/log/gnomish-dms.log 2>&1
 ```
 
 ### Success-ping vs explicit-fail: pick one, document the choice

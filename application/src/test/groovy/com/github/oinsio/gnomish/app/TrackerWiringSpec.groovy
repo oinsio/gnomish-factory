@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
@@ -111,23 +110,21 @@ class TrackerWiringSpec extends Specification {
     }
 
     // FR1 of add-board-command, design D8: a reader loads the working-tree pipeline, is built with
-    //     the wiring's secrets over a minted instance id, and is left unwrapped — it never claims.
+    //     the wiring's secrets over the command's minted instance id, and is left unwrapped — it never claims.
     def "resolveReadOnly loads the project's pipeline and builds a plain reader from its tracker section"() {
         given: 'a project whose .gnomish/ names the github tracker'
         GnomishProjectFixture.writeGnomishProject(projectDir)
         def tracker = Mock(Tracker)
         def factory = Mock(TrackerAdapterFactory)
-        def properties = new FactoryProperties('reader-instance', null, null, null, null)
+        def readerId = InstanceId.generate('widgets-reader-instance')
 
         when:
-        def resolution = wiring([github: factory]).resolveReadOnly(projectDir, properties)
+        def resolution = wiring([github: factory]).resolveReadOnly(projectDir, readerId)
 
         then: 'the three-argument create — no tenure record — with the wiring\'s own secrets'
         1 * factory.create(SECRETS, { TrackerConfig c ->
             c.type() == 'github'
-        }, { String id ->
-            id.startsWith('reader-instance')
-        }) >> tracker
+        }, readerId.value()) >> tracker
         resolution.tracker().is(tracker)
         resolution.trackerConfig().type() == 'github'
     }
@@ -137,7 +134,7 @@ class TrackerWiringSpec extends Specification {
         GnomishProjectFixture.writeGnomishProject(projectDir)
 
         when:
-        wiring([:]).resolveReadOnly(projectDir, new FactoryProperties('reader-instance', null, null, null, null))
+        wiring([:]).resolveReadOnly(projectDir, InstanceId.generate('widgets-reader-instance'))
 
         then:
         def ex = thrown(UsageException)

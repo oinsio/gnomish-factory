@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -8,14 +9,15 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish status}'s command-line flags into a {@link StatusArguments} (task 5.3):
- * {@code --dir <clone>} (required), an optional positional {@code <task>} id, and {@code --json}.
+ * {@code --dir <clone>} (required; resolved by the configuration loader), an optional positional {@code <task>} id, and {@code --json}.
  * Mirrors {@link RunArgumentsParser}'s conventions — Spring Boot's {@link ApplicationArguments}
  * for {@code --key=value} flags, the raw {@link ApplicationArguments#getSourceArgs()} seam for
  * the positional token (same idiom {@link Subcommand#parse} already uses), {@link UsageException}
  * for every violation.
  *
  * <p>Implements FR13, FR6 of add-git-workflow; FR7, FR8, UX2 of fix-operator-blockers (the
- * directory and unknown-option checks, through {@link ArgumentsParsingSupport}).
+ * directory and unknown-option checks, through {@link ArgumentsParsingSupport}); FR3 of
+ * add-project-registry (the directory is the registered clone's path, design D9).
  */
 final class StatusArgumentsParser {
 
@@ -31,13 +33,14 @@ final class StatusArgumentsParser {
 
     /**
      * @param args the raw application arguments, including the leading {@code status} token
+     * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
+     *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
-     * @throws UsageException if an option is unknown, or {@code --dir} is missing or given more
-     *     than once
+     * @throws UsageException if an option is unknown
      */
-    StatusArguments parse(ApplicationArguments args) {
+    StatusArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, STATUS_TOKEN, ACCEPTED, POSITIONAL_HINTS);
-        Path dir = ArgumentsParsingSupport.requiredProjectDir(args, STATUS_TOKEN);
+        Path dir = clone.clonePath();
         String task = firstPositionalAfterSubcommand(args);
         boolean json = args.containsOption(JSON);
         return new StatusArguments(dir, task, json);

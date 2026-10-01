@@ -21,7 +21,7 @@ import java.util.function.Function;
  * claim-loss flag — is the slot's equipment, not the resumed run's data.
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution; FR4 of
- * introduce-slot-wiring.
+ * introduce-slot-wiring; FR9 of add-project-registry.
  *
  * @param wiring the slot's equipment every engine execution this tail builds works with
  */
@@ -53,7 +53,7 @@ record TakeResumeExecution(SlotWiring wiring) {
         return new TakeEngineExecution(
                 wiring.assembly(),
                 wiring.git(),
-                wiring.worktreesRoot(),
+                wiring.registeredClone(),
                 wiring.abort(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),

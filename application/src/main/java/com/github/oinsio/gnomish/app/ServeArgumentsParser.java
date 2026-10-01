@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -9,8 +10,8 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish serve}'s command-line flags into a {@link ServeArguments} (task 5.1 of
- * add-factory-serve): a required-nothing {@code --dir} (defaults to {@code .}, like {@link
- * TakeArgumentsParser}), a positive-only {@code --slots} override of {@code
+ * add-factory-serve): a required-nothing {@code --dir} (the registered clone, defaulting to
+ * {@code .}), a positive-only {@code --slots} override of {@code
  * ServeProperties#slots()} (design D3), and the {@code --drain} flag.
  *
  * <p>{@code serve} has no ad-hoc task source and no {@code <ref>} — it works the whole ready
@@ -22,7 +23,7 @@ import org.springframework.boot.ApplicationArguments;
  * unconditionally non-interactive (FR4) — rather than merely left unparsed, so a caller who
  * mistakenly passes it gets a clear refusal instead of silent acceptance.
  *
- * <p>Implements FR2, FR4, D3 of add-factory-serve.
+ * <p>Implements FR2, FR4, D3 of add-factory-serve; FR3 of add-project-registry.
  */
 final class ServeArgumentsParser {
 
@@ -53,14 +54,16 @@ final class ServeArgumentsParser {
 
     /**
      * @param args the raw application arguments, including the leading {@code serve} token
+     * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
+     *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
      * @throws UsageException if a rejected flag is present, or {@code --slots} is given but is
      *     not a positive integer
      */
-    ServeArguments parse(ApplicationArguments args) {
+    ServeArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, SERVE_TOKEN, ACCEPTED, Map.of());
         rejectInapplicableFlags(args);
-        Path dir = ArgumentsParsingSupport.projectDir(args);
+        Path dir = clone.clonePath();
         Integer slots = parseSlots(args);
         boolean drain = args.containsOption(DRAIN);
         return new ServeArguments(dir, slots, drain);

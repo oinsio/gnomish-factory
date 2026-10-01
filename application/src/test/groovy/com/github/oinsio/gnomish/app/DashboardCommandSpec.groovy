@@ -22,6 +22,9 @@ import spock.lang.Timeout
  * to {@code dashboard.html} in the instance's observability directory (design D8), honors an
  * explicit {@code --out}, writes atomically, and completes a one-shot render normally — exit zero
  * — even when the tracker is unreachable (FR3's degraded-board case, never an exception).
+ *
+ * <p>FR10 of add-project-registry: the observability directory is the registered project's
+ * {@code GNOMISH_HOME/projects/<name>/serve/<instance>}, computed from the clone the loader resolved.
  */
 class DashboardCommandSpec extends Specification implements ApplicationArgumentsFixture {
 
@@ -31,11 +34,11 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
     Path tempDir
 
     Path projectDir
-    Path homeDir
+    Path factoryHome
 
     def setup() {
         projectDir = GnomishProjectFixture.writeGnomishProject(tempDir.resolve('project'))
-        homeDir = tempDir.resolve('home')
+        factoryHome = tempDir.resolve('gnomish-home')
     }
 
     /**
@@ -51,12 +54,13 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         newCommand(tracker, sleeper)
     }
 
-    private DashboardCommand newCommand(RecordingReadOnlyTracker tracker, Sleeper sleeper) {
+    private DashboardCommand newCommand(RecordingReadOnlyTracker tracker, Sleeper sleeper,
+            String instanceName = INSTANCE_NAME) {
         new DashboardCommand(
                 Clock.fixed(Instant.parse('2026-08-06T00:00:00Z'), ZoneOffset.UTC),
                 sleeper,
-                FactoryPathsFixture.homeAt(homeDir),
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
+                RegisteredCloneFixture.scope(RegisteredCloneFixture.unregistered(factoryHome, projectDir), instanceName),
+                new FactoryProperties(instanceName, null, null, null),
                 new TrackerWiring([github: new RecordingTrackerAdapterFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
     }
 
@@ -68,8 +72,19 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         command.run(args('dashboard', "--dir=${projectDir}".toString()))
 
         then:
-        def expected = homeDir.resolve('.gnomish/serve').resolve(INSTANCE_NAME).resolve('dashboard.html')
+        def expected = factoryHome.resolve('projects/widgets/serve').resolve(INSTANCE_NAME).resolve('dashboard.html')
         Files.exists(expected)
+    }
+
+    def "FR10 of add-project-registry: default output lands beside the observability files"() {
+        given: 'project widgets with the default instance name'
+        def command = newCommand(new RecordingReadOnlyTracker([], []), { Duration d -> } as Sleeper, null)
+
+        when: 'the dashboard runs without --out'
+        command.run(args('dashboard', "--dir=${projectDir}".toString()))
+
+        then: 'the page is written to GNOMISH_HOME/projects/widgets/serve/default/dashboard.html'
+        Files.readString(factoryHome.resolve('projects/widgets/serve/default/dashboard.html')).startsWith('<!doctype html>')
     }
 
     def "honors an explicit --out path"() {
@@ -82,7 +97,7 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
 
         then:
         Files.exists(out)
-        !Files.exists(homeDir.resolve('.gnomish/serve').resolve(INSTANCE_NAME).resolve('dashboard.html'))
+        !Files.exists(factoryHome.resolve('projects/widgets/serve').resolve(INSTANCE_NAME).resolve('dashboard.html'))
     }
 
     def "a one-shot render writes exactly one complete, self-contained page and returns normally"() {

@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.sandbox;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.operatorconfig.ConfigLevel;
+import com.github.oinsio.gnomish.operatorconfig.Level;
 import java.time.Duration;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -22,7 +24,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * allowlist, and passthrough values are the container adapter's (task group 4)
  * and the guard's (task group 6) concern; this record only carries them, typed.
  *
- * <p>Implements FR3, FR7, FR9, FR10 of add-sandbox-core.
+ * <p>Every component declares where its key may be set with {@link ConfigLevel} (design D5 of
+ * add-project-registry): the image, the egress allowlist and the env passthrough widen or select
+ * the sandbox, so they are {@link Level#SANDBOX_BOUNDARY} keys read from the project's own file
+ * alone; the daemon-facing knobs describe the host; {@code limits} is a nested record whose own
+ * components carry the level.
+ *
+ * <p>Implements FR3, FR7, FR9, FR10 of add-sandbox-core; FR6, NFR-S1 of add-project-registry.
  *
  * @param image the operator-supplied container image ({@code
  *     factory.sandbox.image}); {@code null} when unset — required only when a
@@ -67,17 +75,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("factory.sandbox")
 public record SandboxProperties(
-        @Nullable String image,
-        String runtime,
-        String guardImage,
+        @ConfigLevel(Level.SANDBOX_BOUNDARY) @Nullable String image,
+        @ConfigLevel(Level.HOST) String runtime,
+        @ConfigLevel(Level.HOST) String guardImage,
         ResourceLimits limits,
-        List<String> egressAllowlist,
-        List<String> envPassthrough,
-        boolean enforceDiskQuota,
-        @Nullable String projectId,
-        Duration minimumAge,
-        Duration keptReapAge,
-        Duration manualRunningStopAge) {
+        @ConfigLevel(Level.SANDBOX_BOUNDARY) List<String> egressAllowlist,
+        @ConfigLevel(Level.SANDBOX_BOUNDARY) List<String> envPassthrough,
+        @ConfigLevel(Level.HOST) boolean enforceDiskQuota,
+        @ConfigLevel(Level.PROJECT) @Nullable String projectId,
+        @ConfigLevel(Level.HOST) Duration minimumAge,
+        @ConfigLevel(Level.HOST) Duration keptReapAge,
+        @ConfigLevel(Level.HOST) Duration manualRunningStopAge) {
 
     private static final String DEFAULT_RUNTIME = "runc";
     private static final Duration DEFAULT_MINIMUM_AGE = Duration.ofMinutes(2);

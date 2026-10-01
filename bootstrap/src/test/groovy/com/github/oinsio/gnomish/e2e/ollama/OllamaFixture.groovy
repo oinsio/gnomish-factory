@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.e2e.ollama
 
+import com.github.oinsio.gnomish.e2e.E2eGitTree
 import java.nio.file.Path
 
 /**
@@ -16,12 +17,15 @@ final class OllamaFixture {
 
     private OllamaFixture() {}
 
+    /** A git working tree, so the spawned factory can register it (FR3 of add-project-registry). */
+    private static final Path PROJECT_ROOT = E2eGitTree.copyOf('ollama-e2e')
+
     /**
-     * @return the fixture project root ({@code --dir} target), resolved from the test
-     *     classpath resource {@code /.gnomish-fixtures/ollama-e2e}
+     * @return the fixture project root ({@code --dir} target): a git working tree copied from the
+     *     test classpath resource {@code /.gnomish-fixtures/ollama-e2e}
      */
     static Path projectRoot() {
-        Path.of(OllamaFixture.getResource('/.gnomish-fixtures/ollama-e2e').toURI())
+        PROJECT_ROOT
     }
 
     /** @return the fixture's {@code .gnomish/} subdirectory, for direct {@code PipelineLoader} use */

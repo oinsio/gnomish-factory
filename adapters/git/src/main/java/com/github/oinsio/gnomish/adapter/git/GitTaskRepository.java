@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.Decision;
@@ -59,7 +60,7 @@ import org.slf4j.LoggerFactory;
  * revised 2026-09-10).
  *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR9 of add-project-registry.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
 
@@ -73,16 +74,16 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
     /**
      * @param runner the git subprocess runner
-     * @param cloneDir the existing git clone (the {@code --dir} target) where branch/worktree ops run
-     * @param worktreesRoot the root under which per-task worktrees are materialized
+     * @param clone the registered clone (the {@code --dir} target) where branch/worktree ops run;
+     *     per-task worktrees are materialized in its own worktree folder
      * @param epochs the tenure every lifecycle commit is stamped with (FR13 of
      *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
      */
-    public GitTaskRepository(GitProcessRunner runner, Path cloneDir, Path worktreesRoot, ClaimEpochSource epochs) {
+    public GitTaskRepository(GitProcessRunner runner, RegisteredClone clone, ClaimEpochSource epochs) {
         this.runner = runner;
-        this.cloneDir = cloneDir;
+        this.cloneDir = clone.clonePath();
         this.branchCreator = new TaskBranchCreator(runner);
-        this.worktreeManager = new TaskWorktreeManager(runner, worktreesRoot);
+        this.worktreeManager = new TaskWorktreeManager(runner, clone);
         this.epochs = epochs;
     }
 
@@ -207,7 +208,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
     private Path ensureWorktree(String taskId) {
         String branchName = TaskIdSanitizer.branchName(taskId);
-        return worktreeManager.ensureWorktree(cloneDir, taskId, branchName);
+        return worktreeManager.ensureWorktree(taskId, branchName);
     }
 
     /**

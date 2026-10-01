@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
-import org.springframework.stereotype.Component;
 
 /**
  * Parses and first-tier-validates {@code gnomish run}'s command-line flags into a
@@ -23,9 +23,9 @@ import org.springframework.stereotype.Component;
  * <p>Implements FR1, UX1 of add-manual-run; {@code --dir} (renamed from {@code --project}) and
  * {@code --mode} implement FR7, design D8 of add-git-workflow; {@code --base}, {@code --resume},
  * {@code --discard-work} and their exclusion matrix implement FR7, FR8, FR10, design D7, D9, D10
- * of add-git-workflow.
+ * of add-git-workflow. The {@code dir} component is the registered clone's path, resolved by the
+ * configuration loader before this parser runs (FR3, design D9 of add-project-registry).
  */
-@Component
 public final class RunArgumentsParser {
 
     private static final String RUN_TOKEN = "run";
@@ -56,13 +56,15 @@ public final class RunArgumentsParser {
      * Parses and validates {@code args} into a {@link RunArguments}.
      *
      * @param args the raw application arguments, as Spring Boot parsed them
+     * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
+     *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
      * @throws UsageException if a required flag is missing, mutually exclusive flags conflict,
      *     or a flag's value fails its format check
      */
-    public RunArguments parse(ApplicationArguments args) {
+    public RunArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, RUN_TOKEN, ACCEPTED, Map.of());
-        Path dir = ArgumentsParsingSupport.projectDir(args);
+        Path dir = clone.clonePath();
         String resume = singleValue(args, RESUME);
         TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);

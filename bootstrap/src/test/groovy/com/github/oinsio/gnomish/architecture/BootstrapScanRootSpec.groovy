@@ -1,13 +1,16 @@
 package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.FactoryApplication
-import org.springframework.beans.factory.annotation.Autowired
+import com.github.oinsio.gnomish.FactoryBoot
+import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import java.nio.file.Path
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ConfigurableApplicationContext
+import spock.lang.Shared
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
  * Composition-root scan gate (FR3, NFR-R1, design D3 of split-into-modules,
@@ -25,15 +28,33 @@ import spock.lang.Specification
  * is constrained: every class-level definition must sit under a declared scan
  * root or be an explicitly exported auto-configuration.
  */
-@SpringBootTest(classes = FactoryApplication)
 class BootstrapScanRootSpec extends Specification {
+
+    @Shared
+    @TempDir
+    Path operatorHomeDir
+
+    @Shared
+    OperatorHomeFixture operatorHome
+
+    @Shared
+    ConfigurableApplicationContext context
 
     private static final String PRODUCTION_ROOT = 'com.github.oinsio.gnomish'
     private static final String AUTO_CONFIG_IMPORTS =
     'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
 
-    @Autowired
-    ConfigurableApplicationContext context
+    // Design D8 of add-project-registry: booted through the CommandExit argument registration,
+    // against a factory home of the spec's own.
+    def setupSpec() {
+        operatorHome = OperatorHomeFixture.install(operatorHomeDir.resolve('home'))
+        context = FactoryBoot.boot()
+    }
+
+    def cleanupSpec() {
+        context?.close()
+        operatorHome?.close()
+    }
 
     // FR3: the scan is rooted in the composition root's own package tree
     def "the declared scan roots reach no adapter package"() {
@@ -56,8 +77,11 @@ class BootstrapScanRootSpec extends Specification {
 
         and: 'the scan roots, plus the property records the composition root names itself'
         def roots = FactoryApplication.getAnnotation(SpringBootApplication).scanBasePackages().toList()
-        def namedByBootstrap = [FactoryApplication.name] +
-        FactoryApplication.getAnnotation(EnableConfigurationProperties).value()*.name
+        List<String> namedByBootstrap = [FactoryApplication.name]
+        namedByBootstrap.addAll(
+                FactoryApplication.getAnnotation(EnableConfigurationProperties).value().collect { Class<?> type ->
+                    type.name
+                })
 
         when: 'the first-party classes Spring registered by looking, not by a declared @Bean method'
         ConfigurableListableBeanFactory factory = context.beanFactory
@@ -70,8 +94,8 @@ class BootstrapScanRootSpec extends Specification {
                 .findAll { it.startsWith(PRODUCTION_ROOT) }
 
         then: 'none is left unexplained by a declared scan root, an explicit export, or an explicit name'
-        foundClasses.findAll { name ->
-            !(name in namedByBootstrap || name in exported || roots.any {
+        foundClasses.findAll { String name ->
+            !(namedByBootstrap.contains(name) || exported.contains(name) || roots.any {
                 name.startsWith("${it}.")
             })
         }.isEmpty()

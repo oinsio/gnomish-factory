@@ -124,6 +124,10 @@ class RawCaptureOwners {
             'no mint owed: a secret value, which never reaches a log line or a comment by construction (NFR-S1) — minting it would put it one accessor away from an exit',
         ],
         [
+            'application/src/main/java/com/github/oinsio/gnomish/app/project/OperatorFile.java',
+            'no mint owed: operator configuration — reads the host file or a project file the operator or `project add` wrote under the factory home; its values are parsed into typed paths and names (ProjectFile), checked against the level table, or bound as configuration — a violation line quotes a key or a value only through the console\'s human path',
+        ],
+        [
             'application/src/main/java/com/github/oinsio/gnomish/dashboard/SnapshotReader.java',
             'no mint owed: factory-authored — reads back the snapshot this factory wrote; the untrusted fields inside it are re-minted by SnapshotJsonReader',
         ],

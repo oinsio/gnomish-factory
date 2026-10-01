@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -48,7 +49,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
     Path tempDir
 
     Path cloneDir
-    Path worktreesRoot
+    RegisteredClone registeredClone
 
     // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
     String originUrl
@@ -62,7 +63,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
         originUrl = gitea.createRepository("best-effort-push-${System.nanoTime()}")
         addRemote(cloneDir, 'origin', originUrl)
         seedAndPushGnomishTask(cloneDir)
-        worktreesRoot = tempDir.resolve('worktrees-root')
+        registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
     private static StageDefinition stage() {
@@ -79,7 +80,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
 
     private GitModeRunner newRunner() {
         def assembly = newAssembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')))
-        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
+        new GitModeRunner(assembly, TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     // FR11: after a git-mode round commits, the round commit itself (design D11's push scope is

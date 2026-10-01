@@ -22,13 +22,15 @@ import org.springframework.stereotype.Component;
  * <p>The rendered table goes out on the console owner's human path and the {@code --json}
  * envelope on its machine path, byte for byte (FR5, UX3 of harden-untrusted-text-sinks).
  *
- * <p>Implements FR14, NFR-C1, UX3 of add-git-workflow; FR5 of harden-untrusted-text-sinks.
+ * <p>Implements FR14, NFR-C1, UX3 of add-git-workflow; FR5 of harden-untrusted-text-sinks; FR3 of
+ * add-project-registry.
  */
 @Component
 final class UsageCommand {
 
     private final UsageArgumentsParser argumentsParser = new UsageArgumentsParser();
     private final TaskGit git;
+    private final ProjectScope scope;
     private final UsageTextRenderer textRenderer = new UsageTextRenderer();
     private final UsageReportJsonMapper jsonMapper = new UsageReportJsonMapper();
     private final ConsoleIO console;
@@ -36,10 +38,13 @@ final class UsageCommand {
     /**
      * @param git the task-git capability set the usage history is reconstructed through; never
      *     null
+     * @param scope the registered clone {@code --dir} names, whose history is read (FR3, D9 of
+     *     add-project-registry); never null
      * @param console the console owner every byte this command writes goes through; never null
      */
-    UsageCommand(TaskGit git, ConsoleIO console) {
+    UsageCommand(TaskGit git, ProjectScope scope, ConsoleIO console) {
         this.git = git;
+        this.scope = scope;
         this.console = console;
     }
 
@@ -50,7 +55,7 @@ final class UsageCommand {
      *     UX3) — printed calmly to the operator console first
      */
     void run(ApplicationArguments args) {
-        UsageArguments usageArguments = argumentsParser.parse(args);
+        UsageArguments usageArguments = argumentsParser.parse(args, scope.registeredClone());
         UsageHistoryResult result = git.store().usageHistory(usageArguments.dir(), usageArguments.task());
         switch (result) {
             case UsageHistoryResult.NotFound ignored -> reportNotFound(usageArguments.task());

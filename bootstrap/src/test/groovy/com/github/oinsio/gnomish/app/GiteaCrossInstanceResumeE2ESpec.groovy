@@ -99,12 +99,12 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         given: 'instance A: a clone with a project history, seeded on origin'
         def instanceA = freshClone('instance-a')
         seedAndPushGnomishTask(instanceA)
-        def worktreesA = tempDir.resolve('worktrees-a')
+        def cloneA = RegisteredCloneFixture.registered(tempDir.resolve('home-a'), instanceA)
         def taskId = 'CROSS-1'
 
         when: 'instance A completes only the first stage\'s round, then its stdin runs out mid-second-stage: only one Enter is supplied, enough for "build" to pass and advance, not enough for "verify" to also complete — simulating a died process (GitModeRunner deliberately leaves such an exit without any outcome write, per its own javadoc)'
         new GitModeRunner(assembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))),
-                TaskGitFixture.real(), worktreesA, LiveConsoleIO.onStdout())
+                TaskGitFixture.real(), cloneA, LiveConsoleIO.onStdout())
                 .run(new RunOrder(instanceA, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
                 context(taskId), TaskState.atStageStart('build'))
 
@@ -115,10 +115,10 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
 
         when: 'instance B: a completely separate fresh clone, made only now — after A already pushed'
         def instanceB = freshClone('instance-b')
-        def worktreesB = tempDir.resolve('worktrees-b')
+        def cloneB = RegisteredCloneFixture.registered(tempDir.resolve('home-b'), instanceB)
 
         and: 'instance B resumes the same task purely via what reached origin (FR8/D9 locate -> fetch)'
-        def bundle = new GitResumeRunner(assembly(), TaskGitFixture.real(), worktreesB, 'taskId').bootstrap(instanceB, taskId)
+        def bundle = new GitResumeRunner(assembly(), TaskGitFixture.real(), cloneB, 'taskId').bootstrap(instanceB, taskId)
 
         then: 'instance B sees exactly the round instance A pushed, without ever touching instance A locally'
         Files.exists(bundle.worktreePath().resolve('.gnomish-task').resolve('task.json'))
@@ -127,7 +127,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         when: 'instance B continues the task to completion, driving the second round ("verify") and pushing it'
         def twoEnters = (System.lineSeparator() * 2)
         new GitResumeRunner(assembly(new ByteArrayInputStream(twoEnters.getBytes('UTF-8'))),
-                TaskGitFixture.real(), worktreesB, 'taskId')
+                TaskGitFixture.real(), cloneB, 'taskId')
                 .run(new RunOrder(instanceB, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
 
         then: 'instance B\'s own round commit for "verify" exists, distinct from instance A\'s "build" round'

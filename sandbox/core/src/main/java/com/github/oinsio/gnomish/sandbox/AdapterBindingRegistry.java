@@ -86,7 +86,8 @@ public final class AdapterBindingRegistry {
         AdapterBinding binding = find(configName);
         if (binding == null) {
             throw new IllegalArgumentException("unknown adapter binding '" + configName + "'; discovered bindings are "
-                    + names() + " — name one of them in factory.bindings.*, or add the module contributing '"
+                    + names() + " — name one of them in the project file's factory.bindings.*, or add the module"
+                    + " contributing '"
                     + configName + "' to the classpath");
         }
         return binding;
