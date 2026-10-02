@@ -75,13 +75,17 @@ reason = "Test-scope only (WireMock 3.13.2 templating, localhost, never shipped,
 # latest patch on Maven Central 2026-10-01, moves only to the still-affected
 # 2.21.5). The project's jackson-bom override (gradle/libs.versions.toml) wins
 # with 2.22.3 on every classpath, so `gradle/verification-metadata.xml` records
-# only the losing candidates' `.module` files — no `.jar` — as described for
-# httpclient5 below. Until 2026-10-01 the jars were real: Spotless resolved
+# only the losing candidates' metadata — `.module` files and the parent `.pom`
+# files they inherit from (jackson-base, jackson-dataformats-text,
+# jackson-modules-java8) — no `.jar`, as described for httpclient5 below. The
+# parent POMs are verified when the configuration cache entry is stored; a
+# local build reusing a stored entry never re-verifies them, so check a
+# metadata edit with `.gradle/configuration-cache` removed, as CI runs. Until 2026-10-01 the jars were real: Spotless resolved
 # palantir-java-format's pinned 2.21.4 Jackson on its formatter tool
 # classpath. A component metadata rule in java-conventions.gradle now lifts
 # those edges onto the catalog version, so no 2.21.4 jar is resolved anywhere
 # (verified: with every 2.21.4 entry removed from the metadata, `spotlessCheck`
-# passes and `--write-verification-metadata` re-adds `.module` files only).
+# passes and the metadata needs `.module` and parent `.pom` files only).
 # Re-review 2026-11-01, or drop once a Boot release manages a fixed 2.x line.
 [[IgnoredVulns]]
 id = "GHSA-5gvw-p9qm-jgwh"
