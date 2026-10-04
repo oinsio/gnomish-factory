@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import java.nio.file.Path
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -12,8 +13,9 @@ import spock.lang.TempDir
  * front of the parser, and {@code ManualRunRunner} once had one — its own copy of the {@code run}
  * flag list, which let {@code gnomish run --tsk=x} exit 0 having done nothing. This spec feeds an
  * unknown option to every {@link Subcommand} through {@link ManualRunRunner#run}, so a gate that
- * skips a parser fails a row, and pins the one command line that legitimately reaches no parser:
- * the empty one a Spring test context boots with.
+ * skips a parser fails a row, and pins the two command lines that legitimately reach no parser:
+ * the empty one a Spring test context boots with, and the sole {@code --version} the entry point
+ * answers before Spring starts (FR6, design D3 of add-release-pipeline).
  */
 class CliEntrypointContractSpec extends Specification implements AppAssemblyFixture {
 
@@ -63,5 +65,67 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
         noExceptionThrown()
         out.toString('UTF-8').isEmpty()
         err.toString('UTF-8').isEmpty()
+    }
+
+    // FR6 of add-release-pipeline (design D3): a sole --version is answered before any parser runs
+    def "FR6: a sole --version prints the factory version on one line and reaches no parser"() {
+        given:
+        def console = new ScriptedConsoleIO()
+
+        when:
+        boolean answered = VersionCommand.answer(['--version'] as String[], console)
+
+        then: 'the version is printed on the human path, once, as one line'
+        answered
+        console.printed == [
+            FactoryVersion.current().value() + '\n'
+        ]
+        console.printedMachine.isEmpty()
+    }
+
+    // FR6 of add-release-pipeline, FR8 of fix-operator-blockers: --version beside any other token
+    // is no version request; it reaches the run parser and is rejected like any unknown option
+    def "FR6: --version with another token (#tokens) reaches the run parser and is rejected"() {
+        given:
+        def console = new ScriptedConsoleIO()
+        def runner = newManualRunRunner(clonePath, homeDir)
+
+        when:
+        boolean answered = VersionCommand.answer(tokens as String[], console)
+
+        then: 'the entry point leaves it to Spring and prints nothing'
+        !answered
+        console.printed.isEmpty()
+
+        when:
+        runner.run(new DefaultApplicationArguments(tokens as String[]))
+
+        then:
+        def e = thrown(UsageException)
+        e.message.startsWith("unknown option --version for 'gnomish run'")
+
+        where:
+        tokens << [
+            ['run', '--version'],
+            ['--version', '--dir=.'],
+        ]
+    }
+
+    // FR6: only the exact token qualifies — no prefix, no value, no other spelling
+    def "FR6: #tokens is not a version request"() {
+        given:
+        def console = new ScriptedConsoleIO()
+
+        expect:
+        !VersionCommand.answer(tokens as String[], console)
+        console.printed.isEmpty()
+
+        where:
+        tokens << [
+            [],
+            ['--version=1'],
+            ['-v'],
+            ['version'],
+        ]
     }
 }

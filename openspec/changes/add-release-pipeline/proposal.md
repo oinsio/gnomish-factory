@@ -131,8 +131,9 @@ tag; the first release is `0.1.0`; the plugin contract keeps its own version.
 - **FR6**: `gnomish --version` SHALL print the product version and exit 0; the
   serve snapshot and ledger SHALL record the same version.
 - **FR7**: the release workflow SHALL publish the two archives, a `SHA256SUMS`
-  file covering them, a CycloneDX SBOM of the boot jar, and a build provenance
-  attestation for each archive; the release notes SHALL be
+  file covering them, a CycloneDX SBOM of the boot jar as a separate asset (never
+  embedded in the jar), and for each archive a build provenance attestation and
+  an attestation binding the SBOM to it; the release notes SHALL be
   `docs/releases/<tag>.md` when that file exists, otherwise generated from the
   merged pull requests.
 - **FR8**: before publishing, the workflow SHALL unpack the built archive, run
@@ -141,7 +142,8 @@ tag; the first release is `0.1.0`; the plugin contract keeps its own version.
 ### Non-Functional
 
 - **NFR-S1**: the release workflow's token SHALL have only the permissions it
-  uses (`contents: write`, `id-token: write`, `attestations: write`), and actions
+  uses (`contents: write`, `id-token: write`, `attestations: write`, and
+  `actions: read` for the CI-run query), and actions
   SHALL be pinned as in the existing workflows.
 - **NFR-S2**: the archive's jar SHALL carry `META-INF/LICENSE` and
   `META-INF/NOTICE` identical to the root files, and the archive root SHALL
@@ -168,8 +170,8 @@ tag; the first release is `0.1.0`; the plugin contract keeps its own version.
 ## Success Metrics
 
 - **M1**: pushing `v0.1.0` on a green `main` commit produces a release with 4
-  assets (2 archives, `SHA256SUMS`, SBOM) and one provenance attestation per
-  archive, without any manual step.
+  assets (2 archives, `SHA256SUMS`, SBOM) and, per archive, one provenance and
+  one SBOM attestation, without any manual step.
 - **M2**: building the archive twice from the same commit yields identical
   SHA-256 sums.
 - **M3**: `gnomish --version` from the downloaded archive prints exactly the tag
@@ -185,7 +187,8 @@ plugin-contract separation were decided in the design session.
 
 - `.github/workflows/release.yml` (new); `ci.yml`, `license-gate.yml`,
   `osv-scan.yml`, `gitleaks.yml` (push trigger narrowed to branches); `build-logic` (a product-version
-  convention and reproducible-archive settings); `bootstrap/build.gradle`
+  convention, reproducible-archive settings, and an SBOM convention applied to
+  the root project); `bootstrap/build.gradle`
   (distribution, build info); new `bootstrap/src/dist/` (launcher, archive
   README); `:application` (`FactoryVersion`, `ObservabilityAssembly`);
   `Subcommand` / the entry point (`--version`).
@@ -193,3 +196,7 @@ plugin-contract separation were decided in the design session.
   metadata updated).
 - Docs: `README.md`, `docs/guides/developer-guide.md`, new `docs/releases/`,
   `docs/glossary.md` (a "Release and distribution" section).
+- Sync order: this change's `quality-gates` delta MODIFIES "Continuous
+  integration" and syncs **before** `scope-pit-locally`, whose delta is layered
+  on the text written here (see `.claude/rules/delta-specs.md`, overlapping
+  MODIFIED requirements).

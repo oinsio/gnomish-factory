@@ -135,7 +135,7 @@ locally.
 ### Requirement: Reproducible build
 The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location. A security override of a BOM-managed or `strictly`-constrained transitive SHALL be applied on every configuration where the affected artifact resolves, and its effect SHALL be visible in the committed lock state rather than implied by build-script intent.
 
-The build's outputs SHALL be reproducible as well as its inputs: every archive task of every module (jars, the boot jar, distribution archives) SHALL write a fixed entry order, no file timestamps and fixed file modes, and the boot jar's build info SHALL carry no build time, so that two builds of the same commit with the same version produce byte-identical archives.
+The build's outputs SHALL be reproducible as well as its inputs: every archive task of every module (jars, the boot jar, distribution archives) SHALL write a fixed entry order, no file timestamps and fixed file modes, and no archive SHALL embed a generated file that records when it was made — the boot jar's build info SHALL carry no build time, and the SBOM SHALL stay outside the jar — so that two builds of the same commit with the same version produce byte-identical archives.
 <!-- implements NFR-R1 of add-release-pipeline -->
 <!-- implements FR3, FR4, FR5, NFR-R1, NFR-R2 of fix-osv-dependency-gate -->
 

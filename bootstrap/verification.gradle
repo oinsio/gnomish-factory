@@ -18,6 +18,8 @@ tasks.named('test') {
     // already compiled.
     dependsOn tasks.named('bootJar')
     systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+    // BuildInfoSpec compares the jar's build info with the version this build set (FR3, design D2).
+    systemProperty 'e2e.productVersion', project.version.toString()
 
     // The fake agent's script and scenario library live in `:test-fixtures` but
     // are resolved from disk, not the classpath: they reach a consumer inside a
@@ -102,6 +104,9 @@ pitest {
         // FactoryApplicationSpec's "bootJar stays headless" feature, task 6.5 of add-tracker-port).
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
+        // The archives and their launcher (add-release-pipeline 3.1-3.2): build outputs only the
+        // `test` task wires, and a shell script under `sh` — no production Java class is reached.
+        'com.github.oinsio.gnomish.distribution.*',
         // Drive a real Docker daemon — real containers, volumes, networks — and a real Gitea
         // remote through subprocess `docker`/`git` (add-sandbox-core tasks 4.5-9.4). The sibling
         // suites of this family live in `:adapters` and are excluded by that module (task 8.1).

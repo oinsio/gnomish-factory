@@ -33,6 +33,18 @@ final class GradleRunnerSupport {
         home
     }
 
+    /** A system property {@code functionalTest} must pass (see {@code build-logic/build.gradle}). */
+    static String requiredProperty(String name) {
+        String value = System.getProperty(name)
+        assert value != null: "functionalTest must pass -D${name} (see build-logic/build.gradle)"
+        value
+    }
+
+    /** A path inside a single-quoted Groovy literal: backslashes and quotes escaped. */
+    static String quotedPath(String path) {
+        path.replace('\\', '\\\\').replace("'", "\\'")
+    }
+
     /** Writes {@code content} to {@code relativePath} under {@code projectDir}, creating parents. */
     static void writeFile(Path projectDir, String relativePath, String content) {
         Path target = projectDir.resolve(relativePath)

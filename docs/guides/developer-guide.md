@@ -3,7 +3,7 @@
 This guide is for a developer working on the factory itself: how the Gradle
 module tree is laid out, what `./gradlew check` enforces, and how the
 supply-chain gates (dependency locking, verification, the OSV scan, the license
-gate) are operated.
+gate) are operated, and how a release is cut.
 The quick start — prerequisites and the one `check` command — is in the main
 [README](../../README.md#building); this document carries the detail behind it.
 
@@ -125,4 +125,49 @@ A violation means a module on a shipped classpath offers **no** accepted license
 
 ## CI
 
-CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, Gitleaks, and the license gate (with the `LICENSE`/`NOTICE` presence and jar-identity checks, see above) on every push and pull request. The CLA check runs on every pull request and blocks an unsigned contributor until they sign ([CONTRIBUTING.md](../../CONTRIBUTING.md)). **Secret scanning** and **Push protection** are enabled in the repository settings. The Gradle wrapper jar is validated by `setup-gradle`'s `validate-wrappers: true`.
+CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, Gitleaks, and the license gate (with the `LICENSE`/`NOTICE` presence and jar-identity checks, see above) on every branch push and pull request — never on a tag push, so a release tag starts no second `check` (see *Releasing*). The CLA check runs on every pull request and blocks an unsigned contributor until they sign ([CONTRIBUTING.md](../../CONTRIBUTING.md)). **Secret scanning** and **Push protection** are enabled in the repository settings. The Gradle wrapper jar is validated by `setup-gradle`'s `validate-wrappers: true`.
+
+## Releasing
+
+<!-- implements FR1, FR2, NFR-O1 of add-release-pipeline (design D6, D8) -->
+
+A release is one pushed tag; `.github/workflows/release.yml` does the rest. The product version is the tag without its `v` — no file in the repository records it, and every other build reports `0.0.0-dev`.
+
+1. Merge the change to `main`.
+2. Wait for the CI run of the merge commit on `main` to finish green.
+3. Optionally add the release notes file `docs/releases/v<version>.md` (merged like any change); without it the notes are generated from the merged pull requests.
+4. Tag that commit and push the tag: `git tag v0.2.0 <sha> && git push origin v0.2.0`. A suffix (`v0.2.0-rc.1`) publishes a pre-release.
+
+The workflow checks before it builds (`scripts/release-preflight.sh`); each failure is an annotation titled with the check:
+
+| Check            | Message says                                         | Meaning and fix                                                                                       |
+|------------------|------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `Tag shape`      | `is not vMAJOR.MINOR.PATCH with an optional -suffix` | the tag is malformed (`v0.2`); delete it with `git push --delete origin <tag>` and push a correct one |
+| `Commit on main` | `does not resolve`                                   | the checkout has no `origin/main`; the job's `fetch-depth: 0` was lost — restore it                   |
+| `Commit on main` | `is not reachable from main`                         | the tag points at a branch commit; merge first, then tag the merged commit                            |
+| `CI status`      | `could not list the ci.yml runs`                     | the GitHub API did not answer; re-run the release workflow                                            |
+| `CI status`      | `no ci.yml run on a push to main exists`             | the commit never reached `main` by a push (or CI was skipped); tag a commit CI ran on                 |
+| `CI status`      | `is still in_progress` (or `queued`)                 | CI has not finished; re-run the release workflow when it does                                         |
+| `CI status`      | `concluded 'failure'` (or another conclusion)        | CI is red for that commit; fix `main` and tag a green commit                                          |
+
+After the gate, the workflow builds the archives twice and fails on differing sums (`Reproducible archive`), checks that the unpacked `bin/gnomish --version` prints the tag's version (`Archive version`) and that the archive's `LICENSE`/`NOTICE` equal the root files, and only then attests and publishes. A failed run publishes nothing, so re-running it for the same tag is safe; the tag never moves.
+
+**Tag protection** is a repository setting, set once by a maintainer: a ruleset restricting creation, update and deletion of `v*` tags to the Maintain and Admin roles.
+
+```bash
+gh api --method POST repos/oinsio/gnomish-factory/rulesets --input - <<'JSON'
+{
+  "name": "release tags",
+  "target": "tag",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "rules": [{ "type": "creation" }, { "type": "update" }, { "type": "deletion" }],
+  "bypass_actors": [
+    { "actor_id": 2, "actor_type": "RepositoryRole", "bypass_mode": "always" },
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ]
+}
+JSON
+```
+
+`actor_id` 2 and 5 are GitHub's built-in Maintain and Admin repository roles; `gh api repos/oinsio/gnomish-factory/rulesets` lists the result.

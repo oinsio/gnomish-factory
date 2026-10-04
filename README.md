@@ -23,6 +23,7 @@ Built on a pure ports-and-adapters architecture (Java 25), the factory provides 
 - [How it works](#how-it-works)
 - [Pipeline stages](#pipeline-stages)
 - [Escalation](#escalation)
+- [Install](#install)
 - [Using the factory](#using-the-factory)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
@@ -104,9 +105,28 @@ sequenceDiagram
     Note over F: resuming instance may differ<br/>from the one that blocked
 ```
 
+## Install
+
+<!-- implements UX1, G1 of add-release-pipeline -->
+
+Prerequisites: Java 25 or newer and git. Pick a version from the [releases page](https://github.com/oinsio/gnomish-factory/releases), then:
+
+```bash
+VERSION=0.1.0
+BASE=https://github.com/oinsio/gnomish-factory/releases/download/v$VERSION
+curl -fL -O "$BASE/gnomish-$VERSION.tar.gz" -O "$BASE/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS        # macOS: shasum -a 256 -c --ignore-missing SHA256SUMS
+gh attestation verify "gnomish-$VERSION.tar.gz" --repo oinsio/gnomish-factory   # optional: build provenance
+tar -xzf "gnomish-$VERSION.tar.gz"
+export PATH="$PWD/gnomish-$VERSION/bin:$PATH"  # or add it to your shell profile
+gnomish --version                              # prints 0.1.0
+```
+
+`bin/gnomish` refuses a Java older than 25 and names the binary it found; point `JAVA_HOME` at a Java 25 installation to fix it. Extra JVM options go in `GNOMISH_JAVA_OPTS`. The archive also carries example configuration (`share/examples/`) and the reference sandbox-image recipe (`share/sandbox-image/`). A `.zip` of the same content is published beside the `.tar.gz`.
+
 ## Using the factory
 
-The CLI is one boot jar with eight subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
+The CLI is the `gnomish` command ([Install](#install)) with eight subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
 
 | Command                    | What it does                                                                         | Reference                                                                             |
 |----------------------------|--------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
@@ -120,13 +140,13 @@ The CLI is one boot jar with eight subcommands; `run` is the implicit default wh
 
 ```bash
 # once per clone: register it as a clone of a project (~/.gnomish/projects/widgets/)
-java -jar build/libs/*.jar project add widgets --dir=/path/to/target-repo
+gnomish project add widgets --dir=/path/to/target-repo
 
 # one ad-hoc task, no tracker (git mode by default: task branch + worktree + resume)
-java -jar build/libs/*.jar --task="fix the flaky login spec" --dir=/path/to/target-repo
+gnomish --task="fix the flaky login spec" --dir=/path/to/target-repo
 
 # tracker-driven: claim the head of the ready queue, process one task, exit
-java -jar build/libs/*.jar take --dir=/path/to/target-repo
+gnomish take --dir=/path/to/target-repo
 ```
 
 **Operator state** — configuration, secrets, logs, serve state and worktrees — lives under one folder, `~/.gnomish` (or `GNOMISH_HOME`), one subfolder per registered project. Every command that takes `--dir` works only in a registered clone. Project settings, the sandbox boundary included, go in the project's `project.yaml`; a setting in the wrong place stops startup with its file, line and fix (exit 2). See [*Setting up a project*](docs/guides/operator-guide.md#setting-up-a-project).
@@ -174,7 +194,7 @@ One command answers "is my change OK?":
 ./gradlew check
 ```
 
-It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. `./gradlew build` additionally produces the boot jar.
+It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. `./gradlew build` additionally produces the boot jar; `./gradlew :bootstrap:distTar` builds the distribution archive (version `0.0.0-dev`) under `bootstrap/build/distributions/`.
 
 Everything beyond the one command — per-module verification and mutation scoping, dependency locking and verification (`--write-locks --write-verification-metadata sha256`), the Dependabot flow, the supply-chain threat model, and reproducing the OSV vulnerability gate and the license gate locally — is in [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md).
 

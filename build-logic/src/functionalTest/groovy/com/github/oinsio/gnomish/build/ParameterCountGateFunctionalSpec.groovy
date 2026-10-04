@@ -94,22 +94,15 @@ final class Wide {
     }
 
     private static String buildChecksDir() {
-        property('gnomish.buildChecksDir')
+        GradleRunnerSupport.requiredProperty('gnomish.buildChecksDir')
     }
 
     private static String versionCatalog() {
-        property('gnomish.versionCatalog')
+        GradleRunnerSupport.requiredProperty('gnomish.versionCatalog')
     }
 
-    private static String property(String name) {
-        String value = System.getProperty(name)
-        assert value != null: "functionalTest must pass -D${name} (see build-logic/build.gradle)"
-        value
-    }
-
-    /** A path inside a single-quoted Groovy literal: backslashes and quotes escaped. */
     private static String escape(String path) {
-        path.replace('\\', '\\\\').replace("'", "\\'")
+        GradleRunnerSupport.quotedPath(path)
     }
 
     private void write(String relativePath, String content) {

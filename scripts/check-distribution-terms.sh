@@ -1,7 +1,9 @@
 #!/bin/bash
-# Distribution-terms checks of the license CI job (.github/workflows/license-gate.yml).
-# Implements FR1 and FR3 of add-project-license (design D2). Kept out of the workflow
-# YAML so DistributionTermsScriptSpec in :bootstrap can drive the red paths too.
+# Distribution-terms checks of the license CI job (.github/workflows/license-gate.yml)
+# and the release workflow (.github/workflows/release.yml). Implements FR1 and FR3 of
+# add-project-license (design D2) and NFR-S2 of add-release-pipeline (design D6, step 6).
+# Kept out of the workflow YAML so DistributionTermsScriptSpec in :bootstrap can drive
+# the red paths too.
 # Compatible with bash 3.x (macOS) and bash 4+ (Linux). Run from the repository root.
 #
 # Usage:
@@ -10,6 +12,9 @@
 #   scripts/check-distribution-terms.sh identity <jar-dir>...
 #       fails unless each directory holds exactly one jar whose META-INF/LICENSE and
 #       META-INF/NOTICE equal the root files byte for byte (FR3)
+#   scripts/check-distribution-terms.sh archive <unpacked-dir>
+#       fails unless <unpacked-dir>/LICENSE and <unpacked-dir>/NOTICE equal the root files
+#       byte for byte and <unpacked-dir>/lib passes `identity` (NFR-S2 of add-release-pipeline)
 #
 # Every failure is printed as a GitHub `::error` annotation naming the file (and the
 # jar); all failures are reported before the non-zero exit.
@@ -53,6 +58,24 @@ identity() {
     return "$failed"
 }
 
+# An unpacked distribution archive: its top-level copies are compared with the root files
+# of the current directory, never with each other, which is why `identity` alone cannot be
+# run inside the unpacked folder (design D6, step 6).
+archive() {
+    local dir="$1" failed=0 file
+    for file in $TERMS; do
+        if ! test -f "${dir}/${file}"; then
+            echo "::error file=${dir}/${file}::${dir}/${file} is missing from the archive"
+            failed=1
+        elif ! cmp -s "${dir}/${file}" "$file"; then
+            echo "::error file=${dir}/${file}::${dir}/${file} differs from the root ${file}"
+            failed=1
+        fi
+    done
+    identity "${dir}/lib" || failed=1
+    return "$failed"
+}
+
 case "${1:-}" in
     presence)
         presence
@@ -65,8 +88,15 @@ case "${1:-}" in
         fi
         identity "$@"
         ;;
+    archive)
+        if [ "$#" -ne 2 ]; then
+            echo "usage: $0 archive <unpacked-dir>" >&2
+            exit 2
+        fi
+        archive "$2"
+        ;;
     *)
-        echo "usage: $0 presence | identity <jar-dir>..." >&2
+        echo "usage: $0 presence | identity <jar-dir>... | archive <unpacked-dir>" >&2
         exit 2
         ;;
 esac

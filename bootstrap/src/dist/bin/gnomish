@@ -1,0 +1,69 @@
+#!/bin/sh
+# The gnomish launcher, shipped as bin/gnomish in the distribution archive (FR5, NFR-P1,
+# UX2 of add-release-pipeline; design D4).
+#
+# It does three things and nothing else: finds the one factory jar in ../lib, finds a
+# Java of feature version 25 or newer (JAVA_HOME, else java on PATH), and hands every
+# argument to the factory unchanged. It never adds a factory option: Spring joins a
+# repeated option, so a default injected here would collide with the operator's own.
+# Extra JVM options come from GNOMISH_JAVA_OPTS, split on whitespace.
+#
+# The Java check costs one short JVM start (`-XshowSettings:properties -version`), then
+# the launcher replaces itself with the factory's JVM. LauncherScriptSpec pins all of it.
+set -eu
+
+# The distribution root, with any symlink to this script followed: an operator may link
+# bin/gnomish into a directory already on PATH.
+self=$0
+while [ -h "$self" ]; do
+    link=$(readlink "$self")
+    case $link in
+        /*) self=$link ;;
+        *) self=$(dirname "$self")/$link ;;
+    esac
+done
+home=$(cd "$(dirname "$self")/.." && pwd -P)
+
+jar=
+for candidate in "$home"/lib/*.jar; do
+    [ -e "$candidate" ] || continue
+    if [ -n "$jar" ]; then
+        echo "gnomish: expected one jar in $home/lib, found several; unpack the archive into an empty directory" >&2
+        exit 1
+    fi
+    jar=$candidate
+done
+if [ -z "$jar" ]; then
+    echo "gnomish: no jar in $home/lib; unpack the whole archive, not bin/ alone" >&2
+    exit 1
+fi
+
+if [ -n "${JAVA_HOME:-}" ]; then
+    java=$JAVA_HOME/bin/java
+else
+    java=$(command -v java || true)
+fi
+if [ -z "$java" ] || [ ! -x "$java" ]; then
+    echo "gnomish: Java 25 or newer is required; no java found at ${java:-PATH} (set JAVA_HOME to a Java 25 installation)" >&2
+    exit 1
+fi
+
+# Both properties come from one probe: the specification version decides, the full
+# version is what the refusal names. A pre-9 Java reports `1.8`, whose leading `1` is
+# below the floor like any other old version.
+settings=$("$java" -XshowSettings:properties -version 2>&1 || true)
+specification=$(printf '%s\n' "$settings" | sed -n 's/^[[:space:]]*java\.specification\.version = //p')
+found=$(printf '%s\n' "$settings" | sed -n 's/^[[:space:]]*java\.version = //p')
+feature=${specification%%.*}
+case $feature in
+    '' | *[!0-9]*) feature=0 ;;
+esac
+if [ "$feature" -lt 25 ]; then
+    echo "gnomish: Java 25 or newer is required; found ${found:-an unreadable version} at $java (set JAVA_HOME to a Java 25 installation)" >&2
+    exit 1
+fi
+
+# GNOMISH_JAVA_OPTS is split on whitespace on purpose and never glob-expanded.
+set -f
+# shellcheck disable=SC2086
+exec "$java" ${GNOMISH_JAVA_OPTS:-} -jar "$jar" "$@"

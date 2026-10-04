@@ -1,0 +1,12 @@
+// The product version of the shipped executable (FR3, design D1 of add-release-pipeline).
+// Applied by `:bootstrap` only: every other module keeps its own `version` assignment, and
+// `:gnomish-plugin-api`'s published contract version is untouched (NG3).
+//
+// The release workflow validates the pushed tag and hands it over as
+// `-PreleaseVersion=<tag without v>`, so the human's tag is the only record of the number;
+// any other build — a developer's, CI's — is `0.0.0-dev`. Nothing here reads git.
+//
+// `java-conventions` assigns the placeholder every module carries when it is applied, so a
+// module applying both lists this plugin AFTER it; the release workflow's identity check
+// (the unpacked archive's `--version` against the tag, FR8) is what catches the reverse order.
+version = providers.gradleProperty('releaseVersion').getOrElse('0.0.0-dev')

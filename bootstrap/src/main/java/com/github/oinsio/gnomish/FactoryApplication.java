@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish;
 
+import com.github.oinsio.gnomish.app.VersionCommand;
+import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import org.springframework.boot.SpringApplication;
@@ -30,7 +32,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * writes instead is the {@code serve} lifecycle anchor set ({@code AnchorLog}, FR2) — real
  * operator content rather than a line whose only reader was a spec.
  *
- * <p>Implements FR2, FR4 of add-project-skeleton.
+ * <p>Implements FR2, FR4 of add-project-skeleton; FR6 of add-release-pipeline.
  */
 @SpringBootApplication(scanBasePackages = FactoryApplication.USE_CASE_PACKAGE)
 @EnableConfigurationProperties({
@@ -55,7 +57,16 @@ public class FactoryApplication {
      */
     static final String USE_CASE_PACKAGE = "com.github.oinsio.gnomish.app";
 
+    /**
+     * Answers a sole {@code --version} before Spring starts (design D3 of add-release-pipeline);
+     * every other command line boots the application. The decision is {@link VersionCommand}'s and
+     * is mutation-covered there; the branch here is exercised end to end by {@code
+     * FactoryApplicationSpec}, which spawns the packaged jar with {@code --version}.
+     */
     static void main(String[] args) {
+        if (VersionCommand.answer(args, new SystemConsoleIO(System.in, System.out))) {
+            return;
+        }
         CommandExit.start(new SpringApplication(FactoryApplication.class), args);
         CommandExit.finish();
     }

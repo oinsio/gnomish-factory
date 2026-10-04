@@ -40,8 +40,12 @@ The build SHALL produce `gnomish-<version>.tar.gz` and `gnomish-<version>.zip`, 
 - **WHEN** the archive is built twice from the same commit with the same version
 - **THEN** both builds have the same SHA-256 sum
 
+#### Scenario: The jar carries no SBOM
+- **WHEN** the distribution is built
+- **THEN** the boot jar has no `META-INF/sbom/` entry and no `Sbom-Location` manifest attribute
+
 ### Requirement: A pushed version tag publishes a verified release
-A pushed tag matching `v*` SHALL start the release workflow. It SHALL fail before building when the tag is not `vMAJOR.MINOR.PATCH` with an optional pre-release suffix, when the tagged commit is not reachable from `main`, or when the commit's CI run did not conclude successfully — each failure naming the check and its fix. It SHALL build the distribution with the tag's version, unpack the archive and fail unless `bin/gnomish --version` prints that version, verify the distribution terms of the archive and its jar, and only then publish a GitHub Release carrying both archives, a `SHA256SUMS` file, a CycloneDX SBOM of the boot jar, and a build provenance attestation per archive. The notes SHALL be `docs/releases/<tag>.md` when present, otherwise generated from merged pull requests. A failed run SHALL publish nothing and SHALL be safe to re-run for the same tag. The workflow SHALL NOT re-run the verification suite.
+A pushed tag matching `v*` SHALL start the release workflow. It SHALL fail before building when the tag is not `vMAJOR.MINOR.PATCH` with an optional pre-release suffix, when the tagged commit is not reachable from `main`, or when the commit's CI run did not conclude successfully — each failure naming the check and its fix. It SHALL build the distribution with the tag's version, unpack the archive and fail unless `bin/gnomish --version` prints that version, verify the distribution terms of the archive and its jar, and only then publish a GitHub Release carrying both archives, a `SHA256SUMS` file, a CycloneDX SBOM of the boot jar as a separate asset, and per archive a build provenance attestation and an attestation binding the SBOM to that archive. The SBOM SHALL NOT be embedded in the boot jar, and the workflow's reproducibility comparison SHALL cover the archives, not the SBOM, which records when it was generated. The notes SHALL be `docs/releases/<tag>.md` when present, otherwise generated from merged pull requests. A failed run SHALL publish nothing and SHALL be safe to re-run for the same tag. The workflow SHALL NOT re-run the verification suite.
 <!-- implements FR1, FR2, FR7, FR8, NFR-S1, NFR-S2, NFR-R2, NFR-O1, NFR-C1 of add-release-pipeline -->
 
 #### Scenario: Malformed tag stops early
@@ -55,6 +59,10 @@ A pushed tag matching `v*` SHALL start the release workflow. It SHALL fail befor
 #### Scenario: Version mismatch blocks publishing
 - **WHEN** the built archive's `bin/gnomish --version` prints anything other than the tag's version
 - **THEN** the workflow fails and publishes nothing
+
+#### Scenario: The SBOM is bound to the archives
+- **WHEN** a release is published for tag `v0.2.0`
+- **THEN** it carries `gnomish-0.2.0-cyclonedx.json`, and `gh attestation verify` on either archive lists an SBOM attestation whose predicate is that SBOM
 
 #### Scenario: Hand-written notes win
 - **WHEN** `docs/releases/v0.1.0.md` exists at the tagged commit

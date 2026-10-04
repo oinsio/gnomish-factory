@@ -9,11 +9,15 @@
 # and everything already committed.
 name: Gitleaks
 
-# Trigger pattern mirrors ci.yml: every push (FR11); pull_request only for
+# Trigger pattern mirrors ci.yml: every branch push (FR11); pull_request only for
 # fork PRs, which get no push events here (NFR-C1). The weekly schedule
 # re-scans the existing history with newly added detection rules.
+# A tag push starts no run (`branches: ['**']` matches every branch and no tag):
+# the tagged commit was already scanned by its `main` push run, so a release tag
+# would only repeat that verdict (FR2, NFR-C1 of add-release-pipeline, design D6).
 on:
   push:
+    branches: ['**']
   pull_request:
   schedule:
     - cron: "47 3 * * 1" # weekly, Monday 03:47 UTC
