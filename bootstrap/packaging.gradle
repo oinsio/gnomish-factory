@@ -1,0 +1,89 @@
+// How `:bootstrap` is packaged: what the boot jar carries beyond its classes. A module-local
+// script plugin for the same reason as `verification.gradle` — the build file states what this
+// module *is*, this one what it ships (add-release-pipeline).
+
+// The product version reaches runtime through one resource: Boot's
+// `META-INF/build-info.properties`, whose `build.version` is the `project.version` that
+// `product-version-conventions` set, read by `FactoryVersion` and nothing else (FR3, FR6,
+// design D2). `time` is excluded: Boot would stamp `build.time` with the wall clock, so two
+// builds of one commit would differ (NFR-R1, design D5). `BuildInfoSpec` pins both.
+springBoot {
+    buildInfo {
+        excludes = ['time']
+    }
+}
+
+// The operator archives (FR4, design D4): `gnomish-<version>.tar.gz` and `.zip`, each unpacking
+// to `gnomish-<version>/`. The plugin's defaults would name both after the module and leave the
+// tar uncompressed, hence the base name and the two `distTar` settings. Only the boot jar is
+// shipped — `lib/` holds exactly one jar, which is what the launcher looks for.
+//
+// The sandbox-image recipe is copied from `docs/examples/sandbox-image/` at build time and kept
+// out of `share/examples/`, so the repository holds one copy of it (FR4). The launcher keeps its
+// 0755 mode; every other mode and every timestamp is fixed build-wide by `java-conventions`
+// (NFR-R1, design D5). `DistributionLayoutSpec` pins the result.
+apply plugin: 'distribution'
+
+def productVersion = version.toString()
+def examples = rootProject.layout.projectDirectory.dir('docs/examples')
+distributions {
+    main {
+        distributionBaseName = 'gnomish'
+        contents {
+            from('src/dist') {
+                exclude 'bin/**'
+            }
+            from('src/dist/bin') {
+                into 'bin'
+                filePermissions { unix('rwxr-xr-x') }
+            }
+            from(tasks.named('bootJar')) {
+                into 'lib'
+                rename { "gnomish-${productVersion}.jar" }
+            }
+            from(rootProject.layout.projectDirectory.file('LICENSE'), rootProject.layout.projectDirectory.file('NOTICE'))
+            from(examples) {
+                into 'share/examples'
+                exclude 'sandbox-image/**'
+            }
+            from(examples.dir('sandbox-image')) {
+                into 'share/sandbox-image'
+            }
+        }
+    }
+}
+
+tasks.named('distTar', Tar) {
+    compression = Compression.GZIP
+    archiveExtension = 'tar.gz'
+}
+
+// DistributionLayoutSpec reads the archives this build produced, by the paths named here.
+tasks.named('test') {
+    dependsOn tasks.named('distTar'), tasks.named('distZip')
+    systemProperty 'e2e.distTarPath', tasks.named('distTar').get().archiveFile.get().asFile.absolutePath
+    systemProperty 'e2e.distZipPath', tasks.named('distZip').get().archiveFile.get().asFile.absolutePath
+}
+
+// The SBOM the release publishes beside the archives (FR7, design D7): CycloneDX, over the runtime
+// classpath only — what the boot jar bundles, not the build's tools or the test classpath. The
+// task is registered by `sbom-conventions` on the root project; the plugin is never applied here,
+// where Spring Boot would embed a timestamped SBOM in the jar (`BootJarSbomSpec`).
+// `:bootstrap:cyclonedxDirectBom` writes `build/reports/cyclonedx-direct/bom.json`.
+def sbom = layout.buildDirectory.file('reports/cyclonedx-direct/bom.json')
+tasks.named('cyclonedxDirectBom') {
+    includeConfigs = ['runtimeClasspath']
+}
+
+// Boot would add `spring-boot-jarmode-tools` from its own plugin classpath — no dependency of
+// this module, so absent from the SBOM — for `-Djarmode=tools` layer extraction, which a CLI
+// shipped as an archive never uses. Left out, every jar in `BOOT-INF/lib/` is in the SBOM (FR7).
+tasks.named('bootJar') {
+    includeTools = false
+}
+
+// BootJarSbomSpec compares the jar's libraries with the SBOM this build wrote.
+tasks.named('test') {
+    dependsOn tasks.named('cyclonedxDirectBom')
+    systemProperty 'e2e.sbomPath', sbom.get().asFile.absolutePath
+}

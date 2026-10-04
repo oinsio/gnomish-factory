@@ -48,8 +48,11 @@ import java.time.ZoneOffset;
  * by {@link ServeAssembly}, which computes it from the registered clone and the configured instance
  * name (design D1 of add-project-registry); this class derives no directory of its own.
  *
+ * <p><b>The factory version</b> in {@link InstanceInfo} is {@link FactoryVersion#current()}, the
+ * one runtime reader of the product version (design D2 of add-release-pipeline).
+ *
  * <p>Implements FR1, FR4, FR7, FR9, FR12 of add-serve-observability. Implements FR10 of
- * add-project-registry.
+ * add-project-registry. Implements FR6 of add-release-pipeline.
  */
 final class ObservabilityAssembly {
 
@@ -80,7 +83,8 @@ final class ObservabilityAssembly {
             ForwardingDirtyNotifier dirtyNotifier,
             Clock clock,
             SnapshotSources sources) {
-        InstanceInfo instance = new InstanceInfo(instanceId.value(), resolveHost(), resolveFactoryVersion());
+        InstanceInfo instance = new InstanceInfo(
+                instanceId.value(), resolveHost(), FactoryVersion.current().value());
         Instant startedAt = clock.instant();
         LifecycleStateTracker lifecycleTracker = new LifecycleStateTracker(startedAt, dirtyNotifier);
 
@@ -122,10 +126,5 @@ final class ObservabilityAssembly {
         } catch (UnknownHostException e) {
             return "unknown";
         }
-    }
-
-    private static String resolveFactoryVersion() {
-        String version = ObservabilityAssembly.class.getPackage().getImplementationVersion();
-        return version != null ? version : "dev";
     }
 }

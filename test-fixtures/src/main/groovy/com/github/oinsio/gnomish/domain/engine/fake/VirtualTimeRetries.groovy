@@ -18,7 +18,11 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
  * <p>The retries below keep the production bound and the production backoff and change only where
  * time comes from, so a spec asserts the real shape and an outage exhausts the bound in
  * microseconds. Deliberately not a no-op sleeper: one that never advances a clock turns a
- * ten-minute block into an infinite one against a permanent outage.
+ * ten-minute block into an infinite one against a permanent outage. For the same reason the
+ * sleeper is budgeted ({@link BudgetedVirtualSleeper}): a mutant that shrinks the backoff to zero
+ * stops the virtual clock, and against a permanent outage the bound would never elapse — PIT would
+ * report the hang as TIMED_OUT, which {@code pitestVerifyAllKilled} rejects, rather than KILLED.
+ * The production schedule exhausts the bound in about sixteen sleeps, far inside the budget.
  *
  * <p>The git-adapter retry lives beside the git fixtures as {@code VirtualTimeGitRetries}: this
  * class sits in a {@code ..domain..} package, which the domain-purity gate forbids from naming an
@@ -37,6 +41,6 @@ final class VirtualTimeRetries {
      */
     static TerminalWriteRetry terminalWrite() {
         def clock = new VirtualClock()
-        new TerminalWriteRetry(new VirtualSleeper(clock), clock, TerminalWriteRetry.DEFAULT_BOUND)
+        new TerminalWriteRetry(new BudgetedVirtualSleeper(clock), clock, TerminalWriteRetry.DEFAULT_BOUND)
     }
 }

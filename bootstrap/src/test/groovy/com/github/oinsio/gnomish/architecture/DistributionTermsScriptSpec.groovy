@@ -9,11 +9,12 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * The license CI job's distribution-terms checks (FR1, FR3 of add-project-license, design D2)
- * are a shell script, {@code scripts/check-distribution-terms.sh}; on CI they only ever run
+ * The license CI job's distribution-terms checks (FR1, FR3 of add-project-license, design D2),
+ * and the release workflow's check of the unpacked archive (NFR-S2 of add-release-pipeline,
+ * design D6), are a shell script, {@code scripts/check-distribution-terms.sh}; on CI they only ever run
  * against a healthy repository, so a regression in the script (a dropped {@code cmp}, a lost
  * exit code) would stay green until a real incident. This spec drives the script's red paths
- * against a throwaway repository root, and pins that the workflow really calls it.
+ * against a throwaway repository root, and pins that both workflows really call it.
  */
 class DistributionTermsScriptSpec extends Specification {
 
@@ -107,6 +108,67 @@ class DistributionTermsScriptSpec extends Specification {
         expect:
         workflow.contains('run: bash scripts/check-distribution-terms.sh presence')
         workflow.contains('run: bash scripts/check-distribution-terms.sh identity bootstrap/build/libs gnomish-plugin-api/build/libs')
+    }
+
+    // NFR-S2 of add-release-pipeline: an unpacked archive whose copies equal the root files
+    def "NFR-S2: archive passes when the unpacked folder and its jar carry the root files"() {
+        given:
+        writeRootTerms()
+        unpacked([LICENSE: LICENSE, NOTICE: NOTICE])
+
+        expect:
+        runScript('archive', 'gnomish-1.0.0').exit == 0
+    }
+
+    // NFR-S2: the "An archive copy drifts from the root file" scenario
+    def "NFR-S2: archive fails naming gnomish-1.0.0/#file when the copy #how"() {
+        given:
+        writeRootTerms()
+        unpacked(copies)
+
+        when:
+        def run = runScript('archive', 'gnomish-1.0.0')
+
+        then:
+        run.exit != 0
+        run.output.contains("::error file=gnomish-1.0.0/${file}::gnomish-1.0.0/${file} ${message}")
+
+        where:
+        file | how | copies | message
+        'NOTICE' | 'differs by one byte' | [LICENSE: LICENSE, NOTICE: NOTICE.replace('G', 'g')] | 'differs from the root NOTICE'
+        'LICENSE' | 'differs by one byte' | [LICENSE: LICENSE + ' ', NOTICE: NOTICE] | 'differs from the root LICENSE'
+        'LICENSE' | 'is missing' | [NOTICE: NOTICE] | 'is missing from the archive'
+    }
+
+    // NFR-S2: the archive's jar is checked too — a lib/ with no jar is not a pass
+    def "NFR-S2: archive fails when lib/ holds no jar"() {
+        given:
+        writeRootTerms()
+        unpacked([LICENSE: LICENSE, NOTICE: NOTICE])
+        Files.delete(root.resolve('gnomish-1.0.0/lib/gnomish-1.0.0.jar'))
+
+        when:
+        def run = runScript('archive', 'gnomish-1.0.0')
+
+        then:
+        run.exit != 0
+        run.output.contains('::error::expected exactly one jar in gnomish-1.0.0/lib')
+    }
+
+    // NFR-S2: the release runs the archive mode through this script (design D6, step 6)
+    def "NFR-S2: the release workflow checks the unpacked archive through the script"() {
+        expect:
+        Files.readString(RepoSourceTree.repoRoot().resolve('.github/workflows/release.yml'))
+                .contains('run: bash scripts/check-distribution-terms.sh archive "unpacked/gnomish-')
+    }
+
+    /** An unpacked archive: the given top-level copies, and a jar carrying the root files. */
+    private void unpacked(Map<String, String> copies) {
+        Files.createDirectories(root.resolve('gnomish-1.0.0'))
+        copies.each { name, content ->
+            Files.writeString(root.resolve("gnomish-1.0.0/${name}"), content)
+        }
+        jar('gnomish-1.0.0/lib/gnomish-1.0.0.jar', [LICENSE: LICENSE, NOTICE: NOTICE])
     }
 
     private void writeRootTerms() {

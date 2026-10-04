@@ -24,12 +24,16 @@
 # apply — put the entry in the root file instead.
 name: OSV-Scanner
 
-# Trigger pattern mirrors ci.yml: every push (FR11); pull_request only for
+# Trigger pattern mirrors ci.yml: every branch push (FR11); pull_request only for
 # fork PRs, which get no push events here (NFR-C1: no double scans). Plus a
 # weekly schedule so newly published advisories against unchanged
 # dependencies still fail the default branch.
+# A tag push starts no run (`branches: ['**']` matches every branch and no tag):
+# the tagged commit was already scanned by its `main` push run, so a release tag
+# would only repeat that verdict (FR2, NFR-C1 of add-release-pipeline, design D6).
 on:
   push:
+    branches: ['**']
   pull_request:
   schedule:
     - cron: "32 3 * * 1" # weekly, Monday 03:32 UTC

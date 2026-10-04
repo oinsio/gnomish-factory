@@ -56,6 +56,20 @@ dependencies {
     compileOnly 'com.github.oinsio.build:parameter-count-annotations'
 }
 
+// Reproducible archives (NFR-R1, design D5 of add-release-pipeline): every jar, boot jar and
+// distribution archive writes a fixed entry order, no file timestamps and fixed modes, so two
+// builds of one commit are byte-identical. These are Gradle 9's defaults, written down because a
+// default can be switched off without touching a build script
+// (`org.gradle.archives.use-file-system-permissions`) and has drifted from its own documentation
+// before (gradle/gradle#34643). A child copy spec that sets its own mode keeps it — that is how
+// the launcher ships 0755. `ReproducibleArchiveSpec` (build-logic functionalTest) pins the result.
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    filePermissions { unix('rw-r--r--') }
+    dirPermissions { unix('rwxr-xr-x') }
+}
+
 // Retain formal parameter names in the bytecode. Spring resolves an ambiguous
 // injection point by parameter name — beans of one type are told apart that
 // way — and the Boot plugin used to supply this flag implicitly, back when the

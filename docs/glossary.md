@@ -700,6 +700,30 @@ Introduced by `add-project-registry`; the levels and the check are ADR 0011.
   from the resolved project's own project file and nowhere else, the command
   line included.
 
+## Release and distribution
+
+Introduced by `add-release-pipeline`; the release flow is the developer guide's
+*Releasing* section.
+
+- **Product version** — the version of the factory as a product: the release
+  tag without its leading `v` in a release build, `0.0.0-dev` in every other
+  build. Stamped into the boot jar's build info and read at runtime only by
+  `FactoryVersion`; `gnomish --version`, the serve snapshot and the ledger
+  report it. *Not:* the plugin-contract version, which `gnomish-plugin-api`
+  declares in its own build file. *Never:* build version, app version.
+- **Distribution archive** — `gnomish-<version>.tar.gz` or
+  `gnomish-<version>.zip`, the file a release publishes for operators to
+  install from: one top-level folder `gnomish-<version>/` holding the launcher,
+  the boot jar under `lib/`, `share/examples/`, `share/sandbox-image/`,
+  `LICENSE`, `NOTICE` and `README.md`. *Never:* bundle, tarball, dist.
+- **Launcher** — `bin/gnomish` in the distribution archive: the committed POSIX
+  `sh` script that finds Java (`JAVA_HOME`, else `PATH`), refuses one older than
+  25, adds `GNOMISH_JAVA_OPTS` and passes every argument to the factory
+  unchanged, injecting no factory option. *Never:* start script, wrapper script.
+- **Release notes file** — `docs/releases/<tag>.md`: the hand-written body of
+  one release, used by the release workflow instead of notes generated from the
+  merged pull requests when it exists at the tagged commit. *Never:* changelog.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                       |

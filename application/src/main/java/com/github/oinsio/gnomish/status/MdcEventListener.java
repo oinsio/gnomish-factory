@@ -16,7 +16,7 @@ import org.slf4j.MDC;
  *
  * <p>{@code taskId} is deliberately out of this listener's scope: unlike {@code stage}/{@code
  * attempt}, it does not change during a run, so the runner sets it once, directly, before the
- * engine loop starts ({@link com.github.oinsio.gnomish.app.ManualRunRunner}) rather than via a
+ * engine loop starts ({@code ManualRunRunner}) rather than via a
  * per-event listener (design D9, task 8.2).
  *
  * <p>Every {@link EngineEvent} variant carrying an {@link AttemptKey} — {@code AttemptStarted},

@@ -214,7 +214,11 @@ public enum OperatorEvent {
     // git version floor (own-git-transfer-argv, design D8): the one ERROR of the startup check
     // that refuses to run below the floor the seed clone's protections need, or on a git that
     // cannot report its version at all; the command that ends on it prints the same sentence.
-    STARTUP_GIT_VERSION_REFUSED("GF149");
+    STARTUP_GIT_VERSION_REFUSED("GF149"),
+    // product version (add-release-pipeline, design D2): the jar's build info is present but
+    // unreadable, malformed or without a version, so the factory reports itself as the
+    // development version; the release workflow's identity check is where such a jar is stopped.
+    FACTORY_VERSION_UNREADABLE("GF150");
 
     private final String code;
     private final String head;

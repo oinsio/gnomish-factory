@@ -4,10 +4,12 @@ package com.github.oinsio.gnomish.serveobservability;
  * The snapshot's {@code instance} section (id/host/version): the full instance id (not merely
  * the stable name half the file lives under — design D2), the host it runs
  * on, and the running factory version. Kept as plain {@code String} fields
- * rather than coupling to {@code app.port.tracker.InstanceId} or a build-info
- * type: neither a hostname abstraction nor a factory-version abstraction
- * exists elsewhere in the codebase yet, and this document model must not
- * pull in wiring from later task groups (design phase note, task 1.1).
+ * rather than {@code app.port.tracker.InstanceId} or {@code app.FactoryVersion}:
+ * this is also the read model {@code SnapshotJsonReader} fills from any
+ * instance's snapshot file, so its fields are recorded text, not the running
+ * process's values — a typed field would wrap that text and exclude nothing.
+ * The running version enters only through {@code ObservabilityAssembly}, from
+ * {@code FactoryVersion.current()} (design D2 of add-release-pipeline).
  *
  * <p>Inert value data compared by content.
  *

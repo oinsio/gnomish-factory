@@ -6,7 +6,7 @@ import org.jspecify.annotations.Nullable;
  * Carries the current round's harvested attempt (snapshot) commit id from the
  * executor's round-closing snapshot to everything that judges or persists that
  * round (FR21, design D15): verification materializes fresh boxes from it,
- * builtin checks read it as bare objects, and {@link
+ * builtin checks read it as bare objects, and {@code
  * EnvironmentAttemptPersistence} parent-checks the state commit against it.
  * One instance lives for a task run; the snapshot step {@link #record}s each
  * round's commit, overwriting the previous round's.

@@ -23,15 +23,16 @@ the engine's port shapes survive contact with real adapters.
 <name> --dir=<clone>` (see
 [`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project)).
 
-There is no launcher script yet; run it through the boot jar (or `bootRun`) and
+Run it through the `gnomish` launcher from the distribution archive (see the
+README's *Install* section), or straight from a source checkout with `bootRun`, and
 pass the task flags. With **no** run flag present the application keeps its plain
 boot-and-exit behavior. `run` is the implicit default subcommand —
 `gnomish --task=... --dir=...` and `gnomish run --task=... --dir=...` are
 equivalent — so existing invocations keep working.
 
 ```bash
-# via the boot jar (./gradlew build produces it under build/libs/)
-java -jar build/libs/*.jar --task="fix the flaky login spec" --dir=/path/to/target-repo
+# via the launcher (bin/gnomish of the unpacked archive, on PATH)
+gnomish --task="fix the flaky login spec" --dir=/path/to/target-repo
 
 # or straight from Gradle
 ./gradlew bootRun --args='--task="fix the flaky login spec" --dir=/path/to/target-repo'

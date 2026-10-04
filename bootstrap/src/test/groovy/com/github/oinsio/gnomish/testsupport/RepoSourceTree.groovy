@@ -26,8 +26,7 @@ class RepoSourceTree {
 
     /** The repository root wired by bootstrap's {@code test} task (see verification.gradle). */
     static Path repoRoot() {
-        def property = System.getProperty('repoRoot')
-        assert property: 'repoRoot system property is not set (see bootstrap/verification.gradle)'
+        def property = TestTaskProperty.required('repoRoot')
         def root = Path.of(property)
         assert Files.isDirectory(root): "repoRoot does not point at a directory: $property"
         root

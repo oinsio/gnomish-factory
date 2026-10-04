@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.status.Activity;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The seam {@link DialogConsole} calls to mark the begin/end of a blocking
- * prompt read (design D7): the engine has no notion of a human being
+ * The seam {@link com.github.oinsio.gnomish.app.console.DialogConsole} calls to mark the
+ * begin/end of a blocking prompt read (design D7): the engine has no notion of a human being
  * prompted — only {@code DialogConsole}, the single input choke point
  * (design D1), knows a prompt is pending — so it marks an {@link
  * Activity.AwaitingInput} directly around each blocking read through this

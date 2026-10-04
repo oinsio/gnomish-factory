@@ -7,8 +7,9 @@ How the `gnomish` command line is parsed and reported: which options each subcom
 ## Requirements
 
 ### Requirement: Unknown options are usage errors
-Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. Options whose name contains a dot (Spring properties such as `--factory.*`, `--spring.*`, `--logging.*`) and Spring Boot's own `--debug` and `--trace` switches SHALL pass through to configuration and are not checked by this rule. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment. The entrypoint SHALL hand every non-empty command line to its subcommand's parser, so the check cannot be skipped by a command line that names no known option; only an empty command line (no subcommand token and no option) is the no-op that keeps a Spring test context from driving a run.
+Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. Options whose name contains a dot (Spring properties such as `--factory.*`, `--spring.*`, `--logging.*`) and Spring Boot's own `--debug` and `--trace` switches SHALL pass through to configuration and are not checked by this rule. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment. The entrypoint SHALL hand every non-empty command line to its subcommand's parser, so the check cannot be skipped by a command line that names no known option. Exactly two command lines reach no parser: the empty one (no subcommand token and no option), which is the no-op that keeps a Spring test context from driving a run, and the one consisting of the sole token `--version`, which prints the product version and exits 0 before Spring starts (the `release-distribution` capability, "The factory reports its version"). A `--version` accompanied by any other token SHALL reach the parser like any other command line and is rejected as an unknown option.
 <!-- implements FR8, NFR-R1, NFR-O1, UX2 of fix-operator-blockers -->
+<!-- implements FR6 of add-release-pipeline -->
 
 #### Scenario: A mistyped task flag fails loudly
 - **WHEN** the operator runs `gnomish status --dir=. --task=github:acme/widgets#7`
@@ -39,6 +40,15 @@ Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accep
 #### Scenario: An empty command line stays a no-op
 - **WHEN** the application starts with no arguments at all, as a Spring test context does
 - **THEN** no parser runs, nothing is printed, and the process exits 0
+
+#### Scenario: A sole `--version` is the other command line that reaches no parser
+- **WHEN** the operator runs `gnomish --version` with no other token
+- **THEN** the product version is printed on one line and the process exits 0
+- **AND** no subcommand parser runs and no usage error is raised
+
+#### Scenario: `--version` with any other token is parsed as usual
+- **WHEN** the operator runs `gnomish run --version` or `gnomish --version --dir=.`
+- **THEN** the command line reaches the `run` parser and exits 2 with the usage error naming `--version` for `'gnomish run'`
 
 ### Requirement: The project directory is resolved once to an absolute path
 Every subcommand that accepts `--dir` SHALL resolve its value — or, for the subcommands where the option is optional (`run`, `take`, `serve`, `board`, `dashboard`), the working directory when it is absent — to an absolute, normalized path when the command line is parsed, and every component SHALL receive that resolved path. Whether `--dir` is required does not change: `status` and `usage` SHALL keep refusing an absent `--dir` with their usage error. A relative `--dir` SHALL behave exactly like the equivalent absolute path.

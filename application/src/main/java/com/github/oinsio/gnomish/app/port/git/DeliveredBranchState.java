@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 
 /**
- * The pre-cleanup state {@link DeliveredBranchReader} recovers from a delivered task branch's
+ * The pre-cleanup state {@code DeliveredBranchReader} recovers from a delivered task branch's
  * history: the delivered {@link TaskContext} and the final {@link TaskState} that the deferred
  * finish is rendered from during reconcile-on-resume (FR10, D10 of add-claim-heartbeat).
  *

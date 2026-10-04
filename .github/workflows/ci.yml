@@ -7,12 +7,17 @@
 # cancellation, and wrapper validation — not SHA pinning.
 name: CI
 
-# Trigger pattern: run on every push (FR7); the pull_request event is used only
+# Trigger pattern: run on every branch push (FR7); the pull_request event is used only
 # for PRs from forks (which get no push events in this repo). Same-repo PR
 # branches are already covered by their push runs, so the job-level `if` below
 # skips the duplicate pull_request run (NFR-C1: no double builds per commit).
+# A tag push starts no run (`branches: ['**']` matches every branch and no tag):
+# the release workflow judges the run this commit already has on `main`, and a
+# second `check` for the same commit would cost 20 minutes and shadow that
+# verdict in its run query (FR2, NFR-C1 of add-release-pipeline, design D6).
 on:
   push:
+    branches: ['**']
   pull_request:
 
 # Least-privilege token: the build only reads the repo contents (NFR-S2).

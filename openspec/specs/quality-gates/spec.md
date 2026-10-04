@@ -100,8 +100,11 @@ The build SHALL detect unused and misdeclared dependencies and fail the gate on 
 - **THEN** the dependency-analysis task fails naming the dependency
 
 ### Requirement: Continuous integration
-A CI workflow SHALL run `./gradlew check` on every push and pull request and
-SHALL publish JaCoCo and PIT reports as build artifacts. On pull-request and
+A CI workflow SHALL run `./gradlew check` on every branch push and pull request
+and SHALL publish JaCoCo and PIT reports as build artifacts. A tag push SHALL
+NOT start the check workflow: the release workflow judges the run the tagged
+commit already has on `main`, and a second run for the same commit would waste
+the budget and shadow that verdict. On pull-request and
 branch runs the mutation gate SHALL be scoped per module: the production Java
 classes changed relative to the merge base with `main` map to their owning
 modules, and only those modules' mutation gates run, targeted at the changed
@@ -112,6 +115,7 @@ in-flight runs for the same ref SHALL be cancelled by workflow concurrency.
 Every other CI workflow job that supports a per-job timeout SHALL set
 `timeout-minutes: 30`; a job whose reusable-workflow form forbids a per-job
 timeout is exempt.
+<!-- implements FR2, NFR-C1 of add-release-pipeline -->
 <!-- implements FR1, FR2, NFR-C1 of remove-ci-build-timeout -->
 <!-- implements FR2, FR3, FR4, NFR-C1 of scope-pit-to-changed-files -->
 <!-- implements FR11 of split-into-modules -->
@@ -120,6 +124,12 @@ timeout is exempt.
 - **WHEN** a commit is pushed with a failing test or a surviving mutant in a
   changed production class
 - **THEN** the CI run fails
+
+#### Scenario: A tag push starts no check run
+- **WHEN** a `v*` tag is pushed on a commit that already has a CI run on `main`
+- **THEN** no CI, license-gate, OSV-Scanner or Gitleaks run starts for the tag
+  ref, and the release workflow finds exactly the `main` push run for that
+  commit
 
 #### Scenario: Mutation gate is scoped to the diff
 - **WHEN** a branch changes a subset of production Java files
@@ -148,7 +158,7 @@ timeout is exempt.
 - **THEN** GitHub cancels the job with its standard timeout error rather than letting it run to the 6-hour default
 
 ### Requirement: Security scanning
-CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every push and pull request; CodeQL analysis of the codebase on every pull request and on pushes to `main`.
+CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every branch push and pull request, never on a tag push; CodeQL analysis of the codebase on every pull request and on pushes to `main`.
 
 The OSV-Scanner gate SHALL evaluate **every** committed Gradle lockfile in the
 repository — root and per-module, project and buildscript — against a **single**
@@ -170,6 +180,7 @@ regenerated so the scanned lockfiles reflect them.
 
 The project SHALL document one command that reproduces the CI scan verdict
 locally.
+<!-- implements FR2, NFR-C1 of add-release-pipeline -->
 <!-- implements FR1, FR2, FR6, FR7, FR8, FR9, NFR-S1, NFR-S2, NFR-S3 of fix-osv-dependency-gate -->
 
 #### Scenario: Vulnerable dependency fails CI
@@ -222,6 +233,9 @@ locally.
 
 ### Requirement: Reproducible build
 The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location. A security override of a BOM-managed or `strictly`-constrained transitive SHALL be applied on every configuration where the affected artifact resolves, and its effect SHALL be visible in the committed lock state rather than implied by build-script intent.
+
+The build's outputs SHALL be reproducible as well as its inputs: every archive task of every module (jars, the boot jar, distribution archives) SHALL write a fixed entry order, no file timestamps and fixed file modes, and no archive SHALL embed a generated file that records when it was made — the boot jar's build info SHALL carry no build time, and the SBOM SHALL stay outside the jar — so that two builds of the same commit with the same version produce byte-identical archives.
+<!-- implements NFR-R1 of add-release-pipeline -->
 <!-- implements FR3, FR4, FR5, NFR-R1, NFR-R2 of fix-osv-dependency-gate -->
 
 #### Scenario: Wrapper pins the toolchain
@@ -239,6 +253,11 @@ The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the
 - **WHEN** a version override is changed in the single version source
 - **THEN** the lock state is regenerated and committed before the scan is
   considered authoritative
+
+#### Scenario: Archive outputs are byte-identical
+- **WHEN** any module's archive task runs twice from the same commit with the
+  same version
+- **THEN** both outputs have the same SHA-256 sum
 
 ### Requirement: Source file size cap
 Every production Java source file SHALL stay within the 200-line hard cap of

@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 
 /**
- * Where a {@link ShellCommandCheckRunner} check gets its execution environment
+ * Where a {@code ShellCommandCheckRunner} check gets its execution environment
  * (the sandbox integration pass of add-sandbox-core): the host default
  * materializes a {@code HostTaskExecutionEnvironment} over the {@code
  * DirectoryWorkspace} root per check — today's behavior; the sandboxed source
@@ -23,8 +23,9 @@ public interface CheckEnvironmentSource {
      * @param check the command check about to run, carrying its freshness knob
      * @param workspace the engine's workspace for the round under verification
      * @return the acquired environment and its release action; never null
-     * @throws CheckEnvironmentUnavailableException if no environment can serve the check — an
-     *     infrastructure failure the runner maps to {@code CannotVerify}
+     * @throws RuntimeException the adapter's {@code CheckEnvironmentUnavailableException} if no
+     *     environment can serve the check — an infrastructure failure the runner maps to
+     *     {@code CannotVerify}
      */
     Acquired acquire(VerifyCheck.Command check, Workspace workspace);
 

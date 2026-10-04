@@ -6,7 +6,7 @@ import java.io.Serial;
 
 /**
  * Carries an already-computed process exit code out of a {@code take} run,
- * mirroring how {@link ManualRunRunner} lets exceptions propagate uncaught for
+ * mirroring how {@code ManualRunRunner} lets exceptions propagate uncaught for
  * {@link RunExitCodeMapper} to catch. This is the mechanism task 5.13's
  * {@code TakeCommand} SHOULD use to terminate the process with the code
  * design D16 requires, without ever calling {@code System.exit} directly

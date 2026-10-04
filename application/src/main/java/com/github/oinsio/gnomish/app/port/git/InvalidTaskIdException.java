@@ -4,7 +4,8 @@ import java.io.Serial;
 
 /**
  * Thrown when a taskId cannot be sanitized into a safe branch/directory name segment:
- * sanitization ({@link TaskIdSanitizer}) produced an empty result, or a result ending in
+ * sanitization ({@link com.github.oinsio.gnomish.app.git.TaskIdSanitizer}) produced an empty
+ * result, or a result ending in
  * {@code .lock} (git's own lock-file suffix, unsafe as a ref or worktree directory name). The
  * message carries the offending, un-sanitized taskId for diagnosis.
  *

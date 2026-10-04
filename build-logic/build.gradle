@@ -31,6 +31,7 @@ dependencies {
     implementation marker(libs.plugins.pitest)
     implementation marker(libs.plugins.japicmp)
     implementation marker(libs.plugins.license.report)
+    implementation marker(libs.plugins.cyclonedx)
 }
 
 // --- Functional (TestKit) verification of the convention plugins ---

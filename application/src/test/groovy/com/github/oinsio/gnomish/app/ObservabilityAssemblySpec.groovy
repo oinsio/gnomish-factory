@@ -172,10 +172,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         '(kills resolveHost\'s replaced-return-value mutant)'
         json.contains('"host" : "' + InetAddress.getLocalHost().getHostName() + '"')
 
-        and: 'the factory version falls back to "dev" when no Implementation-Version manifest ' +
-        'attribute is present (as under the test classpath) — kills resolveFactoryVersion\'s ' +
-        'negated-conditional and replaced-return-value mutants'
-        json.contains('"factoryVersion" : "dev"')
+        and: 'FR6 of add-release-pipeline: the factory version is FactoryVersion\'s — the development ' +
+        'version, since no build info is on the test classpath'
+        json.contains('"factoryVersion" : "0.0.0-dev"')
 
         and: 'the started ledger line landed too'
         def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))

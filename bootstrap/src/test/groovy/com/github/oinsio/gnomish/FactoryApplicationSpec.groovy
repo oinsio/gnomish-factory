@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish
 
 import com.github.oinsio.gnomish.app.OperatorHomeFixture
+import com.github.oinsio.gnomish.app.project.FactoryHome
+import com.github.oinsio.gnomish.e2e.E2eProcessHarness
+import com.github.oinsio.gnomish.testsupport.TestTaskProperty
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
 import org.springframework.context.ConfigurableApplicationContext
@@ -28,6 +32,10 @@ import spock.lang.TempDir
  * <p>Design D8 of add-project-registry: the context boots through {@link FactoryBoot} — the
  * {@code CommandExit} argument registration the configuration loader reads — against a factory
  * home of the spec's own.
+ *
+ * <p>FR6 of add-release-pipeline (design D3): {@code main} answers a sole {@code --version} before
+ * the context starts — shown on the packaged jar, since only a real process can show that nothing
+ * after the answer ran.
  */
 class FactoryApplicationSpec extends Specification {
 
@@ -83,8 +91,7 @@ class FactoryApplicationSpec extends Specification {
     // that ever reaching the packaged application.
     def "bootJar stays headless: no servlet/web-server jar is bundled"() {
         given: 'the packaged application jar built by this test run (dependsOn bootJar)'
-        def jarPath = System.getProperty('e2e.jarPath')
-        assert jarPath != null: 'e2e.jarPath system property is not set (see tasks.named("test") in build.gradle)'
+        def jarPath = TestTaskProperty.required('e2e.jarPath')
 
         when: 'the bundled library jars are listed'
         def bundledLibNames = new ZipFile(jarPath).withCloseable { zip ->
@@ -96,5 +103,26 @@ class FactoryApplicationSpec extends Specification {
 
         then: 'no jetty or servlet-API jar is bundled — the app carries no HTTP server capability'
         bundledLibNames.every { !(it =~ /(?i)(jetty|servlet)/) }
+    }
+
+    // FR6 of add-release-pipeline (design D3): --version is answered before Spring starts — no
+    // project is resolved, no configuration is loaded, no log file is opened
+    def "FR6: the packaged jar prints its version for --version outside any project and exits 0"() {
+        given: 'an empty factory home and a working directory that is no registered clone'
+        def home = Files.createDirectories(tmp.resolve('version-home'))
+        def elsewhere = Files.createDirectories(tmp.resolve('not-a-clone'))
+        def expected = TestTaskProperty.required('e2e.productVersion')
+
+        when:
+        def result = new E2eProcessHarness().execute('--version', elsewhere, [], [], false,
+        [(FactoryHome.HOME_VARIABLE): home.toString()])
+
+        then: 'the version on one line, and success'
+        result.exitCode() == 0
+        result.stdout() == expected + '\n'
+        result.stderr().isEmpty()
+
+        and: 'the home stayed empty: no log file, no registry'
+        Files.list(home).withCloseable { it.toList() } == []
     }
 }

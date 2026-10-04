@@ -18,6 +18,8 @@ tasks.named('test') {
     // already compiled.
     dependsOn tasks.named('bootJar')
     systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+    // BuildInfoSpec compares the jar's build info with the version this build set (FR3, design D2).
+    systemProperty 'e2e.productVersion', project.version.toString()
 
     // The fake agent's script and scenario library live in `:test-fixtures` but
     // are resolved from disk, not the classpath: they reach a consumer inside a
@@ -56,11 +58,11 @@ tasks.named('test') {
         exclude '**/build/**', '**/.git/**', '**/.gradle/**'
     }).withPropertyName('testSources')
 
-    // DistributionTermsScriptSpec drives the license job's shell checks and reads the workflow
-    // that calls them (FR1, FR3, FR7 of add-project-license), so both are inputs for the same
-    // reason: an edited script must re-run the spec.
-    inputs.files(rootProject.file('scripts/check-distribution-terms.sh'),
-            rootProject.file('.github/workflows/license-gate.yml')).withPropertyName('distributionChecks')
+    // DistributionTermsScriptSpec and ReleasePreflightScriptSpec drive the license and release
+    // shell scripts; they, CheckWorkflowTriggerSpec and ReleaseDraftCleanupSpec read the workflows
+    // as data, so all are inputs for the same reason: an edit must re-run the specs.
+    inputs.files(rootProject.files('scripts/check-distribution-terms.sh', 'scripts/release-preflight.sh'),
+            rootProject.fileTree(rootProject.file('.github/workflows'))).withPropertyName('distributionChecks')
 
     // The Ollama E2E layer (task 11.1) needs a native local Ollama install and a logged-in
     // `claude` CLI, and the paid smoke layer (task 11.3) spends real money against the real
@@ -87,8 +89,8 @@ pitest {
         "-DfakeAgentDir=${rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath}".toString(),
         "-DrepoRoot=${rootProject.projectDir.absolutePath}".toString(),
     ]
-    // FR6 documented exception: the application bootstrap class is only
-    // main() + SpringApplication.run(), unreachable by unit tests by design
+    // FR6 documented exception: the bootstrap class is only main() wiring — one hand-off to
+    // Entrypoint, which owns the --version branch, unreachable by unit tests by design
     // (design D5, D10). Everything else must reach 100%.
     excludedClasses = [
         'com.github.oinsio.gnomish.FactoryApplication',
@@ -102,6 +104,9 @@ pitest {
         // FactoryApplicationSpec's "bootJar stays headless" feature, task 6.5 of add-tracker-port).
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
+        // Specs over build outputs only `test` wires, shell scripts and workflow files
+        // (add-release-pipeline 3.1-3.4, 4.0, 4.2): no production Java class is reached.
+        'com.github.oinsio.gnomish.distribution.*',
         // Drive a real Docker daemon — real containers, volumes, networks — and a real Gitea
         // remote through subprocess `docker`/`git` (add-sandbox-core tasks 4.5-9.4). The sibling
         // suites of this family live in `:adapters` and are excluded by that module (task 8.1).

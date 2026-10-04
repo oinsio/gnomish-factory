@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish;
 
+import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import org.springframework.boot.SpringApplication;
@@ -30,7 +31,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * writes instead is the {@code serve} lifecycle anchor set ({@code AnchorLog}, FR2) — real
  * operator content rather than a line whose only reader was a spec.
  *
- * <p>Implements FR2, FR4 of add-project-skeleton.
+ * <p>Implements FR2, FR4 of add-project-skeleton; FR6 of add-release-pipeline.
  */
 @SpringBootApplication(scanBasePackages = FactoryApplication.USE_CASE_PACKAGE)
 @EnableConfigurationProperties({
@@ -55,8 +56,16 @@ public class FactoryApplication {
      */
     static final String USE_CASE_PACKAGE = "com.github.oinsio.gnomish.app";
 
+    /**
+     * Hands the command line to {@link Entrypoint}, which answers a sole {@code --version} before
+     * Spring starts and boots the application for every other one (design D3 of
+     * add-release-pipeline). The branch is {@code Entrypoint}'s, inside the mutation gate; this
+     * method stays one hand-off, exercised end to end by {@code FactoryApplicationSpec}.
+     */
     static void main(String[] args) {
-        CommandExit.start(new SpringApplication(FactoryApplication.class), args);
-        CommandExit.finish();
+        Entrypoint.start(args, new SystemConsoleIO(System.in, System.out), () -> {
+            CommandExit.start(new SpringApplication(FactoryApplication.class), args);
+            CommandExit.finish();
+        });
     }
 }

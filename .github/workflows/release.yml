@@ -1,0 +1,169 @@
+# Release: a pushed version tag publishes a verified GitHub Release.
+# Implements FR1, FR2, FR7, FR8, NFR-S1, NFR-S2, NFR-R1, NFR-R2, NFR-O1, NFR-C1 of
+# add-release-pipeline (design D6, D7). One job, in four phases:
+#   gate     (steps 1-3) tag shape, commit on main, green CI run — before any build;
+#   build    (step 4)    distribution archives and SBOM, then a second archive build
+#                        whose SHA-256 sums must match the first (M2);
+#   verify   (steps 5-6) the unpacked archive reports the tag's version and carries the
+#                        root LICENSE/NOTICE, in its top-level folder and in its jar;
+#   publish  (steps 7-9) SHA256SUMS, provenance and SBOM attestations, the release.
+# Publishing is the last step, so a failed run publishes nothing and a re-run for the same
+# tag starts from scratch (NFR-R2). The verification suite is not re-run: the release trusts
+# the green `main` CI run of the tagged commit that step 3 finds (NFR-C1, NG6).
+#
+# Action versions are pinned by major tag, as in ci.yml; Dependabot keeps them fresh.
+name: Release
+
+# Every `v*` tag starts the workflow, so a mis-shaped one fails loudly in step 1 instead of
+# being ignored (FR1). The check workflows run on branch pushes only, so this tag push starts
+# no second `check` (design D6).
+on:
+  push:
+    tags: ['v*']
+
+# Only what the job uses (NFR-S1): `contents: write` creates the release and uploads its
+# assets; `id-token: write` and `attestations: write` sign and store the attestations;
+# `actions: read` lets step 3 list the CI runs of the tagged commit.
+permissions:
+  actions: read
+  attestations: write
+  contents: write
+  id-token: write
+
+# One release run per tag; a second push of the same tag waits rather than racing it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # 30-min budget: one distribution build is the target, under 10 (NFR-C1)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history: step 2 needs origin/main to decide reachability.
+          fetch-depth: 0
+
+      # Steps 1-3 (FR1, FR2, NFR-O1): shared with ReleasePreflightScriptSpec, which drives
+      # every red path. Writes `version` and `prerelease` to the step outputs.
+      - name: Preflight (tag shape, commit on main, green CI)
+        id: preflight
+        run: bash scripts/release-preflight.sh "$TAG" "$GITHUB_SHA"
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Validate gradle-wrapper.jar against known checksums, as ci.yml does.
+          validate-wrappers: true
+          # A release builds from a clean slate: nothing read from or written to the cache.
+          cache-disabled: true
+
+      # Step 4 (FR3, FR4, FR7, NFR-R1, M2): the version comes from the tag. The archives and
+      # the SBOM are copied aside, then the module is cleaned and the tar built again without
+      # the build cache; both tars must have the same SHA-256 sum. The SBOM is not compared:
+      # it records its generation time (design D7).
+      - name: Build the distribution twice and compare
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+        run: |
+          ./gradlew :bootstrap:distTar :bootstrap:distZip :bootstrap:cyclonedxDirectBom "-PreleaseVersion=$VERSION"
+          mkdir release
+          cp "bootstrap/build/distributions/gnomish-$VERSION.tar.gz" "bootstrap/build/distributions/gnomish-$VERSION.zip" release/
+          cp bootstrap/build/reports/cyclonedx-direct/bom.json "release/gnomish-$VERSION-cyclonedx.json"
+          ./gradlew :bootstrap:clean
+          ./gradlew :bootstrap:distTar "-PreleaseVersion=$VERSION" --no-build-cache
+          first="$(sha256sum "release/gnomish-$VERSION.tar.gz" | cut -d ' ' -f 1)"
+          second="$(sha256sum "bootstrap/build/distributions/gnomish-$VERSION.tar.gz" | cut -d ' ' -f 1)"
+          if [ "$first" != "$second" ]; then
+            echo "::error title=Reproducible archive::two builds of ${GITHUB_SHA} produced different tars (${first} vs ${second}); find the entry that differs with diffoscope and remove its source of variation"
+            exit 1
+          fi
+
+      # Step 5 (FR8, M3): the archive an operator downloads reports the tag's version.
+      - name: Unpacked archive reports the tag's version
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+        run: |
+          mkdir unpacked
+          tar -xzf "release/gnomish-$VERSION.tar.gz" -C unpacked
+          reported="$("unpacked/gnomish-$VERSION/bin/gnomish" --version)"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error title=Archive version::bin/gnomish --version printed '${reported}', expected '${VERSION}'; the product version did not reach the boot jar's build info"
+            exit 1
+          fi
+
+      # Step 6 (NFR-S2): the archive's LICENSE/NOTICE and its jar's META-INF copies equal the
+      # root files byte for byte. Run from the repository root, whose files are the reference.
+      - name: Archive carries the root LICENSE and NOTICE
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+        run: bash scripts/check-distribution-terms.sh archive "unpacked/gnomish-$VERSION"
+
+      # Step 7 (FR7): one checksum file covering both archives, by bare file name.
+      - name: Write SHA256SUMS
+        working-directory: release
+        run: sha256sum gnomish-*.tar.gz gnomish-*.zip > SHA256SUMS
+
+      # Step 8 (FR7): per archive, a build provenance attestation and one binding the SBOM to
+      # the archive's digest, not merely published beside it.
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            release/gnomish-*.tar.gz
+            release/gnomish-*.zip
+
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            release/gnomish-*.tar.gz
+            release/gnomish-*.zip
+          sbom-path: release/gnomish-${{ steps.preflight.outputs.version }}-cyclonedx.json
+
+      # Step 9 (NFR-R2): `gh release create` deletes its own draft when an upload or the publish
+      # fails, but not when the job is killed between the two (timeout, lost runner, cancel); its
+      # pre-check sees published releases only, so a re-run would add a second draft beside it.
+      # `gh release view` also finds a draft by its pending tag. A published release answers
+      # `false` and stays: the create below fails on it, the safe re-run. No release, or an API
+      # error, prints nothing and deletes nothing. No `--cleanup-tag`: the tag is the only record
+      # of the version (design D1), so only the draft goes.
+      - name: Remove a draft left by an interrupted run
+        run: |
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = 'true' ]; then
+            gh release delete "$TAG" --yes
+          fi
+
+      # Step 9 (FR7, NFR-R2): every asset in one call, which creates a draft, uploads and only
+      # then publishes. Hand-written notes win over generated ones; `--verify-tag` refuses to
+      # create a tag, so the release stays on the commit the maintainer tagged.
+      - name: Publish the release
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+          PRERELEASE: ${{ steps.preflight.outputs.prerelease }}
+        run: |
+          notes=(--generate-notes)
+          if [ -f "docs/releases/$TAG.md" ]; then
+            notes=(--notes-file "docs/releases/$TAG.md")
+          fi
+          prerelease=()
+          if [ "$PRERELEASE" = 'true' ]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$TAG" --verify-tag --draft=false --title "$TAG" "${notes[@]}" "${prerelease[@]}" \
+            "release/gnomish-$VERSION.tar.gz" \
+            "release/gnomish-$VERSION.zip" \
+            release/SHA256SUMS \
+            "release/gnomish-$VERSION-cyclonedx.json"

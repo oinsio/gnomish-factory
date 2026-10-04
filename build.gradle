@@ -1,11 +1,10 @@
 // Build script for the gnomish-factory root project.
 //
-// The root project holds no source: since `:bootstrap` was carved out of the
-// remainder (task 4.7 of split-into-modules), every production class and spec
-// lives in a module and the root is build-wide metadata only — the formatting
-// gate over the build files (via `build-metadata-conventions`), the
-// dependency-analysis gate, and the git-hook installer. Everything a module
-// needs comes from the `build-logic` convention plugins (FR6, design D9).
+// The root project holds no source: since `:bootstrap` was carved out of the remainder (task 4.7
+// of split-into-modules), every production class and spec lives in a module and the root is
+// build-wide metadata only — the formatting gate over the build files (via
+// `build-metadata-conventions`), the dependency-analysis gate, the release SBOM, and the git-hook
+// installer. Everything a module needs comes from the `build-logic` convention plugins (FR6, D9).
 
 // Dependency locking for the buildscript classpath (the convention plugins'
 // own transitives). Together with the project-configuration locking from
@@ -58,6 +57,8 @@ plugins {
     id 'log-expectation-conventions'
     // The dependency-license gate: CI-only, outside `check` (D2 of add-project-license).
     id 'license-gate-conventions'
+    // The release SBOM: applied here, never in `:bootstrap` (FR7, D7 of add-release-pipeline).
+    id 'sbom-conventions'
     // dependency-analysis is applied build-wide from settings.gradle (FR10,
     // design D8); only its configuration and `check` wiring live here.
 }
@@ -138,12 +139,11 @@ tasks.named('check') {
     dependsOn tasks.named('buildHealth')
 }
 
-// Opt-in whole-build mutation run (FR11, design D6, task 8.2 of
-// split-into-modules). Since the split there is no whole-tree PIT task: every
-// module mutates its own production packages and root `check` aggregates those
-// runs. This task is the one-shot full report on demand — `./gradlew pitestAll`
-// — without the rest of `check`, and is deliberately NOT wired into `check`,
-// which would run each module's gate twice. Each module contributes itself from
+// Opt-in whole-build mutation run (FR11, design D6, task 8.2 of split-into-modules). Since the
+// split there is no whole-tree PIT task: every module mutates its own production packages and
+// root `check` aggregates those runs. This task is the one-shot full report on demand —
+// `./gradlew pitestAll` — without the rest of `check`, and is deliberately NOT wired into
+// `check`, which would run each module's gate twice. Each module contributes itself from
 // `pitest-conventions`; the reports stay per module (see README).
 tasks.register('pitestAll') {
     description = 'Runs every module\'s PIT mutation gate; opt-in, not part of `check`.'

@@ -1,0 +1,17 @@
+// The CycloneDX SBOM the release publishes beside the archives (FR7, design D7 of
+// add-release-pipeline). Applied to the ROOT project only, never to `:bootstrap`.
+//
+// Applied here, the plugin registers a `cyclonedxDirectBom` task in every subproject without
+// applying its plugin class to them, so Spring Boot's reaction to that class never fires in
+// `:bootstrap`: applied there, Boot would route the SBOM into the jar as
+// `META-INF/sbom/application.cdx.json` with `Sbom-Location` in the manifest, and the SBOM's
+// generation timestamp would make every jar and archive differ (NFR-R1). `BootJarSbomSpec` pins
+// the jar's absence of both. `bootstrap/packaging.gradle` scopes that module's task to the
+// runtime classpath; `:bootstrap:cyclonedxDirectBom` writes
+// `bootstrap/build/reports/cyclonedx-direct/bom.json`.
+//
+// The 3.x line supports the configuration cache and parallel execution (2.x fails under Gradle 9
+// with the cache on), so neither the build nor the release workflow passes cache flags for it.
+plugins {
+    id 'org.cyclonedx.bom'
+}
