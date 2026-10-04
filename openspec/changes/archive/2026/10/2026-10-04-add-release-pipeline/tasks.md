@@ -194,3 +194,5 @@ green after every section.
       `v0.0.1-rc.1` on a fork and deletes it afterwards. Verify the release page
       holds the four assets and, per archive, a provenance and an SBOM
       attestation, and `gh attestation verify` passes for the tar; attach the run link to the task report.
+      Not verified in this change: left open on purpose. The first release is
+      verified in `fix-docker-exec-env-argv` instead.
