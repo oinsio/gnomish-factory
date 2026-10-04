@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.e2e
 
+import com.github.oinsio.gnomish.testsupport.TestTaskProperty
 import java.util.zip.ZipFile
 import spock.lang.Shared
 import spock.lang.Specification
@@ -22,8 +23,7 @@ class BuildInfoSpec extends Specification {
 
     def "FR3: the jar's build info carries the version the build set"() {
         given:
-        def expected = System.getProperty('e2e.productVersion')
-        assert expected != null: 'e2e.productVersion is not set (see verification.gradle)'
+        def expected = TestTaskProperty.required('e2e.productVersion')
 
         expect:
         buildInfo.getProperty('build.version') == expected
@@ -35,8 +35,7 @@ class BuildInfoSpec extends Specification {
     }
 
     private static Properties readBuildInfo() {
-        def jarPath = System.getProperty('e2e.jarPath')
-        assert jarPath != null: 'e2e.jarPath is not set (see verification.gradle)'
+        def jarPath = TestTaskProperty.required('e2e.jarPath')
         new ZipFile(jarPath).withCloseable { zip ->
             def entry = zip.getEntry(BUILD_INFO)
             assert entry != null: "${BUILD_INFO} is missing from ${jarPath}"

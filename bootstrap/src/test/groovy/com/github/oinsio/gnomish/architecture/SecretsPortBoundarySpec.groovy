@@ -4,11 +4,11 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import java.nio.file.Files
-import java.nio.file.Path
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -88,8 +88,7 @@ class SecretsPortBoundarySpec extends Specification {
     }
 
     private static List<File> buildMetadataFiles() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/build.gradle)'
+        def root = RepoSourceTree.repoRoot()
         Files.walk(root).withCloseable { paths ->
             paths.filter { Files.isRegularFile(it) }
             .filter { path ->

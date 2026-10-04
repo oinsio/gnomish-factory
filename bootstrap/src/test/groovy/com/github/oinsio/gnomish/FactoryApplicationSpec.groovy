@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish
 import com.github.oinsio.gnomish.app.OperatorHomeFixture
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
+import com.github.oinsio.gnomish.testsupport.TestTaskProperty
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -90,8 +91,7 @@ class FactoryApplicationSpec extends Specification {
     // that ever reaching the packaged application.
     def "bootJar stays headless: no servlet/web-server jar is bundled"() {
         given: 'the packaged application jar built by this test run (dependsOn bootJar)'
-        def jarPath = System.getProperty('e2e.jarPath')
-        assert jarPath != null: 'e2e.jarPath system property is not set (see tasks.named("test") in build.gradle)'
+        def jarPath = TestTaskProperty.required('e2e.jarPath')
 
         when: 'the bundled library jars are listed'
         def bundledLibNames = new ZipFile(jarPath).withCloseable { zip ->
@@ -111,8 +111,7 @@ class FactoryApplicationSpec extends Specification {
         given: 'an empty factory home and a working directory that is no registered clone'
         def home = Files.createDirectories(tmp.resolve('version-home'))
         def elsewhere = Files.createDirectories(tmp.resolve('not-a-clone'))
-        def expected = System.getProperty('e2e.productVersion')
-        assert expected != null: 'e2e.productVersion is not set (see verification.gradle)'
+        def expected = TestTaskProperty.required('e2e.productVersion')
 
         when:
         def result = new E2eProcessHarness().execute('--version', elsewhere, [], [], false,

@@ -25,7 +25,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param instance the writing process's identity; never null
  * @param taskId the tracker's original task id; never blank
- * @param outcome which terminal {@link TakeResult} variant produced this line; never null
+ * @param outcome which terminal {@link com.github.oinsio.gnomish.app.take.TakeResult} variant
+ *     produced this line; never null
  * @param parkReason why the task was parked; non-null iff {@code outcome} is
  *     {@link TaskOutcome#AWAITING_HUMAN}
  * @param stage the pipeline stage the task was in when it finished; null at

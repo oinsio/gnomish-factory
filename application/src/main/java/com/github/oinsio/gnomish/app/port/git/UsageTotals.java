@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * (FR14, NFR-C1 of add-git-workflow): every recorded round of every stage visit — including
  * failed attempts — contributes, matching {@code state.json}'s own {@code totals} semantics
  * (design D5) but derived here directly from the walked rows so it stays correct even though the
- * per-stage {@code attempts} list resets on advancement (see {@link UsageHistoryWalker}).
+ * per-stage {@code attempts} list resets on advancement (see {@code UsageHistoryWalker}).
  *
  * <p>Implements FR14, NFR-C1 of add-git-workflow.
  *

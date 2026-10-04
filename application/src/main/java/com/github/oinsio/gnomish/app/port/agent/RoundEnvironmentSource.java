@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Where a {@link CliStageExecutor} round gets its execution environment and
+ * Where a {@code CliStageExecutor} round gets its execution environment and
  * decision transport (the sandbox integration pass of add-sandbox-core): the
  * host default builds a {@code HostTaskExecutionEnvironment} over the {@code
  * DirectoryWorkspace} root with the temp-dir decision file ({@code

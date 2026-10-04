@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
+import java.nio.file.Files
 import spock.lang.Specification
 
 /**
@@ -43,6 +44,41 @@ class FactoryVersionBoundarySpec extends Specification {
         'a spaced call' | 'String v = pkg . getImplementationVersion ();' || true
         'a trailing comment' | 'String v = FactoryVersion.current().value(); // not getImplementationVersion()' || false
         'the owner call' | 'String v = FactoryVersion.current().value();' || false
+    }
+
+    // NG3, scenario "Plugin contract is untouched": `ReleaseVersionSpec` proves the plugin reaches
+    // only the project applying it, on a miniature build; this pins which real project that is.
+    // `verifyPublishedApiVersion` cannot stand in: `0.0.0-dev` is a valid semver it accepts.
+    def "NG3: only :bootstrap applies the product version"() {
+        given: 'every build script of the main build, the convention plugins excluded'
+        def scripts = buildScripts()
+        def appliers = scripts.findAll {
+            it.text =~ /id\s+'product-version-conventions'/
+        }
+        .collect { RepoSourceTree.relative(it) }
+
+        expect: 'the scan reached the published API module'
+        scripts.collect {
+            RepoSourceTree.relative(it)
+        }.contains('gnomish-plugin-api/build.gradle')
+
+        and: 'the product version is applied to the shipped executable alone'
+        appliers == ['bootstrap/build.gradle']
+    }
+
+    /** Every {@code *.gradle} outside build output and outside the {@code build-logic} plugins. */
+    private static List<File> buildScripts() {
+        Files.walk(RepoSourceTree.repoRoot()).withCloseable { paths ->
+            paths.filter {
+                Files.isRegularFile(it) && it.fileName.toString().endsWith('.gradle')
+            }
+            .map { it.toFile() }
+            .filter {
+                def path = RepoSourceTree.relative(it)
+                !path.startsWith('build-logic/') && !path.contains('/build/') && !path.startsWith('build/')
+            }
+            .toList()
+        }
     }
 
     private static boolean readsManifestVersion(String code) {

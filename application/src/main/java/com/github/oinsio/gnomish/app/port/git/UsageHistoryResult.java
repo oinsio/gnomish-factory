@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app.port.git;
 import java.util.List;
 
 /**
- * The outcome of {@link UsageHistoryWalker#walk}: either the task branch was located and its
+ * The outcome of {@code UsageHistoryWalker#walk}: either the task branch was located and its
  * {@code state.json} history walked into rows, or no branch exists anywhere for the requested
  * task. Mirrors the {@link BranchStateResult} precedent so {@code usage} and {@code status} give
  * callers the same "not found is not a defect" shape (FR14).

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.distribution
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.oinsio.gnomish.testsupport.TestTaskProperty
 import java.util.jar.JarFile
 import spock.lang.Shared
 import spock.lang.Specification
@@ -24,7 +25,7 @@ import spock.lang.Specification
 class BootJarSbomSpec extends Specification {
 
     @Shared
-    String jarPath = property('e2e.jarPath')
+    String jarPath = TestTaskProperty.required('e2e.jarPath')
 
     def "FR7: the boot jar has no META-INF/sbom/ entry and no Sbom-Location manifest attribute"() {
         expect:
@@ -42,7 +43,7 @@ class BootJarSbomSpec extends Specification {
 
     def "FR7: every library in the boot jar's BOOT-INF/lib/ is a component of the SBOM"() {
         given:
-        def bom = new ObjectMapper().readTree(new File(property('e2e.sbomPath')))
+        def bom = new ObjectMapper().readTree(new File(TestTaskProperty.required('e2e.sbomPath')))
         def components = bom.get('components').collect {
             "${it.get('name').asText()}-${it.get('version').asText()}.jar".toString()
         } as Set
@@ -61,11 +62,5 @@ class BootJarSbomSpec extends Specification {
 
         and:
         bundled.findAll { !(it in components) } == []
-    }
-
-    private static String property(String name) {
-        def value = System.getProperty(name)
-        assert value != null: "${name} is not set (see verification.gradle and packaging.gradle)"
-        value
     }
 }

@@ -8,7 +8,7 @@ import java.io.Serial;
  * D13, {@link com.github.oinsio.gnomish.app.port.git.BranchLocation.NotFound}). Per design D15 and
  * UX3, branch death after a merged PR is the expected end state of a task, not a tool failure: the
  * calm "task not found" line is printed to {@link System#out} by the throwing command before this
- * type is thrown, so {@link ManualRunRunner} rethrows it unadorned — no {@code System.err} line, no
+ * type is thrown, so {@code ManualRunRunner} rethrows it unadorned — no {@code System.err} line, no
  * WARN log, no stack trace — and {@link RunExitCodeMapper} settles it on its own exit code (6),
  * distinct from both a clean report (0) and the generic internal-error fallback (1), so scripts can
  * tell "nothing to report" apart from "the tool broke."

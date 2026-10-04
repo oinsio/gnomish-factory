@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
- * Thrown when {@link WorktreeSalvage#salvage} cannot durably commit an interrupted round's
- * uncommitted leftovers: {@code git add -A} or {@code git commit} exits non-zero. Mirrors {@link
+ * Thrown when {@code WorktreeSalvage#salvage} cannot durably commit an interrupted round's
+ * uncommitted leftovers: {@code git add -A} or {@code git commit} exits non-zero. Mirrors {@code
  * GitPersistFailedException}'s "never swallow a failed commit" contract, scoped to the salvage
  * commit rather than a round commit.
  *

@@ -33,6 +33,11 @@ class ReleasePreflightScriptSpec extends Specification {
     List<Map> runs = []
 
     def setup() {
+        // The gh stub filters its runs with jq; without it every call exits 127 and the script
+        // reports a gh failure, so a missing tool would read as a broken script.
+        assert System.getenv('PATH').split(File.pathSeparator).any {
+            Files.isExecutable(Path.of(it, 'jq'))
+        }: 'no jq on the PATH: the gh stub (release-preflight/gh-stub.sh) needs it'
         repo = Files.createDirectories(tmp.resolve('repo'))
         git('init', '--quiet', '--initial-branch=main')
         onMain = commit('on main')

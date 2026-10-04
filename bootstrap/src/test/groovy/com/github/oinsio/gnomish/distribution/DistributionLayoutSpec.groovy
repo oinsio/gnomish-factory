@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.distribution
 
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
+import com.github.oinsio.gnomish.testsupport.TestTaskProperty
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -24,13 +25,13 @@ class DistributionLayoutSpec extends Specification {
     private static final String RECIPE = 'docs/examples/sandbox-image'
 
     @Shared
-    String version = property('e2e.productVersion')
+    String version = TestTaskProperty.required('e2e.productVersion')
 
     @Shared
-    Path tar = Path.of(property('e2e.distTarPath'))
+    Path tar = Path.of(TestTaskProperty.required('e2e.distTarPath'))
 
     @Shared
-    Path zip = Path.of(property('e2e.distZipPath'))
+    Path zip = Path.of(TestTaskProperty.required('e2e.distZipPath'))
 
     @Shared
     Map<String, Integer> tarFiles = readTar(tar)
@@ -177,11 +178,5 @@ class DistributionLayoutSpec extends Specification {
         def output = process.inputStream.getText(StandardCharsets.UTF_8.name())
         assert process.waitFor() == 0: "git ${arguments.join(' ')} failed: ${process.errorStream.text}"
         output
-    }
-
-    private static String property(String name) {
-        def value = System.getProperty(name)
-        assert value != null: "${name} is not set (see verification.gradle)"
-        value
     }
 }

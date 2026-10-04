@@ -8,7 +8,7 @@ package com.github.oinsio.gnomish.app.port.git;
  * written by {@code recordOutcome} — {@link #COMPLETED}, {@link #PAUSED}, {@link
  * #ESCALATED}, {@link #ABORTED}.
  *
- * <p>Deliberately closed rather than a free-text event name: {@link
+ * <p>Deliberately closed rather than a free-text event name: {@code
  * ServiceCommitMessages#taskEvent} switches over every constant exhaustively, so adding
  * a seventh lifecycle write forces a compile error here instead of producing
  * inconsistent wording later.

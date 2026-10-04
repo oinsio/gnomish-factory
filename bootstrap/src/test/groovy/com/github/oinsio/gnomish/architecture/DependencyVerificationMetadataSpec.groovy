@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -33,8 +34,7 @@ class DependencyVerificationMetadataSpec extends Specification {
     }
 
     private static Path metadataFile() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
+        def root = RepoSourceTree.repoRoot()
         def file = root.resolve('gradle/verification-metadata.xml')
         assert Files.isRegularFile(file): "verification metadata not found at ${file}"
         file

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish;
 
-import com.github.oinsio.gnomish.app.VersionCommand;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
@@ -58,16 +57,15 @@ public class FactoryApplication {
     static final String USE_CASE_PACKAGE = "com.github.oinsio.gnomish.app";
 
     /**
-     * Answers a sole {@code --version} before Spring starts (design D3 of add-release-pipeline);
-     * every other command line boots the application. The decision is {@link VersionCommand}'s and
-     * is mutation-covered there; the branch here is exercised end to end by {@code
-     * FactoryApplicationSpec}, which spawns the packaged jar with {@code --version}.
+     * Hands the command line to {@link Entrypoint}, which answers a sole {@code --version} before
+     * Spring starts and boots the application for every other one (design D3 of
+     * add-release-pipeline). The branch is {@code Entrypoint}'s, inside the mutation gate; this
+     * method stays one hand-off, exercised end to end by {@code FactoryApplicationSpec}.
      */
     static void main(String[] args) {
-        if (VersionCommand.answer(args, new SystemConsoleIO(System.in, System.out))) {
-            return;
-        }
-        CommandExit.start(new SpringApplication(FactoryApplication.class), args);
-        CommandExit.finish();
+        Entrypoint.start(args, new SystemConsoleIO(System.in, System.out), () -> {
+            CommandExit.start(new SpringApplication(FactoryApplication.class), args);
+            CommandExit.finish();
+        });
     }
 }

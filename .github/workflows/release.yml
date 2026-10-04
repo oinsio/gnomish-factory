@@ -107,7 +107,9 @@ jobs:
       # Step 6 (NFR-S2): the archive's LICENSE/NOTICE and its jar's META-INF copies equal the
       # root files byte for byte. Run from the repository root, whose files are the reference.
       - name: Archive carries the root LICENSE and NOTICE
-        run: bash scripts/check-distribution-terms.sh archive "unpacked/gnomish-${{ steps.preflight.outputs.version }}"
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+        run: bash scripts/check-distribution-terms.sh archive "unpacked/gnomish-$VERSION"
 
       # Step 7 (FR7): one checksum file covering both archives, by bare file name.
       - name: Write SHA256SUMS
@@ -130,6 +132,19 @@ jobs:
             release/gnomish-*.tar.gz
             release/gnomish-*.zip
           sbom-path: release/gnomish-${{ steps.preflight.outputs.version }}-cyclonedx.json
+
+      # Step 9 (NFR-R2): `gh release create` deletes its own draft when an upload or the publish
+      # fails, but not when the job is killed between the two (timeout, lost runner, cancel); its
+      # pre-check sees published releases only, so a re-run would add a second draft beside it.
+      # `gh release view` also finds a draft by its pending tag. A published release answers
+      # `false` and stays: the create below fails on it, the safe re-run. No release, or an API
+      # error, prints nothing and deletes nothing. No `--cleanup-tag`: the tag is the only record
+      # of the version (design D1), so only the draft goes.
+      - name: Remove a draft left by an interrupted run
+        run: |
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = 'true' ]; then
+            gh release delete "$TAG" --yes
+          fi
 
       # Step 9 (FR7, NFR-R2): every asset in one call, which creates a draft, uploads and only
       # then publishes. Hand-written notes win over generated ones; `--verify-tag` refuses to
