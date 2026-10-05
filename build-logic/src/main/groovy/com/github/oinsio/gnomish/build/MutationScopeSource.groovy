@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.build
 
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
+import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
@@ -17,8 +18,10 @@ import org.gradle.process.ExecOperations
  *
  * <p><b>Mode (D5).</b> {@code pitScope} absent → {@link MutationScope.Mode#BRANCH}; {@code all},
  * or a {@code pitestAll} task in the requested task list → {@link MutationScope.Mode#ALL}; any
- * other value → {@link MutationScope.Mode#EXPLICIT} with the comma-separated globs. Only branch
- * mode runs {@code git}.
+ * other value → {@link MutationScope.Mode#EXPLICIT} with the comma-separated globs. A value that
+ * names no glob ({@code -PpitScope=}, a forgotten {@code pitScope=} in a {@code gradle.properties})
+ * fails the build: read as an explicit scope it would skip every module, the narrowing NFR-R1
+ * forbids. Only branch mode runs {@code git}.
  *
  * <p><b>Branch mode runs three {@code git} processes (D2, D3, NFR-P1)</b>, from the repository
  * root:
@@ -103,7 +106,11 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
             return MutationScope.all("-PpitScope=${WHOLE_TREE}".toString())
         }
         if (requested != null) {
-            return MutationScope.explicit(requested.split(',').collect { it.trim() }.findAll { !it.isEmpty() })
+            def globs = requested.split(',').collect { it.trim() }.findAll { !it.isEmpty() }
+            if (globs.isEmpty()) {
+                throw new GradleException("pitScope is set but names no class glob; unset it for the branch scope, or pass -PpitScope=${WHOLE_TREE} for the whole tree")
+            }
+            return MutationScope.explicit(globs)
         }
         branch()
     }

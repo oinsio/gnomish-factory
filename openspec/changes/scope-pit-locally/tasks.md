@@ -92,6 +92,17 @@ add-functional-api-gate-test), which is what runs the included build's `function
       module's `pitest` and `pitestVerifyAllKilled` depend on it. Verify: `grep -c "PIT scope:"`
       == 1 for a scoped `check` with changes, for a scoped `check` on a clean tree where every
       `pitest` is skipped, and on a configuration-cache hit (run twice).
+- [x] 2.5 Pin the consumer by a TestKit suite, `MutationScopeConventionsFunctionalSpec`, so the
+      checks 2.1–2.3 verified by hand stay verified: a mini repository whose one module applies
+      the real `library-conventions` (repository catalog, real `build-checks`) and runs real PIT
+      offline. Scenarios: a clean branch skips `pitest` and the verdict over a planted SURVIVED
+      `mutations.xml`, with one `PIT scope:` line naming every module skipped (NFR-R3, NFR-O1);
+      one line on a configuration-cache hit (NFR-R2); a change to an excluded class only skips
+      `pitest` without "No mutations found" (D1); a changed class is mutated and counted; an
+      assertion deleted from the killing spec widens the module and fails the gate on the
+      survivor (M3, end to end); no base mutates the whole tree and says why (NFR-R1). Verify:
+      each scenario turns red when its rule is removed from the scripts (shared skip, widening,
+      `excludedClasses` subtraction, announcement without `onlyIf`).
 - [x] 2.4 Update `docs/guides/developer-guide.md` "Per-module verification": three modes in one
       paragraph each (branch default, `-PpitScope=all` / `pitestAll`, explicit list), the
       widening rules, the fallback direction, the nightly run as the whole-tree guarantee (UX3);

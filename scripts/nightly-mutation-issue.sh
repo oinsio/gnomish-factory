@@ -27,8 +27,10 @@ readonly LOG="$1" RUN_URL="$2" ARTIFACT="$3"
 # `Execution failed for task ':mod:pitest'.` above the failure message, whose first line
 # follows as `> …`. The second form carries the reason (the surviving-mutation count of
 # `pitestVerifyAllKilled`), so it is preferred; a task seen only in the first form is still
-# listed. Each task appears once, in the order the log first names it.
+# listed. Each task appears once, in the order the log first names it. A missing log means
+# the job failed before the gate step teed it (a setup step), so no task is listed.
 failed_tasks() {
+    [ -f "$LOG" ] || return 0
     awk '
         /^Execution failed for task / {
             task = $0

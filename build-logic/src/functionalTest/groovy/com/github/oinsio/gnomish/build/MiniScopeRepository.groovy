@@ -8,7 +8,10 @@ import org.gradle.testkit.runner.GradleRunner
 
 /**
  * A miniature git repository holding a mini build that obtains {@code MutationScopeSource} and
- * prints the scope it got — the fixture of {@code MutationScopeFunctionalSpec}.
+ * prints the scope it got — the fixture of {@code MutationScopeFunctionalSpec}. {@code
+ * MutationScopeConventionsFunctionalSpec} overwrites that build with one applying the real
+ * convention plugins and drives it through {@link #runner}, keeping the repository and its git
+ * configuration.
  *
  * <p>The repository owns its git configuration (Risks of scope-pit-locally): {@code build-logic}
  * does not apply {@code adversarial-gitconfig-conventions}, so without this the repository would
@@ -25,7 +28,9 @@ import org.gradle.testkit.runner.GradleRunner
  */
 final class MiniScopeRepository {
 
-    static final Map<String, String> MODULES = [':mod-a': 'mod-a', ':mod-b': 'mod-b', ':test-fixtures': 'test-fixtures']
+    /** {@code :mod-a:inner} nests inside {@code :mod-a}, as {@code sandbox/core} does in the real build. */
+    static final Map<String, String> MODULES = [':mod-a': 'mod-a', ':mod-a:inner': 'mod-a/inner', ':mod-b': 'mod-b',
+                                                ':test-fixtures': 'test-fixtures']
 
     final Path dir
     final Path globalConfig
@@ -79,13 +84,9 @@ exec '${realGit()}' "\$@"
         output.trim()
     }
 
-    /** The {@code git} lines the build under test ran since the last {@link #clearInvocations()}. */
+    /** The {@code git} lines the build under test has run. */
     List<String> invocations() {
         Files.exists(invocationLog) ? invocationLog.readLines() : []
-    }
-
-    void clearInvocations() {
-        Files.deleteIfExists(invocationLog)
     }
 
     /** Runs the mini build and returns the scope it printed, plus the raw result. */
@@ -96,7 +97,8 @@ exec '${realGit()}' "\$@"
         (new JsonSlurper().parseText(line.substring('SCOPE '.length())) as Map) + [output: result.output]
     }
 
-    private GradleRunner runner(String... arguments) {
+    /** Runs whatever build the repository holds — a caller may replace the scope-printing one. */
+    GradleRunner runner(String... arguments) {
         def environment = new HashMap<String, String>(System.getenv())
         environment.keySet().removeIf { it.startsWith('GIT_') }
         environment.putAll(gitEnvironment())

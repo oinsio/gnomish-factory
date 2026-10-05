@@ -93,6 +93,16 @@ Execution failed for task ':bootstrap:test'.
         body().contains('no failed Gradle task was found in the log')
     }
 
+    def "UX4: a run that failed before Gradle wrote any log still yields an issue that says so"() {
+        when: 'a setup step failed, so the step that tees the log never ran'
+        def run = runScript(label: 'nightly-mutation', openIssue: '', log: false)
+
+        then:
+        run.exit == 0
+        body().contains('no failed Gradle task was found in the log')
+        body().contains("Run: ${RUN_URL}")
+    }
+
     def "FR6: the script refuses a call without its three arguments"() {
         expect:
         execute([

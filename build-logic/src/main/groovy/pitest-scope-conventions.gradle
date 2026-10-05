@@ -18,7 +18,8 @@ plugins {
 // its three `git` processes once (NFR-P1), and the configuration cache fingerprints one value
 // (NFR-R2). `pitestAll` in the task list implies the whole tree (D5): the task names are part of
 // the cache key, so a `pitestAll` run and a `check` run cache apart. `summaries` collects each
-// module's resolved line for the announcement below.
+// module's resolved line for the announcement below, `scheduled` the modules whose `pitest` the
+// task graph holds.
 def shared = gradle.extensions.extraProperties
 if (!shared.has('mutationScope')) {
     def root = rootProject
@@ -29,10 +30,26 @@ if (!shared.has('mutationScope')) {
         parameters.taskNames = gradle.startParameter.taskNames
     })
     shared.set('mutationScopeSummaries', new TreeMap<String, String>())
+    shared.set('mutationScopeScheduled', new TreeSet<String>())
+    def scheduled = shared.get('mutationScopeScheduled')
+    def obtained = shared.get('mutationScope')
+    gradle.taskGraph.whenReady { graph ->
+        // Gradle accepts an abbreviated task name (`pA`, `pitestA`) that the task-name check in
+        // MutationScopeSource cannot see without reimplementing Gradle's matching; the graph does
+        // see it, so the whole-tree promise of `pitestAll` (D5) is kept by refusing, before any
+        // module runs, a graph holding it under a narrower scope.
+        if (graph.hasTask(":${MutationScopeSource.WHOLE_TREE_TASK}") && obtained.get().mode != MutationScope.Mode.ALL) {
+            throw new GradleException("request ${MutationScopeSource.WHOLE_TREE_TASK} by its full name, or pass -PpitScope=${MutationScopeSource.WHOLE_TREE}")
+        }
+        // The modules whose `pitest` this build runs: the announcement speaks only of them (UX2), so
+        // a one-module run does not list the branch's changes in modules it never mutates.
+        graph.allTasks.findAll { it.name == 'pitest' }.each { scheduled << it.project.path }
+    }
 }
 MutationScope scope = shared.get('mutationScope').get()
 def module = path
 Map<String, String> summaries = shared.get('mutationScopeSummaries')
+Set<String> scheduled = shared.get('mutationScopeScheduled')
 
 // The module's own production surface, read once at configuration time (the pitest {} block is
 // eager, not a lazy Property, so the read happens here to stay config-cache safe): `ownPackages`
@@ -116,8 +133,9 @@ def announcement = rootTasks.names.contains('pitestScope') ? rootTasks.named('pi
     inputs.property('mutationScope', scope)
     doLast {
         def label = { String projectPath -> projectPath.substring(1).replace(':', '/') }
-        def mutated = summaries.findAll { it.value != null }
-        def skipped = summaries.size() - mutated.size()
+        def inBuild = summaries.findAll { it.key in scheduled }
+        def mutated = inBuild.findAll { it.value != null }
+        def skipped = inBuild.size() - mutated.size()
         def head = scope.mode == MutationScope.Mode.BRANCH
                 ? "branch — base ${scope.base.take(7)} (${scope.baseOrigin})"
                 : scope.mode == MutationScope.Mode.ALL

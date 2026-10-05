@@ -73,9 +73,10 @@ tasks.named('test') {
 }
 
 // PIT exclusions documented for THIS module; the engine configuration
-// (versions, threads, this module's own targetClasses, thresholds, timeout
-// budget, the pitestVerifyAllKilled fail-closed gate) lives in
-// `pitest-conventions`, and the two exemption categories and their bars in
+// (versions, threads, thresholds, timeout budget, the pitestVerifyAllKilled
+// fail-closed gate) lives in `pitest-conventions`, what to mutate this build
+// (`targetClasses`) in `pitest-scope-conventions`, and the two exemption
+// categories and their bars in
 // `.claude/rules/testing.md`. Task 8.1 bound each module's mutation scope to its
 // own production packages, so exclusions naming classes and specs owned by
 // `:adapters` and `:application` live in those modules' build files.

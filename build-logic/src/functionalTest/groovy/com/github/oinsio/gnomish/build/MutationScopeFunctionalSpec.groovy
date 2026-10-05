@@ -129,6 +129,23 @@ class MutationScopeFunctionalSpec extends Specification {
         'a fixture edited'    | { MiniScopeRepository r -> r.write(FIXTURE, '// fake') }  || MiniScopeRepository.MODULES.collectEntries { k, v -> [(k): 'shared fixture'] }
     }
 
+    def "FR3, D2: a path in a nested module belongs to the nested module, not to the one enclosing it (#situation)"() {
+        given:
+        branched().write(change).commit(situation)
+
+        when:
+        def scope = repo.scope()
+
+        then:
+        scope.changedClasses == changedClasses
+        scope.widened == widened
+
+        where:
+        situation               | change                                         || changedClasses                 | widened
+        'a nested class edited' | 'mod-a/inner/src/main/java/com/n/Nested.java'  || [':mod-a:inner': ['com.n.Nested']] | [:]
+        'a nested spec edited'  | 'mod-a/inner/src/test/groovy/com/n/NSpec.groovy' || [:]                          | [':mod-a:inner': 'test change']
+    }
+
     def "FR3: a deleted production file and a package-info contribute no class"() {
         given:
         branched().write('mod-a/src/main/java/com/x/package-info.java', 'package com.x;')
@@ -159,6 +176,20 @@ class MutationScopeFunctionalSpec extends Specification {
         ['printScope', '-PpitScope=all']                || 'ALL'      | '-PpitScope=all'    | []
         ['printScope', '-PpitScope=com.x.Foo, com.y.*'] || 'EXPLICIT' | null                | ['com.x.Foo', 'com.y.*']
         ['pitestAll']                                   || 'ALL'      | 'pitestAll requested' | []
+    }
+
+    def "FR4, NFR-R1: a pitScope that is set but names no glob fails the build rather than skipping every module (#value)"() {
+        given:
+        branched().write(FOO, 'class Foo { int edited }')
+
+        when:
+        def result = repo.runner('printScope', "-PpitScope=${value}".toString()).buildAndFail()
+
+        then:
+        result.output.contains('pitScope is set but names no class glob')
+
+        where:
+        value << ['', ' , ']
     }
 
     def "NFR-R4: a non-ASCII path is mapped to its class, committed and untracked alike"() {

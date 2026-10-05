@@ -107,6 +107,18 @@ its computation runs `git` only — never the test suite, never class files.
 - **THEN** PIT mutates only the classes matching those globs that the module owns
 - **AND** the module skips its gate when none of them is mutable there
 
+#### Scenario: A property that names no glob is refused
+- **WHEN** `pitScope` is set but holds no class glob (`-PpitScope=`, a blank
+  `pitScope=` in a `gradle.properties`, only commas)
+- **THEN** the build fails naming the empty property, rather than skipping
+  every module's mutation task
+
+#### Scenario: An abbreviated pitestAll is refused
+- **WHEN** `pitestAll` is requested by an abbreviation Gradle accepts (`pA`)
+  and `pitScope` is not `all`
+- **THEN** the build fails before any task runs, asking for the full name or
+  `-PpitScope=all`, rather than mutating the branch scope
+
 #### Scenario: No resolvable base preserves full-project mutation
 - **WHEN** `./gradlew check` runs without the `pitScope` property and no scope
   base can be resolved (no default-branch ref, a root commit, not a git checkout)
@@ -216,6 +228,12 @@ even when the scope leaves every module's mutation task skipped.
 #### Scenario: A fallback is visible
 - **WHEN** the base could not be resolved
 - **THEN** the log line says the whole tree is mutated and why
+
+#### Scenario: A one-module run speaks only of its own modules
+- **WHEN** a run schedules the mutation task of some modules only
+  (`./gradlew :domain:check`)
+- **THEN** the scope line counts and names only those modules, not the
+  branch's changes in modules the run does not mutate
 
 ### Requirement: Scheduled whole-tree mutation run
 A scheduled CI workflow SHALL run the whole-tree gate on `main` nightly and on
