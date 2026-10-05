@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.build.MutationEngineLock
 plugins {
     id 'java-conventions'
     id 'info.solidsoft.pitest' // mutation testing gate, FR6 (design D5)
+    // What this build mutates — targetClasses, the shared skip, the scope line.
+    id 'pitest-scope-conventions'
     // What happens to a run's result — status gate, `check` wiring, report path.
     id 'pitest-gate-conventions'
 }
@@ -22,55 +24,6 @@ def mutationEngine = gradle.sharedServices.registerIfAbsent('mutationEngine', Mu
     maxParallelUsages = 1
 }
 
-// The module's own production surface, read once at configuration time (the pitest
-// {} block is eager, not a lazy Property, so the read happens here to stay
-// config-cache safe): `ownPackages` binds targetClasses to this module's packages
-// (FR11, D6), `ownClasses` is what a pitScope list intersects with.
-def ownPackages = [] as TreeSet
-def ownClasses = [] as TreeSet
-sourceSets.main.java.srcDirs.each { srcDir ->
-    fileTree(srcDir) { include '**/*.java' }.visit { details ->
-        if (details.file.isFile()) {
-            def fqcn = details.relativePath.pathString[0..-'.java'.length() - 1].replace('/', '.')
-            ownPackages << fqcn.substring(0, fqcn.lastIndexOf('.'))
-            if (!fqcn.endsWith('.package-info')) {
-                ownClasses << fqcn
-            }
-        }
-    }
-}
-// One glob per package rather than per class: PIT matches globs against the runtime
-// class name, so `pkg.*` also covers the `Outer$Inner` forms an exact list misses.
-def moduleTargets = ownPackages.collect { "${it}.*".toString() }
-
-// pitScope (scope-pit-to-changed-files, FR1/FR5, design D1; re-scoped per module
-// by task 8.1 of split-into-modules): opt-in, CI-only project property carrying
-// the changed-class glob list CI computes from the diff, for the WHOLE build since
-// one CI run covers every module. Each module keeps only the globs matching its own
-// production classes, so modules the diff did not touch skip their gate (D6's "map
-// changed classes to their owning modules"); unset (the local default) runs the full
-// module tree, whose union is the whole production tree. Accepted trade-off: a scoped
-// run can miss a mutation surviving in an unchanged file due to a change elsewhere —
-// "cross-file mutation rot", see design.md's Risks.
-def pitScopeRaw = providers.gradleProperty('pitScope')
-def pitScopeSet = pitScopeRaw.isPresent()
-// PIT's glob syntax: `*` matches any run of characters, the rest is literal; the
-// literal segments are quoted so a `.` cannot match arbitrarily.
-def globToPattern = { String glob ->
-    java.util.regex.Pattern.compile(glob.split(/\*/, -1)
-            .collect { java.util.regex.Pattern.quote(it) }
-            .join('.*'))
-}
-def pitScopeRawGlobs = pitScopeRaw.getOrElse('')
-        .split(',')
-        .collect { it.trim() }
-        .findAll { !it.isEmpty() }
-def pitScopeGlobs = pitScopeRawGlobs.findAll { glob -> ownClasses.any { globToPattern(glob).matcher(it).matches() } }
-// Resolved again in afterEvaluate, once `excludedClasses` is readable, and read by
-// the skip below at execution time. A plain map so the onlyIf spec the configuration
-// cache serializes carries data, not the project.
-def pitScopeResolution = [empty: false]
-
 pitest {
     // asProvider(): 'pitest' is a prefix of other catalog version aliases.
     pitestVersion = libs.findVersion('pitest-tool').get().requiredVersion
@@ -82,11 +35,9 @@ pitest {
     // the memory ceiling is applied in `afterEvaluate` below, once the heavy-JVM
     // budget's own slot count is readable.
     threads = Math.max(1, Runtime.runtime.availableProcessors() - 2)
-    // Java production code only — never Groovy test bytecode (mutating Groovy
-    // produces noisy false-positive survivors; see .claude/rules/testing.md).
-    // Unset (local default) => this module's full production tree; set => the
-    // subset of the CI list belonging to this module (empty => the skip below).
-    targetClasses = pitScopeSet ? pitScopeGlobs : moduleTargets
+    // `targetClasses` is NOT set here: what this build mutates — Java production
+    // code only, never Groovy test bytecode (.claude/rules/testing.md) — is
+    // `pitest-scope-conventions`'s (scope-pit-locally D1).
     // Set explicitly rather than leaning on PIT's default (which falls back to
     // targetClasses and finds the specs only by the coincidence that they share
     // the package tree; an empty test scan is what lets a run count every
@@ -120,13 +71,6 @@ pitest {
     outputFormats = ['XML', 'HTML']
 }
 
-// A scoped run must intersect the CI list with what this module will actually
-// MUTATE, not merely with what it compiles: a diff touching only an exempted
-// class (task 8.6, design D13(b) — `.claude/rules/testing.md`) leaves a non-empty
-// targetClasses that PIT filters to nothing and hard-fails on with "No mutations
-// found". The subtraction waits for afterEvaluate, since `excludedClasses` is set
-// by the module's build file after this plugin applies; unscoped runs are
-// untouched, PIT applies the exclusions itself.
 // The mutation phase's memory ceiling (FR1/D1 of adapt-build-load-to-hardware, whose
 // stated invariant is "a memory budget, not a worker count"). Sizing the minion pool
 // by cores alone contradicted it: on a 14-core/36 GB host PIT forked 12 unbounded
@@ -150,15 +94,6 @@ afterEvaluate {
     if (budget != null) {
         pitest.threads = Math.max(1, Math.min(pitest.threads.get(), budget.parameters.slots.get()))
     }
-
-    if (!pitScopeSet) {
-        return
-    }
-    def excludedPatterns = pitest.excludedClasses.getOrElse([] as Set).collect(globToPattern)
-    def mutableClasses = ownClasses.findAll { fqcn -> !excludedPatterns.any { it.matcher(fqcn).matches() } }
-    def scoped = pitScopeRawGlobs.findAll { glob -> mutableClasses.any { globToPattern(glob).matcher(it).matches() } }
-    pitest.targetClasses = scoped
-    pitScopeResolution.empty = scoped.isEmpty()
 }
 
 // Per-method exemptions are NOT configured here: they are carried by the
@@ -185,14 +120,6 @@ tasks.named('pitest') {
     // same-named Docker objects. `mustRunAfter` serializes them without adding a
     // real dependency (`pitest` does not consume `test`'s output).
     mustRunAfter tasks.named('test')
-    // PIT hard-fails ("No mutations found") when there is nothing to mutate, so a
-    // module with no Java production code is skipped rather than weakened with
-    // failWhenNoMutations = false, which would also mask a misconfigured filter.
-    onlyIf('no Java production classes to mutate yet') { !moduleTargets.isEmpty() }
-    // scope-pit-to-changed-files FR4/D4, per module since task 8.1: pitScope set but
-    // matching nothing MUTABLE here means a diff that did not touch this module or is
-    // confined to its exempted classes — skip cleanly (resolved above).
-    onlyIf('pitScope is set but resolves to no mutable classes in this module') {
-        !(pitScopeSet && pitScopeResolution.empty)
-    }
+    // The scope skip — no mutable class in this module this build — is
+    // `pitest-scope-conventions`'s, shared with the verdict tasks (NFR-R3).
 }
