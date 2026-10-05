@@ -41,7 +41,7 @@ class TrackerTaskFixtures {
      */
     static TakeOrder orderFor(TaskRef ref, Tracker tracker, InstanceId instanceId,
             PipelineDefinition definition = oneStagePipeline()) {
-        def run = new RunOrder(Path.of('/tmp/gnomish-clone'), null, definition, RunArguments.InteractiveMode.NONE, false)
+        def run = new RunOrder(Path.of('/tmp/gnomish-clone'), null, definition, false)
         new TakeOrder(run, taskWith(ref, new TrackerTaskState.Working(instanceId.value())), tracker, instanceId)
     }
 

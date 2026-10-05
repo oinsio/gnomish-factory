@@ -27,7 +27,11 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
     @TempDir
     Path tempDir
 
-    def source = new GnomishDirPipelineSource([:], TrackerValidatorStub.discoveredGithubCheckProvider())
+    def source = new GnomishDirPipelineSource(
+    [:], TrackerValidatorStub.discoveredGithubCheckProvider(), TrackerValidatorStub.configuredGithubCheckProvider())
+
+    /** The same source on a factory that wrote no {@code factory.check} section. */
+    def unconfigured = new GnomishDirPipelineSource([:], TrackerValidatorStub.discoveredGithubCheckProvider(), [] as Set)
 
     private Path projectWithDefinition() {
         Path project = Files.createDirectories(tempDir.resolve('project'))
@@ -122,19 +126,77 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
         e.message.contains('config.yaml')
     }
 
-    def "both registries are defensively copied at construction"() {
+    def "both registries and the configured set are defensively copied at construction"() {
         given:
         Map<String, TrackerSubsectionValidator> mutableTrackers = [:]
         Map<String, CheckParamsValidator> mutableProviders = [:]
-        def built = new GnomishDirPipelineSource(mutableTrackers, mutableProviders)
+        Set<String> mutableConfigured = [] as Set
+        def built = new GnomishDirPipelineSource(mutableTrackers, mutableProviders, mutableConfigured)
 
         when:
         mutableTrackers['github'] = null
         mutableProviders['github'] = null
+        mutableConfigured << 'github'
 
         then:
         built.trackerValidatorRegistry().isEmpty()
         built.checkProviderRegistry().isEmpty()
+        built.configuredCheckProviders().isEmpty()
+    }
+
+    // FR3, D3 of remove-interactive-console: every read a run, take or serve goes through grades
+    //     the fixture's `external` check on github against the configured set — load (run), the
+    //     startup bind (take, serve) and the per-task bind — and refuses it, located.
+    def "#read refuses an external check whose provider this factory has not configured"() {
+        when:
+        def outcome = reading(read)
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors().find {
+            it.where() == 'verify[2].provider'
+        }
+        .message().contains("check provider 'github' has no factory.check.github section")
+
+        where:
+        read << [
+            'load',
+            'bindConfiguration',
+            'bindTaskTier'
+        ]
+    }
+
+    private LoadOutcome reading(String read) {
+        switch (read) {
+            case 'load':
+                return unconfigured.load(projectWithDefinition())
+            case 'bindConfiguration':
+                return unconfigured.bindConfiguration(
+                LawBinding.atRevision(repoWithCommittedLaw(), 'HEAD'), ConfiguredDesignatorKinds.NONE).outcome()
+            default:
+                return unconfigured.bindTaskTier(LawBinding.atRevision(repoWithCommittedLaw(), 'HEAD')).outcome()
+        }
+    }
+
+    // FR3, D3 of remove-interactive-console: board and dashboard only show the project's state and
+    //     run no check, so their read-only load is never refused for an unconfigured provider.
+    def "loadReadOnly accepts an external check whose provider this factory has not configured"() {
+        expect:
+        unconfigured.loadReadOnly(projectWithDefinition()) instanceof LoadOutcome.Loaded
+    }
+
+    def "loadReadOnly still refuses an external check whose provider was never discovered"() {
+        given:
+        def bare = new GnomishDirPipelineSource([:], [:], [] as Set)
+
+        when:
+        def outcome = bare.loadReadOnly(projectWithDefinition())
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors()*.message().any {
+            it.startsWith("unknown check provider 'github'")
+        }
     }
 
     // FR6, FR13 (add-plugin-architecture): the source closes the discovered
@@ -142,7 +204,7 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
     // provider nobody discovered is a located load error rather than a mid-run failure
     def "an external check whose provider was never discovered is a located load error"() {
         given: 'a source built over an empty check-provider registry'
-        def bare = new GnomishDirPipelineSource([:], [:])
+        def bare = new GnomishDirPipelineSource([:], [:], [] as Set)
 
         when:
         def outcome = bare.load(projectWithDefinition())

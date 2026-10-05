@@ -90,7 +90,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
             completedRound('PROJ-2')
         ]))
         TakeRefDispatch.run(dispatcher(repositories, assembly, heartbeat),
-                new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
+                new TakeArguments(CLONE_DIR, refs, null, false, false),
                 new BoundTracker(completingPipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),
                 SERVE_PROPERTIES, LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
     }

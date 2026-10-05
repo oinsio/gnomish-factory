@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import java.nio.file.Files
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -29,7 +30,7 @@ class OllamaFixtureLoadSpec extends Specification {
     PipelineDefinition model
 
     def setupSpec() {
-        def outcome = PipelineLoader.load(OllamaFixture.gnomishDir(), [:], [:])
+        def outcome = PipelineLoader.load(OllamaFixture.gnomishDir(), [:], [:], [] as Set)
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }
@@ -53,7 +54,7 @@ class OllamaFixtureLoadSpec extends Specification {
 
     def "M1: the acceptance criteria file states a single, file-existence-only criterion"() {
         expect:
-        java.nio.file.Files.readString(OllamaFixture.gnomishDir().resolve('stages/write-file/acceptance.md'))
+        Files.readString(OllamaFixture.gnomishDir().resolve('stages/write-file/acceptance.md'))
                 .contains('hello.txt')
     }
 }

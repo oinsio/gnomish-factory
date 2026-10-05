@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -91,7 +92,7 @@ tracker:
         // to the real System.in (which a mutated confirm() would block on). Behaviour is identical: no
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
         newTakeCommand(
-                testProperties(instanceName: INSTANCE_NAME), registeredClone, registry,
+                testProperties(instanceName: INSTANCE_NAME, agentCliBinary: FakeAgentSupport.wrapperFor('plain-round')), registeredClone, registry,
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(new ThreadSleeper())
                 .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
@@ -265,7 +266,7 @@ tracker:
         def command = newCommand(registry)
 
         when:
-        command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir", '--interactive'))
+        command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))
 
         then:
         thrown(TakeExitCodeException)

@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The {@link PipelineSource} realization every command runs on: the project's definition is the
@@ -32,6 +33,12 @@ import java.util.Map;
  * located load error in every run mode — the composition root holds the registry, and no command
  * has to thread it down either.
  *
+ * <p>It closes the factory's configured check providers over the load as well (FR3, design D3 of
+ * remove-interactive-console): an {@code external} check on a provider with no {@code
+ * factory.check.<provider>} section is a located load error on every path that will run the
+ * pipeline. {@link #loadReadOnly} is the one read that does not grade it — a command that only
+ * shows a project's state runs no check, so treats every discovered provider as configured.
+ *
  * <p>The binding forms (FR2, FR13, design D12–D15 of add-base-ref-resolution) open the law a
  * {@link LawBinding} names through {@link LawSources} — git objects at the peeled law commit for a
  * resolved revision — and run the same one-pass loader over it, with the same registries and
@@ -46,6 +53,8 @@ import java.util.Map;
  *     null, possibly empty (no adapter contributes a validator)
  * @param checkProviderRegistry the {@code provider} → check-params-validator registry, keyed by
  *     every discovered check provider; never null, possibly empty (no provider discovered)
+ * @param configuredCheckProviders the providers with a {@code factory.check.<provider>} section in
+ *     this factory's configuration; never null, possibly empty (none configured)
  * @param connectionProfiles the operator-declared {@code factory.connections} profiles a {@code
  *     tracker.<type>} subsection may reference as {@code connection: <name>} (FR16, design D8/D12 of
  *     add-plugin-architecture); closed over here for the same reason as the registries — the
@@ -55,27 +64,40 @@ import java.util.Map;
 public record GnomishDirPipelineSource(
         Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
         Map<String, CheckParamsValidator> checkProviderRegistry,
+        Set<String> configuredCheckProviders,
         ConnectionProfiles connectionProfiles)
         implements PipelineSource {
 
     public GnomishDirPipelineSource {
         trackerValidatorRegistry = Map.copyOf(trackerValidatorRegistry);
         checkProviderRegistry = Map.copyOf(checkProviderRegistry);
+        configuredCheckProviders = Set.copyOf(configuredCheckProviders);
     }
 
     /** Convenience for the callers predating named connection profiles: no profile is defined. */
     public GnomishDirPipelineSource(
             Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
-            Map<String, CheckParamsValidator> checkProviderRegistry) {
-        this(trackerValidatorRegistry, checkProviderRegistry, ConnectionProfiles.none());
+            Map<String, CheckParamsValidator> checkProviderRegistry,
+            Set<String> configuredCheckProviders) {
+        this(trackerValidatorRegistry, checkProviderRegistry, configuredCheckProviders, ConnectionProfiles.none());
     }
 
     @Override
     public LoadOutcome load(Path projectDir) throws IOException {
+        return loadGrading(projectDir, configuredCheckProviders);
+    }
+
+    @Override
+    public LoadOutcome loadReadOnly(Path projectDir) throws IOException {
+        return loadGrading(projectDir, checkProviderRegistry.keySet());
+    }
+
+    private LoadOutcome loadGrading(Path projectDir, Set<String> configured) throws IOException {
         return PipelineLoader.load(
                 projectDir.resolve(LawBinding.LAW_ROOT),
                 trackerValidatorRegistry,
                 checkProviderRegistry,
+                configured,
                 connectionProfiles);
     }
 
@@ -84,7 +106,12 @@ public record GnomishDirPipelineSource(
             throws IOException {
         BoundLaw law = openLaw(binding);
         ConfigurationLoad load = PipelineLoader.loadConfiguration(
-                law.source(), trackerValidatorRegistry, checkProviderRegistry, connectionProfiles, designatorKinds);
+                law.source(),
+                trackerValidatorRegistry,
+                checkProviderRegistry,
+                configuredCheckProviders,
+                connectionProfiles,
+                designatorKinds);
         return new BoundConfiguration(load.outcome(), load.base(), lawCommitOf(law, binding));
     }
 
@@ -95,6 +122,7 @@ public record GnomishDirPipelineSource(
                         law.source(),
                         trackerValidatorRegistry,
                         checkProviderRegistry,
+                        configuredCheckProviders,
                         connectionProfiles,
                         ConfiguredDesignatorKinds.NONE)
                 .outcome();

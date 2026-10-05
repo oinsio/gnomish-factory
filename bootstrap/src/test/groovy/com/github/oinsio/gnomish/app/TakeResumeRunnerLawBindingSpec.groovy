@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
@@ -38,7 +39,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         def resolved = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
         def baseRefGit = Stub(BaseRefGit)
         baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Bound('irrelevant', resolved, OriginContact.CONTACTED)
-        def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
+        def runner = newTakeResumeRunner(new ByteArrayInputStream(new byte[0]), FakeAgentSupport.propertiesFor('plain-round'), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         when:
@@ -59,7 +60,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
         baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Refused(UntrustedText.subprocess('gone'))
-        def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
+        def runner = newTakeResumeRunner(new ByteArrayInputStream(new byte[0]), FakeAgentSupport.propertiesFor('plain-round'), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         when:
@@ -83,7 +84,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
         baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Unavailable(UntrustedText.subprocess('no answer'))
-        def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
+        def runner = newTakeResumeRunner(new ByteArrayInputStream(new byte[0]), FakeAgentSupport.propertiesFor('plain-round'), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         when:

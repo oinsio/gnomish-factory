@@ -2,32 +2,47 @@
 
 ## MODIFIED Requirements
 
+Layered on `Local sanity validation of mechanism and check configs` as modified by
+`define-executor-contract` (sequenced before this change); the accepted type set gains
+`command` and the model rule gains its `command` arm.
+
 ### Requirement: Local sanity validation of mechanism and check configs
-The loader SHALL apply catalog-free sanity rules that do not require a live target. The
-set of accepted executor types SHALL be `api`, `agent-cli`, and `command`. The executor
-`model` SHALL be present and non-blank for the agent executor types (`api`,
-`agent-cli`) — the model is pinned in the stage manifest so any instance reproduces the
-stage identically, never left to an executor default — and SHALL be a located error
-when present on a `command` executor, which has no model. A `command` executor SHALL
-declare a non-blank `executor.command`; a missing or blank `command` SHALL be a located
-error, and `executor.command` present on an agent executor type SHALL be a located
-error. `settings` SHALL be carried as an opaque, well-formed mapping (not validated by
-key, value, or range). An `external` check SHALL have a positive `interval`, a positive
-`timeout`, `interval ≤ timeout`, and a non-blank check identifier. An `external` check
-SHALL also carry a `provider`, defaulting to `github` when absent; a `provider` absent
-from the discovered check-provider registry SHALL be a located error naming the
-provider and the discovered set — provider existence is in-process knowledge, not
-target liveness; the check's provider-specific `params` SHALL be validated at the seam
-by that provider's `CheckParamsValidator`, whose problems are aggregated as located
-`ConfigError` data like every other validation problem. A `judge` check SHALL have
-`votes ≥ 1` and an odd `votes`, and its `model` SHALL remain required and non-blank. The
-loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a
-`model` is real, or whether `judge` criteria are gradeable.
+The loader SHALL apply catalog-free sanity rules that do not require a live target. The set of
+accepted executor types SHALL be `api`, `agent-cli`, `program`, and `command`. The executor
+`model` SHALL be present and non-blank for the agent executor types (`api`, `agent-cli`) — the
+model is pinned in the stage manifest so any instance reproduces the stage identically, never
+left to an executor default — and SHALL be a located error when present on a `command`
+executor, which has no model; for a `program` executor the model SHALL be optional and, when
+present, carried to the executor as a setting. A `command` executor SHALL declare a non-blank
+`executor.command`; a missing or blank `command` SHALL be a located error, and
+`executor.command` present on any other executor type SHALL be a located error. A `program`
+executor SHALL declare `executor.name` referencing a declared executor. `settings` SHALL be
+carried as an opaque, well-formed mapping (not validated by key, value, or range) except for
+`program` executors, whose settings are validated against the declared schema. An `external`
+check SHALL have a positive `interval`, a positive `timeout`, `interval ≤ timeout`, and a
+non-blank check identifier. An `external` check SHALL also carry a `provider`, defaulting to
+`github` when absent; a `provider` absent from the discovered check-provider registry SHALL be
+a located error naming the provider and the discovered set — provider existence is in-process
+knowledge, not target liveness; the check's provider-specific `params` SHALL be validated at
+the seam by that provider's `CheckParamsValidator`, whose problems are aggregated as located
+`ConfigError` data like every other validation problem. A `judge` check SHALL have `votes ≥ 1`
+and an odd `votes`, and its `model` SHALL remain required and non-blank. The loader SHALL NOT
+validate target liveness — whether a CI-check name exists, whether a `model` is real, or
+whether `judge` criteria are gradeable.
 <!-- implements FR11 of load-pipeline-config -->
 <!-- implements FR6 of add-plugin-architecture -->
 <!-- implements FR13 of add-plugin-architecture -->
 <!-- implements UX1 of add-plugin-architecture -->
+<!-- implements FR9, FR10 of define-executor-contract -->
 <!-- implements FR1, FR2, UX2 of add-command-executor -->
+
+#### Scenario: Program stage names a declared executor
+- **WHEN** a stage declares `executor: {type: program, name: acme}` and `executors.acme` exists
+- **THEN** validation passes and the typed model carries the executor reference
+
+#### Scenario: Program stage may omit the model
+- **WHEN** a `program` stage declares no `model`
+- **THEN** validation passes; a present `model` is carried to the executor as a setting
 
 #### Scenario: Missing model is rejected
 - **WHEN** an `api` or `agent-cli` stage's `model` is absent or blank

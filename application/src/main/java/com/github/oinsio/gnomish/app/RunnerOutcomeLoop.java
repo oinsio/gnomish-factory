@@ -130,10 +130,8 @@ public final class RunnerOutcomeLoop {
     /**
      * Resumes a {@code manual} checkpoint (D8, FR9): confirmation only — {@code paused} is
      * already advanced past the stage that triggered the pause, so there is nothing to reset
-     * and no decision to append. No {@code inputExhausted()} pre-check ahead of this prompt
-     * (contrast {@link #handleEscalated}): a {@code Paused} outcome means the checks genuinely
-     * passed, so a live EOF here is always Case 2 (deliberate Ctrl-D at this very prompt) —
-     * caught and rethrown as {@link CheckpointEofException} (exit 11), distinct from the
+     * and no decision to append. A live EOF here is a deliberate Ctrl-D at this
+     * very prompt — caught and rethrown as {@link CheckpointEofException} (exit 11), distinct from the
      * escalation resume prompt's {@link EscalationEofException} (exit 10).
      *
      * <p>Implements FR9, D8, D10 of add-manual-run.

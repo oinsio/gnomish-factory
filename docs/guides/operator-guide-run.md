@@ -12,12 +12,9 @@ actually executes — an ephemeral container box by default, or the host — is
 
 `gnomish run` executes one task through the whole quality-control cycle. By
 default it is manifest-driven: real `agent-cli` and judge adapters run each stage
-(see [Manifest-driven run and `--interactive` overrides](#manifest-driven-run-and---interactive-overrides)).
-Passing `--interactive` swaps in a human standing in for the gnome instead: you
-read each stage briefing and press Enter to complete it, answer the verify
-checks, and resolve escalations at the prompt. It doubles as the pipeline
-author's dry-run tool for a project's `.gnomish/`, and as the harness that proves
-the engine's port shapes survive contact with real adapters.
+(see [Manifest-driven run](#manifest-driven-run)). No flag swaps a human in for
+the gnome, the judge or the CI. The operator's part is the escalation decision and
+the manual-checkpoint confirmation at the prompt.
 
 `--dir` must name a registered clone: register it once with `gnomish project add
 <name> --dir=<clone>` (see
@@ -53,7 +50,6 @@ Flags use Spring's `--key=value` form (quote values with spaces):
 | `--base=<ref>`                    | no                 | current clone state | git mode only; override the branch base                                                                    |
 | `--resume=<task>`                 | no                 | —                   | git mode only; resume a task by id instead of starting a new one — see [Resuming a task](#resuming-a-task) |
 | `--discard-work`                  | no                 | `false`             | git mode only; requires `--resume`; discards the interrupted round instead of salvaging it                 |
-| `--interactive[=executor\|judge]` | no                 | —                   | human plays a role instead of the real adapter — see below                                                 |
 
 \* Exactly one of `--task`/`--task-file` is required unless `--resume` is given, in which case none of `--task`/`--task-file`/`--task-id`/`--from-stage` may be used. `--base`, `--resume`, and `--discard-work` are rejected together with `--mode=in-place` (exit code 2, usage error).
 
@@ -97,18 +93,19 @@ A **true divergence** — neither tip an ancestor of the other — is the one ca
 
 The process exit code reports the outcome — anything `>= 10` means the engine reached a legitimate terminal state:
 
-| Code | Meaning                                                                                                     |
-|------|-------------------------------------------------------------------------------------------------------------|
-| 0    | completed                                                                                                   |
-| 1    | internal error                                                                                              |
-| 2    | usage error — including a configuration violation or an unregistered `--dir`, reported before anything runs |
-| 3    | pipeline load failure                                                                                       |
-| 4    | stdin exhausted mid-stage (Ctrl-D at an ordinary prompt)                                                    |
-| 5    | diverged branch on a claimless resume (see above — under a claim it reconciles automatically)               |
-| 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch)                                         |
-| 10   | escalated (attempts exhausted / undecidable)                                                                |
-| 11   | paused at a manual checkpoint                                                                               |
-| 12   | aborted                                                                                                     |
+| Code | Meaning                                                                                                                                                                          |
+|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | completed                                                                                                                                                                        |
+| 1    | internal error                                                                                                                                                                   |
+| 2    | usage error — including a configuration violation or an unregistered `--dir`, reported before anything runs                                                                      |
+| 3    | pipeline load failure — including an `api` stage or an `external` check on an unconfigured provider                                                                              |
+| 4    | retired — used in the MVP for stdin ending inside an interactive adapter; removed as unneeded; kept as a gap so other codes do not shift; may be filled by a future tool failure |
+| 5    | diverged branch on a claimless resume (see above — under a claim it reconciles automatically)                                                                                    |
+| 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch)                                                                                                              |
+| 7    | branch shape refused on pickup (`status` on a branch in a quarantine shape)                                                                                                      |
+| 10   | escalated (attempts exhausted / undecidable)                                                                                                                                     |
+| 11   | paused at a manual checkpoint                                                                                                                                                    |
+| 12   | aborted                                                                                                                                                                          |
 
 `take` and `serve` carry their own exit-code tables — see
 [`operator-guide.md`](operator-guide.md) and
@@ -138,20 +135,11 @@ In a clone with **no `origin` remote**, all of this is silent: no push is attemp
 
 On completion, the factory strips `.gnomish-task/` from the branch tip in a final cleanup commit, but every round leading up to it stays reachable in the branch history as an audit trail — that's what makes resume and escalation reviewable. That history is internal bookkeeping, not something a target project wants in its permanent log. **Squash-merge** gnome PRs into the target project's mainline so only the final clean diff lands there and the round-by-round journal stays behind on the (eventually discarded) task branch.
 
-## Manifest-driven run and `--interactive` overrides
+## Manifest-driven run
 
-By default `gnomish run` is **manifest-driven, not interactive**: it reads the target project's `.gnomish/` pipeline and wires each stage's real adapter straight from the manifest — an `agent-cli` stage executor gets the CLI executor (a real `claude -p` subprocess per round), and every `judge` verify check gets the CLI judge, regardless of the stage's own executor type. This is the normal, paid mode, and starting a real agent round requires **no confirmation gate** by design — that is the tool's purpose, and the operator is present. Where that agent process executes — an ephemeral container box by default, or the host — is decided by the sandbox binding, not the manifest; see [`operator-guide-sandbox.md`](operator-guide-sandbox.md). `api` stages aren't supported yet and are rejected at startup (exit 3, before any dialog), naming the offending stage.
+`gnomish run` is **manifest-driven**: it reads the target project's `.gnomish/` pipeline and wires each stage's real adapter straight from the manifest — an `agent-cli` stage executor gets the CLI executor (a real `claude -p` subprocess per round), and every `judge` verify check gets the CLI judge, regardless of the stage's own executor type. This is the normal, paid mode, and starting a real agent round requires **no confirmation gate** by design — that is the tool's purpose, and the operator is present. Where that agent process executes — an ephemeral container box by default, or the host — is decided by the sandbox binding, not the manifest; see [`operator-guide-sandbox.md`](operator-guide-sandbox.md). `api` stages aren't supported yet and are rejected at startup (exit 3, before any dialog), naming the offending stage. Likewise an `external` verify check whose provider has no `factory.check.<provider>` section is rejected at startup (exit 3, before any branch, worktree or dialog exists), naming the stage, the check and the provider: configure the provider section or remove the check from the stage.
 
-`--interactive` overrides the wiring, entirely or per role:
-
-| Flag                     | Effect                                                                                                            |
-|--------------------------|-------------------------------------------------------------------------------------------------------------------|
-| *(absent)*               | manifest-driven: real CLI executor + real CLI judge (default, paid)                                               |
-| `--interactive`          | full add-manual-run behavior: human plays both executor and judge                                                 |
-| `--interactive=executor` | human plays the executor; judge stays the real CLI judge — verdict calibration                                    |
-| `--interactive=judge`    | human plays the judge; executor stays the real CLI agent — judge-prompt debugging without paying for agent rounds |
-
-`--interactive` may be given only once. External checks are always interactive regardless of this flag.
+There is no human stand-in for any of these roles. The interactive-mode flag of earlier builds is now an unknown flag (exit 2, usage error), so a wrapper script still passing it must drop it. To observe a pipeline without paying for agent rounds, point `factory.agent-cli-binary` at the `fake-agent` fixture in the factory's test tree (`test-fixtures/src/main/resources/fake-agent/fake-agent.sh`): it plays a scripted scenario chosen by `GNOMISH_FAKE_SCENARIO` for every round, and, through `GNOMISH_FAKE_JUDGE_SCENARIO` / `GNOMISH_FAKE_JUDGE_MODEL`, a judge verdict for the judge's model (see the fixture's `README.md`).
 
 ## Manifest settings vs. installation properties
 

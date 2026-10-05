@@ -103,6 +103,29 @@ final class E2eProcessHarness {
     }
 
     /**
+     * {@link #run} with the gnome played by {@code agentBinary}: the binary reaches the spawned
+     * factory as the Spring argument {@code --factory.agent-cli-binary=<agentBinary>}, which binds
+     * {@code FactoryProperties.agentCliBinary} and which {@code run}'s own parser passes through
+     * as a dotted name (FR6 of remove-interactive-console). Specs hand it a fake-agent wrapper
+     * from {@code FakeAgentSupport.wrapperFor}, so no round spends a token (NFR-C1).
+     *
+     * @param agentBinary the agent CLI the spawned factory launches for every round and vote
+     */
+    E2eProcessResult run(
+            Path workingDirectory,
+            String agentBinary,
+            List<String> extraArgs,
+            List<String> scriptedInputLines,
+            boolean keepStdinOpen = false,
+            Map<String, String> extraEnv = [:]) {
+        List<String> args = [
+            '--factory.agent-cli-binary=' + agentBinary
+        ]
+        args.addAll(extraArgs)
+        execute('run', workingDirectory, args, scriptedInputLines, keepStdinOpen, extraEnv)
+    }
+
+    /**
      * {@link #run}, for any subcommand: spawns {@code java -jar <jar> <subcommand> <extraArgs...>}
      * — the seam a spec uses to drive {@code serve} or {@code take} out of process.
      *

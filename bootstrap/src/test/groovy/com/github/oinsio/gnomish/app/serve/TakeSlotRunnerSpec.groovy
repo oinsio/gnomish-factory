@@ -7,35 +7,17 @@ import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.app.AppAssemblyFixture
-import com.github.oinsio.gnomish.app.ClaimTenure
-import com.github.oinsio.gnomish.app.ContainerTakeSupport
-import com.github.oinsio.gnomish.app.RegisteredCloneFixture
-import com.github.oinsio.gnomish.app.RunArguments
-import com.github.oinsio.gnomish.app.RunOrder
-import com.github.oinsio.gnomish.app.SlotWiring
-import com.github.oinsio.gnomish.app.TaskGitFixture
-import com.github.oinsio.gnomish.app.TrustedBaseContext
+import com.github.oinsio.gnomish.app.*
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
@@ -58,8 +40,6 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import spock.lang.Specification
 import spock.lang.TempDir
-
-
 /**
  * {@link TakeSlotRunner}, task 4.3 of add-factory-serve: proves the "slot body unchanged"
  * scenario by asserting {@link TakeSlotRunner#run} delegates to the exact same {@code
@@ -165,7 +145,7 @@ tracker:
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
-                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)
     }
 

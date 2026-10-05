@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -172,5 +173,27 @@ class CliJudgeVoterSpec extends Specification {
         then:
         events.any { it instanceof AgentProgressEvent.RoundStarted }
         events.any { it instanceof AgentProgressEvent.RoundFinished }
+    }
+
+    // FR6, NFR-C1, D4 of remove-interactive-console: one FactoryProperties serves both roles —
+    // the executor round plays its scenario and the judge vote, told apart by its model, plays
+    // the judge scenario — so a fake-agent journey can carry a judge check without a console.
+    def "one binary drives an executor round and a judge vote, selected by the judge model"() {
+        given: 'one fake-agent binary routing the judge check\'s model to a pass verdict'
+        def properties = FakeAgentSupport.propertiesFor('plain-round', 'claude-fake-judge-1', 'judge-verdict-pass')
+        Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
+        def law = PipelineLaw.ofContent([
+            'criteria.md' : 'The output must be correct.',
+            'instructions.md': 'Do the thing.'])
+        def executor = new CliStageExecutor(properties, clock, law)
+        def voter = new CliJudgeVoter(properties, clock, law)
+
+        when: 'the stage runs one executor round and then one judge vote'
+        def round = executor.execute(FakeAgentSupport.requestFor(workspaceDir))
+        def vote = voter.vote(checkFor(), context(), new DirectoryWorkspace(workspaceDir))
+
+        then: 'the round completes as plain-round and the vote passes as judge-verdict-pass'
+        round instanceof ExecutionResult.Completed
+        vote.verdict() instanceof Verdict.Pass
     }
 }

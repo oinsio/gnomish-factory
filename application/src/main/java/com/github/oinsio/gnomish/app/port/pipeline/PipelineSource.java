@@ -22,8 +22,10 @@ import java.nio.file.Path;
  * definition cannot be read at all — is an {@link IOException}.
  *
  * <p><b>Two ways in, one loader.</b> {@link #load(Path)} reads the working tree of a project
- * directory — the in-place mode, manual {@code run} without {@code --base}, {@code board} and
- * {@code dashboard}. The binding forms read the law a {@link LawBinding} names — git objects at a
+ * directory — the in-place mode and manual {@code run} without {@code --base}; {@link
+ * #loadReadOnly(Path)} is the same read for {@code board} and {@code dashboard}, which run no
+ * check and so are not refused for a check provider this factory has not configured (FR3, design
+ * D3 of remove-interactive-console). The binding forms read the law a {@link LawBinding} names — git objects at a
  * revision for every path that resolved a ref (design D12 of add-base-ref-resolution): {@link
  * #bindConfiguration} is the startup read of both tiers from the refreshed default branch, {@link
  * #bindTaskTier} the per-task read of the task tier alone from the task's law commit (D14, D15).
@@ -43,6 +45,20 @@ public interface PipelineSource {
      *     problem
      */
     LoadOutcome load(Path projectDir) throws IOException;
+
+    /**
+     * Loads {@code projectDir}'s pipeline definition for a command that only shows the project's
+     * state: every rule of {@link #load(Path)} applies except the refusal of an {@code external}
+     * check whose provider has no {@code factory.check.<provider>} section — a view runs no check,
+     * so a provider the factory could not serve is no reason to refuse it (FR3, design D3 of
+     * remove-interactive-console).
+     *
+     * @param projectDir the project root; never null
+     * @return the validated definition, or every located problem found in one pass; never null
+     * @throws IOException if the definition cannot be read — an I/O fault, never a validation
+     *     problem
+     */
+    LoadOutcome loadReadOnly(Path projectDir) throws IOException;
 
     /**
      * Reads both configuration tiers from the law {@code binding} names: the startup read of

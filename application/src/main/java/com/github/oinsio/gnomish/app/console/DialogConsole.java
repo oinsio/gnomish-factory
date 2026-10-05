@@ -37,7 +37,6 @@ public final class DialogConsole {
     private final ConsoleIO io;
     private final StatusRenderer statusRenderer;
     private final ActivityTracker activityTracker;
-    private boolean inputExhausted;
 
     /**
      * Convenience constructor for call sites with no live-activity signal to
@@ -60,19 +59,6 @@ public final class DialogConsole {
         this.io = io;
         this.statusRenderer = statusRenderer;
         this.activityTracker = activityTracker;
-    }
-
-    /**
-     * Whether the underlying {@link ConsoleIO} has hit EOF during a previous
-     * prompt on this console. Latched permanently once set; callers (the
-     * runner) consult it to skip resume/checkpoint dialogs rather than
-     * re-entering an input-requiring prompt on exhausted input (FR13).
-     *
-     * @return {@code true} once a {@link ConsoleClosedException} has propagated
-     *     from a prompt on this console
-     */
-    public boolean inputExhausted() {
-        return inputExhausted;
     }
 
     /**
@@ -105,8 +91,8 @@ public final class DialogConsole {
      * Prints {@code prompt} and reads one line, intercepting {@code status} and
      * {@code status --json} (FR10): a meta-command renders the current status,
      * prints it, and re-prompts with the same {@code prompt} text — the caller
-     * never sees the meta-command. On EOF, the input-exhausted flag latches and
-     * {@link ConsoleClosedException} propagates to the caller (FR13).
+     * never sees the meta-command. On EOF, {@link ConsoleClosedException}
+     * propagates to the caller (FR13).
      *
      * <p>Implements FR10, FR13 of add-manual-run.
      *
@@ -167,9 +153,6 @@ public final class DialogConsole {
         Activity previousActivity = activityTracker.markAwaitingInput(prompt);
         try {
             return io.readLine();
-        } catch (ConsoleClosedException e) {
-            inputExhausted = true;
-            throw e;
         } finally {
             activityTracker.restore(previousActivity);
         }

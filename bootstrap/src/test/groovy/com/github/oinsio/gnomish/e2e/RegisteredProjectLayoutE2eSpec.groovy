@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.ProjectRegistry
@@ -29,7 +30,9 @@ import spock.lang.Timeout
  * <p>{@code run} in git mode materializes the task's worktree and writes the log; {@code serve
  * --drain} against an in-JVM tracker with an empty queue writes the snapshot and the log. Both are
  * host-bound through the project file, and {@code serve} reads its tracker token from the project's
- * secrets folder, so no {@code --factory.*} option and no exported path variable is involved (M1).
+ * secrets folder, so no {@code --factory.*} path option and no exported path variable is involved
+ * (M1). The one {@code --factory.*} argument, on {@code run}, names the fake agent as the gnome
+ * (FR6 of remove-interactive-console) and has no bearing on any path.
  *
  * <p>Implements FR1, FR9, FR10, FR11, NFR-R2 of add-project-registry (design, identity spec).
  */
@@ -78,11 +81,11 @@ tracker:
     }
 
     def "FR9, FR11: run in git mode puts the task's worktree and the log under the project folder"() {
-        when: 'a git-mode run starts; stdin closes at the first prompt, after the worktree exists'
+        when: 'a git-mode run starts; the fake agent asks a decision, and stdin closes at that prompt, after the worktree exists'
         def result = harness.execute('run', clone, [
+            '--factory.agent-cli-binary=' + FakeAgentSupport.wrapperFor('decision-needed'),
             "--dir=$clone".toString(),
-            '--task=identity',
-            '--interactive'
+            '--task=identity'
         ], [], false, env())
 
         then: "the banner names a worktree in the clone's own folder under the project"

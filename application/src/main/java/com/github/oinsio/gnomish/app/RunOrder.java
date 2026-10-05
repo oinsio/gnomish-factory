@@ -6,8 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The <em>run order</em>: the mode-independent description of the work one invocation performs —
- * where the clone is, which base to start from, which pipeline, which console mode, and whether to
- * discard an interrupted round's leftovers. Both manual {@code gnomish run} and tracker-driven
+ * where the clone is, which base to start from, which pipeline, and whether to discard an interrupted round's leftovers. Both manual {@code gnomish run} and tracker-driven
  * {@code take}/{@code serve} carry it; the tracker-driven modes wrap it in a {@link TakeOrder}
  * (design D1 of introduce-take-order).
  *
@@ -21,22 +20,16 @@ import org.jspecify.annotations.Nullable;
  * @param cloneDir the clone the invocation works in
  * @param base the {@code --base} override, or {@code null} to let base resolution decide
  * @param definition the pipeline the invocation runs under, as loaded at startup
- * @param interactiveMode which role(s), if any, the console adapters replace
  * @param discardWork whether to reset to the last recorded round instead of salvaging an
  *     interrupted round's uncommitted work
  */
-public record RunOrder(
-        Path cloneDir,
-        @Nullable String base,
-        PipelineDefinition definition,
-        RunArguments.InteractiveMode interactiveMode,
-        boolean discardWork) {
+public record RunOrder(Path cloneDir, @Nullable String base, PipelineDefinition definition, boolean discardWork) {
 
     /**
      * This order re-bound to {@code taskDefinition}, every other field unchanged — reached only
      * through {@link TakeOrder#withDefinition} (design D6 of introduce-take-order).
      */
     RunOrder withDefinition(PipelineDefinition taskDefinition) {
-        return new RunOrder(cloneDir, base, taskDefinition, interactiveMode, discardWork);
+        return new RunOrder(cloneDir, base, taskDefinition, discardWork);
     }
 }

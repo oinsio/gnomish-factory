@@ -27,6 +27,14 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
      */
     String guardLog = ''
 
+    /**
+     * What a {@code docker exec} of the agent CLI inside the box prints — the round's stream-json.
+     * Defaults to the fake agent's {@code plain-round} scenario, so a container round driven by the
+     * real CLI adapter completes the way it does on the host against the fake agent (FR6 of
+     * remove-interactive-console); the fake binary itself cannot run inside a box no daemon backs.
+     */
+    String agentRound = FakeAgentScenario.stdout('plain-round')
+
     ScriptedSandboxDocker() {
         onRun = { List<String> args ->
             // Matched against the production command itself, never a copy of its format string:
@@ -62,6 +70,10 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
     @Override
     Process start(List<String> args, boolean mergeStderr) {
         starts << args
+        // The agent CLI's own exec: every round and vote asks for stream-json output.
+        if (args.contains('stream-json')) {
+            return new FakeExecProcess(0, agentRound)
+        }
         // The two exec'd self-check probes: direct egress must fail; the proxied
         // probe of a denied host must observe the guard's 403.
         args.contains('--noproxy') ? new FakeExecProcess(1, '') : new FakeExecProcess(0, '403')
@@ -85,10 +97,22 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         sandbox,
                         new BoxTiming({
                             -> Instant.now()
-                        } as Clock, { d -> } as Sleeper, DockerCli.DEFAULT_COMMAND_TIMEOUT),
+                        } as Clock, { d -> } as Sleeper, DEFAULT_COMMAND_TIMEOUT),
                         ChildEnvAllowlist.none(),
                         guardRoot,
                         new ObjectOwnership(mode, projectId)))
+    }
+
+    /** Reads a fake-agent scenario's scripted stream from the {@code fake-agent} resources beside this fixture. */
+    private static final class FakeAgentScenario {
+
+        static String stdout(String scenario) {
+            def resource = ScriptedSandboxDocker.getResource("/fake-agent/scenarios/${scenario}/stdout.jsonl")
+            if (resource == null) {
+                throw new IllegalStateException("no fake-agent scenario '${scenario}' on the test classpath")
+            }
+            resource.getText('UTF-8')
+        }
     }
 
     /** A finished child process with canned merged output — the exec seam's daemon-free stand-in. */

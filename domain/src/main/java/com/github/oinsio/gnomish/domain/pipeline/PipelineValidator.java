@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The pure validation aggregator (design D6): runs every pure rule over a
@@ -26,7 +27,10 @@ import java.util.List;
  *   <li>{@link StageSanityRule} — per-stage mechanism and check local sanity
  *       (FR11, FR7);</li>
  *   <li>{@link ApiExecutorRule} — per-stage {@code api} executor rejection,
- *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor).</li>
+ *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor);</li>
+ *   <li>{@link UnconfiguredCheckProviderRule} — per-check rejection of an
+ *       {@code external} check whose provider this factory has no
+ *       {@code factory.check} section for (FR3, D3 of remove-interactive-console).</li>
  * </ol>
  *
  * <p>Each delegated rule keeps its own internal ordering and reporting contract;
@@ -39,7 +43,9 @@ import java.util.List;
  *
  * <p>Implements FR8 of load-pipeline-config; the {@code TrackerConfigRule} tier
  * additionally implements FR17 of add-tracker-port; the {@code ApiExecutorRule}
- * tier additionally implements FR10, UX2, D6 of add-agent-executor.
+ * tier additionally implements FR10, UX2, D6 of add-agent-executor; the
+ * {@code UnconfiguredCheckProviderRule} tier implements FR3, D3 of
+ * remove-interactive-console.
  */
 public final class PipelineValidator {
 
@@ -53,10 +59,13 @@ public final class PipelineValidator {
      * <p>Implements FR8 of load-pipeline-config.
      *
      * @param model the typed pipeline model to validate
+     * @param configuredCheckProviders the providers this factory instance has a
+     *     {@code factory.check.<provider>} section for — a fact of the instance,
+     *     not of the model, so it is an input (D3 of remove-interactive-console)
      * @return every pure-rule error, concatenated in the documented order;
      *     immutable and possibly empty
      */
-    public static List<ConfigError> validate(PipelineDefinition model) {
+    public static List<ConfigError> validate(PipelineDefinition model, Set<String> configuredCheckProviders) {
         List<ConfigError> errors = new ArrayList<>();
         errors.addAll(SchemaVersionRule.validate(model.schemaVersion()));
         errors.addAll(TrackerConfigRule.validate(model.tracker()));
@@ -64,6 +73,7 @@ public final class PipelineValidator {
         errors.addAll(ArtifactGraphRule.validate(model.stages()));
         errors.addAll(StageSanityRule.validate(model.stages()));
         errors.addAll(ApiExecutorRule.validate(model.stages()));
+        errors.addAll(UnconfiguredCheckProviderRule.validate(model.stages(), configuredCheckProviders));
         return List.copyOf(errors);
     }
 }

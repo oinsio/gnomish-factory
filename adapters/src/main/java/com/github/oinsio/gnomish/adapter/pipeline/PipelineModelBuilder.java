@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineValidator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -46,6 +47,11 @@ final class PipelineModelBuilder {
      * <p>Takes the {@link ParsedTree} whole rather than its three components
      * (FR6 of add-parameter-count-gate, design D12).
      *
+     * <p>{@code configuredCheckProviders} reaches the domain validator's
+     * unconfigured-provider rule (FR3, design D3 of remove-interactive-console);
+     * {@code checkProviders} stays the discovered set the check seam grades
+     * against.
+     *
      * @return the mapped, validated definition, or {@code null} when it could not
      *     be produced
      */
@@ -54,6 +60,7 @@ final class PipelineModelBuilder {
             ParsedTree tree,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders,
             ConnectionProfiles profiles,
             List<ConfigError> errors) {
         if (!(tree.config() instanceof Ok<ConfigDto>(ConfigDto value))
@@ -75,7 +82,7 @@ final class PipelineModelBuilder {
         if (model == null) {
             return null;
         }
-        errors.addAll(PipelineValidator.validate(model));
+        errors.addAll(PipelineValidator.validate(model, configuredCheckProviders));
         errors.addAll(ReferencedFiles.check(law, model.stages()));
         errors.addAll(AgentSettingsValidator.validate(model));
         errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));

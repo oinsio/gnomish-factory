@@ -10,12 +10,11 @@ See proposal.md — Why. The verified current state that constrains the approach
   at load with "'agent-cli' is the only supported executor type currently".
 - `StageSanityRule` (lines 72–77) requires a non-blank `executor.model` for **every**
   executor type — the live conflict this change's pipeline-config delta resolves.
-- The engine flow is confirmed: `RoundExecution.execute` calls
-  `executor.execute(new StageExecutor.Request(...))` (line 98) and only a `Completed`
-  result proceeds to `verified(...)`, which runs the verify chain (line 126);
-  `DecisionNeeded` skips verification. `ExecutionResult` is sealed with exactly
-  `Completed` and `DecisionNeeded`; retry feedback is `priorFailures(state)` — the
-  non-Pass `CheckResult`s of all prior attempts (lines 176–186).
+- After `define-executor-contract` (sequenced before this change) the engine's result is
+  the contract's status + answer: `failed/quality` is a recorded quality-failure round
+  whose findings join `priorFailures` and whose verify chain is skipped;
+  `failed/infrastructure` is `CannotExecute`. The classification lives in the engine's
+  single `ExecutorOutcomeClassifier`; an adapter only reports a status.
 - `TaskExecutionEnvironment.exec` (`sandbox/core/.../TaskExecutionEnvironment.java:65`)
   is documented as "the sole process-launch seam"; host and container implementations
   (`HostTaskExecutionEnvironment.exec`, `ContainerTaskExecutionEnvironment.exec`) both
@@ -26,9 +25,10 @@ See proposal.md — Why. The verified current state that constrains the approach
   [sh, -c, cmd], env, null, true))` with a concurrent `BoundedTail` drain,
   `waitForExitOrTimeout`, and exit-code classification in `ShellCommandCheckRunner`
   (0 → Pass, 126/127 → CannotVerify, other → Fail with findings/tail).
-- `EnginePorts` carries exactly one `StageExecutor`; `ExecutorAdapterSelector` branches
-  on interactive mode only and its javadoc asserts every engine-bound stage is
-  `agent-cli` — there is no per-stage executor-type dispatch today.
+- `define-executor-contract` D8 gives `ExecutorAdapterSelector` an `ExecutorRegistry`
+  (`Map<ExecutorName, Executor>` of built-ins and law-declared programs) and a name-keyed
+  dispatching `StageExecutor`; built-ins implement the contract's `Executor` mirror
+  interface (`describe`, `start`, `poll`).
 - `RoundTimeout` (adapters/agent) resolves the `roundTimeout` settings key (Number =
   seconds, String = ISO-8601 with tolerant `PT` prefixing, default 30 min); it forms a
   declared manual-sync pair with `AgentSettingsValidator.isWellFormedRoundTimeout`
@@ -36,27 +36,28 @@ See proposal.md — Why. The verified current state that constrains the approach
 
 ## Decisions
 
-**D1 — Exit ≠ 0 is an executor-reported quality failure (`ExecutionResult.Failed`),
-and the verify chain is skipped for that round.** (FR6, NFR-R1, G3.) The sealed
-`ExecutionResult` gains a `Failed(usage, trace, findings)` variant; `RoundExecution`'s
-exhaustive switch gains one arm mapping it to a recorded quality-failure round whose
-synthetic non-Pass result joins `priorFailures` feedback like any failed check. The
-attempt loop, strict persistence ordering, events, and escalation are untouched —
-`StageAttemptLoop.route` already handles a `Fail`-verdict round. Skipping verification
-mirrors the `DecisionNeeded` precedent: the round produced no product worth verifying,
-and fail-fast is the engine's stated verification posture. *Rationale:* flaky builds
-are real — a quality failure buys retries with the exit code and output tail as
-feedback, exactly the loop findings already ride. *Alternatives rejected:* (a) treat
-exit ≠ 0 as infrastructure (`CannotExecute`) — burns no attempt, so a legitimately
-failing build escalates instantly with no retry and no findings history; (b) complete
-the round and let the verify chain discover the damage — the failure signal already
-exists (the exit code), running checks over a known-failed transformation wastes them
-and buries the true finding; (c) a synthetic implicit verify check — smuggles engine
-semantics into manifest space and breaks "verify list is manifest-declared".
+**D1 — Exit ≠ 0 is reported as the contract's `failed/quality` status; the engine does
+the rest.** (FR6, NFR-R1, G3.) The command executor builds an `ExecutorResult` with
+`failed/quality` and one finding; `define-executor-contract` owns what follows (attempt
+burned, round recorded, findings fed forward, verify chain skipped). This change adds no
+engine arm and no result variant. *Rationale:* flaky builds are real — a quality failure
+buys retries with the exit code and output tail as feedback, exactly the loop findings
+already ride; and the classification must not be decided in an adapter (the contract's
+single-owner rule). *Alternatives rejected:* (a) report exit ≠ 0 as
+`failed/infrastructure` — burns no attempt, so a legitimately failing build escalates
+instantly with no retry and no findings history; (b) report `completed` and let the
+verify chain discover the damage — the failure signal already exists (the exit code),
+running checks over a known-failed transformation wastes them and buries the true
+finding; (c) a synthetic implicit verify check — smuggles engine semantics into manifest
+space and breaks "verify list is manifest-declared".
 
-**D2 — Sync surfaces.** Four surfaces examined; verdicts per the preference order of
+**D2 — Sync surfaces.** Five surfaces examined; verdicts per the preference order of
 `.claude/rules/manual-sync-pairs.md`:
 
+- *The executor is a built-in of the contract, not a parallel path.* `CommandStageExecutor`
+  implements the contract's `Executor` mirror interface and returns `ExecutorResult`, so it
+  shares the status taxonomy, the classifier and the conformance kit with every other
+  executor (define-executor-contract D2); no second result shape appears.
 - *No host/container twin is created.* The command executor calls
   `TaskExecutionEnvironment.exec` — the sole process seam — and mode is resolved
   inside the existing environment implementations. One executor implementation serves
@@ -100,8 +101,8 @@ Expiry kills the process tree via the existing `waitForExitOrTimeout` and classi
 as infrastructure, matching the executor-round timeout contract already spec'd for
 agent rounds (agent-executor: "roundTimeout expiry SHALL ... classify the round as an
 infrastructure failure"). Spawn failure and exits 126/127 mirror
-`ShellCommandCheckRunner`'s CannotVerify classification, mapped to the executor's
-infrastructure channel. *Alternative rejected:* quality failure on timeout (the command
+`ShellCommandCheckRunner`'s CannotVerify classification, reported as the contract's
+`failed/infrastructure` status. *Alternative rejected:* quality failure on timeout (the command
 *check*'s behavior) — executor rounds already define timeout = infrastructure, and two
 timeout classes for the same executor concept, varying by executor type, would make
 engine behavior unpredictable from the manifest. The check keeps its own contract; the
@@ -115,15 +116,15 @@ decision file is an agent wire protocol (declared pair `DecisionFileTransport` �
 pair's audit scope is unchanged. *Alternative rejected:* a script-facing decision
 channel — no use case, and it would drag the decision-file pair into a third medium.
 
-**D6 — Dispatch is a type-keyed composite at wiring, outside the engine.** (FR8.)
-`EnginePorts` keeps exactly one `StageExecutor`; a dispatching implementation selects
-per `stage.executor().type()` and is assembled in `ExecutorAdapterSelector`.
-Interactive substitution wraps the agent branch only — command stages always run for
-real (running the command is what a human at the console would do anyway, and it costs
-no tokens). `ApiExecutorRule` stays; its message text now names both supported types.
-*Alternative rejected:* a second executor port in `EnginePorts` — an engine structural
-change for what is purely an adapter-selection concern, and every future executor type
-would widen the port set again.
+**D6 — `command` is one built-in registration in the contract's `ExecutorRegistry`.**
+(FR8.) `CommandStageExecutor` is registered under the built-in name `command`; the
+name-keyed dispatching `StageExecutor` of `define-executor-contract` D8 resolves a
+`command` stage to it with no type-keyed arm added here. Interactive substitution stays
+on the agent arm only — command stages always run for real (running the command is what
+a human at the console would do anyway, and it costs no tokens). `ApiExecutorRule`
+stays; its message names the supported types. *Alternative rejected:* a `command` arm
+in the selector beside the registry — the second dispatch mechanism the contract's
+single-owner table forbids.
 
 **D7 — Crash consistency: no new durable steps.** Per `.claude/rules/
 crash-consistency.md`: this change adds no multi-step transition. A command round rides
@@ -134,7 +135,7 @@ no new recovery owner.
 
 ## Risks / Trade-offs
 
-- [Skipping verify on `Failed` hides check regressions until the command passes] →
+- [Skipping verify on `failed/quality` hides check regressions until the command passes] →
   acceptable: checks verify the product, and the failed command *is* the finding; the
   verify chain runs on the first exit-0 round.
 - [Generalizing `CommandProcessRunner` touches the verify-check path] → the existing

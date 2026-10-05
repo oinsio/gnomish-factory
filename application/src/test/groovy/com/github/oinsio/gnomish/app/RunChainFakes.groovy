@@ -299,7 +299,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * discard — the shape every chain spec passed by hand before introduce-take-order bundled it.
      */
     RunOrder runOrder(PipelineDefinition definition = pipeline(), Path cloneDir = CLONE_DIR) {
-        new RunOrder(cloneDir, null, definition, RunArguments.InteractiveMode.NONE, false)
+        new RunOrder(cloneDir, null, definition, false)
     }
 
     /**

@@ -105,10 +105,7 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
         rethrown.is(failure)
 
         where:
-        failure << [
-            new InputExhaustedException(),
-            new ConsoleClosedException()
-        ]
+        failure << [new ConsoleClosedException()]
     }
 
     // FR16 of fix-operator-blockers; UX3, design D15: a task-not-found already printed a calm

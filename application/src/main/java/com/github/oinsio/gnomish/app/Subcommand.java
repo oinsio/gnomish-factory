@@ -10,8 +10,7 @@ import org.springframework.boot.ApplicationArguments;
  * add-dashboard-page). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
  * {@link ApplicationArguments} has no built-in concept of a leading positional subcommand, so this
- * reads {@link ApplicationArguments#getSourceArgs()} directly, the same raw-args seam {@link
- * InteractiveModeParser} already uses for a similar reason.
+ * reads {@link ApplicationArguments#getSourceArgs()} directly.
  *
  * <p>Absent entirely, {@link #RUN} is implicit: this preserves the flag-only invocation ({@code
  * gnomish --dir=... --task=...}) that predates subcommand dispatch, so existing scripts and specs

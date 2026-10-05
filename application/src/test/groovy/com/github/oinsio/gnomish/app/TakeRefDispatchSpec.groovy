@@ -67,7 +67,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private void dispatch(List<String> refs) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
         TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
-                new TakeArguments(CLONE_DIR, refs, RunArguments.InteractiveMode.NONE, null, false, false),
+                new TakeArguments(CLONE_DIR, refs, null, false, false),
                 new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),
                 SERVE_PROPERTIES, LOG)
     }

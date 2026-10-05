@@ -10,15 +10,12 @@ import java.nio.file.Files
 
 /**
  * FR15, M2 of add-agent-executor: {@link CliStageExecutor} passes the same
- * {@link StageExecutorContract} suite as the fake and interactive adapters,
- * driven against the fake agent binary through the real
- * {@code ProcessBuilder}/pipes/exit-code path (design D11).
+ * {@link StageExecutorContract} suite as the fake adapter, driven against the
+ * fake agent binary through the real {@code ProcessBuilder}/pipes/exit-code
+ * path (design D11).
  *
- * <p>Unlike {@code InteractiveStageExecutorContractSpec}, which reuses the
- * contract's fixed sample request unchanged because {@link
- * com.github.oinsio.gnomish.adapter.console.StageBriefing} degrades a
- * non-{@link DirectoryWorkspace} marker Workspace to a placeholder, {@link
- * CliStageExecutor} hard-requires a real {@link DirectoryWorkspace} with a
+ * <p>The contract's fixed sample request carries a marker Workspace, but
+ * {@link CliStageExecutor} hard-requires a real {@link DirectoryWorkspace} with a
  * readable {@code instructionsRef} file — an unreadable control file is
  * deliberately an infrastructure failure here (FR13), not a placeholder. A
  * thin request-rewriting delegate swaps in a real temp-directory workspace

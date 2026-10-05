@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.e2e
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The exit-code matrix (task 9.3): five scenarios pinning FR12's exit-code table and
+ * The exit-code matrix (task 9.3): scenarios pinning FR12's exit-code table and
  * FR13's EOF semantics against the real {@code gnomish run} process, complementing the
  * reference journey ({@link ReferenceE2ESessionSpec}, exit 0) and the harness smoke test
  * ({@link E2eProcessHarnessSmokeSpec}). {@code Aborted} (exit 12) needs a breaking
@@ -13,10 +14,12 @@ import java.nio.file.Path
  * <ul>
  *   <li>usage error (bad flags) &rarr; 2
  *   <li>broken pipeline ({@code .gnomish/} invalid) &rarr; 3
- *   <li>truncated script (EOF mid-stage, Case 1) &rarr; 4
  *   <li>Ctrl-D at the escalation resume prompt (Case 2) &rarr; 10
  *   <li>Ctrl-D at the manual checkpoint prompt (Case 2) &rarr; 11
  * </ul>
+ *
+ * <p>The gnome and the judge are the fake agent (FR6 of remove-interactive-console); stdin
+ * reaches only the runner's own prompts.
  *
  * <p>Implements M1, FR12, FR13 of add-manual-run.
  */
@@ -89,51 +92,53 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         (result.stdout() + result.stderr()).contains('instructions.md')
     }
 
-    def "truncated script exits 4 without a resume-decision prompt"() {
-        given: 'stdin closes immediately, before the executor prompt is answered'
-        List<String> emptyScript = []
+    // FR3, NFR-O1, D5 of remove-interactive-console: an `external` check on a provider this
+    //     factory has no `factory.check.<provider>` section for is a load failure — exit 3, the
+    //     located error naming the section to write, and no stage ever started.
+    def "unconfigured check provider exits 3 before any dialog"() {
+        given: 'a fixture whose one stage declares an external check on github, with no factory.check.github'
+        Path root = E2eFixture.unconfiguredProviderRoot()
 
         when:
         def result = harness.run(
-                E2eFixture.projectRoot(),
+                root,
                 [
-                    '--dir=' + E2eFixture.projectRoot(),
-                    '--task=script too short',
-                    '--mode=in-place',
-                    '--interactive'
+                    '--dir=' + root,
+                    '--task=irrelevant, load fails first',
+                    '--mode=in-place'
                 ],
-                emptyScript)
+                [])
 
-        then: 'FR13: exit code 4, Case 1 short-circuit'
-        result.exitCode() == 4
+        then: 'FR3: pipeline-load-failure exit code'
+        result.exitCode() == 3
 
-        and: 'the resume-decision dialog was never reached (NFR-R1)'
-        !result.stdout().contains('Decision (empty to resume without one)')
+        and: 'NFR-O1: the located error names the stage manifest, the field and the missing section'
+        def output = result.stdout() + result.stderr()
+        output.contains('stages/work/stage.yaml')
+        output.contains('verify[0].provider')
+        output.contains("check provider 'github' has no factory.check.github section")
+
+        and: 'no stage ran and no operator prompt was printed'
+        !output.contains("Stage '")
+        !output.contains('Press Enter')
     }
 
     def "Ctrl-D at the escalation resume prompt exits 10"() {
-        given: 'scripted input reaches the DecisionNeeded escalation, then stdin closes'
-        List<String> script = [
-            'ask',
-            'should the fixture use approach A or B?',
-            'approach A',
-            'approach B',
-            ''
-            // empty line ends the options list -> DecisionNeeded escalation, no attempt
-            // burned; the engine has not touched the console since this last line, so
-            // console.inputExhausted() is still false here. Stdin now closes with no
-            // further lines: the escalation renders, then the resume-decision prompt
-            // hits a fresh EOF (Case 2) -> EscalationEofException -> exit 10.
-        ]
+        given: 'the fake agent asks a decision on its first round, and stdin is already closed'
+        def agent = FakeAgentSupport.wrapperFor('decision-needed')
+        // decision-needed -> DecisionNeeded escalation, no attempt burned; the escalation
+        // renders, then the resume-decision prompt hits EOF (Case 2) ->
+        // EscalationEofException -> exit 10.
+        List<String> script = []
 
         when:
         def result = harness.run(
                 E2eFixture.projectRoot(),
+                agent,
                 [
                     '--dir=' + E2eFixture.projectRoot(),
                     '--task=ctrl-d at resume',
-                    '--mode=in-place',
-                    '--interactive'
+                    '--mode=in-place'
                 ],
                 script)
 
@@ -142,36 +147,30 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
 
         and: 'the escalation was rendered before the process exited'
         result.stdout().contains('The gnome asked:')
-        result.stdout().contains('should the fixture use approach A or B?')
-        result.stdout().contains('approach A')
-        result.stdout().contains('approach B')
+        result.stdout().contains('Refactor or patch?')
+        result.stdout().contains('refactor')
+        result.stdout().contains('patch')
     }
 
     def "Ctrl-D at the manual checkpoint prompt exits 11"() {
         given: 'the stateful command check pre-passes so the stage completes on the first attempt'
         Files.writeString(E2eFixture.projectRoot().resolve(MARKER_FILE), '')
 
-        and: 'scripted input completes the single round and all four checks, then stdin closes'
-        List<String> script = [
-            '',
-            // InteractiveStageExecutor: empty Enter -> Completed
-            'pass',
-            // InteractiveExternalCheckClient poll verdict
-            'pass'
-            // InteractiveJudgeVoter vote (1 vote configured); files_exist and command both
-            // pass -> stage passes -> advancement: manual -> Paused. Stdin now closes: the
-            // checkpoint confirmation prompt hits a fresh EOF (Case 2) ->
-            // CheckpointEofException -> exit 11.
-        ]
+        and: 'the fake agent plays a clean round and a passing judge vote, and stdin is already closed'
+        def agent = FakeAgentSupport.wrapperFor('plain-round', 'judge-model', 'judge-verdict-pass')
+        // plain-round -> Completed; files_exist and command pass; judge-verdict-pass (1 vote
+        // configured) -> stage passes -> advancement: manual -> Paused. The checkpoint
+        // confirmation prompt hits EOF (Case 2) -> CheckpointEofException -> exit 11.
+        List<String> script = []
 
         when:
         def result = harness.run(
                 E2eFixture.projectRoot(),
+                agent,
                 [
                     '--dir=' + E2eFixture.projectRoot(),
                     '--task=ctrl-d at checkpoint',
-                    '--mode=in-place',
-                    '--interactive'
+                    '--mode=in-place'
                 ],
                 script)
 

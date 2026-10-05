@@ -219,7 +219,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                takeOrder(heldByUs(), tracker, new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, true)), new BranchShape.InProgress())
+                takeOrder(heldByUs(), tracker, new RunOrder(CLONE_DIR, null, completingPipeline(), true)), new BranchShape.InProgress())
 
         then:
         1 * builtSupport.disposeExistingEnvironment()

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -72,7 +73,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
         def flag = new ClaimLossFlag()
         flag.claimLost(REF)
         def runner = newTakeResumeRunner(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], flag)
+                new ByteArrayInputStream(new byte[0]), FakeAgentSupport.propertiesFor('plain-round'), [], flag)
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
         and: 'the tracker itself still reports the claim held by THIS instance (only the flag says lost)'

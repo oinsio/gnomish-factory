@@ -22,9 +22,6 @@ import org.jspecify.annotations.Nullable;
  *     more for batch mode (FR2 of add-factory-serve). Carried verbatim — short-ref expansion
  *     (`42`, `#42`) into a canonical {@code TaskRef} is task 5.14's job, not this record's or its
  *     parser's
- * @param interactiveMode which role(s), if any, use the interactive console adapter (FR10 of
- *     add-manual-run, design D6), parsed with identical semantics to {@link
- *     RunArguments#interactiveMode()}; rejected outright on batch mode (FR3 of add-factory-serve)
  * @param base the {@code --base} branch override for a fresh explicit-mode claim, or {@code null};
  *     rejected outright on the bare form and on batch mode (spec "Flag validation"; FR3 of
  *     add-factory-serve)
@@ -35,13 +32,7 @@ import org.jspecify.annotations.Nullable;
  *     meaningful only for explicit-mode {@code take <ref>}, rejected on the bare form like {@code
  *     --base}
  */
-record TakeArguments(
-        Path dir,
-        List<String> refs,
-        RunArguments.InteractiveMode interactiveMode,
-        @Nullable String base,
-        boolean discardWork,
-        boolean takeover) {
+record TakeArguments(Path dir, List<String> refs, @Nullable String base, boolean discardWork, boolean takeover) {
 
     TakeArguments {
         ArgumentsParsingSupport.requireAbsoluteDir(dir);

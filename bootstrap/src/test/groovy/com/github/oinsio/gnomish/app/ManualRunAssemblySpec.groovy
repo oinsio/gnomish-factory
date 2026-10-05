@@ -9,8 +9,6 @@ import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
-import com.github.oinsio.gnomish.adapter.console.InteractiveJudgeVoter
-import com.github.oinsio.gnomish.adapter.console.InteractiveStageExecutor
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -25,12 +23,10 @@ import java.time.Instant
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
-import spock.lang.Unroll
 /**
- * FR10, D6 of add-agent-executor: {@link ManualRunAssembly#assemble} selects the manifest-driven
- * CLI adapter for each role by default and swaps to the interactive console adapter only for the
- * role(s) named by {@link RunArguments.InteractiveMode} — proven here by inspecting the concrete
- * type wired into the resulting {@code EnginePorts}.
+ * FR10, D6 of add-agent-executor; FR2 of remove-interactive-console: {@link
+ * ManualRunAssembly#assemble} binds the manifest-driven CLI adapter for each role — proven here by
+ * inspecting the concrete type wired into the resulting {@code EnginePorts}.
  */
 class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture {
 
@@ -91,46 +87,20 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         TaskState.atStageStart('build')
     }
 
-    @Unroll
-    def "#interactiveMode wires #expectedExecutor as the stage executor"() {
+    // FR2 of remove-interactive-console: the manifest alone binds both roles — the CLI stage
+    // executor and the CLI judge voter — with no flag in the run order to swap either.
+    def "FR2: a run binds the CLI stage executor and the CLI judge voter from the manifest"() {
         given:
         def assembly = newAssembly()
 
         when:
         def run = assembly.assemble(
-                new RunOrder(workspaceDir, null, definition(), interactiveMode, false), context('task-1'), initialState(),
-                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                new RunOrder(workspaceDir, null, definition(), false), context('task-1'),
+                initialState(), new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
-        run.ports().executor().class == expectedExecutor
-
-        where:
-        interactiveMode | expectedExecutor
-        RunArguments.InteractiveMode.NONE | CliStageExecutor
-        RunArguments.InteractiveMode.ALL | InteractiveStageExecutor
-        RunArguments.InteractiveMode.EXECUTOR_ONLY | InteractiveStageExecutor
-        RunArguments.InteractiveMode.JUDGE_ONLY | CliStageExecutor
-    }
-
-    @Unroll
-    def "#interactiveMode wires #expectedJudgeVoter as the judge voter"() {
-        given:
-        def assembly = newAssembly()
-
-        when:
-        def run = assembly.assemble(
-                new RunOrder(workspaceDir, null, definition(), interactiveMode, false), context('task-1'), initialState(),
-                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
-
-        then:
-        run.ports().judgeVoter().class == expectedJudgeVoter
-
-        where:
-        interactiveMode | expectedJudgeVoter
-        RunArguments.InteractiveMode.NONE | CliJudgeVoter
-        RunArguments.InteractiveMode.ALL | InteractiveJudgeVoter
-        RunArguments.InteractiveMode.EXECUTOR_ONLY | CliJudgeVoter
-        RunArguments.InteractiveMode.JUDGE_ONLY | InteractiveJudgeVoter
+        run.ports().executor().class == CliStageExecutor
+        run.ports().judgeVoter().class == CliJudgeVoter
     }
 
     // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach both the
@@ -142,7 +112,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), RunArguments.InteractiveMode.NONE, false),
+        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
@@ -200,7 +170,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), RunArguments.InteractiveMode.NONE, false),
+        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))

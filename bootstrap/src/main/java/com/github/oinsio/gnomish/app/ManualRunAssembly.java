@@ -33,9 +33,8 @@ import org.jspecify.annotations.Nullable;
  * com.github.oinsio.gnomish.status.StatusSnapshotHolder} and one {@link DialogConsole} are built
  * per {@link #assemble} call (design D1); the default {@link
  * com.github.oinsio.gnomish.domain.engine.port.StageExecutor}/{@link
- * com.github.oinsio.gnomish.domain.engine.port.JudgeVoter} pair is the real CLI adapter, with
- * {@code --interactive} (design D6) swapping one or both roles to the console adapters via {@link
- * RunArguments.InteractiveMode} (see {@link ExecutorAdapterSelector}).
+ * com.github.oinsio.gnomish.domain.engine.port.JudgeVoter} pair is the real CLI adapter, bound
+ * to the run's execution medium by {@link ExecutorAdapterSelector}.
  * <p>An optional {@code extraListener} (default {@code null}) joins the run's {@link
  * EngineEventListener} composite (task 6.1 of add-claim-heartbeat): the {@code take} run enriches its
  * shared assembly via {@link #withExtraListener} to register its {@code HeartbeatProgress}; the plain
@@ -251,9 +250,8 @@ public final class ManualRunAssembly implements RunAssembly {
      * CheckEquipment#externalCheckClient}; package-private testing seam: specs inject a {@code
      * registry} of hand-built providers over a fake secrets provider.
      */
-    ExternalCheckClient externalCheckClient(
-            DialogConsole console, LawBinding lawBinding, Map<String, CheckClientFactory> registry) {
-        return checks.externalCheckClient(console, RunLaw.open(lawBinding), CheckRunContext.none(), registry);
+    ExternalCheckClient externalCheckClient(LawBinding lawBinding, Map<String, CheckClientFactory> registry) {
+        return checks.externalCheckClient(RunLaw.open(lawBinding), CheckRunContext.none(), registry);
     }
 
     /**

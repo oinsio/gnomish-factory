@@ -34,9 +34,8 @@ final class RunExceptionReporting {
             UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
             ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
 
-    /** Families that mean the scripted or interactive input ran out. */
-    private static final List<Class<? extends Throwable>> INPUT_EXHAUSTED =
-            List.of(InputExhaustedException.class, ConsoleClosedException.class);
+    /** Families that mean the operator's input ran out at a prompt. */
+    private static final List<Class<? extends Throwable>> INPUT_EXHAUSTED = List.of(ConsoleClosedException.class);
 
     /** Families whose outcome the callee already put on the console. */
     private static final List<Class<? extends Throwable>> ALREADY_REPORTED = List.of(

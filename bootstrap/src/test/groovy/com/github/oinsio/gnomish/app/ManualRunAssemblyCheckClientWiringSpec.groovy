@@ -26,8 +26,8 @@ import spock.lang.Specification
 
 /**
  * {@link ManualRunAssembly#assemble} wiring assertions for the external-check client: the
- * pin-check guard that wraps every assembly's client, the provider-dispatching composite a
- * configured {@code factory.check.<provider>} subsection puts behind that guard, and the
+ * pin-check guard that wraps every assembly's client, the provider-dispatching composite behind
+ * that guard whether or not a {@code factory.check.<provider>} subsection is configured, and the
  * check-provider SPI's credential-name guard. Needs no engine round and so no agent subprocess.
  * Split out of {@code ManualRunAssemblyWiringSpec} (whose own doc comment only ever covered
  * attempt-limit seeding and extra-listener wiring) to keep one capability per spec file
@@ -57,17 +57,6 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
         new PipelineDefinition('1', new AutonomyLimits(7), [stage('build', 4)])
     }
 
-    private def assemble(TaskState initialState) {
-        newAssembly().assemble(
-                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
-                context('task-1'),
-                initialState,
-                new InMemoryAttemptPersistence(),
-                [],
-                // No round runs in this spec, so the law source is never read; any binding suffices.
-                LawBinding.workingTree(Path.of('').toAbsolutePath()))
-    }
-
     private static FactoryProperties githubCheckProperties() {
         new FactoryProperties(null, null, null,
                 [(GithubCheckClientFactory.PROVIDER): [('api-url'): 'https://api.github.com', repo: 'acme/widgets']])
@@ -77,27 +66,57 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
         [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
     }
 
-    // FR16, D10, task 8.4 of add-sandbox-core: every assembly binds its external-check client
-    //     behind the pin-check guard — the interactive default included.
-    def "the default external-check client is wrapped by the pin-check guard"() {
-        expect:
-        assemble(TaskState.atStageStart('build')).ports().externalClient() instanceof PinCheckedExternalCheckClient
+    // FR3, FR4, D3 of remove-interactive-console; FR16, D10, task 8.4 of add-sandbox-core: with no
+    //     factory.check section the client is still the dispatching composite behind the pin-check
+    //     guard — the load already refused any external check it could not serve, so no console
+    //     stands in — and a pipeline with no external check never resolves a credential through it.
+    def "a pipeline with no external checks builds the dispatching client over an empty configuration and never resolves a credential"() {
+        given:
+        def resolved = []
+        def noCheckSection = new FactoryProperties(null, null, null, null)
+        def assembly = assemblyOver(noCheckSection, { name ->
+            resolved << name; Optional.of('tok')
+        } as SecretsProvider)
+
+        when:
+        def client = assembly.assemble(
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), false),
+                context('task-1'),
+                TaskState.atStageStart('build'),
+                new InMemoryAttemptPersistence(),
+                [],
+                LawBinding.workingTree(Path.of('').toAbsolutePath())).ports().externalClient()
+
+        then:
+        client instanceof PinCheckedExternalCheckClient
+        (client as PinCheckedExternalCheckClient).delegate() instanceof ProviderDispatchingExternalCheckClient
+        resolved.isEmpty()
     }
 
-    // FR5, FR6, D10 of add-plugin-architecture: with any factory.check.<provider> subsection
+    // FR5, FR6, D10 of add-plugin-architecture: with a factory.check.<provider> subsection
     //     configured, the seam behind the guard is the provider-dispatching composite — the engine
     //     port is unchanged, and which provider answers is decided per check rather than at wiring.
     def "a configured check provider puts the dispatching composite behind the guard"() {
         given:
         def assembly = newAssembly(githubCheckProperties())
-        def console = assembly.dialogConsole(context('task-1'), TaskState.atStageStart('build'))
 
         when:
-        def client = assembly.externalCheckClient(console, LawBinding.workingTree(Path.of('').toAbsolutePath()), githubRegistry())
+        def client = assembly.externalCheckClient(LawBinding.workingTree(Path.of('').toAbsolutePath()), githubRegistry())
 
         then:
         client instanceof PinCheckedExternalCheckClient
         client.delegate() instanceof ProviderDispatchingExternalCheckClient
+    }
+
+    private static ManualRunAssembly assemblyOver(FactoryProperties properties, SecretsProvider secrets) {
+        new ManualRunAssembly(
+                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
+                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
+                new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(), githubRegistry(), secrets, properties),
+                new SystemClock(),
+                new ThreadSleeper(),
+                properties,
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
     }
 
     // FR3 of add-plugin-architecture: a configured provider's client is built lazily, on first
@@ -107,25 +126,13 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
     def "assembling a configured check provider resolves no credential"() {
         given:
         def resolved = []
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(
-                        new ByteArrayInputStream(new byte[0]), System.out),
-                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
-                new CheckEquipment(
-                        new FilesExistCheckRunner(),
-                        new ShellCommandCheckRunner(),
-                        githubRegistry(), { name ->
-                            resolved << name; Optional.of('tok')
-                        } as SecretsProvider,
-                        githubCheckProperties()),
-                new SystemClock(),
-                new ThreadSleeper(),
-                githubCheckProperties(),
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
+        def assembly = assemblyOver(githubCheckProperties(), { name ->
+            resolved << name; Optional.of('tok')
+        } as SecretsProvider)
 
         when:
         assembly.assemble(
-                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
@@ -162,7 +169,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
 
         when:
         assembly.assemble(
-                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), false),
                 context('task-1'),
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),

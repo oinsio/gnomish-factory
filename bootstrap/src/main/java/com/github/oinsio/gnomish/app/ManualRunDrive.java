@@ -102,12 +102,7 @@ final class ManualRunDrive {
      * <p>Implements FR5 of introduce-take-order.
      */
     private static RunOrder order(RunArguments runArguments, PipelineDefinition definition) {
-        return new RunOrder(
-                runArguments.dir(),
-                runArguments.base(),
-                definition,
-                runArguments.interactiveMode(),
-                runArguments.discardWork());
+        return new RunOrder(runArguments.dir(), runArguments.base(), definition, runArguments.discardWork());
     }
 
     /** The preserved add-manual-run flow (FR7, UX4, design D8): runs the outcome loop in-process. */

@@ -125,7 +125,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
 
         when:
         runner.run(new RunOrder(cloneDir, null, new PipelineDefinition('1', new AutonomyLimits(1), [stage()]),
-        RunArguments.InteractiveMode.NONE, false),
+        false),
         segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
         List.<Decision> of()), TaskState.atStageStart('work'))
 

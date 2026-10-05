@@ -80,7 +80,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         def context = new TaskContext('HYG-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
         then: 'the branch carries exactly one round commit on top of init'
@@ -115,7 +115,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         def context = new TaskContext('HYG-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
         then: 'no leftover gnomish-decision- directory anywhere under the worktree root'

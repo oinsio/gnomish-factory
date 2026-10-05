@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -11,7 +12,6 @@ import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-
 import java.time.Clock
 /**
  * Shared fixture for {@link TakeResumeRunner} specs (task 5.6): adds tracker stubbing and
@@ -74,9 +74,15 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         currentBranch(cloneDir)
     }
 
+    /**
+     * A resume runner whose gnome is the fake agent playing {@code plain-round} unless the caller
+     * hands other {@code factoryProperties} (FR6 of remove-interactive-console). {@code take} asks
+     * the operator nothing on these paths — decisions arrive through the tracker — so stdin is
+     * empty by default.
+     */
     protected TakeResumeRunner newTakeResumeRunner(
-            InputStream input = new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')),
-            FactoryProperties factoryProperties = testProperties(),
+            InputStream input = new ByteArrayInputStream(new byte[0]),
+            FactoryProperties factoryProperties = FakeAgentSupport.propertiesFor('plain-round'),
             List<String> credentialEnvVarsToScrub = [],
             ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
             TaskGit git = taskGit) {
@@ -111,9 +117,8 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
     protected TakeOrder resumeOrder(
             PipelineDefinition definition,
             String taskId = 'PROJ-1',
-            boolean discardWork = false,
-            RunArguments.InteractiveMode interactiveMode = RunArguments.InteractiveMode.ALL) {
-        def run = new RunOrder(cloneDir, null, definition, interactiveMode, discardWork)
+            boolean discardWork = false) {
+        def run = new RunOrder(cloneDir, null, definition, discardWork)
         def trackerTask = new TrackerTask(
                 REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false)

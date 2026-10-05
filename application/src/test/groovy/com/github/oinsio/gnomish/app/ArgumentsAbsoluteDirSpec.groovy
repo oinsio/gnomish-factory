@@ -15,11 +15,10 @@ class ArgumentsAbsoluteDirSpec extends Specification {
 
     private static final Map<String, Closure> RECORDS = [
         run : { Path d ->
-            new RunArguments(d, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE,
-            RunArguments.Mode.GIT, null, null, false)
+            new RunArguments(d, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
         },
         take : { Path d ->
-            new TakeArguments(d, [], RunArguments.InteractiveMode.NONE, null, false, false)
+            new TakeArguments(d, [], null, false, false)
         },
         serve : { Path d -> new ServeArguments(d, null, false) },
         status : { Path d -> new StatusArguments(d, null, false) },

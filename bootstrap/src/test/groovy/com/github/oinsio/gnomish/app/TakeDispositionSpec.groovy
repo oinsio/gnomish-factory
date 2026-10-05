@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
@@ -43,24 +44,24 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def claimEpochBook = taskGit.epochs()
 
     private TakeDisposition newDisposition() {
-        new TakeDisposition(slotWiring(newAssembly()), false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC())
+        new TakeDisposition(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'))), false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC())
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
     // over a fixed clock, so the Working case's TakeTakeover path is exercised deterministically.
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
         new TakeDisposition(
-                slotWiring(newAssembly()), takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC))
+                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'))), takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC))
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
         new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt, new ClaimEpoch(1)), UntrustedText.tracker('fixture title'))
     }
 
-    // The explicit take order for {@code task}: this fixture's clone and pipeline, interactive ALL,
-    // no base and no --discard-work, claimed through {@code via} under INSTANCE (introduce-take-order).
+    // The explicit take order for {@code task}: this fixture's clone and pipeline, the fake agent
+    // as the gnome (wired into the slot), no base and no --discard-work, claimed through {@code via} under INSTANCE (introduce-take-order).
     private TakeOrder order(TrackerTask task, Tracker via = tracker) {
-        new TakeOrder(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), task, via, INSTANCE)
+        new TakeOrder(new RunOrder(cloneDir, null, pipeline(), false), task, via, INSTANCE)
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
@@ -200,7 +201,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def beat = Mock(ClaimBeat)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = new TakeDisposition(
-                slotWiring(newAssembly(), taskGit, [], new ClaimTenure(beat, new ClaimLossFlag())),
+                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), taskGit, [], new ClaimTenure(beat, new ClaimLossFlag())),
                 false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC))
 
         when:

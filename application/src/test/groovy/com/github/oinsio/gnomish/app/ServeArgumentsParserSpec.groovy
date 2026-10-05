@@ -9,8 +9,8 @@ import spock.lang.Specification
  * from the registered clone (FR3 of add-project-registry), defaults {@code --slots} to {@code null} (the caller
  * falls back to {@code ServeProperties#slots()}), validates a given {@code --slots} is positive,
  * carries {@code --drain} as a plain flag, and rejects every {@code take}-only flag before the
- * tracker is ever touched — including {@code --interactive}, since {@code serve} is
- * unconditionally non-interactive.
+ * tracker is ever touched; {@code --interactive}, which no command accepts (FR1 of
+ * remove-interactive-console), is refused as an unknown option.
  */
 class ServeArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
@@ -82,7 +82,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
         parsed.drain()
     }
 
-    // FR4: serve is unconditionally non-interactive — not even --interactive is accepted
+    // FR4: serve accepts none of these — --interactive included, which no command accepts any more
     def "rejects an inapplicable take-only or run-only flag"() {
         when:
         parser.parse(args('serve', "--$flag".toString()), CLONE)

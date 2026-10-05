@@ -25,7 +25,7 @@ class RawOptionReadBoundarySpec extends Specification {
 
     private static final String APP = 'application/src/main/java/com/github/oinsio/gnomish/app/'
 
-    /** The parsers, the argument owner and the two helpers the run parser delegates to. */
+    /** The parsers, the argument owner and the helper the run parser delegates to. */
     private static final Set<String> ALLOWED = [
         'RunArgumentsParser',
         'StatusArgumentsParser',
@@ -35,8 +35,7 @@ class RawOptionReadBoundarySpec extends Specification {
         'BoardArgumentsParser',
         'DashboardArgumentsParser',
         'ArgumentsParsingSupport',
-        'GitFlagsValidator',
-        'InteractiveModeParser'
+        'GitFlagsValidator'
     ].collect { APP + it + '.java' } as Set
 
     /**

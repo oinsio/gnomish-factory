@@ -116,7 +116,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs()) {
-        def run = new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork)
+        def run = new RunOrder(CLONE_DIR, null, completingPipeline(), discardWork)
         chain.resumeExisting(takeOrder(task, tracker, run), new BranchShape.InProgress())
     }
 

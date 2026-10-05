@@ -27,9 +27,9 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
 
-        when: 'resuming drives one more round to completion (a bare Enter via the interactive executor)'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+        when: 'resuming drives one more fake-agent round to completion'
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'the branch records a Completed outcome and the worktree is removed'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -48,8 +48,8 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
 
         when: 'resuming with the default (no --discard-work) drives the task to completion'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'the branch history contains a distinct salvage commit ahead of the round commit'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -70,8 +70,8 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
 
         when: 'resuming with --discard-work drives the task to completion'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, true), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
 
         then: 'no salvage commit landed on the branch — the leftovers were discarded, not committed'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -94,8 +94,8 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         assert Files.exists(worktree.resolve('half-done.txt'))
 
         when: 'resuming with --discard-work drives the task to completion'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, true), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
 
         then: 'the leftover file itself was discarded from the worktree, not just left uncommitted'
         !Files.exists(worktree.resolve('half-done.txt'))
@@ -115,13 +115,13 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         ])
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(afterRound, report))
 
-        and: 'stdin supplies the decision answer, then a bare Enter for the resumed round'
-        def script = 'go ahead' + System.lineSeparator() + System.lineSeparator()
+        and: 'stdin supplies only the decision answer; the resumed round is the fake agent\'s'
+        def script = 'go ahead' + System.lineSeparator()
         def out = new ByteArrayOutputStream()
 
         when:
         newResumeRunner(new ByteArrayInputStream(script.getBytes('UTF-8')), new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'the rendered escalation and the resume prompt were printed — the same dialog as in-process'
         def printed = out.toString('UTF-8')
@@ -161,7 +161,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         when: 'a bare Enter confirms the checkpoint'
         newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
                 new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'the checkpoint confirmation was printed — the same dialog as in-process'
         def printed = out.toString('UTF-8')
@@ -199,7 +199,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when:
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'a status report was printed, naming the task'
         out.toString('UTF-8').contains(taskId)
@@ -231,8 +231,8 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
                 "gnomish/${taskId}")
 
         when:
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then:
         def ex = thrown(AbortedException)

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
@@ -174,16 +175,24 @@ public class ManualRunConfiguration {
      * (FR16, design D8/D12): {@code factory.connections} is operator configuration while the
      * subsection referencing one is repo-side, so only this root sees both — an undefined {@code
      * connection: <name>} is therefore a located load error rather than a mid-{@code take} failure.
+     *
+     * <p>The providers this instance has a {@code factory.check.<provider>} section for are the
+     * fourth (FR3, design D3 of remove-interactive-console): read through the same {@link
+     * CheckProviderSeam#resolve} the check client is built from, so the load refuses exactly the
+     * {@code external} checks no client could be built for — before any branch, worktree or
+     * dialog exists, on {@code run}, {@code take} and {@code serve} alike.
      */
     @Bean
     public PipelineSource pipelineSource(
             Map<String, TrackerSubsectionValidator> trackerSubsectionValidatorRegistry,
             Map<String, CheckParamsValidator> checkParamsValidatorRegistry,
             FactoryProperties factoryProperties) {
+        ConnectionProfiles profiles = ConnectionProfiles.of(factoryProperties.connections());
         return new GnomishDirPipelineSource(
                 trackerSubsectionValidatorRegistry,
                 checkParamsValidatorRegistry,
-                ConnectionProfiles.of(factoryProperties.connections()));
+                CheckProviderSeam.resolve(factoryProperties.check(), profiles).keySet(),
+                profiles);
     }
 
     @Bean

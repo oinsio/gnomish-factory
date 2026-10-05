@@ -49,13 +49,13 @@ class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
         ])
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(afterRound, report))
 
-        and: 'stdin supplies a blank answer (bare Enter) for the decision prompt, then another for the resumed round'
-        def script = System.lineSeparator() + System.lineSeparator()
+        and: 'stdin supplies only a blank answer (bare Enter) for the decision prompt'
+        def script = System.lineSeparator()
         def out = new ByteArrayOutputStream()
 
         when:
         newResumeRunner(new ByteArrayInputStream(script.getBytes('UTF-8')), new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'the task still reaches completion'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -86,8 +86,8 @@ class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
 
         when: 'resuming with --discard-work drives the task to completion'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, true), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
 
         then: 'half-done.txt never appears in any commit on the branch, even though the worktree itself was later removed'
         def allBlobPaths = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--name-only', '--format=')

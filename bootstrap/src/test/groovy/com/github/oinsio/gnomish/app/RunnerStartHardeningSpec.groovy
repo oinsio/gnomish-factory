@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
@@ -87,10 +88,10 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given: 'a clone whose task branch already exists, refusing the run right after hardening'
         Path clone = freshClone('host-fresh')
         gitOutput(clone, 'branch', 'gnomish/H-1', 'HEAD')
-        def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), registered(clone), LiveConsoleIO.onStdout())
+        def runner = new GitModeRunner(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), registered(clone), LiveConsoleIO.onStdout())
 
         when:
-        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(clone, null, pipeline(), false),
                 context('H-1'), TaskState.atStageStart('build'))
 
         then:
@@ -105,14 +106,14 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         gitOutput(clone, 'branch', 'gnomish/C-1', 'HEAD')
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(), git, sandboxProperties(), testProperties(), ContainerSupportFixture.real(git.epochs()),
+                newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round'), ContainerSupportFixture.real(git.epochs()),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:
-        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(clone, null, pipeline(), false),
                 segments, context('C-1'), TaskState.atStageStart('build'))
 
         then:
@@ -125,14 +126,14 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given: 'no branch for the resumed task, refusing the resume right after hardening'
         Path clone = freshClone('container-resume')
         def git = TaskGitFixture.real()
-        def runner = new ContainerResumeRunner(newAssembly(), git, sandboxProperties(), testProperties(), 'taskId',
+        def runner = new ContainerResumeRunner(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round'), 'taskId',
                 ContainerSupportFixture.real(git.epochs()))
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:
-        runner.run(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(clone, null, pipeline(), false),
                 'absent-task', segments)
 
         then:
@@ -194,11 +195,11 @@ tracker:
 
         when:
         new TakeFreshClaim(new SlotWiring(
-                        newAssembly(), TaskGitFixture.real(), registered(clone), 'taskId',
+                        newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), registered(clone), 'taskId',
                         new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], ContainerTakeSupport.hostOnly(),
                         new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                         new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(
-                new TakeOrder(new RunOrder(clone, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+                new TakeOrder(new RunOrder(clone, null, pipeline(), false),
                 trackerTask, tracker, InstanceId.generate('test-instance')))
 
         then:

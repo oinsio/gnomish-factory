@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -79,7 +80,9 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
     }
 
     private GitModeRunner newRunner() {
-        def assembly = newAssembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')))
+        // The gnome is the fake agent (FR6 of remove-interactive-console); no dialog is reached.
+        def assembly = newAssembly(
+                new ByteArrayInputStream(new byte[0]), System.out, FakeAgentSupport.propertiesFor('plain-round'))
         new GitModeRunner(assembly, TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
@@ -93,7 +96,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
         def taskId = 'PUSH-1'
 
         when:
-        newRunner().run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        newRunner().run(new RunOrder(cloneDir, null, pipeline(), false),
                 context(taskId), TaskState.atStageStart('build'))
 
         then: 'the run reached completion locally, and the round commit it made is identifiable by its fixed message'

@@ -19,7 +19,9 @@ import org.springframework.stereotype.Component;
  *   <tr><th>Exception</th><th>Exit code</th><th>Meaning</th></tr>
  *   <tr><td>{@link UsageException}</td><td>2</td><td>usage error</td></tr>
  *   <tr><td>{@link PipelineLoadFailedException}</td><td>3</td><td>pipeline load failure</td></tr>
- *   <tr><td>{@link InputExhaustedException}</td><td>4</td><td>stdin exhausted mid-stage</td></tr>
+ *   <tr><td>none</td><td>4</td><td>retired: stdin ending inside an interactive adapter, removed
+ *       with the adapters (FR5 of remove-interactive-console); kept as a gap so no other code
+ *       shifts</td></tr>
  *   <tr><td>{@link com.github.oinsio.gnomish.app.port.git.DivergedBranchException}</td><td>5</td>
  *       <td>local/origin branch divergence on a claimless run, which FR8's automatic discard
  *       deliberately does not cover</td></tr>
@@ -35,7 +37,7 @@ import org.springframework.stereotype.Component;
  * </table>
  *
  * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR5, FR8 of remove-interactive-console.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -50,7 +52,6 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
         return switch (exception) {
             case UsageException ignored -> 2;
             case PipelineLoadFailedException ignored -> 3;
-            case InputExhaustedException ignored -> 4;
             case DivergedBranchException ignored -> 5;
             case TaskNotFoundException ignored -> 6;
             case BranchShapeRefusedException ignored -> 7;

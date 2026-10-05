@@ -34,14 +34,14 @@ import java.nio.file.Path
 final class FakeAgentSupport {
 
     /**
-     * One wrapper file per scenario per JVM, not per call: macOS assesses a
+     * One wrapper file per distinct environment per JVM, not per call: macOS assesses a
      * freshly written executable on its FIRST direct exec (syspolicyd /
      * Gatekeeper), which can cost seconds — a per-call temp file made every
      * spawned round pay that scan cold, blowing tightly budgeted
      * PollingConditions windows in real-thread specs. The wrapper's content is
-     * a pure function of the scenario name, so reuse is safe.
+     * a pure function of the variables it exports, so reuse is safe.
      */
-    private static final Map<String, String> WRAPPERS_BY_SCENARIO = [:].asSynchronized()
+    private static final Map<Map<String, String>, String> WRAPPERS_BY_ENVIRONMENT = [:].asSynchronized()
 
     private FakeAgentSupport() {}
 
@@ -52,14 +52,45 @@ final class FakeAgentSupport {
      *     generated wrapper script's path
      */
     static FactoryProperties propertiesFor(String scenario) {
-        def path = WRAPPERS_BY_SCENARIO.computeIfAbsent(scenario) { String name ->
-            def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
-            wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${name}'\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
-            wrapper.setExecutable(true)
-            wrapper.deleteOnExit()
-            wrapper.absolutePath
+        propertiesOver(wrapperFor(scenario))
+    }
+
+    /**
+     * One binary for both roles (FR6, D4 of remove-interactive-console): an invocation whose
+     * {@code --model} is {@code judgeModel} plays {@code judgeScenario}, every other invocation
+     * plays {@code scenario}.
+     *
+     * @param scenario the scenario an executor round plays
+     * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
+     * @param judgeScenario the scenario a judge vote plays
+     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the generated wrapper
+     */
+    static FactoryProperties propertiesFor(String scenario, String judgeModel, String judgeScenario) {
+        propertiesOver(wrapperFor(scenario, judgeModel, judgeScenario))
+    }
+
+    /**
+     * The wrapper path itself, for a caller that hands the binary to a process rather than
+     * building {@link FactoryProperties} in-JVM — the packaged-jar harness passes it as
+     * {@code --factory.agent-cli-binary=<path>}. Same cache as {@link #propertiesFor}.
+     *
+     * @param scenario the scenario an executor round plays
+     * @param judgeModel the judge check's model id, or {@code null} for an executor-only wrapper
+     * @param judgeScenario the scenario a judge vote plays, or {@code null} with {@code judgeModel}
+     * @return the absolute path of the generated wrapper script
+     */
+    static String wrapperFor(String scenario, String judgeModel = null, String judgeScenario = null) {
+        if ((judgeModel == null) != (judgeScenario == null)) {
+            throw new IllegalArgumentException('judgeModel and judgeScenario are set together or not at all')
         }
-        new FactoryProperties('factory-01', path, null, null)
+        Map<String, String> environment = [GNOMISH_FAKE_SCENARIO: scenario]
+        if (judgeModel != null) {
+            environment.GNOMISH_FAKE_JUDGE_MODEL = judgeModel
+            environment.GNOMISH_FAKE_JUDGE_SCENARIO = judgeScenario
+        }
+        WRAPPERS_BY_ENVIRONMENT.computeIfAbsent(environment.asImmutable()) { Map<String, String> exports ->
+            writeWrapper('fake-agent-wrapper', exports)
+        }
     }
 
     /**
@@ -68,7 +99,7 @@ final class FakeAgentSupport {
      * argv to {@code argvCapture} through the fake's {@code GNOMISH_FAKE_CAPTURE_ARGV} hook — the
      * shape an E2E spec needs to drive an executor round and a judge vote through one binary and
      * then read back what each actually launched with (M1 of fix-operator-blockers). The wrapper
-     * sets both variables itself, so neither depends on the child-environment allowlist.
+     * sets every variable itself, so none depends on the child-environment allowlist.
      *
      * @param executorScenario the scenario an executor round plays
      * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
@@ -78,24 +109,29 @@ final class FakeAgentSupport {
      */
     static FactoryProperties propertiesCapturingArgv(
             String executorScenario, String judgeModel, String judgeScenario, Path argvCapture) {
-        def wrapper = File.createTempFile('fake-agent-routing-wrapper', '.sh')
-        wrapper.text = """\
-#!/bin/sh
-scenario='${executorScenario}'
-previous=''
-for arg in "\$@"; do
-    if [ "\$previous" = '--model' ] && [ "\$arg" = '${judgeModel}' ]; then
-        scenario='${judgeScenario}'
-    fi
-    previous="\$arg"
-done
-export GNOMISH_FAKE_SCENARIO="\$scenario"
-export GNOMISH_FAKE_CAPTURE_ARGV='${argvCapture.toAbsolutePath()}'
-exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
-"""
+        propertiesOver(writeWrapper('fake-agent-routing-wrapper', [
+            GNOMISH_FAKE_SCENARIO : executorScenario,
+            GNOMISH_FAKE_JUDGE_MODEL : judgeModel,
+            GNOMISH_FAKE_JUDGE_SCENARIO: judgeScenario,
+            GNOMISH_FAKE_CAPTURE_ARGV : argvCapture.toAbsolutePath().toString(),
+        ]))
+    }
+
+    private static FactoryProperties propertiesOver(String wrapperPath) {
+        new FactoryProperties('factory-01', wrapperPath, null, null)
+    }
+
+    private static String writeWrapper(String prefix, Map<String, String> exports) {
+        def wrapper = File.createTempFile(prefix, '.sh')
+        def lines = ['#!/bin/sh']
+        exports.each { String name, String value ->
+            lines << "export ${name}='${value}'".toString()
+        }
+        lines << "exec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"".toString()
+        wrapper.text = lines.join('\n') + '\n'
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, null, null)
+        wrapper.absolutePath
     }
 
     /**

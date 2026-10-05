@@ -104,7 +104,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, 'taskId')
 
         when:
-        runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, completingPipeline(), false),
                 'PROJ-1')
 
         then:
@@ -124,7 +124,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
             runner.run(
-                    new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork),
+                    new RunOrder(cloneDir, null, completingPipeline(), discardWork),
                     'PROJ-1')
         } finally {
             System.out = originalOut

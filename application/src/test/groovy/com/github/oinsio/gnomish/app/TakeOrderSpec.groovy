@@ -35,7 +35,7 @@ class TakeOrderSpec extends Specification {
     }
 
     private TakeOrder orderFor(TrackerTask task) {
-        def run = new RunOrder(Path.of('/clone'), null, pipeline(), RunArguments.InteractiveMode.NONE, false)
+        def run = new RunOrder(Path.of('/clone'), null, pipeline(), false)
         new TakeOrder(run, task, Stub(Tracker), new InstanceId('gnomish', 'ab12cd'))
     }
 
@@ -68,7 +68,7 @@ class TakeOrderSpec extends Specification {
         def tracker = Stub(Tracker)
         def instance = new InstanceId('gnomish', 'ab12cd')
         def startup = pipeline()
-        def run = new RunOrder(Path.of('/clone'), 'release/1.2', startup, RunArguments.InteractiveMode.ALL, true)
+        def run = new RunOrder(Path.of('/clone'), 'release/1.2', startup, true)
         def order = new TakeOrder(run, task, tracker, instance)
         def taskDefinition = new PipelineDefinition('2', new AutonomyLimits(5), pipeline().stages())
 
@@ -77,7 +77,7 @@ class TakeOrderSpec extends Specification {
 
         then:
         bound.run().definition().is(taskDefinition)
-        bound.run() == new RunOrder(Path.of('/clone'), 'release/1.2', taskDefinition, RunArguments.InteractiveMode.ALL, true)
+        bound.run() == new RunOrder(Path.of('/clone'), 'release/1.2', taskDefinition, true)
         bound.trackerTask().is(task)
         bound.tracker().is(tracker)
         bound.instanceId().is(instance)
