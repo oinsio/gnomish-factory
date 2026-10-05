@@ -85,8 +85,8 @@ The factory SHALL enforce size limits when reading command output and polling ex
 - **THEN** the factory reads at most the configured cap and records that truncation occurred
 
 ### Requirement: Pin-check guards external checks
-When a stage declares external checks, each SHALL be guarded by a pin-check performed by a guard component wrapping any `ExternalCheckClient`, before the adapter's first poll: the check's definition files — the union of pin paths declared in the stage law and paths contributed by the adapter — SHALL be byte-identical to the base branch, compared as bare git objects at the attempt commit. Any difference SHALL yield a Fail verdict with the diff as findings — a quality failure — and the adapter is never invoked. When the union is empty (the interactive client contributes no paths and the declaration names none), the pin SHALL pass vacuously. The engine's manifest-order verification chain is unchanged.
-<!-- implements FR16 of add-sandbox-core -->
+When a stage declares external checks, each SHALL be guarded by a pin-check performed by a guard component wrapping any `ExternalCheckClient`, before the adapter's first poll: the check's definition files — the union of pin paths declared in the stage law and paths contributed by the adapter — SHALL be byte-identical to the base branch, compared as bare git objects at the attempt commit. Any difference SHALL yield a Fail verdict with the diff as findings — a quality failure — and the adapter is never invoked. When the union is empty (the provider contributes no paths and the declaration names none), the pin SHALL pass vacuously. The engine's manifest-order verification chain is unchanged.
+<!-- implements NFR-S1 of remove-interactive-console -->
 
 #### Scenario: Rewritten workflow is caught before the adapter is invoked
 - **WHEN** the gnome branch modifies a definition file of the external check
@@ -97,8 +97,8 @@ When a stage declares external checks, each SHALL be guarded by a pin-check perf
 - **THEN** stage 3 fails the pin-check against the base branch before its adapter is invoked
 
 #### Scenario: Interactive client with nothing declared passes the pin
-- **WHEN** an external check is served by the interactive client and its declaration names no pin paths
-- **THEN** the pin passes vacuously and the operator is asked as usual
+- **WHEN** an external check is served by a configured provider that contributes no pin paths and its declaration names none
+- **THEN** the pin passes vacuously and the provider's client is polled as usual
 
 ### Requirement: Model-output writes are confined to the working copy
 Any factory-side application of model-produced file content SHALL resolve symlinks before writing and refuse paths outside the working copy and any path under `.git/`, enforced by a contract test.
