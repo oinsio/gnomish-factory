@@ -194,7 +194,7 @@ One command answers "is my change OK?":
 ./gradlew check
 ```
 
-It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. `./gradlew build` additionally produces the boot jar; `./gradlew :bootstrap:distTar` builds the distribution archive (version `0.0.0-dev`) under `bootstrap/build/distributions/`.
+It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%, scoped to the branch's changes by default; the whole tree with `-PpitScope=all`), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. `./gradlew build` additionally produces the boot jar; `./gradlew :bootstrap:distTar` builds the distribution archive (version `0.0.0-dev`) under `bootstrap/build/distributions/`.
 
 Everything beyond the one command — per-module verification and mutation scoping, dependency locking and verification (`--write-locks --write-verification-metadata sha256`), the Dependabot flow, the supply-chain threat model, and reproducing the OSV vulnerability gate and the license gate locally — is in [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md).
 

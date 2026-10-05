@@ -26,8 +26,8 @@ gate runs on the default branch at all. Both are correctness defects of the gate
   same owner. `-PpitScope=all` requests the whole tree; `./gradlew pitestAll` implies it.
 - **MODIFIED** — scope rules close the two gaps: a changed test source in a module widens the scope
   to that module's whole production tree; a changed shared test fixture (`:test-fixtures`) widens it
-  to the whole build; a branch whose merge base is `HEAD` (the default branch itself) diffs against
-  the first parent of `HEAD`; a base that cannot be resolved at all (no default-branch ref, a root
+  to the whole build; a build on the default branch itself (whose merge base is `HEAD`) diffs
+  against the first parent of `HEAD`; a base that cannot be resolved at all (no default-branch ref, a root
   commit, not a git checkout) falls back to the whole tree. The fallback direction is always *more*
   mutation, never less.
 - **ADDED** — a scheduled CI workflow runs the whole-tree mutation gate nightly on `main` and opens
@@ -41,8 +41,9 @@ gate runs on the default branch at all. Both are correctness defects of the gate
 
 ## Goals
 
-- **G1** — A task that touches one or two modules runs `./gradlew check` locally in under 10 minutes
-  on the reference development machine (14 cores, 36 GB), down from ~57.
+- **G1** — A task that touches one or two modules runs `./gradlew check` locally in under 20 minutes
+  on the reference development machine (14 cores, 36 GB), down from ~57, with mutation testing no
+  longer the dominant cost.
 - **G2** — The mutation gate's verdict on changed code is identical between the local run and the CI
   push run: one owner computes the scope, both consume it.
 - **G3** — Whole-tree mutation coverage is asserted at least once a day on `main`, with a failure
@@ -85,8 +86,11 @@ gate runs on the default branch at all. Both are correctness defects of the gate
   classes it owns whose source files differ between the working tree (index, worktree and untracked
   files included) and the scope base; a module with no such class skips its gate cleanly, as today.
 - **FR2** — The scope base is the merge base of `HEAD` with the default branch (`main`, else
-  `origin/main`). When the merge base equals `HEAD` the base is `HEAD`'s first parent. When no base
-  can be resolved (no `main` ref, a root commit, not a git checkout) the scope is the whole tree.
+  `origin/main`). When the build runs on the branch `main` itself (`HEAD` is `refs/heads/main`, so
+  the merge base is `HEAD`) the base is `HEAD`'s first parent; on any other branch a merge base
+  equal to `HEAD` — a fresh branch with no commits of its own — stays the base, so only the
+  uncommitted work is scoped. When no base can be resolved (no `main` ref, a root commit, not a
+  git checkout) the scope is the whole tree.
 - **FR3** — A changed file under a module's test source tree widens that module's scope to its whole
   production tree. A changed file under `:test-fixtures` sources widens the scope to the whole tree.
   A deleted or renamed-away production file contributes nothing (as today).
@@ -105,8 +109,8 @@ gate runs on the default branch at all. Both are correctness defects of the gate
 
 ### Non-Functional — Performance
 
-- **NFR-P1** — Scope computation adds under 2 seconds to configuration (two or three `git`
-  invocations); it never runs the test suite or reads class files.
+- **NFR-P1** — Scope computation adds under 2 seconds to configuration (three `git` invocations, a
+  fourth only when the base comes from `origin/main`); it never runs the test suite or reads class files.
 
 ### Non-Functional — Reliability
 
@@ -157,8 +161,13 @@ gate runs on the default branch at all. Both are correctness defects of the gate
 
 ## Success Metrics
 
-- **M1** — Local `./gradlew check` after a change confined to `:application` or `:domain` completes
-  in ≤ 10 minutes on the reference machine (baseline ~57 min).
+- **M1** — Local `./gradlew check` after a one-class change confined to `:application` or
+  `:adapters:git` completes in ≤ 20 minutes on the reference machine (baseline ~57 min), and its
+  PIT tasks take ≤ 5 minutes of it. Measured 2026-10-05 with `--profile`: `:application` 18 min 3 s
+  (PIT 21 s), `:adapters:git` 17 min 58 s (PIT 4 min 17 s). The rest is the test suites of the
+  edited module and its dependents — `:bootstrap:test` ~10 min and `:adapters:git:test` ~7.8 min
+  rerun on any upstream change — outside this change's scope (NG5, NG6). The original ≤ 10-minute
+  target assumed PIT was the whole remaining cost; the measurement showed it is not.
 - **M2** — `.github/workflows/ci.yml` contains no `git diff`, `git merge-base` or computed
   `-PpitScope=`; a build-wide spec asserts it.
 - **M3** — A test-only diff that deletes an assertion from a killing spec fails the scoped gate
@@ -185,7 +194,9 @@ None.
 
 ### Modified Capabilities
 
-- `quality-gates`: the "Scoped mutation target" requirement changes — the default scope is the
+- `quality-gates`: the "Scoped mutation target" requirement is replaced by "Branch-scoped mutation
+  target" (REMOVED + ADDED, since its "Absent property preserves full-project mutation" scenario
+  becomes false and a MODIFIED block cannot drop a scenario) — the default scope is the
   branch's changes computed by the build, with explicit whole-tree and explicit-list modes and the
   widening/fallback rules; the "Continuous integration" requirement changes — CI passes no computed
   scope, uploads a profile report, and a scheduled whole-tree run with issue creation is added.

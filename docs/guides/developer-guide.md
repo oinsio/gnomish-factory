@@ -59,17 +59,26 @@ The direction is enforced, not documented: each module declares the sibling proj
 ## Per-module verification
 
 <!-- implements FR11, NFR-P1, UX1 of split-into-modules -->
+<!-- implements FR1, FR2, FR3, FR4, NFR-O1, NFR-R1, UX1, UX2, UX3 of scope-pit-locally -->
 
-Working inside one module? Verify just that module — it runs that module's tests, coverage and mutation gate, and mutates **only** that module's production classes:
+Working inside one module? Verify just that module — it runs that module's tests, coverage and mutation gate, and never mutates another module's classes:
 
 ```bash
 ./gradlew :application:check      # everything, one module
 ./gradlew :application:pitest     # the mutation gate alone
 ```
 
-There is no whole-tree mutation task: `./gradlew check` aggregates every module's run, which together cover the full production tree. For a one-shot full mutation report without the rest of `check`, use the opt-in aggregate `./gradlew pitestAll`.
+What the mutation gate mutates is decided once per build by one owner in `build-logic` (`MutationScopeSource`), the same way on your machine and in CI. There are three modes, chosen by the `pitScope` property:
 
-Narrowing further is possible within a module via `-PpitScope=<comma-separated class globs>`; CI uses it to scope the gate to the classes a branch changed, and each module keeps only the globs it owns. Leave it unset locally — an unset run is the one that guarantees whole-module coverage.
+**Branch (the default — no property).** Each module mutates the production classes whose source files differ between your working tree and the scope base — committed, staged, unstaged and untracked changes alike, so uncommitted work is covered. The base is the merge base of `HEAD` with `main` (else `origin/main`); on the branch `main` itself it is `HEAD`'s first parent, so the last merge is what gets mutated. A branch with no commits of its own keeps `HEAD` as the base and mutates only the uncommitted work. A module the branch did not touch skips its mutation gate entirely — its verdict and report tasks too, so a report an earlier run left behind is never judged. Two changes widen the scope, because a weakened test can hide a survivor anywhere it reaches: a changed file under a module's `src/test/` mutates that module's whole production tree, and a changed file under `test-fixtures/src/` mutates every module's whole tree. A deleted production file contributes nothing. If no base can be resolved — no `main` or `origin/main`, a root commit, not a git checkout — the build mutates the whole tree: a scope the build cannot justify is always wider, never narrower.
+
+**Whole tree (`-PpitScope=all`, or `./gradlew pitestAll`).** Every module mutates its full production tree. `pitestAll` is the opt-in aggregate that runs every module's mutation gate without the rest of `check`, and it implies the whole tree whatever `pitScope` says.
+
+**Explicit (`-PpitScope=<comma-separated class globs>`).** Each module mutates only the globs that match classes it owns, and skips its gate when none do — useful for re-running one class: `./gradlew :adapters:git:pitest -PpitScope=com.github.oinsio.gnomish.adapter.git.GitProcessRunner`.
+
+Every build that runs a mutation task logs one line saying what was scoped and why, for example `PIT scope: branch — base 3f2c1a7 (merge-base main) — adapters/git: 3 classes, application: whole module (test change) — 17 modules skipped`. Check it against `git status` when a verdict surprises you.
+
+The branch scope trades one risk for speed: a mutant in an unchanged class can start surviving because of a change elsewhere. The nightly whole-tree run in CI (see [CI](#ci)) is the guarantee that closes it — it mutates everything on `main` once a day and opens an issue when that fails.
 
 Reports land per module: `<module>/build/reports/jacoco/test/html/index.html` and `<module>/build/reports/pitest/index.html`.
 
@@ -126,6 +135,14 @@ A violation means a module on a shipped classpath offers **no** accepted license
 ## CI
 
 CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, Gitleaks, and the license gate (with the `LICENSE`/`NOTICE` presence and jar-identity checks, see above) on every branch push and pull request — never on a tag push, so a release tag starts no second `check` (see *Releasing*). The CLA check runs on every pull request and blocks an unsigned contributor until they sign ([CONTRIBUTING.md](../../CONTRIBUTING.md)). **Secret scanning** and **Push protection** are enabled in the repository settings. The Gradle wrapper jar is validated by `setup-gradle`'s `validate-wrappers: true`.
+
+The `check` run passes no mutation scope: the build scopes the gate to the branch's changes exactly as it does locally (see [Per-module verification](#per-module-verification)). Besides the JaCoCo and PIT reports, each run attaches a Gradle profile report as the `profile` artifact — the first place to look when asking where a run's time went.
+
+<!-- implements FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally -->
+
+**The nightly whole-tree run** ([`.github/workflows/pitest-nightly.yml`](../../.github/workflows/pitest-nightly.yml), *PIT nightly*) runs `./gradlew check -PpitScope=all` on `main` every day at 02:17 UTC and uploads the PIT reports as the `pit-report` artifact. It is the whole-tree guarantee behind the branch scope: a mutant in an unchanged class that stops dying because of a change elsewhere fails this run within a day. A commit the run has already verified is not mutated again — the job looks up a `nightly-verified-<sha>` cache entry and ends green before Gradle starts. Its token carries only `contents: read` and `issues: write`.
+
+When it fails, it reports on the tracker: an open issue labelled `nightly-mutation` gets a comment, or a new one is opened when none is open. The body lists the failed Gradle tasks with the first line of each failure — for `pitestVerifyAllKilled`, the count of mutations that were not killed — and links the run and its `pit-report` artifact. The report is written by `scripts/nightly-mutation-issue.sh`. After fixing the survivor, run the workflow by hand (*Actions → PIT nightly → Run workflow*, or `gh workflow run pitest-nightly.yml`) and close the issue once it is green.
 
 ## Releasing
 

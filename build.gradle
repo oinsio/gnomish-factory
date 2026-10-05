@@ -144,9 +144,9 @@ tasks.named('check') {
 // root `check` aggregates those runs. This task is the one-shot full report on demand —
 // `./gradlew pitestAll` — without the rest of `check`, and is deliberately NOT wired into
 // `check`, which would run each module's gate twice. Each module contributes itself from
-// `pitest-conventions`; the reports stay per module (see README).
+// `pitest-conventions`; the reports stay per module. It implies the whole tree (D5 of scope-pit-locally).
 tasks.register('pitestAll') {
-    description = 'Runs every module\'s PIT mutation gate; opt-in, not part of `check`.'
+    description = 'Runs every module\'s PIT mutation gate over its whole production tree, whatever `pitScope` says; opt-in, not part of `check`.'
     group = 'verification'
 }
 

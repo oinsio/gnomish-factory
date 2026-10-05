@@ -55,9 +55,13 @@ value is what makes "CI and local agree" true by construction rather than by two
 — two implementations of one rule, the shape `manual-sync-pairs.md` exists to prevent, and the
 local copy would still have to be invoked by hand (UX1).
 
-**D2 — Changed files = `git diff --name-only --diff-filter=d <base>` (working tree against the
+**D2 — Changed files = `git diff --name-status --no-renames <base>` (working tree against the
 base, so index and worktree edits are included) plus `git ls-files --others --exclude-standard`
-(untracked).** Both lists are mapped to modules by the `src/main/java/` marker exactly as the
+(untracked).** Revised at apply time from `--name-only --diff-filter=d`: that form also dropped a
+deleted *spec*, and deleting a killing spec is the weakening FR3 exists to catch. With the status
+column a deleted production file still contributes nothing, a deleted test file widens its
+module, and `--no-renames` makes a rename a deletion plus an addition whatever the operator's
+`diff.renames` says. Both lists are mapped to modules by the `src/main/java/` marker exactly as the
 current shell step does, and by the `src/test/` marker, which is new (D4); the module prefix is
 matched by source-root segment, not by path depth, since modules nest (`sandbox/core`). Every
 `git` process the source runs is insulated from the operator's environment (NFR-R4): argv
@@ -72,10 +76,20 @@ diff, so one code path serves both. *Alternative rejected:* `git status --porcel
 committed-range diff — two commands for the same answer with two parsers.
 
 **D3 — Base resolution order: `merge-base(HEAD, main)`, else `merge-base(HEAD, origin/main)`;
-if the result equals `HEAD`, use `HEAD^`; if any step fails, mode `ALL` with the failure as the
-reason.** *Rationale:* FR2 and NFR-R1. On a feature branch the merge base scopes exactly the
-branch's additions; on `main` itself the merge base is `HEAD` and would scope nothing — the first
-parent is what a squash merge or a merge commit changed. Every failure (no `main` ref in a fresh
+if `HEAD` is the branch `refs/heads/main`, use `HEAD^`; if any step fails, mode `ALL` with the
+failure as the reason.** *Rationale:* FR2 and NFR-R1. On a feature branch the merge base scopes
+exactly the branch's additions; on `main` itself the merge base is `HEAD` and would scope nothing
+— the first parent is what a squash merge or a merge commit changed. The trigger is the branch
+*name*, not "merge base equals `HEAD`" (revised at apply time): a fresh branch with no commits of
+its own — the agent's state for a whole change, since it never commits — also has merge base
+`HEAD`, and the equality rule would re-mutate the last squash on `main` (0 to 102 production
+classes over the six most recent ones) on every local run. Every surveyed tool that scopes to a
+base (Nx, Turborepo, moon, Pants) leaves such a branch at merge base `HEAD`, i.e. scopes only the
+uncommitted work; the one with an in-tool first-parent rule, moon, gates it on the current branch
+name equalling the default branch, as this does. A push to `main` checks out the local branch
+`main` (`actions/checkout`), so the CI path keeps the first parent; a pull request's merge commit
+is detached and its merge base is not `HEAD`, so it needs no rule. A detached `HEAD` at `main`'s
+tip scopes only the dirty tree, like a fresh branch. Every failure (no `main` ref in a fresh
 clone with one branch, a root commit, `git` absent, not a checkout) resolves to the widest scope,
 which is slow but never wrong. Two consequences of the order are deliberate. A developer's
 local `main` that lags `origin/main` yields an older merge base, hence a wider scope — the safe
@@ -83,7 +97,13 @@ direction, so no freshness check is made. And the fork `pull_request` path the c
 step keeps apart (the event's base SHA) needs no counterpart: on that event the checkout is the
 `refs/pull/N/merge` commit, whose first parent is the base branch tip, so
 `merge-base(HEAD, origin/main)` is that tip and the diff is exactly the pull request's changes;
-`fetch-depth: 0` stays so the history is there. *Alternative rejected:* fail the build when
+`fetch-depth: 0` stays so the history is there. Each candidate ref costs one `git` process:
+`git rev-parse <ref>...HEAD HEAD^ --symbolic-full-name HEAD` prints `HEAD`, the ref, the merge
+base (negated), the first parent and the current branch's full name together, so the "on `main`"
+test needs no second call. No single command falls back
+from `main` to `origin/main` (`--revs-only` and `--ignore-missing` drop the whole range), so a
+checkout without a local `main` — every CI branch and pull-request checkout — spends a fourth
+process; accepted at apply time over reordering the refs, which would narrow the scope. *Alternative rejected:* fail the build when
 the base cannot be resolved, as the CI step does today — on an agent's machine that turns a
 slow-but-correct run into a blocked task, and the agent's likely fix is to pass `-PpitScope` by
 hand, which is the escape hatch this change removes.
@@ -158,8 +178,8 @@ leaves one half.
 
 **Single-owner mechanisms:**
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|-------|--------------|-----------|-----------------|-------------|
+| Owner                                     | Value (type)                                                     | Consumers                                                                                                                                                                                                                                                                                                                                                                                                    | Old way removed                                                                                                                                                                                                                                                                                                         | Enforced by                                                                                                                                                                                                                                                                                                                               |
+|-------------------------------------------|------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `MutationScopeSource` (`build-logic`, D1) | `MutationScope` (mode, base, per-module class sets and widening) | `pitest-scope-conventions.gradle` (`targetClasses`, the shared skip predicate, the `pitestScope` announcement task; reads `gradle.startParameter.taskNames` for the `pitestAll` implication, D5); `pitest-gate-conventions.gradle` (the skip predicate, taken from the scope script, on `pitestVerifyAllKilled` and `pitestReportLocation`); `.github/workflows/ci.yml` and `pitest-nightly.yml` (mode only) | `ci.yml` steps "Resolve diff base" and "Compute changed production classes" deleted; the computed `-PpitScope=${{ … }}` argument deleted; the raw `pitScopeRaw.split(',')` glob parse and the `pitScopeSet` boolean in `pitest-conventions.gradle` deleted, replaced by the typed value's accessors in the scope script | `MutationScopeFunctionalSpec` (TestKit, build-logic) drives the owner over a miniature git repository for every mode and fallback; `CiScopeOwnerSpec` (`:bootstrap`, beside `DistributionTermsScriptSpec`) asserts no workflow under `.github/workflows/` contains `git merge-base`, `git diff` or a `-PpitScope=` value other than `all` |
 
 No identity claim is made ("the same" scope locally and in CI follows from there being one
@@ -167,6 +187,11 @@ computation, not from two values agreeing), so no identity spec is needed.
 
 ## Risks / Trade-offs
 
+- **A red build on `main` is not re-judged by the next push** — the first-parent base scopes
+  only the newest commit, so a survivor left by a red push is not in the next push's scope (the
+  reason Nx's own CI recipe prefers the last green commit over `HEAD~1`) → the nightly run (D7)
+  mutates the whole tree within a day; a last-green base would need the Actions API, which
+  NFR-S1 withholds.
 - **Cross-file mutation rot now also applies locally** (a mutant in an unchanged file survives
   because of a change elsewhere) → the nightly run (D7) catches it within a day; the issue it
   opens is the hand-off to a human. This is the trade-off `scope-pit-to-changed-files` accepted
@@ -174,7 +199,7 @@ computation, not from two values agreeing), so no identity spec is needed.
 - **A build-script change can weaken the gate without widening the scope** (proposal Q1) →
   visible in the review diff; the nightly run covers the result. Not widened, by decision.
 - **`git` output differences across versions and operators** (rename detection, path quoting
-  of non-ASCII names, a global ignore list) → `--name-only` with `-z`-free plain paths is stable
+  of non-ASCII names, a global ignore list) → `--name-status` with `-z`-free plain paths is stable
   across the floor version the project already requires (`gittransfer` pins git ≥ 2.45.1); the
   argv and environment of D2 neutralize `core.quotePath`, `core.excludesFile` and optional
   locks; the functional spec includes a non-ASCII path scenario and a global-ignore scenario.
@@ -191,7 +216,7 @@ computation, not from two values agreeing), so no identity spec is needed.
   workstation). The spec therefore points `GIT_CONFIG_GLOBAL` at its own file — an identity and
   nothing else — for both the TestKit runner's environment and the fixture's `git` processes,
   the way `AdversarialGitConfig` does for the main build.
-- **`ValueSource` re-runs on every build, including cache-hit builds** → three `git` invocations,
+- **`ValueSource` re-runs on every build, including cache-hit builds** → three `git` invocations (a fourth when only `origin/main` exists, as on a CI checkout — D3),
   measured well under NFR-P1's two seconds on the reference machine; the spec asserts the count of
   invocations, not the time.
 - **The nightly skip reads a cache entry from the previous run** → an evicted or missing entry

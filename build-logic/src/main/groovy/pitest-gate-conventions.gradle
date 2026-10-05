@@ -7,7 +7,15 @@ import groovy.xml.XmlSlurper
 // `pitest-conventions`; never applied directly by a module.
 plugins {
     id 'info.solidsoft.pitest'
+    // The scope skip this script shares with `pitest` (NFR-R3 of scope-pit-locally).
+    id 'pitest-scope-conventions'
 }
+
+// A module the mutation scope skips is skipped as a whole: its verdict and its report finalizer
+// take the very predicate `pitest` takes, so a `mutations.xml` an earlier run left in the build
+// directory is never judged as this build's (Risks "A stale report in a skipped module").
+def scopeSkip = extensions.extraProperties.get('mutationScopeSkip') as Spec<Task>
+def scopeSkipReason = extensions.extraProperties.get('mutationScopeSkipReason') as String
 
 // Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
 // add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
@@ -19,6 +27,7 @@ tasks.register('pitestVerifyAllKilled') {
     group = 'verification'
     dependsOn tasks.named('pitest')
     def reportFile = layout.buildDirectory.file('reports/pitest/mutations.xml')
+    onlyIf(scopeSkipReason, scopeSkip)
     // Mirror pitest's own skip: no report means nothing was mutated yet.
     onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
     doLast {
@@ -48,7 +57,8 @@ tasks.named('check') {
 
 // Opt-in whole-build aggregate (FR11, D6, task 8.2): `pitestAll` at the root is
 // the one-shot full report, deliberately NOT wired into `check`, which already
-// aggregates the same runs through each module.
+// aggregates the same runs through each module. Requesting it makes the scope the
+// whole tree whatever `pitScope` says (D5 of scope-pit-locally).
 rootProject.tasks.named('pitestAll').configure {
     dependsOn tasks.named('pitest')
     dependsOn tasks.named('pitestVerifyAllKilled')
@@ -59,6 +69,7 @@ rootProject.tasks.named('pitestAll').configure {
 // (finalizedBy runs even when the finalized task fails).
 tasks.register('pitestReportLocation') {
     def reportFile = layout.buildDirectory.file('reports/pitest/index.html')
+    onlyIf(scopeSkipReason, scopeSkip)
     onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
     doLast {
         logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
