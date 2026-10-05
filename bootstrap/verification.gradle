@@ -72,13 +72,12 @@ tasks.named('test') {
     exclude 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
 }
 
-// PIT exclusions documented for THIS module; the engine configuration
-// (versions, threads, this module's own targetClasses, thresholds, timeout
-// budget, the pitestVerifyAllKilled fail-closed gate) lives in
-// `pitest-conventions`, and the two exemption categories and their bars in
-// `.claude/rules/testing.md`. Task 8.1 bound each module's mutation scope to its
-// own production packages, so exclusions naming classes and specs owned by
-// `:adapters` and `:application` live in those modules' build files.
+// PIT exclusions documented for THIS module; the engine configuration (versions, threads,
+// thresholds, timeout budget, the pitestVerifyAllKilled fail-closed gate) lives in
+// `pitest-conventions`, what to mutate this build (`targetClasses`) in `pitest-scope-conventions`,
+// and the two exemption categories and their bars in `.claude/rules/testing.md`. Task 8.1 bound
+// each module's mutation scope to its own production packages, so exclusions naming classes and
+// specs owned by `:adapters` and `:application` live in those modules' build files.
 pitest {
     // PIT's minions are separate JVM launches that inherit nothing from the `test` task, so the
     // two deterministic on-disk locations are handed to them explicitly (see the rules file):

@@ -1,0 +1,159 @@
+import com.github.oinsio.gnomish.build.MutationScope
+import com.github.oinsio.gnomish.build.MutationScopeSource
+
+import java.util.regex.Pattern
+
+// What PIT mutates in this build, per module (D1 of scope-pit-locally): `targetClasses`, the one
+// skip predicate the verdict shares, and the build's one scope announcement — all derived from the
+// typed `MutationScope` that `MutationScopeSource` returns, never from a diff or a property parse of
+// this script's own (FR5). Split out of `pitest-conventions` along the line its gate half already
+// left by: the engine configuration stays there, *what to mutate this build* lives here. Applied by
+// `pitest-conventions` and `pitest-gate-conventions`; never applied directly by a module.
+plugins {
+    id 'info.solidsoft.pitest'
+}
+
+// One obtain per build, not per module: the provider is kept on the `gradle` object, which every
+// project of the build shares, and a ValueSource provider memoizes its value — so branch mode runs
+// its three `git` processes once (NFR-P1), and the configuration cache fingerprints one value
+// (NFR-R2). `pitestAll` in the task list implies the whole tree (D5): the task names are part of
+// the cache key, so a `pitestAll` run and a `check` run cache apart. `summaries` collects each
+// module's resolved line for the announcement below, `scheduled` the modules whose `pitest` the
+// task graph holds.
+def shared = gradle.extensions.extraProperties
+if (!shared.has('mutationScope')) {
+    def root = rootProject
+    shared.set('mutationScope', providers.of(MutationScopeSource) {
+        parameters.repositoryRoot = root.layout.projectDirectory
+        parameters.moduleDirs = root.allprojects.collectEntries { [it.path, root.relativePath(it.projectDir)] }
+        parameters.requested = providers.gradleProperty('pitScope')
+        parameters.taskNames = gradle.startParameter.taskNames
+    })
+    shared.set('mutationScopeSummaries', new TreeMap<String, String>())
+    shared.set('mutationScopeScheduled', new TreeSet<String>())
+    def scheduled = shared.get('mutationScopeScheduled')
+    def obtained = shared.get('mutationScope')
+    gradle.taskGraph.whenReady { graph ->
+        // Gradle accepts an abbreviated task name (`pA`, `pitestA`) that the task-name check in
+        // MutationScopeSource cannot see without reimplementing Gradle's matching; the graph does
+        // see it, so the whole-tree promise of `pitestAll` (D5) is kept by refusing, before any
+        // module runs, a graph holding it under a narrower scope.
+        if (graph.hasTask(":${MutationScopeSource.WHOLE_TREE_TASK}") && obtained.get().mode != MutationScope.Mode.ALL) {
+            throw new GradleException("request ${MutationScopeSource.WHOLE_TREE_TASK} by its full name, or pass -PpitScope=${MutationScopeSource.WHOLE_TREE}")
+        }
+        // The modules whose `pitest` this build runs: the announcement speaks only of them (UX2), so
+        // a one-module run does not list the branch's changes in modules it never mutates.
+        graph.allTasks.findAll { it.name == 'pitest' }.each { scheduled << it.project.path }
+    }
+}
+MutationScope scope = shared.get('mutationScope').get()
+def module = path
+Map<String, String> summaries = shared.get('mutationScopeSummaries')
+Set<String> scheduled = shared.get('mutationScopeScheduled')
+
+// The module's own production surface, read once at configuration time (the pitest {} block is
+// eager, not a lazy Property, so the read happens here to stay config-cache safe): `ownPackages`
+// binds the whole-module target to this module's packages (FR11, D6 of split-into-modules),
+// `ownClasses` is what a branch or explicit scope intersects with.
+def ownPackages = [] as TreeSet
+def ownClasses = [] as TreeSet
+sourceSets.main.java.srcDirs.each { srcDir ->
+    fileTree(srcDir) { include '**/*.java' }.visit { details ->
+        if (details.file.isFile()) {
+            def fqcn = details.relativePath.pathString[0..-'.java'.length() - 1].replace('/', '.')
+            ownPackages << fqcn.substring(0, fqcn.lastIndexOf('.'))
+            if (!fqcn.endsWith('.package-info')) {
+                ownClasses << fqcn
+            }
+        }
+    }
+}
+// One glob per package rather than per class: PIT matches globs against the runtime class name, so
+// `pkg.*` also covers the `Outer$Inner` forms an exact list misses.
+def moduleTargets = ownPackages.collect { "${it}.*".toString() }
+
+// PIT's glob syntax: `*` matches any run of characters, the rest is literal; the literal segments
+// are quoted so a `.` cannot match arbitrarily.
+def globToPattern = { String glob ->
+    Pattern.compile(glob.split(/\*/, -1)
+            .collect { Pattern.quote(it) }
+            .join('.*'))
+}
+
+// Resolved in afterEvaluate, once `excludedClasses` is readable, and read by the shared skip at
+// execution time. A plain map so the spec the configuration cache serializes carries data, not the
+// project.
+def resolution = [empty: false]
+// The ONE skip (NFR-R3): `pitest` takes it here, `pitest-gate-conventions` puts it on the verdict
+// and the report finalizer, so a module the scope skips is skipped as a whole and a report an
+// earlier run left is never judged. It covers a module with no production Java as well — PIT
+// hard-fails ("No mutations found") on an empty target, and `failWhenNoMutations = false` would
+// also mask a misconfigured filter.
+def skip = { Task task -> !resolution.empty } as Spec<Task>
+def skipReason = 'the mutation scope leaves no mutable class in this module'
+extensions.extraProperties.set('mutationScopeSkip', skip)
+extensions.extraProperties.set('mutationScopeSkipReason', skipReason)
+
+// The scope must be intersected with what this module will actually MUTATE, not merely with what
+// it compiles: a change touching only an exempted class (`.claude/rules/testing.md`) leaves a
+// non-empty targetClasses that PIT filters to nothing and hard-fails on. The subtraction waits for
+// afterEvaluate, since `excludedClasses` is set by the module's build file after this plugin
+// applies; a whole-module target is left to PIT, which applies the exclusions itself.
+afterEvaluate {
+    def excludedPatterns = pitest.excludedClasses.getOrElse([] as Set).collect(globToPattern)
+    def mutable = ownClasses.findAll { fqcn -> !excludedPatterns.any { it.matcher(fqcn).matches() } }
+    def wholeModule = scope.mode == MutationScope.Mode.ALL || scope.widened.containsKey(module)
+    List<String> targets
+    String summary
+    if (wholeModule) {
+        targets = moduleTargets
+        summary = scope.widened.containsKey(module) ? "whole module (${scope.widened[module]})" : 'whole module'
+    } else if (scope.mode == MutationScope.Mode.EXPLICIT) {
+        targets = scope.globs.findAll { glob -> mutable.any { globToPattern(glob).matcher(it).matches() } }
+        summary = "${targets.size()} of the requested globs"
+    } else {
+        def changed = scope.changedClasses.getOrDefault(module, [] as Set).findAll { it in mutable }
+        // A class and its nested classes, which PIT sees as `Outer$Inner` — all one source file.
+        targets = changed.collectMany { [it, "${it}\$*".toString()] }
+        summary = "${changed.size()} ${changed.size() == 1 ? 'class' : 'classes'}"
+    }
+    pitest.targetClasses = targets
+    resolution.empty = targets.isEmpty()
+    summaries[module] = resolution.empty ? null : summary.toString()
+}
+
+// The scope is announced once per build, at execution time, by one root task every module's
+// `pitest` and `pitestVerifyAllKilled` depend on (D6, NFR-O1, UX2): it has no `onlyIf`, so the line
+// prints even when the scope skips every module, and it survives a configuration-cache hit, which a
+// configuration-time log line would not. Registered by the first module that applies this script.
+def rootTasks = rootProject.tasks
+def announcement = rootTasks.names.contains('pitestScope') ? rootTasks.named('pitestScope') : rootTasks.register('pitestScope') {
+    description = 'Logs what this build\'s PIT runs mutate and why.'
+    group = 'verification'
+    inputs.property('mutationScope', scope)
+    doLast {
+        def label = { String projectPath -> projectPath.substring(1).replace(':', '/') }
+        def inBuild = summaries.findAll { it.key in scheduled }
+        def mutated = inBuild.findAll { it.value != null }
+        def skipped = inBuild.size() - mutated.size()
+        def head = scope.mode == MutationScope.Mode.BRANCH
+                ? "branch — base ${scope.base.take(7)} (${scope.baseOrigin})"
+                : scope.mode == MutationScope.Mode.ALL
+                ? "all — whole tree (${scope.reason})"
+                : "explicit — ${scope.globs.join(', ')}"
+        def parts = [head]
+        if (scope.mode != MutationScope.Mode.ALL && !mutated.isEmpty()) {
+            parts << mutated.collect { projectPath, summary -> "${label(projectPath)}: ${summary}" }.join(', ')
+        }
+        if (scope.mode == MutationScope.Mode.ALL) {
+            parts << "${mutated.size()} modules mutated"
+        }
+        parts << (mutated.isEmpty() ? "every module skipped (${skipped})" : "${skipped} modules skipped")
+        logger.lifecycle("PIT scope: ${parts.join(' — ')}")
+    }
+}
+
+tasks.named('pitest') {
+    dependsOn announcement
+    onlyIf(skipReason, skip)
+}

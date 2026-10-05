@@ -1,0 +1,115 @@
+# Nightly whole-tree mutation run: `./gradlew check -PpitScope=all` on main.
+# Implements FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally (design D7).
+#
+# Every other run mutates only what its branch changed (the build's own scope,
+# MutationScopeSource), so a mutant in an unchanged class that stops dying
+# because of a change elsewhere is invisible to it. This run re-judges the
+# whole production tree once a day and is the gate's whole-tree guarantee.
+name: PIT nightly
+
+# Daily at 02:17 UTC, clear of the OSV-Scanner (03:32) and Gitleaks (03:47)
+# weekly Monday slots; workflow_dispatch re-runs it by hand, e.g. after a
+# surviving mutant was fixed. A schedule always runs on the default branch.
+on:
+  schedule:
+    - cron: "17 2 * * *" # daily, 02:17 UTC
+  workflow_dispatch:
+
+# The token carries exactly this pair and nothing else (NFR-S1): contents to
+# check out, issues for the failure report. The skip below reads the cache,
+# which needs no token permission; reading another run's artifact would need
+# `actions: read`, which is deliberately withheld.
+permissions:
+  contents: read
+  issues: write
+
+# One run per ref at a time; a dispatch while the nightly runs queues behind it
+# rather than cancelling a run that may be an hour in.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # A successful run saves the cache key `nightly-verified-<sha>`; a hit means
+  # this exact commit was already verified, so the gate job is skipped and the
+  # run reports success without starting Gradle (NFR-C1). A cache evicted after
+  # seven idle days means one redundant run, never a missed one.
+  verified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # 30-min budget: kills a hung run well below GitHub's 6-hour default (NFR-C1)
+    outputs:
+      hit: ${{ steps.lookup.outputs.cache-hit }}
+
+    steps:
+      - name: Look up the verified marker for this commit
+        id: lookup
+        uses: actions/cache/restore@v6
+        with:
+          path: nightly-verified
+          key: nightly-verified-${{ github.sha }}
+          lookup-only: true
+
+  mutation:
+    needs: verified
+    if: needs.verified.outputs.hit != 'true'
+    # No per-job timeout, for the reason ci.yml's build job has none: a whole-tree
+    # mutation run is long by design, and a cut-off run reports no verdict at all.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The whole-tree scope resolves no merge base, so no history is needed.
+          fetch-depth: 1
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Validate gradle-wrapper.jar against known checksums (NFR-S2 of add-project-skeleton).
+          validate-wrappers: true
+
+      # The console is teed to build/nightly.log because a later step cannot
+      # read an earlier step's output; the failure report parses the file.
+      # pipefail keeps Gradle's exit code rather than tee's.
+      - name: Run the whole-tree gate
+        run: |
+          set -o pipefail
+          mkdir -p build
+          ./gradlew check -PpitScope=all 2>&1 | tee build/nightly.log
+
+      - name: Write the verified marker
+        run: touch nightly-verified
+
+      - name: Save the verified marker for this commit
+        uses: actions/cache/save@v6
+        with:
+          path: nightly-verified
+          key: nightly-verified-${{ github.sha }}
+
+      # Uploaded even when the gate fails: a red run is when the reports are
+      # needed. Same retention as ci.yml's reports.
+      - name: Upload PIT reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pit-report
+          path: '**/build/reports/pitest/'
+          retention-days: 14
+
+      # A red night reaches a human as a tracker issue (FR6, UX4): a comment on the
+      # still-open `nightly-mutation` issue, or a new one. The script lists the failed
+      # Gradle tasks from the teed log with their first failure line; it is driven by
+      # NightlyMutationIssueScriptSpec in :bootstrap against a stubbed `gh`.
+      - name: Report the failure on the tracker
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/nightly-mutation-issue.sh build/nightly.log "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" pit-report
