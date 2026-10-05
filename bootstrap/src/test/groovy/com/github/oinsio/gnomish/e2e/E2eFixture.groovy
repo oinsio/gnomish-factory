@@ -49,9 +49,19 @@ final class E2eFixture {
         UNCONFIGURED_PROVIDER_ROOT
     }
 
+    /**
+     * @return the {@code e2e-auto} fixture root — one stage whose only check is a {@code files_exist}
+     *     the tree already satisfies, with {@code advancement: auto}, so a clean round finishes the
+     *     pipeline without reaching any operator prompt (FR5 of remove-interactive-console)
+     */
+    static Path autoAdvanceRoot() {
+        AUTO_ADVANCE_ROOT
+    }
+
     private static final Path PROJECT_ROOT = E2eGitTree.copyOf('e2e')
     private static final Path BROKEN_ROOT = E2eGitTree.copyOf('e2e-broken')
     private static final Path UNCONFIGURED_PROVIDER_ROOT = E2eGitTree.copyOf('e2e-unconfigured-provider')
+    private static final Path AUTO_ADVANCE_ROOT = E2eGitTree.copyOf('e2e-auto')
 
     /** @return the fixture's {@code .gnomish/} subdirectory, for direct {@code PipelineLoader} use */
     static Path gnomishDir() {

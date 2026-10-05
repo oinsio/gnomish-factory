@@ -25,7 +25,8 @@ public sealed interface ActivityDto {
      * D10, D12 of add-agent-executor): {@code currentTool} names the top-level
      * tool call presently running and {@code toolCalls} counts top-level tool
      * calls started so far this round. Both are {@code null} when no live detail
-     * has been reported (an interactive round, or before the first tool starts).
+     * has been reported (an executor that streams no tool events, or before the
+     * first tool starts).
      *
      * @param type the discriminator, always {@code "executing"}
      * @param since ISO-8601 UTC instant this activity began

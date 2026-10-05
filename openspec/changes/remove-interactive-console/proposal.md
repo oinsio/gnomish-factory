@@ -156,8 +156,14 @@ None.
 
 ## Success Metrics
 
-- M1: `grep -rn "InteractiveMode\|--interactive\|adapter.console" */src */*/src docs README.md`
-  returns zero hits after the change.
+- M1: `grep -rn "InteractiveMode\|--interactive\|adapter.console" */src/main */*/src/main docs README.md`
+  returns zero hits after the change; in `src/test` the only hits are the FR1 parser features
+  asserting the retired flag is refused. `grep -rni "interactive" --include='*.java' */src/main
+  */*/src/main` hits only `non-interactive`, the change's own name in traceability comments,
+  git's credential prompts (`GitProcessRunner`), docker's `-i` (`DockerCommands`,
+  `ContainerTaskExecutionEnvironment`), the takeover confirmation's terminal prompt
+  (`TakeoverConfirmation`, `ConsoleTakeoverConfirmation`), the `status` meta-command
+  (`GitInfrastructureRetry`) and the retired exit-code row (`RunExitCodeMapper`).
 - M2: `grep -rln "Kept in sync with\|fake-agent\|FakeAgent" */src/test` shows every former
   interactive-driven spec on the fake agent; `grep -rn "ScriptedConsoleIO" */src/test` is
   limited to specs of the operator dialogs, `status`/`usage`/`board` and the console itself.
@@ -166,7 +172,7 @@ None.
 ## Impact
 
 - Modules: `:application` (arguments, `RunOrder`, `DialogConsole`, exit-code mapper),
-  `:bootstrap` (`ExecutorAdapterSelector`, `RunAssembler`, `CheckProviderWiring`,
+  `:bootstrap` (`ExecutorAdapterSelector`, `RunAssembler`, `CheckEquipment`,
   `ManualRunAssembly`, every affected spec), `:adapters` (`adapter.console` package deleted,
   `PipelineLaw` / `BriefingSections` javadoc, startup rule for FR3), `:domain` (a new pure
   validation rule beside `ApiExecutorRule` or its adapter-side twin — decided in design),

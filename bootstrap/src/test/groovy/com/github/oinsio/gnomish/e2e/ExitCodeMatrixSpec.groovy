@@ -12,6 +12,7 @@ import java.nio.file.Path
  * persistence fake and is covered elsewhere (in-process, not here).
  *
  * <ul>
+ *   <li>stdin closed, pipeline finishes without escalation or checkpoint &rarr; 0
  *   <li>usage error (bad flags) &rarr; 2
  *   <li>broken pipeline ({@code .gnomish/} invalid) &rarr; 3
  *   <li>Ctrl-D at the escalation resume prompt (Case 2) &rarr; 10
@@ -24,6 +25,39 @@ import java.nio.file.Path
  * <p>Implements M1, FR12, FR13 of add-manual-run.
  */
 class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
+
+    // FR5 of remove-interactive-console, scenario "Script too short": with stdin closed before the
+    //     run starts and a pipeline that neither escalates nor checkpoints, nothing reads stdin —
+    //     the run exits 0, prints no prompt, and the retired code 4 is unreachable.
+    def "closed stdin and a pipeline with no prompt on its path exits 0"() {
+        given: 'the fake agent plays one clean round, and stdin is already closed'
+        def agent = FakeAgentSupport.wrapperFor('plain-round')
+        Path root = E2eFixture.autoAdvanceRoot()
+        // plain-round -> Completed; files_exist passes on the fixture's marker.txt;
+        // advancement: auto -> the pipeline completes with no checkpoint.
+        List<String> script = []
+
+        when:
+        def result = harness.run(
+                root,
+                agent,
+                [
+                    '--dir=' + root,
+                    '--task=script too short',
+                    '--mode=in-place'
+                ],
+                script)
+
+        then: 'FR5: success, not the retired code 4'
+        result.exitCode() == 0
+
+        and: 'the pipeline ran to its end and no operator prompt was printed'
+        def output = result.stdout() + result.stderr()
+        output.contains('Stage: pipeline complete')
+        !output.contains('Press Enter')
+        !output.contains('The gnome asked:')
+        !output.contains('Manual checkpoint reached')
+    }
 
     def "usage error exits 2 without any dialog"() {
         given: 'neither --task nor --task-file is supplied'

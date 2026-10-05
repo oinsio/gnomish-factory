@@ -31,8 +31,8 @@ public interface ExternalCheckPinContributor {
     Set<String> pinPaths(VerifyCheck.External check);
 
     /**
-     * The empty contribution of adapters with no repo-borne definition (the interactive
-     * client): with nothing declared in the law either, the pin passes vacuously (FR16).
+     * The empty contribution of adapters with no repo-borne definition (the default of
+     * {@code CheckClientFactory#pinContributor}): with nothing declared in the law either, the pin passes vacuously (FR16).
      */
     static ExternalCheckPinContributor none() {
         return _ -> Set.of();

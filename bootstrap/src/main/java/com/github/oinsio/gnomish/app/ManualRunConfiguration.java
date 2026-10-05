@@ -40,8 +40,7 @@ import org.springframework.context.annotation.Primary;
  * Assembles every {@code gnomish run} collaborator that needs no per-invocation data — the
  * context-independent half of {@link com.github.oinsio.gnomish.domain.engine.EnginePorts}'s bean
  * graph (design D10), and the manual-run drive assembled from it (design D6 of
- * collapse-composition-roots). The remaining collaborators (the interactive adapters, the status
- * snapshot pipeline, {@code EnginePorts} itself) depend on the {@link
+ * collapse-composition-roots). The remaining collaborators (the status snapshot pipeline, {@code EnginePorts} itself) depend on the {@link
  * com.github.oinsio.gnomish.domain.engine.TaskContext} synthesized from {@code --task}/{@code
  * --task-file} at runtime and cannot be known at Spring context-refresh time; {@link
  * ManualRunAssembly} builds those imperatively once that context exists, using the beans here as

@@ -1,6 +1,6 @@
 /**
  * The {@code StatusReport} model: a single pure report shared by every render (text,
- * JSON) and every consumer (the interactive runner live, and — via the same contract —
+ * JSON) and every consumer (the running {@code gnomish run} process live, and — via the same contract —
  * a future external CLI reading a persisted state file with no live process at all)
  * (design D7 of add-manual-run).
  *

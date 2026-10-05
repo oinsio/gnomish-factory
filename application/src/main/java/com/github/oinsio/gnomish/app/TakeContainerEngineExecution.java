@@ -87,8 +87,7 @@ record TakeContainerEngineExecution(
      * Runs the engine exactly once against {@code support} (see class javadoc).
      *
      * @param order the take order the run executes: the pipeline it advances through (the task's
-     *     own law on a fresh claim, design D6 of introduce-take-order), the interactive mode, and
-     *     the tracker, task identity and instance identity for the revocation check and the
+     *     own law on a fresh claim, design D6 of introduce-take-order), and the tracker, task identity and instance identity for the revocation check and the
      *     terminal write; never null
      * @param support the sandboxed-run bundle the run executes against; never null
      * @param context the task context to run with; never null

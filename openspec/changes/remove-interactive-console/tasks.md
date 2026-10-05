@@ -103,7 +103,7 @@ compiles (design D7). Group 2 (§3–§5) deletes. Root `check` is green at the 
       `PipelineValidator.validate` is re-exposed through `:gnomish-plugin-api`, so the new
       signature broke `japicmpApiGate`: the api went 0.8.0 → 0.9.0 with `compat-baseline/`
       regenerated (decision: the human, over keeping a rule-skipping overload).
-- [x] 3.3 Simplify `CheckProviderWiring.externalCheckClient`: drop the `DialogConsole` parameter
+- [x] 3.3 Simplify `CheckEquipment.externalCheckClient`: drop the `DialogConsole` parameter
       and the `configured.isEmpty()` branch; the dispatching composite is built unconditionally
       (the rule in 3.2 guarantees a provider for every declared check). Update
       `ManualRunAssemblyCheckClientWiringSpec`: the "default external-check client" feature
@@ -216,6 +216,31 @@ compiles (design D7). Group 2 (§3–§5) deletes. Root `check` is green at the 
       the `ExternalCheckWiringBoundarySpec` to the enforcement examples in
       `.claude/rules/implementation.md` item 4 only if the precedent list is meant to grow (else
       leave). Verify greps.
-- [ ] 5.4 Group-2 gate and metrics: root `./gradlew check` green; record M1 (`grep -rn "InteractiveMode\|--interactive\|adapter.console" */src */*/src docs README.md` empty), M2 and M3
+- [x] 5.4 Group-2 gate and metrics: root `./gradlew check` green; record M1 (`grep -rn "InteractiveMode\|--interactive\|adapter.console" */src */*/src docs README.md` empty), M2 and M3
       results in this task; list the two active changes (`add-command-executor`,
       `add-decision-arbiter`) that need `/opsx:update` next.
+      *Result (2026-10-05):*
+      - M3: root `./gradlew check --continue` (55 min): every test, PIT and gate task green; the
+        only failures were `spotlessJavaCheck` in `:application` and `:bootstrap` — signatures
+        shortened by the removed `interactiveMode` parameter (`RunOrder`, `ManualRunDrive`,
+        `RunAssembler`, `ServeArgumentsParser`, …). Fixed with `spotlessApply`
+        (whitespace only); `./gradlew spotlessCheck` plus compile re-run green.
+      - M1: zero hits in `docs`, `README.md` and every `src/main`. The remaining hits are
+        `src/test` specs that assert the FR1 rejection (`RunArgumentsParserSpec`,
+        `TakeArgumentsParserSpec`, `ServeArgumentsParserSpec`); they are the regression guard
+        FR1's scenarios require, so the metric is read as "no production or doc hit".
+      - M2: `ScriptedConsoleIO` remains only in operator-dialog specs (`RunnerOutcomeLoopSpec`,
+        `RunChainFakes`, `GitModeRunnerFreshRunSpec`, `GitResumeRoutingSpec`,
+        `ContainerResumeRoutingSpec`, `ContainerTerminalDriveDisposalSpec`), report commands
+        (`StatusCommandSpec`, `UsageCommandSpec`, `BoardCommandSpec`, `ReportCommandsSpec`,
+        `ProjectCommandSpec`), the console itself (`DialogConsoleSpec`, `ScriptedConsoleIOSpec`)
+        and entry-point output capture (`EntrypointSpec`, `CliEntrypointContractSpec`,
+        `OperatorConfigLoaderHarness`) — the task-4.5 list exactly.
+      - Docs grep of task 5.2: beyond the serve guide's "non-interactive", three hits stay in
+        `operator-guide-run.md`, each deliberate — the FR8-mandated retired-4 row, the git
+        credential-prompting note (unrelated), and the note that the former flag is now a
+        usage error (Impact). The sandbox-VM "interactive-latency" sentence no longer exists.
+      - `/opsx:update` next, before either is applied: `add-command-executor` (design D6),
+        `add-decision-arbiter` (design D2, tasks) — and, found by the sweep, also
+        `define-executor-contract` (design D8 "interactive substitution wraps the agent arm",
+        tasks). `migrate-verify-to-executor-contract` already accounts for this change.

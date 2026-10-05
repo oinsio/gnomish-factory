@@ -19,8 +19,7 @@ import org.jspecify.annotations.Nullable;
  * The telemetry an executor round reports: total {@code wallTime}, the per-tool
  * aggregates, and the round's per-model token map {@code tokensByModel}. {@code
  * wallTime} and {@code tools} stay optional (design D5 of add-stage-engine): an
- * interactive {@code agent-cli} executor may know only wall time, while an {@code
- * api} round may report tokens but no per-tool breakdown.
+ * executor may know only wall time, or report tokens but no per-tool breakdown.
  *
  * <p>{@code wallTime} is {@code null} when unknown and non-negative when present.
  * {@code tools} is defensively copied, unmodifiable, and may be empty (no

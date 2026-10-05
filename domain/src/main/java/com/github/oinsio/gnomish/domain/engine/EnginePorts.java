@@ -57,7 +57,7 @@ public record EnginePorts(
 
     /**
      * The dominant nine-port construction: assemblies and specs whose external checks have no
-     * push precondition to verify (the in-place and interactive shapes) default {@code
+     * push precondition to verify (the in-place shape) default {@code
      * attemptDelivery} to {@link AttemptDelivery#assumedDelivered()}; sandboxed git assemblies
      * use the canonical constructor with a real push-verifying implementation (FR21 of
      * add-sandbox-core).

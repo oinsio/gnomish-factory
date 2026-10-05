@@ -49,8 +49,7 @@ public interface JudgeVoter {
      * <p>{@code tokensByModel} is map-only, following {@link
      * com.github.oinsio.gnomish.domain.engine.ExecutorUsage#tokensByModel()}'s
      * shape (design D4): an empty map means the adapter did not report token
-     * counts for this vote — the interactive judge always reports an empty map,
-     * since a human vote never carries tokens — and the engine simply omits an
+     * counts for this vote — and the engine simply omits an
      * unreported vote from its cost aggregation rather than treating a missing
      * count as zero.
      *

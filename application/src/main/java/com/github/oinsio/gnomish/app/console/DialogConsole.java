@@ -12,7 +12,7 @@ import java.util.Set;
 /**
  * The single input choke point (design D1): wraps a dumb {@link ConsoleIO},
  * intercepting the {@code status} / {@code status --json} meta-commands below
- * every interactive adapter and runner dialog so none of them has to know
+ * every runner dialog so none of them has to know
  * about {@code status}. Every prompt in the manual-run dialog SHALL go through
  * this class rather than {@link ConsoleIO} directly.
  *
@@ -124,9 +124,8 @@ public final class DialogConsole {
      * Prompts for one of a fixed set of {@code acceptedAnswers}, re-prompting
      * with the accepted answers listed whenever the operator's line matches
      * none of them (UX1), while every line still passes through meta-command
-     * interception first (FR10). Later interactive adapters (tasks 5.1-5.4)
-     * build their pass/fail/running and other fixed-answer prompts on this
-     * helper instead of duplicating the re-prompt loop.
+     * interception first (FR10). Fixed-answer prompts build on this helper
+     * instead of duplicating the re-prompt loop.
      *
      * <p>Implements FR10, UX1 of add-manual-run.
      *

@@ -68,8 +68,7 @@ public final class TakeBareAuto {
      * add-factory-serve. Implements FR3, FR4, NFR-R2, NFR-R3, NFR-O1 of enforce-finish-terminality.
      *
      * @param run the run order: the project clone (never mutated outside a task worktree), the
-     *     loaded pipeline the run advances through, and which role(s), if any, use the interactive
-     *     console adapter; never null
+     *     loaded pipeline the run advances through; never null
      * @param tracker the tracker port; never null
      * @param instanceId this factory instance's identity; never null
      * @return the {@link TakeResult} of the one task processed; {@link TakeResult.EmptyQueue} when
