@@ -25,7 +25,7 @@ report, and runs PIT mutation testing. With the module tree in place, root
 - **AND** no other module's production classes are mutated
 
 ### Requirement: Mutation testing gate
-PIT SHALL mutate Java production classes only and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). The set of mutated classes MAY be narrowed to an explicit scope (see "Scoped mutation target"); the threshold and documented exceptions apply unchanged to whichever classes are in scope.
+PIT SHALL mutate Java production classes only and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). The set of mutated classes MAY be narrowed to an explicit scope (see "Branch-scoped mutation target"); the threshold and documented exceptions apply unchanged to whichever classes are in scope.
 <!-- implements FR1 of scope-pit-to-changed-files -->
 
 #### Scenario: Surviving mutant fails the build
@@ -36,35 +36,6 @@ PIT SHALL mutate Java production classes only and SHALL fail the build when the 
 #### Scenario: Only Java production code is mutated
 - **WHEN** PIT runs
 - **THEN** its target classes include only Java production packages
-
-### Requirement: Scoped mutation target
-Each module's build SHALL accept the optional scoped-target property that
-narrows PIT's target classes to an explicit list within that module; when the
-property is absent each module SHALL mutate its full production package tree,
-so root `check` covers the union — the whole production tree — exactly as the
-monolith did.
-<!-- implements FR1, FR5 of scope-pit-to-changed-files -->
-<!-- implements FR11 of split-into-modules -->
-
-#### Scenario: Property narrows the mutation scope
-- **WHEN** a module's `check` runs with the scoped-target property set to one or
-  more class globs under that module's production packages
-- **THEN** PIT mutates only classes matching those globs
-- **AND** the 100% mutation-score gate and `pitestVerifyAllKilled` apply to that
-  scoped set
-
-#### Scenario: Absent property preserves full-project mutation
-- **WHEN** `./gradlew check` runs without the scoped-target property (e.g. a
-  local developer run)
-- **THEN** every module mutates its full production package tree
-- **AND** the union of module scopes equals the full production tree, as before
-  the split
-
-#### Scenario: Empty scope is a clean pass
-- **WHEN** the scoped-target property is set but resolves to no production
-  classes in a module
-- **THEN** that module's mutation task is skipped and the build succeeds
-- **AND** the build does NOT fail with PIT's "No mutations found" error
 
 ### Requirement: Coverage reporting
 JaCoCo SHALL produce XML and HTML coverage reports on every test run.
@@ -101,20 +72,18 @@ The build SHALL detect unused and misdeclared dependencies and fail the gate on 
 
 ### Requirement: Continuous integration
 A CI workflow SHALL run `./gradlew check` on every branch push and pull request
-and SHALL publish JaCoCo and PIT reports as build artifacts. A tag push SHALL
-NOT start the check workflow: the release workflow judges the run the tagged
-commit already has on `main`, and a second run for the same commit would waste
-the budget and shadow that verdict. On pull-request and
-branch runs the mutation gate SHALL be scoped per module: the production Java
-classes changed relative to the merge base with `main` map to their owning
-modules, and only those modules' mutation gates run, targeted at the changed
-classes; whole-tree mutation coverage is guaranteed by local/manual
-`./gradlew check`, not by CI. The CI build job SHALL NOT declare a per-job
-timeout: it runs to completion under GitHub's 6-hour default, and superseded
-in-flight runs for the same ref SHALL be cancelled by workflow concurrency.
-Every other CI workflow job that supports a per-job timeout SHALL set
-`timeout-minutes: 30`; a job whose reusable-workflow form forbids a per-job
-timeout is exempt.
+and SHALL publish JaCoCo and PIT reports and a Gradle profile report as build
+artifacts. A tag push SHALL NOT start the check workflow: the release workflow
+judges the run the tagged commit already has on `main`, and a second run for the
+same commit would waste the budget and shadow that verdict. The workflow SHALL
+pass no mutation scope: the build's own scope owner narrows the gate to the
+branch's changes exactly as a local run does, and the whole-tree gate is the
+scheduled run's. The CI build job SHALL NOT declare a per-job timeout: it runs
+to completion under GitHub's 6-hour default, and superseded in-flight runs for
+the same ref SHALL be cancelled by workflow concurrency. Every other CI workflow
+job that supports a per-job timeout SHALL set `timeout-minutes: 30`; a job whose
+reusable-workflow form forbids a per-job timeout is exempt.
+<!-- implements FR5, FR7 of scope-pit-locally -->
 <!-- implements FR2, NFR-C1 of add-release-pipeline -->
 <!-- implements FR1, FR2, NFR-C1 of remove-ci-build-timeout -->
 <!-- implements FR2, FR3, FR4, NFR-C1 of scope-pit-to-changed-files -->
@@ -132,18 +101,21 @@ timeout is exempt.
   commit
 
 #### Scenario: Mutation gate is scoped to the diff
-- **WHEN** a branch changes a subset of production Java files
-- **THEN** the CI mutation run targets only the owning modules' gates, with the
-  classes derived from those changed files
+- **WHEN** the check workflow runs on a branch push
+- **THEN** its Gradle invocation carries no `pitScope` value and no step
+  resolves a diff base or a changed-file list
+- **AND** the mutation gate's scope equals what `./gradlew check` on that tree
+  resolves locally
 
 #### Scenario: Diff with no production changes still passes
-- **WHEN** a branch changes only docs, tests, or CI configuration
+- **WHEN** a branch changes only docs or CI configuration
 - **THEN** the CI mutation run targets no classes and passes without a "No
   mutations found" failure
 
 #### Scenario: Reports are downloadable
 - **WHEN** a CI run completes (pass or fail)
-- **THEN** JaCoCo and PIT reports are attached as artifacts
+- **THEN** JaCoCo and PIT reports and the Gradle profile report are attached as
+  artifacts
 
 #### Scenario: A long build run is not cancelled
 - **WHEN** the CI build job runs longer than 30 minutes
@@ -448,3 +420,193 @@ like every other plugin.
 #### Scenario: Local reproduction
 - **WHEN** a maintainer runs the documented command on the same lock state CI evaluated
 - **THEN** the verdict and the report equal CI's
+
+### Requirement: Branch-scoped mutation target
+Each module's `pitest` SHALL target a mutation scope the build computes from one
+owner. With no `pitScope` property the scope is the branch's changes: the
+module's production classes whose source files differ, in the working tree
+(committed, staged, unstaged and untracked) against the scope base. `-PpitScope=all`
+or requesting `pitestAll` selects the module's whole production tree; an explicit
+comma-separated glob list keeps the subset the module owns. A module whose
+resolved scope is empty skips its gate cleanly — its mutation task, its verdict
+task and its report finalizer together, so a report an earlier run left in the
+module's build directory is never judged. The scope is obtained through a
+configuration-cache-validated read, so an edit between two builds re-resolves it;
+its computation runs `git` only — never the test suite, never class files.
+<!-- implements FR1, FR4, FR5, NFR-P1, NFR-R2, NFR-R3, NFR-R4, UX1 of scope-pit-locally -->
+<!-- implements FR1, FR5 of scope-pit-to-changed-files -->
+<!-- implements FR11 of split-into-modules -->
+
+#### Scenario: Default run mutates the branch's changed classes
+- **WHEN** `./gradlew check` runs with no `pitScope` property on a branch that
+  changed production files in some modules
+- **THEN** each of those modules' PIT run targets exactly the classes derived
+  from its changed files, uncommitted edits included
+- **AND** every module the branch did not touch skips its mutation task
+- **AND** the 100% mutation-score gate and `pitestVerifyAllKilled` apply to the
+  scoped set
+
+#### Scenario: Whole tree on request
+- **WHEN** `./gradlew check -PpitScope=all` or `./gradlew pitestAll` runs
+- **THEN** every module mutates its full production package tree
+- **AND** the union of module scopes equals the full production tree
+
+#### Scenario: Property narrows the mutation scope
+- **WHEN** a module's `check` runs with `pitScope` set to one or more class globs
+- **THEN** PIT mutates only the classes matching those globs that the module owns
+- **AND** the module skips its gate when none of them is mutable there
+
+#### Scenario: A property that names no glob is refused
+- **WHEN** `pitScope` is set but holds no class glob (`-PpitScope=`, a blank
+  `pitScope=` in a `gradle.properties`, only commas)
+- **THEN** the build fails naming the empty property, rather than skipping
+  every module's mutation task
+
+#### Scenario: An abbreviated pitestAll is refused
+- **WHEN** `pitestAll` is requested by an abbreviation Gradle accepts (`pA`)
+  and `pitScope` is not `all`
+- **THEN** the build fails before any task runs, asking for the full name or
+  `-PpitScope=all`, rather than mutating the branch scope
+
+#### Scenario: No resolvable base preserves full-project mutation
+- **WHEN** `./gradlew check` runs without the `pitScope` property and no scope
+  base can be resolved (no default-branch ref, a root commit, not a git checkout)
+- **THEN** every module mutates its full production package tree — the fallback
+  is the whole tree, never an empty scope
+
+#### Scenario: Empty scope is a clean pass
+- **WHEN** a module's resolved scope holds no mutable production class
+- **THEN** that module's mutation task is skipped and the build succeeds
+- **AND** the build does NOT fail with PIT's "No mutations found" error
+- **AND** a `mutations.xml` left in that module's build directory by an earlier
+  run is not re-judged: the verdict task and the report finalizer skip with the
+  mutation task
+
+#### Scenario: An edit between two builds re-resolves the scope
+- **WHEN** `./gradlew check` runs twice with no edit in between, then a
+  production file is edited and it runs a third time, with the configuration
+  cache on
+- **THEN** the second build reuses the cached configuration and the same scope
+- **AND** the third build re-obtains the scope and the edited class is in it
+
+#### Scenario: Scope computation is git-only
+- **WHEN** the scope is computed in branch mode
+- **THEN** at most three `git` processes run — four when the base comes from
+  `origin/main` because no local `main` exists — and no test task or class file
+  is read; in whole-tree mode via the property, none runs
+
+#### Scenario: The operator's git configuration cannot narrow the scope
+- **WHEN** the operator's global git configuration ignores a path pattern that
+  matches an untracked production class, or quotes non-ASCII paths
+- **THEN** the untracked class is still scoped and the non-ASCII path is mapped
+  to its class
+- **AND** the build's `git` processes take no optional index lock, so a
+  concurrent `git status` on the same checkout is not refused
+
+### Requirement: Mutation scope base
+The scope base SHALL be the merge base of `HEAD` with the default branch
+(`main`, else `origin/main`). When the build runs on the branch `main` itself,
+the base SHALL be `HEAD`'s first parent; on any other branch a merge base equal
+to `HEAD` SHALL stay the base. When no base can be resolved — no default-branch
+ref, a root commit, not a git checkout — the scope SHALL be the whole tree.
+Resolution failures SHALL never narrow the scope.
+<!-- implements FR2, NFR-R1 of scope-pit-locally -->
+
+#### Scenario: Feature branch diffs against its merge base
+- **WHEN** the build runs on a branch that forked from `main` and `main` has
+  since moved
+- **THEN** the scope base is the merge base, so classes changed only on `main`
+  are not scoped in
+
+#### Scenario: The default branch diffs against its first parent
+- **WHEN** the build runs with `HEAD` on the branch `main`
+- **THEN** the scope base is `HEAD^`, so a squash or merge commit's own changes
+  are mutated
+
+#### Scenario: A fresh branch scopes only its uncommitted work
+- **WHEN** the build runs on a branch other than `main` that has no commits of
+  its own (its merge base with `main` is `HEAD`) and carries uncommitted edits
+- **THEN** the scope base is `HEAD`, so only the uncommitted and untracked
+  changes are mutated — not the last commit of `main`
+
+#### Scenario: No resolvable base widens to the whole tree
+- **WHEN** neither `main` nor `origin/main` exists, or `HEAD` has no parent, or
+  the project directory is not a git checkout
+- **THEN** every module mutates its whole production tree
+- **AND** the scope line names the fallback reason
+
+### Requirement: Test changes widen the mutation scope
+A changed file under a module's test source tree SHALL widen that module's scope
+to its whole production tree. A changed file under the shared test-fixtures
+module's sources SHALL widen every module's scope to its whole production tree.
+A deleted or renamed-away production file SHALL contribute no class.
+<!-- implements FR3 of scope-pit-locally -->
+
+#### Scenario: A weakened spec is caught
+- **WHEN** a branch changes only a test file in one module (for example deletes
+  an assertion from a killing spec)
+- **THEN** that module's whole production tree is mutated and the mutant the
+  assertion killed survives, failing the gate
+
+#### Scenario: A shared fixture change mutates everything
+- **WHEN** a branch changes a file under the shared test-fixtures module
+- **THEN** every module mutates its whole production tree
+
+#### Scenario: A deleted class contributes nothing
+- **WHEN** a branch deletes a production source file and changes nothing else in
+  that module
+- **THEN** that module's mutation task is skipped
+
+### Requirement: Mutation scope is announced
+The build SHALL log one lifecycle line per build naming the scope mode
+(`branch`, `all`, `explicit`), the resolved base commit, the changed-class
+count per module, and any widening or fallback reason. The line SHALL be logged
+even when the scope leaves every module's mutation task skipped.
+<!-- implements NFR-O1, UX2 of scope-pit-locally -->
+
+#### Scenario: A run that mutates nothing says so
+- **WHEN** a scoped run resolves its base and no module has a changed class
+- **THEN** the log still carries the scope line, naming the base and that every
+  module was skipped
+
+#### Scenario: A branch run explains itself
+- **WHEN** a scoped run resolves its base
+- **THEN** the log carries the base commit, the per-module class counts, and the
+  widening reason for any module widened by a test change
+
+#### Scenario: A fallback is visible
+- **WHEN** the base could not be resolved
+- **THEN** the log line says the whole tree is mutated and why
+
+#### Scenario: A one-module run speaks only of its own modules
+- **WHEN** a run schedules the mutation task of some modules only
+  (`./gradlew :domain:check`)
+- **THEN** the scope line counts and names only those modules, not the
+  branch's changes in modules the run does not mutate
+
+### Requirement: Scheduled whole-tree mutation run
+A scheduled CI workflow SHALL run the whole-tree gate on `main` nightly and on
+manual dispatch, SHALL upload the PIT reports, and on failure SHALL create a
+tracker issue — or comment on the still-open issue from a previous run — naming
+the failing modules and linking the run. It SHALL skip when `main` is unchanged
+since the previous successful scheduled run, through a mechanism that reads no
+other run's artifacts. Its token SHALL carry only `contents: read` and
+`issues: write`.
+<!-- implements FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally -->
+
+#### Scenario: Cross-file mutation rot is caught within a day
+- **WHEN** a mutant in an unchanged class stops dying because of a change
+  merged elsewhere
+- **THEN** the next scheduled run fails on that module and an issue names it
+  with a link to the run and its PIT report artifact
+
+#### Scenario: A repeat failure updates the open issue
+- **WHEN** the scheduled run fails while the issue from a previous failure is
+  still open
+- **THEN** a comment is added to that issue instead of a second issue being
+  opened
+
+#### Scenario: An unchanged main is not re-mutated
+- **WHEN** the scheduled run starts and `main` is at the commit the previous
+  successful scheduled run verified
+- **THEN** the run skips the gate and reports success
