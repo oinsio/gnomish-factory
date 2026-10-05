@@ -140,7 +140,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         new TakeContainerFreshClaim(slotWiring(
                         assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE, containerTakeSupport(support))).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
-                new RunOrder(CLONE_DIR, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)),
+                new RunOrder(CLONE_DIR, 'release/1.2', completingPipeline(), false)),
                 [] as List<Segment>)
 
         then:

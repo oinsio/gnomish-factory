@@ -87,7 +87,7 @@ final class TakeResumeRunner {
      * <p>Implements FR9 of add-tracker-port.
      *
      * @param order the take order being resumed: the clone (never mutated), the pipeline the run
-     *     advances through, the interactive mode, {@code --discard-work} (true discards
+     *     advances through, {@code --discard-work} (true discards
      *     interrupted leftovers instead of salvaging them), and the tracker, task identity and
      *     instance identity for the revocation check wrapped around persistence
      * @param bootstrap the located/materialized bundle from {@link #bootstrap}

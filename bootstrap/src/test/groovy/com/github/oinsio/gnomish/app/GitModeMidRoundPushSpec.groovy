@@ -130,7 +130,7 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
             runner.run(
                     new RunOrder(cloneDir, null,
                     new PipelineDefinition('1', new AutonomyLimits(3), [stage()]),
-                    RunArguments.InteractiveMode.NONE, false),
+                    false),
                     new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                     TaskState.atStageStart('build'))
         } finally {

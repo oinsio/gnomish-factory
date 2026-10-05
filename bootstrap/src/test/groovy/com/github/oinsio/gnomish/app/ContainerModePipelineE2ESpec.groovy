@@ -134,7 +134,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         ]
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
                 List.<Decision> of()), TaskState.atStageStart('work'))
 
@@ -185,7 +185,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
         when:
         runner.run(new RunOrder(cloneDir, null, new PipelineDefinition('1', new AutonomyLimits(1), [judgedStage()]),
-        RunArguments.InteractiveMode.NONE, false),
+        false),
         segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
         List.<Decision> of()), TaskState.atStageStart('work'))
 

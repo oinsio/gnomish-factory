@@ -64,8 +64,8 @@ import java.util.List;
  * dialogs (see {@link RunnerOutcomeLoop#dispatch}) until a {@code Completed} or {@code Aborted}
  * terminal is reached, so this class's exhaustive-looking "only these two boundaries" is not an
  * oversight — those two are the only outcomes {@link RunnerOutcomeLoop#run} can ever hand back
- * control for. The EOF exceptions ({@link CheckpointEofException}, {@link EscalationEofException},
- * {@link InputExhaustedException}) are deliberately left without a {@code TaskRepository} write:
+ * control for. The EOF exceptions ({@link CheckpointEofException}, {@link EscalationEofException})
+ * are deliberately left without a {@code TaskRepository} write:
  * the operator or input stream cut the process off mid-dialog, so the task is left exactly as
  * FR5/NFR-R2 describe a crash — rounds present, no outcome, honestly reported by {@code status}
  * as interrupted.

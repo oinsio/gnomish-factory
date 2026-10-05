@@ -3,8 +3,8 @@
  * ports: {@link com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence},
  * {@link com.github.oinsio.gnomish.domain.engine.time.SystemClock}, and
  * {@link com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper}. These don't fit
- * {@code adapter.console}/{@code adapter.check}/{@code adapter.workspace} — they are
- * not interactive, not check-specific, and not workspace I/O, but the plain
+ * {@code adapter.check}/{@code adapter.workspace} — they are not check-specific and
+ * not workspace I/O, but the plain
  * process-lifetime environment the engine runs against (design D8, D10).
  *
  * <p>Null-marked (JSpecify): every type usage in this package is non-null by

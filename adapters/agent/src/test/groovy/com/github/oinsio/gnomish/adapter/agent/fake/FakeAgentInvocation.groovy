@@ -41,8 +41,21 @@ class FakeAgentInvocation {
      */
     Path decisionFilePath
 
-    /** Extra CLI args appended after the script path, for ProcessBuilder-log realism only; ignored by the fake. */
+    /**
+     * Extra CLI args appended after the script path, for ProcessBuilder-log realism; the fake
+     * reads only the {@code --model} value, and only when {@link #judgeScenario} is set.
+     */
     List<String> extraArgs = []
+
+    /**
+     * When set together with {@link #judgeModel}, wired as {@code $GNOMISH_FAKE_JUDGE_SCENARIO}:
+     * an invocation carrying {@code --model <judgeModel>} plays this scenario (D4 of
+     * remove-interactive-console).
+     */
+    String judgeScenario
+
+    /** When set together with {@link #judgeScenario}, wired as {@code $GNOMISH_FAKE_JUDGE_MODEL}. */
+    String judgeModel
 
     /**
      * Runs the fake as a real subprocess and blocks for completion.
@@ -56,6 +69,12 @@ class FakeAgentInvocation {
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
         builder.environment().put('GNOMISH_FAKE_SCENARIO', scenario ?: '')
+        if (judgeScenario != null) {
+            builder.environment().put('GNOMISH_FAKE_JUDGE_SCENARIO', judgeScenario)
+        }
+        if (judgeModel != null) {
+            builder.environment().put('GNOMISH_FAKE_JUDGE_MODEL', judgeModel)
+        }
         if (decisionFilePath != null) {
             builder.environment().put('GNOMISH_DECISION_FILE', decisionFilePath.toAbsolutePath().toString())
         }

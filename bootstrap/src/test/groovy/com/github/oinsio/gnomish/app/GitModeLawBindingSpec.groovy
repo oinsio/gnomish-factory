@@ -102,7 +102,7 @@ exec sh '${scriptPath}' "\$@"
         def context = new TaskContext('LAW-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run: attempt 1 tampers + fails files_exist, attempt 2 completes'
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
         then: 'the run reached Completed and left the delivered branch behind'

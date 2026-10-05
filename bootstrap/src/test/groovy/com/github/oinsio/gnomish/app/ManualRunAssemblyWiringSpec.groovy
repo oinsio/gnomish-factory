@@ -50,7 +50,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
     private def assemble(TaskState initialState, EngineEventListener extraListener = null) {
         def assembly = extraListener == null ? newAssembly() : newAssembly().withExtraListener(extraListener)
         assembly.assemble(
-                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(Path.of('').toAbsolutePath(), null, definition(), false),
                 context('task-1'),
                 initialState,
                 new InMemoryAttemptPersistence(),

@@ -69,6 +69,11 @@ import java.util.Set;
  *       when a {@link PipelineDefinition} was produced.</li>
  * </ol>
  *
+ * <p>The domain-validate tier is handed the providers this factory has a {@code factory.check}
+ * section for, beside the discovered registry the check seam grades against: an {@code external}
+ * check on a provider that is discovered but unconfigured is a located load error (exit 3) rather
+ * than a run whose verification can never start (FR3, design D3 of remove-interactive-console).
+ *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
  * discovery order), structural (same order), consistency, mapping, tracker-seam,
@@ -114,6 +119,9 @@ public final class PipelineLoader {
      * @param checkProviders known check providers' params validators, keyed by {@code provider}; an
      *     empty map means no provider is known and every {@code external} check's provider is
      *     reported unknown
+     * @param configuredCheckProviders the providers this factory has a {@code
+     *     factory.check.<provider>} section for (FR3, design D3 of remove-interactive-console); an
+     *     {@code external} check on any other provider is a located load error
      * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
      *     no problem, else {@link LoadOutcome.Invalid} with every located error
      * @throws IOException when a required file cannot be read (an I/O fault, never a
@@ -122,9 +130,11 @@ public final class PipelineLoader {
     public static LoadOutcome load(
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders)
+            Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders)
             throws IOException {
-        return load(gnomishRoot, trackerValidators, checkProviders, ConnectionProfiles.none());
+        return load(
+                gnomishRoot, trackerValidators, checkProviders, configuredCheckProviders, ConnectionProfiles.none());
     }
 
     /**
@@ -140,9 +150,11 @@ public final class PipelineLoader {
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders,
             ConnectionProfiles profiles)
             throws IOException {
-        return loadConfiguration(gnomishRoot, trackerValidators, checkProviders, profiles, Set.of())
+        return loadConfiguration(
+                        gnomishRoot, trackerValidators, checkProviders, configuredCheckProviders, profiles, Set.of())
                 .outcome();
     }
 
@@ -174,10 +186,17 @@ public final class PipelineLoader {
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders,
             ConnectionProfiles profiles,
             Set<String> configuredDesignatorKinds)
             throws IOException {
-        return loadConfiguration(law, trackerValidators, checkProviders, profiles, _ -> configuredDesignatorKinds);
+        return loadConfiguration(
+                law,
+                trackerValidators,
+                checkProviders,
+                configuredCheckProviders,
+                profiles,
+                _ -> configuredDesignatorKinds);
     }
 
     /**
@@ -193,6 +212,7 @@ public final class PipelineLoader {
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders,
             ConnectionProfiles profiles,
             ConfiguredDesignatorKinds designatorKinds)
             throws IOException {
@@ -209,8 +229,8 @@ public final class PipelineLoader {
         tree.checkShape(errors);
         errors.addAll(StageConsistency.check(tree.pipelineStageNames(), raw.stages()));
 
-        PipelineDefinition model =
-                PipelineModelBuilder.mapAndValidate(law, tree, trackerValidators, checkProviders, profiles, errors);
+        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
+                law, tree, trackerValidators, checkProviders, configuredCheckProviders, profiles, errors);
 
         LoadOutcome outcome =
                 errors.isEmpty() && model != null ? new LoadOutcome.Loaded(model) : new LoadOutcome.Invalid(errors);
@@ -230,6 +250,7 @@ public final class PipelineLoader {
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckParamsValidator> checkProviders,
+            Set<String> configuredCheckProviders,
             ConnectionProfiles profiles,
             Set<String> configuredDesignatorKinds)
             throws IOException {
@@ -237,6 +258,7 @@ public final class PipelineLoader {
                 new WorkingTreeLawSource(gnomishRoot),
                 trackerValidators,
                 checkProviders,
+                configuredCheckProviders,
                 profiles,
                 configuredDesignatorKinds);
     }

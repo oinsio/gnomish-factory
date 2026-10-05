@@ -31,7 +31,7 @@ class PipelineStartupSpec extends Specification {
     def "FR1/D3: a valid .gnomish/ under --dir loads and returns the definition and workspace"() {
         given:
         writeValidTree()
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
 
         when:
         PipelineLoadOutcome outcome = startup.load(args)
@@ -46,7 +46,7 @@ class PipelineStartupSpec extends Specification {
 
     def "FR1/FR12/D3: a missing .gnomish/ produces a Failed outcome with rendered loader errors"() {
         given: 'no .gnomish/ directory at all under --dir'
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
 
         when:
         startup.load(args)
@@ -59,7 +59,7 @@ class PipelineStartupSpec extends Specification {
         given: 'a tree that fails validation: pipeline.yaml has no stages key'
         write('config.yaml', 'schemaVersion: "1"\n')
         write('pipeline.yaml', '{}\n')
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
 
         when:
         PipelineLoadOutcome outcome = startup.load(args)
@@ -75,7 +75,7 @@ class PipelineStartupSpec extends Specification {
     def "D3: --dir non-existence propagates rather than being swallowed"() {
         given:
         Path missing = projectRoot.resolve('does-not-exist')
-        RunArguments args = new RunArguments(missing, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+        RunArguments args = new RunArguments(missing, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
 
         when:
         startup.load(args)
@@ -87,7 +87,7 @@ class PipelineStartupSpec extends Specification {
     def "loading is deterministic across repeated calls (NFR-R1 carried through from PipelineLoader)"() {
         given:
         writeValidTree()
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
 
         when:
         def first = startup.load(args) as PipelineLoadOutcome.Loaded

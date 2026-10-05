@@ -47,8 +47,8 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
      *
      * <p>Implements FR12, FR13 of add-tracker-port.
      *
-     * @param order the take order being resumed: the clone (never mutated), the interactive mode,
-     *     and the tracker used for decision collection, ack and park
+     * @param order the take order being resumed: the clone (never mutated) and the tracker used
+     *     for decision collection, ack and park
      * @param branch the loaded branch; {@code lastEscalation()} must be {@link
      *     EscalationReport.AttemptsExhausted} or {@link EscalationReport.DecisionNeeded}
      * @param finalState the escalated state the park was produced from

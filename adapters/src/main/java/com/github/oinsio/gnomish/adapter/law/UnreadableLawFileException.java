@@ -14,8 +14,7 @@ import java.io.Serial;
  * rework moved the read from the working copy to the frozen law source (task 2.5):
  * the CLI executor lets it propagate uncaught so {@code RoundExecution} shapes it
  * into {@code RoundOutcome.CannotExecute}; the judge side catches it and maps it to
- * {@code Verdict.CannotVerify}; the interactive adapters catch it and degrade to a
- * placeholder line. Unchecked, following this codebase's established idiom for
+ * {@code Verdict.CannotVerify}. Unchecked, following this codebase's established idiom for
  * infrastructure-failure signaling (see {@code MissingResultEventException}).
  *
  * <p>Because pipeline law binds once per invocation (D14), an unreadable law file is

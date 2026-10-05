@@ -193,7 +193,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         new TakeFreshClaim(slotWiring(
                         assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask('PROJ-9'), tracker,
-                new RunOrder(cloneDir, 'release/1.2', completingPipeline(), RunArguments.InteractiveMode.NONE, false)))
+                new RunOrder(cloneDir, 'release/1.2', completingPipeline(), false)))
 
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({

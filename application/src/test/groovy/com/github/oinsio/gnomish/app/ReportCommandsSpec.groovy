@@ -18,7 +18,9 @@ import spock.lang.TempDir
  * untouched. The four commands are {@code final}, so each route is proven by the routed command's
  * own observable effect: {@code status} renders its listing, {@code usage} refuses an unknown task,
  * and {@code board} / {@code dashboard} each fail on a pipeline source that names the command
- * whose load it served.
+ * whose load it served. Only the read-only load is stubbed to fail, so the route also shows both
+ * views load through it — a view is never refused for an unconfigured check provider (FR3, design
+ * D3 of remove-interactive-console).
  */
 class ReportCommandsSpec extends Specification implements SeededCloneFixture {
 
@@ -44,7 +46,9 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
 
     private TrackerWiring wiringFailingOn(String command) {
         def source = Stub(PipelineSource) {
-            load(_) >> { throw new IOException("pipeline load for ${command}") }
+            loadReadOnly(_) >> {
+                throw new IOException("pipeline load for ${command}")
+            }
         }
         new TrackerWiring([:], MapSecretsProvider.NONE, source)
     }

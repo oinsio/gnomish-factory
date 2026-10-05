@@ -104,7 +104,7 @@ advancement: auto
         when:
         def configuration = new TrackerAdapterConfiguration()
         def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
-        def outcome = PipelineLoader.load(gnomishRoot, registry, [:])
+        def outcome = PipelineLoader.load(gnomishRoot, registry, [:], [] as Set)
 
         then: 'one Invalid outcome carries both the bad-color adapter error and the core error'
         outcome instanceof LoadOutcome.Invalid

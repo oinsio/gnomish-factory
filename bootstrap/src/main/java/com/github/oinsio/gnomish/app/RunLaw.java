@@ -82,8 +82,8 @@ final class RunLaw {
      * add-sandbox-core) comparing against the very commit this law was opened at: the law commit's
      * own SHA wherever a ref was resolved, the checked-out commit where the law is the working tree.
      * The in-place mode's workspace may not be a git repository at all, in which case a check that
-     * declares pin paths degrades fail-closed to CannotVerify while a pinless interactive check
-     * passes vacuously.
+     * declares pin paths degrades fail-closed to CannotVerify while a pinless check passes
+     * vacuously.
      *
      * @param client the selected external-check client the guard fronts
      * @param contributor the client's pin-path contribution seam

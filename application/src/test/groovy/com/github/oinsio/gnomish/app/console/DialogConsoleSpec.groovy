@@ -82,17 +82,7 @@ class DialogConsoleSpec extends Specification {
         ]
     }
 
-    def "is not exhausted before any EOF"() {
-        given:
-        def console = new DialogConsole(new ScriptedConsoleIO(['line']), { json ->
-            'unused'
-        })
-
-        expect:
-        !console.inputExhausted()
-    }
-
-    def "latches the input-exhausted flag and rethrows on EOF"() {
+    def "rethrows EOF to the caller"() {
         given:
         def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
             'unused'
@@ -103,10 +93,9 @@ class DialogConsoleSpec extends Specification {
 
         then:
         thrown(ConsoleClosedException)
-        console.inputExhausted()
     }
 
-    def "latches exhausted flag on EOF even mid status-loop"() {
+    def "rethrows EOF even mid status-loop"() {
         given:
         def io = new ScriptedConsoleIO(['status'])
         def console = new DialogConsole(io, { json -> 'text-report' })
@@ -116,7 +105,6 @@ class DialogConsoleSpec extends Specification {
 
         then:
         thrown(ConsoleClosedException)
-        console.inputExhausted()
         io.printed == [
             'question? ',
             'text-report',
@@ -155,7 +143,7 @@ class DialogConsoleSpec extends Specification {
         io.printed.contains('text-report')
     }
 
-    def "ask propagates EOF and latches the exhausted flag"() {
+    def "ask propagates EOF"() {
         given:
         def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
             'unused'
@@ -166,7 +154,6 @@ class DialogConsoleSpec extends Specification {
 
         then:
         thrown(ConsoleClosedException)
-        console.inputExhausted()
     }
 
     def "prompt marks awaitingInput before the blocking read and restores the prior activity after"() {

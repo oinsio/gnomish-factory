@@ -52,7 +52,7 @@ tracker:
 
     private static RunArguments argsFor(Path dir) {
         new RunArguments(dir, new TaskSource.Inline('t'), null, null,
-                RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
+                RunArguments.Mode.GIT, null, null, false)
     }
 
     def "FR3/NFR-S1: heartbeat constants are read from the factory clone's --dir/.gnomish, loaded once"() {

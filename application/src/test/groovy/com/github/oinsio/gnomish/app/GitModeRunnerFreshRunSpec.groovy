@@ -100,7 +100,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, liveConsole())
 
         when:
-        runner.run(new RunOrder(cloneDir, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+        runner.run(new RunOrder(cloneDir, null, completingPipeline(), false),
                 context(), TaskState.atStageStart('build'))
 
         then:
@@ -113,7 +113,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
-            runner().run(new RunOrder(cloneDir, base, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+            runner().run(new RunOrder(cloneDir, base, completingPipeline(), false),
                     context(), TaskState.atStageStart('build'))
         } finally {
             System.out = originalOut

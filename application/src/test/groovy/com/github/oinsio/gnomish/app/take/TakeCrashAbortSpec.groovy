@@ -1,26 +1,13 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.TakeOrder
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -29,7 +16,6 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import spock.lang.Specification
-
 /**
  * TakeCrashAbort: the crash arm of the infrastructure-abort protocol (task 5.3) — an uncaught
  * RuntimeException of a post-claim take run is funneled into the same best-effort AbortHandler
@@ -60,7 +46,7 @@ class TakeCrashAbortSpec extends Specification {
     }
 
     private TakeOrder order(TrackerTask task) {
-        new TakeOrder(new RunOrder(Path.of('/tmp/clone'), null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        new TakeOrder(new RunOrder(Path.of('/tmp/clone'), null, pipeline(), false),
                 task, tracker, INSTANCE)
     }
 

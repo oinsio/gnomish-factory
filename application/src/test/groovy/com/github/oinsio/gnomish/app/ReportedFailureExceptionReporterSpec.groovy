@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import spock.lang.Specification
 
 /**
@@ -20,7 +21,7 @@ class ReportedFailureExceptionReporterSpec extends Specification {
             new TaskNotFoundException('PROJ-1'),
             new TakeExitCodeException(0),
             new ServeExitCodeException(1),
-            new InputExhaustedException(),
+            new ConsoleClosedException(),
             // FR7 of add-project-registry: the loader printed the report before the context existed
             new ConfigurationViolationsException([
                 'factory.x is not a known key'

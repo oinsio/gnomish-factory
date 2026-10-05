@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.sandbox.BindingProperties
+import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -31,15 +34,17 @@ class ManualRunRelativeDirSpec extends Specification implements AppAssemblyFixtu
         assert !relative.isAbsolute()
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = newManualRunRunner(projectRoot, homeDir)
+        // The gnome is the fake agent (FR6 of remove-interactive-console); no dialog is reached.
+        def runner = newManualRunRunner(projectRoot, homeDir,
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new BindingProperties('host', [:]), TaskGitFixture.real(), FakeAgentSupport.propertiesFor('plain-round'))
         def args = new DefaultApplicationArguments(
                 "--dir=${relative}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-relative-dir',
-                '--interactive')
+                '--task-id=manual-relative-dir')
 
         when:
         runner.run(args)

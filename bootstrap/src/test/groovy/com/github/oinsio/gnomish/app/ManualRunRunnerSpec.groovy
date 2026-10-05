@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -51,9 +52,12 @@ class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, M
 
     // FR1, FR2, UX3 of refactor-app-spec-fixtures: delegates to the shared 21-collaborator
     // factory on AppAssemblyFixture (also used by ManualRunRunnerContainerOwnershipSpec),
-    // taking every default so this reads exactly like the pre-extraction host git-mode wiring.
-    private ManualRunRunner newRunner() {
-        newManualRunRunner(projectRoot, homeDir)
+    // taking every default but the agent binary: the gnome is the fake agent playing `scenario`
+    // (FR6 of remove-interactive-console), so stdin carries only the operator dialogs.
+    private ManualRunRunner newRunner(String scenario = 'plain-round') {
+        newManualRunRunner(projectRoot, homeDir,
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new BindingProperties('host', [:]), TaskGitFixture.real(), FakeAgentSupport.propertiesFor(scenario))
     }
 
     /** The clone the runner works in, as the fixture registers it for {@code --dir=projectRoot}. */
@@ -319,56 +323,25 @@ advancement: auto
         thrown(UsageException)
     }
 
-    // FR13, NFR-R1, UX3: EOF at the very first prompt prints "Input exhausted" to stderr, no stack trace
-    def "run() prints an input-exhausted message to stderr when stdin hits EOF immediately"() {
-        given:
-        writeOneStagePipeline(projectRoot)
-        def originalIn = System.in
-        def originalErr = System.err
-        System.in = new ByteArrayInputStream(new byte[0])
-        def captured = new ByteArrayOutputStream()
-        System.err = new PrintStream(captured, true, 'UTF-8')
-        def runner = newRunner()
-        def args = new DefaultApplicationArguments(
-                "--dir=${projectRoot}".toString(),
-                '--task=do the thing',
-                '--task-id=manual-test-eof',
-                '--mode=in-place',
-                '--interactive')
-
-        when:
-        try {
-            runner.run(args)
-        } catch (RuntimeException ignored) {
-            // Expected: an exhausted-input exception propagates after the message is printed.
-        } finally {
-            System.in = originalIn
-            System.err = originalErr
-        }
-
-        then:
-        captured.toString('UTF-8').contains('Input exhausted — stopping.')
-    }
-
     // D10: StatusSnapshotHolder's initial attemptLimit comes from the starting stage's own
     // autonomy.attemptLimit (7), not the pipeline default (3) — proven by the "status" meta-
-    // command's rendered "(attempt X/Y)" fraction before the round completes.
+    // command's rendered "(attempt X/Y)" fraction. The holder is seeded once and never updated,
+    // so the escalation prompt the fake agent's decision round leads to still shows the seed;
+    // stdin then ends there, which leaves the run escalated (exit 10).
     def "run() seeds the status snapshot with the starting stage's own attempt limit, not the pipeline default"() {
         given:
         writeOneStagePipelineWithStageAttemptLimitOverride()
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream(('status' + System.lineSeparator() + System.lineSeparator())
-                .getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(('status' + System.lineSeparator()).getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = newRunner()
+        def runner = newRunner('decision-needed')
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
                 '--task-id=manual-test-status',
-                '--mode=in-place',
-                '--interactive')
+                '--mode=in-place')
 
         when:
         try {
@@ -379,6 +352,7 @@ advancement: auto
         }
 
         then:
+        thrown(EscalationEofException)
         capturedOut.toString('UTF-8').contains('attempt 0/7')
     }
 
@@ -388,7 +362,7 @@ advancement: auto
         writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         def runner = newRunner()
@@ -396,8 +370,7 @@ advancement: auto
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
                 '--task-id=manual-test-in-place',
-                '--mode=in-place',
-                '--interactive')
+                '--mode=in-place')
 
         when:
         runner.run(args)
@@ -448,15 +421,14 @@ advancement: auto
         writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-git',
-                '--interactive')
+                '--task-id=manual-test-git')
 
         when:
         runner.run(args)
@@ -492,15 +464,14 @@ advancement: auto
         def cloneStatusBefore = gitOutput(projectRoot, 'status', '--porcelain')
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-git-clean',
-                '--interactive')
+                '--task-id=manual-test-git-clean')
 
         when:
         runner.run(args)
@@ -523,14 +494,13 @@ advancement: auto
         writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         System.out = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-git-complete',
-                '--interactive')
+                '--task-id=manual-test-git-complete')
 
         when:
         runner.run(args)
@@ -609,14 +579,16 @@ advancement: auto
     // is constructed internally by ManualRunRunner, not injected).
     def "run() with --resume dispatches to GitResumeRunner and drives the task to completion"() {
         given: 'a git task with one persisted round but no recorded outcome — the process died mid-visit'
-        makeProjectRootAGitClone(projectRoot)
+        // The pipeline is committed with the clone: a resume reads its law at the task's recorded
+        // base commit, and the fake agent's round reads the stage instructions from there.
         writeOneStagePipeline(projectRoot)
+        makeProjectRootAGitClone(projectRoot)
         bootstrapGitTask('manual-test-resume')
 
-        and: 'stdin/stdout wired for the resumed run: a bare Enter drives one more round to completion'
+        and: 'stdout captured for the resumed run; the fake agent drives one more round to completion'
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
 
@@ -624,16 +596,15 @@ advancement: auto
         try {
             newRunner().run(new DefaultApplicationArguments(
                             "--dir=${projectRoot}".toString(),
-                            '--resume=manual-test-resume',
-                            '--interactive'))
+                            '--resume=manual-test-resume'))
         } finally {
             System.in = originalIn
             System.out = originalOut
         }
 
-        then: 'the stage briefing only reachable through a driven engine round was printed'
+        then: 'the completion report only reachable through a driven engine run was printed'
         noExceptionThrown()
-        capturedOut.toString('UTF-8').contains('=== Task goal ===')
+        capturedOut.toString('UTF-8').contains('Stage: pipeline complete')
 
         and: 'the task reached completion, and the worktree was cleaned up'
         gitExitCode(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-resume') == 0
@@ -676,13 +647,13 @@ advancement: auto
         capturedErr.toString('UTF-8').trim() == thrownException.message
     }
 
-    // FR1, FR2, FR9: a minimal one-stage pipeline runs end to end to Completed via scripted stdin
-    def "run() drives a minimal one-stage pipeline to completion via real stdin"() {
+    // FR1, FR2, FR9: a minimal one-stage pipeline runs end to end to Completed through the fake agent
+    def "run() drives a minimal one-stage pipeline to completion through the fake agent"() {
         given:
         writeOneStagePipeline(projectRoot)
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         def runner = newRunner()
@@ -690,8 +661,7 @@ advancement: auto
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
                 '--task-id=manual-test-1',
-                '--mode=in-place',
-                '--interactive')
+                '--mode=in-place')
 
         when:
         runner.run(args)
@@ -700,8 +670,9 @@ advancement: auto
         noExceptionThrown()
 
         // Proves the outcome loop actually ran the stage (not just that drive() returned
-        // without error): the stage briefing InteractiveStageExecutor prints is only
-        // reachable through RunnerOutcomeLoop#run driving the engine.
+        // without error): the completion report naming the task is only reachable through
+        // RunnerOutcomeLoop#run driving the engine to Completed.
+        capturedOut.toString('UTF-8').contains('Stage: pipeline complete')
         capturedOut.toString('UTF-8').contains('do the thing')
 
         cleanup:

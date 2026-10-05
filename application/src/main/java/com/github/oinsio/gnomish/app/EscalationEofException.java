@@ -6,8 +6,7 @@ import java.io.Serial;
 /**
  * Case 2 of the EOF flows (design D2), at the escalation resume-decision prompt: the
  * operator pressed Ctrl-D right at {@link EscalationResumeDialog}'s resume prompt,
- * a deliberate exit distinct from {@link InputExhaustedException}'s Case 1 (input
- * exhausted earlier, mid-stage). {@link RunnerOutcomeLoop} catches the {@link
+ * a deliberate exit. {@link RunnerOutcomeLoop} catches the {@link
  * ConsoleClosedException} thrown by that prompt and rethrows this type — carrying it as
  * the cause — so {@link RunExitCodeMapper} can tell this apart from {@link
  * CheckpointEofException} (the analogous Case 2 at the {@code Paused} checkpoint prompt)

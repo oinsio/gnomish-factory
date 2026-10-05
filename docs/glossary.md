@@ -98,7 +98,7 @@ terms) live in `.claude/rules/process-invariants.md`.
   instruction a runner acts on.
 - **Run order** — the order both manual `run` and tracker-driven `take` /
   `serve` carry: the clone directory, the `--base` override (if any), the
-  pipeline definition, the interactive mode and the discard-work flag. Type:
+  pipeline definition and the discard-work flag. Type:
   `RunOrder`. Carries no tracker, task or instance identity — manual runs have
   none.
 - **Take order** — the tracker-driven order: a run order plus the claimed

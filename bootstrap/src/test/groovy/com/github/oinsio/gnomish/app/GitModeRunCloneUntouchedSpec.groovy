@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -56,8 +57,11 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
-    private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
+    /** The gnome is the fake agent playing {@code plain-round}; no operator dialog is reached, so stdin is empty. */
+    private GitModeRunner newRunner(PrintStream output = System.out) {
+        new GitModeRunner(
+                newAssembly(new ByteArrayInputStream(new byte[0]), output, FakeAgentSupport.propertiesFor('plain-round')),
+                TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {
@@ -103,12 +107,11 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
     def "a full git-mode round leaves the clone's branch, HEAD, index, and working copy untouched while the work lands in the worktree"() {
         given:
         def out = new ByteArrayOutputStream()
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
-                new PrintStream(out, true, 'UTF-8'))
+        def runner = newRunner(new PrintStream(out, true, 'UTF-8'))
         def before = snapshot()
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskContext('CLONE-1'), TaskState.atStageStart('build'))
 
         then: 'the work actually landed: the task branch and its round commit exist'
@@ -151,10 +154,10 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         Files.createDirectories(worktree.getParent())
         addWorktree(cloneDir, worktree, 'not-the-task-branch')
         def before = snapshot()
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
+        def runner = newRunner()
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskContext(taskId), TaskState.atStageStart('build'))
 
         then:

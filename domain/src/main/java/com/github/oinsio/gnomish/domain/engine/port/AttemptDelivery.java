@@ -27,8 +27,7 @@ public interface AttemptDelivery {
 
     /**
      * The no-precondition implementation for assemblies whose external checks have no push
-     * trigger to wait for: the git-less in-place mode, and the interactive client answering for
-     * a human oracle. Sandboxed git assemblies wire a real push-verifying implementation
+     * trigger to wait for: the git-less in-place mode. Sandboxed git assemblies wire a real push-verifying implementation
      * instead; this constant never belongs where a platform adapter polls CI of a pushed
      * commit.
      */

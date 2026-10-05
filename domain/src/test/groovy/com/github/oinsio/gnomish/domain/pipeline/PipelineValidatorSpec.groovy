@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import java.time.Duration
 import spock.lang.Specification
+
 /**
  * PipelineValidator: the pure aggregator (design D6) that runs every pure rule
  * over a PipelineDefinition and concatenates their located ConfigErrors into
@@ -15,6 +17,9 @@ import spock.lang.Specification
  * Implements FR8 of load-pipeline-config.
  */
 class PipelineValidatorSpec extends Specification {
+
+    /** The factory configures no check provider: every model here declares no external check. */
+    private static final Set<String> NO_PROVIDERS = [] as Set
 
     private static StageDefinition.Executor executor(String model = 'claude-sonnet-4-5') {
         new StageDefinition.Executor(ExecutorType.AGENT_CLI, model, [:])
@@ -60,7 +65,7 @@ class PipelineValidatorSpec extends Specification {
     // rule aggregates to an empty list.
     def "a fully valid model produces no errors"() {
         expect: 'the aggregate error list is empty'
-        PipelineValidator.validate(validModel()) == []
+        PipelineValidator.validate(validModel(), NO_PROVIDERS) == []
     }
 
     // FR8: each delegated rule's contribution is observable in the aggregate —
@@ -68,7 +73,7 @@ class PipelineValidatorSpec extends Specification {
     // concatenation, so each rule must be reachable).
     def "the aggregate contains the errors of the #ruleName rule"() {
         expect: 'the rule-specific error appears in the aggregate'
-        PipelineValidator.validate(model).containsAll(expected)
+        PipelineValidator.validate(model, NO_PROVIDERS).containsAll(expected)
 
         where:
         ruleName | model || expected
@@ -77,6 +82,15 @@ class PipelineValidatorSpec extends Specification {
         'StageOrder' | emptyOrderModel() || StageOrderRule.validate(emptyOrderModel().stages())
         'ArtifactGraph' | danglingRefModel() || ArtifactGraphRule.validate(danglingRefModel().stages())
         'StageSanity' | blankModelModel() || StageSanityRule.validate(blankModelModel().stages())
+        'UnconfiguredCheckProvider' | externalCheckModel() || UnconfiguredCheckProviderRule.validate(externalCheckModel().stages(), NO_PROVIDERS)
+    }
+
+    // FR3 of remove-interactive-console: the configured set reaches the rule — the same
+    // external check that is refused with no provider configured passes once it is.
+    def "an external check on a configured provider contributes no error"() {
+        expect:
+        !UnconfiguredCheckProviderRule.validate(externalCheckModel().stages(), NO_PROVIDERS).isEmpty()
+        PipelineValidator.validate(externalCheckModel(), ['github'] as Set) == []
     }
 
     // FR8 / UX1 / delta-spec "All problems reported in one pass": a model
@@ -88,7 +102,7 @@ class PipelineValidatorSpec extends Specification {
         PipelineDefinition model = allRulesBrokenModel()
 
         expect: 'the aggregate is exactly the five rules concatenated in order'
-        PipelineValidator.validate(model) ==
+        PipelineValidator.validate(model, NO_PROVIDERS) ==
                 SchemaVersionRule.validate(model.schemaVersion()) +
                 TrackerConfigRule.validate(model.tracker()) +
                 StageOrderRule.validate(model.stages()) +
@@ -107,7 +121,7 @@ class PipelineValidatorSpec extends Specification {
     // list on every call.
     def "validation is deterministic for #ruleName"() {
         expect: 'two validations of the same model are equal'
-        PipelineValidator.validate(model) == PipelineValidator.validate(model)
+        PipelineValidator.validate(model, NO_PROVIDERS) == PipelineValidator.validate(model, NO_PROVIDERS)
 
         where:
         ruleName | model
@@ -118,7 +132,7 @@ class PipelineValidatorSpec extends Specification {
     // NFR-R1 / conventions: the returned list is immutable (defensive copy).
     def "the returned error list is immutable"() {
         when: 'mutating the returned list'
-        PipelineValidator.validate(allRulesBrokenModel()).add(
+        PipelineValidator.validate(allRulesBrokenModel(), NO_PROVIDERS).add(
                 new ConfigError('config.yaml', 'x', 'y'))
 
         then: 'it is rejected'
@@ -126,6 +140,19 @@ class PipelineValidatorSpec extends Specification {
     }
 
     // --- fixtures, one broken rule each -------------------------------------
+
+    private static PipelineDefinition externalCheckModel() {
+        new PipelineDefinition(
+                SchemaVersionRule.SUPPORTED_VERSION, new AutonomyLimits(3),
+                [
+                    stage('plan', [new ArtifactInput.Source()], [
+                        new ArtifactOutput('plan-out')
+                    ], executor(), [
+                        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30),
+                        Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+                    ])
+                ])
+    }
 
     private static PipelineDefinition unsupportedVersionModel() {
         new PipelineDefinition(

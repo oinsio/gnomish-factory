@@ -19,6 +19,10 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
  * {@link #discoveredGithubCheckProvider} stands in for a classpath that discovered the github check
  * provider, so a fixture whose {@code external} check resolves to {@code github} loads without the
  * real plugin jar. A spec about provider discovery itself builds its own registry instead.
+ * {@link #configuredGithubCheckProvider} is the matching operator side — a {@code
+ * factory.check.github} section — for a loader spec whose fixture runs such a check (FR3 of
+ * remove-interactive-console). The two sources configure no provider, as their callers' factory
+ * properties carry no {@code factory.check} section.
  */
 class TrackerValidatorStub {
 
@@ -37,16 +41,21 @@ class TrackerValidatorStub {
         [github: CheckParamsValidator.none()]
     }
 
+    /** The configured-provider set of an operator who wrote a {@code factory.check.github} section. */
+    static Set<String> configuredGithubCheckProvider() {
+        ['github'] as Set
+    }
+
     /**
      * The real {@code .gnomish/} {@link PipelineSource} over {@link #acceptingGithub}, for the
      * callers that inject the port rather than the registry (task 4.4 of split-into-modules).
      */
     static PipelineSource acceptingGithubSource() {
-        new GnomishDirPipelineSource(acceptingGithub(), discoveredGithubCheckProvider())
+        new GnomishDirPipelineSource(acceptingGithub(), discoveredGithubCheckProvider(), [] as Set)
     }
 
     /** The real {@code .gnomish/} {@link PipelineSource} with no subsection validator registered. */
     static PipelineSource plainSource() {
-        new GnomishDirPipelineSource([:], discoveredGithubCheckProvider())
+        new GnomishDirPipelineSource([:], discoveredGithubCheckProvider(), [] as Set)
     }
 }

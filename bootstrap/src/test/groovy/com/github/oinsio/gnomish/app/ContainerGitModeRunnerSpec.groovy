@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
@@ -81,8 +82,8 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
      * Drives one fresh container-mode run through the seam constructor over the scripted fake
      * docker (mirroring {@code ContainerResumeSpecBase.runner}) — fully daemon-free, including the
      * runner-start orphan sweep (FR11), whose read-only listings the fake answers empty. Per
-     * {@code ContainerTerminalDriveSpec}, an interactive round never closes with a snapshot
-     * commit, so the sandboxed persistence always aborts the round; every call below is expected
+     * {@code ContainerTerminalDriveSpec}, a fake-agent round over the scripted docker never closes
+     * with a snapshot commit, so the sandboxed persistence always aborts the round; every call below is expected
      * to raise {@link AbortedException}, that abort itself proving {@code run()} reached the loop.
      */
     private void run(String taskId, String base, PrintStream output, InputStream input = lines()) {
@@ -91,9 +92,10 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         def runner = new ContainerGitModeRunner(
-                newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), factory,
+                newAssembly(input, output, FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), sandbox,
+                FakeAgentSupport.propertiesFor('plain-round'), factory,
                 LiveConsoleIO.onStdout())
-        runner.run(new RunOrder(cloneDir, base, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, base, pipeline(), false),
                 segments(), context(taskId), TaskState.atStageStart('build'))
     }
 
@@ -115,7 +117,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
         when:
         run('T-BANNER', null, sink())
 
-        then: 'the interactive round aborts (no attempt commit closes it), but only after both lines print'
+        then: 'the round aborts (no attempt commit closes it), but only after both lines print'
         thrown(AbortedException)
         def text = captured.toString('UTF-8')
         text.contains('container mode: branch gnomish/T-BANNER')

@@ -31,8 +31,8 @@ import org.slf4j.LoggerFactory;
  * as bare git objects in the factory clone ({@link GitObjects}, D11) — the <em>law commit</em>
  * versus the harvested attempt commit carried by the {@link RecordedAttemptCommitWorkspace}.
  *
- * <p>Outcomes: an empty union passes vacuously and the poll goes straight through (the
- * interactive client with nothing declared); any difference — changed bytes, a path added
+ * <p>Outcomes: an empty union passes vacuously and the poll goes straight through (a provider
+ * contributing no pin paths, with nothing declared in the law); any difference — changed bytes, a path added
  * on the gnome branch, or a path removed from it — is a quality {@link PollStatus.Fail}
  * with one finding per differing path, and the delegate is never invoked. Comparing
  * against the base branch, not the previous round, catches a substitution made at any

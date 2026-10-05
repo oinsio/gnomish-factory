@@ -26,7 +26,6 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
         then:
         result.ref() == '42'
         result.dir() == CLONE.clonePath() // FR3 of add-project-registry
-        result.interactiveMode() == RunArguments.InteractiveMode.NONE
         result.base() == null
         !result.discardWork()
         !result.takeover()
@@ -84,21 +83,22 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
         thrown(UsageException)
     }
 
-    @Unroll
-    def "--interactive#suffix parses to #expected"(String suffix, List<String> flags, RunArguments.InteractiveMode expected) {
+    // FR1 of remove-interactive-console: explicit take accepts no --interactive in any form; the
+    // token is refused the way any unknown option is, before the tracker is touched.
+    def "FR1 of remove-interactive-console: explicit take rejects #flag as an unknown option"() {
         when:
-        String[] tokens = (['take', '42'] + flags) as String[]
-        TakeArguments result = parser.parse(args(tokens), CLONE)
+        parser.parse(args('take', '42', flag), CLONE)
 
         then:
-        result.interactiveMode() == expected
+        UsageException ex = thrown(UsageException)
+        ex.message.startsWith('unknown option --interactive')
 
         where:
-        suffix | flags | expected
-        ' bare' | ['--interactive'] | RunArguments.InteractiveMode.ALL
-        '=executor' | ['--interactive=executor'] | RunArguments.InteractiveMode.EXECUTOR_ONLY
-        '=judge' | ['--interactive=judge'] | RunArguments.InteractiveMode.JUDGE_ONLY
-        ' absent' | [] | RunArguments.InteractiveMode.NONE
+        flag << [
+            '--interactive',
+            '--interactive=executor',
+            '--interactive=judge'
+        ]
     }
 
     // Flag validation scenario: take is always git mode, has no ad-hoc task source, no --resume,
@@ -203,9 +203,8 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
         result.refs() == []
     }
 
-    // Spec requirement text: "the batch form SHALL reject --interactive and --base". Scenario
-    // "Batch rejects interactivity": take 42 43 --interactive fails validation before touching the
-    // tracker (FR3 of add-factory-serve).
+    // Scenario "Batch rejects interactivity": take 42 43 --interactive fails validation before
+    // touching the tracker, as for any unknown flag (FR1 of remove-interactive-console).
     def "batch take rejects --interactive"() {
         when:
         parser.parse(args('take', '42', '43', '--interactive'), CLONE)
@@ -232,7 +231,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
         thrown(UsageException)
     }
 
-    // --takeover is not in the batch-rejected set (spec text names only --interactive and --base);
+    // --takeover is not in the batch-rejected set (spec text names only --base);
     // it stays available so a headless batch run can take over Working refs without a TTY prompt.
     def "batch take accepts --takeover without error"() {
         when:

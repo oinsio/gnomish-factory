@@ -9,9 +9,9 @@ import spock.lang.Timeout
 
 /**
  * The substantive Ollama E2E scenario (task 11.2, M1, D11): «agent creates a file → judge issues
- * a verdict» through a real {@code gnomish run} process — manifest-driven, no {@code
- * --interactive} flag, so both the stage executor and the judge check bind to the real CLI
- * adapters (FR10 of add-agent-executor; flagless run is the manifest-driven default). The fixture
+ * a verdict» through a real {@code gnomish run} process — manifest-driven, so both the stage
+ * executor and the judge check bind to the real CLI adapters (FR10 of add-agent-executor; the
+ * manifest-driven binding is the only binding since remove-interactive-console). The fixture
  * ({@link OllamaFixture}) is deliberately trivial by design (D11's risk note): one stage,
  * instructed to create {@code hello.txt}; one judge vote whose only acceptance criterion is that
  * the file exists. A weak local Ollama model failing a harder task would read as an adapter bug
@@ -50,7 +50,7 @@ class OllamaWriteFileScenarioSpec extends Specification {
         given: 'the fixture workspace has no hello.txt before the run'
         assert !Files.exists(OllamaFixture.expectedFile())
 
-        when: 'gnomish run drives the fixture manifest-driven, no --interactive override, against local Ollama'
+        when: 'gnomish run drives the fixture manifest-driven against local Ollama'
         def result = harness.run(
                 OllamaFixture.projectRoot(),
                 [
@@ -65,7 +65,7 @@ class OllamaWriteFileScenarioSpec extends Specification {
         then: 'the process does not crash — no stack trace on stderr regardless of the model outcome'
         !result.stderr().contains('\tat ')
 
-        and: 'stdout shows the real CLI executor round and the real judge round both ran (not the interactive dialogs)'
+        and: 'the trivial task needs no decision: no escalation was rendered'
         !result.stdout().contains('The gnome asked:')
 
         and: 'a passing run (exit 0) can only be reached via the file existing and a real passing verdict'

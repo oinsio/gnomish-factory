@@ -49,19 +49,20 @@ decision protocol is an agent concept.
   only, and no decision escalation occurs
 
 ### Requirement: Exit-code contract
-The command executor SHALL classify the finished process by exit code: `0` SHALL
-complete the round (`Completed` — the stage's verify chain then runs as usual); any
-other exit code from a started, finished process SHALL be an executor-reported quality
-failure carrying exactly one finding that names the exit code, with the bounded tail of
-the command's captured output — stripped of control sequences by the findings
-sanitizer — as its details. A command that cannot start (spawn failure) or whose exit
-code signals an unrunnable command (`126` not executable, `127` not found) SHALL be an
-infrastructure failure of the round — no attempt burned, escalated as "cannot execute".
+The command executor SHALL report the finished process through the executor contract:
+exit `0` is `completed` (the stage's verify chain then runs as usual); any other exit
+code from a started, finished process is `failed/quality` carrying exactly one finding
+that names the exit code, with the bounded tail of the command's captured output —
+stripped of control sequences by the findings sanitizer — as its details. A command
+that cannot start (spawn failure) or whose exit code signals an unrunnable command
+(`126` not executable, `127` not found) is `failed/infrastructure` — the engine burns
+no attempt and escalates as "cannot execute". The executor SHALL decide no class
+itself beyond this status.
 <!-- implements FR5, FR6, FR7, NFR-O1, UX1 of add-command-executor -->
 
 #### Scenario: Exit zero completes the round
 - **WHEN** the command exits with status 0
-- **THEN** the executor returns `Completed` and verification proceeds in manifest order
+- **THEN** the executor returns `completed` and verification proceeds in manifest order
 
 #### Scenario: Non-zero exit is a quality failure with the output tail
 - **WHEN** the command exits with status 1 after printing build errors
@@ -122,17 +123,21 @@ rounds.
 - **THEN** its record carries an empty token map and the task's cumulative usage totals
   are unchanged, while the round's wall time is recorded
 
-### Requirement: Per-stage executor dispatch by declared type
-The executor serving a stage SHALL be selected by the stage's declared executor type:
-`command` stages run the command executor, `agent-cli` stages keep today's executor
-selection unchanged. Interactive-mode executor substitution SHALL apply to agent-typed
-stages only — a `command` stage always runs its declared command for real, in every run
-mode.
+### Requirement: Command executor is a built-in of the executor registry
+The command executor SHALL be registered in the executor registry under the built-in name
+`command`, implementing the executor contract's interface (`describe`, `start`), and SHALL
+pass the contract's conformance kit; a `command` stage resolves to it through the registry.
+Interactive-mode executor substitution SHALL apply to agent-typed stages only — a
+`command` stage always runs its declared command for real, in every run mode.
 <!-- implements FR8 of add-command-executor -->
 
 #### Scenario: Mixed pipeline dispatches per stage
 - **WHEN** a pipeline interleaves an `agent-cli` stage and a `command` stage
-- **THEN** each stage's round runs through the executor matching its declared type
+- **THEN** each stage's round runs through the executor the registry resolves for it
+
+#### Scenario: Built-in passes the conformance kit
+- **WHEN** the conformance kit runs against the `command` built-in
+- **THEN** every applicable case passes
 
 #### Scenario: Interactive mode does not simulate commands
 - **WHEN** a run starts with interactive executor substitution enabled

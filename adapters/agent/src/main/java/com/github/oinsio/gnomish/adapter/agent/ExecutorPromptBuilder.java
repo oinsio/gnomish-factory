@@ -19,8 +19,7 @@ import java.util.List;
  * start from the gnome-unwritable law source — never lazily from the working
  * copy the gnome can edit (task 2.5's pipeline-law rework). An
  * unreadable law file is this adapter's specific failure reaction — an
- * infrastructure failure before any process spawns (FR13) — distinct from the
- * interactive adapter's placeholder degradation: {@link
+ * infrastructure failure before any process spawns (FR13): {@link
  * UnreadableLawFileException} is left uncaught here and is expected to propagate
  * to {@code execute()}, which turns it into a "cannot execute" outcome without
  * burning a stage attempt.

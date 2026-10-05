@@ -67,7 +67,7 @@ tracker:
         def profiles = ConnectionProfiles.of(properties.connections())
 
         when: 'the tracker loads through the assembled loader and the check subsections resolve'
-        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:], profiles)
+        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:], [] as Set, profiles)
         def checkResolved = CheckProviderSeam.resolve(properties.check(), profiles)['github']
 
         then: 'the tracker config carries the profile endpoint, not the reference'
@@ -116,7 +116,7 @@ tracker:
 
         when:
         def outcome = PipelineLoader.load(
-                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profileConfig()))
+                gnomishRoot, trackerValidators(), [:], [] as Set, ConnectionProfiles.of(profileConfig()))
 
         then:
         outcome instanceof LoadOutcome.Invalid
@@ -173,7 +173,7 @@ tracker:
 
         when:
         def outcome = PipelineLoader.load(
-                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profileConfig()))
+                gnomishRoot, trackerValidators(), [:], [] as Set, ConnectionProfiles.of(profileConfig()))
 
         then: 'the error is located at the overlapping key, naming the profile it conflicts with'
         outcome instanceof LoadOutcome.Invalid

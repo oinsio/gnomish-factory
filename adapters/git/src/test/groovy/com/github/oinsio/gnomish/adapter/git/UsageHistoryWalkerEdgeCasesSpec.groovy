@@ -121,7 +121,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
-        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),

@@ -1,0 +1,18 @@
+purpose: do the work and advance on its own, with no operator prompt on the way
+inputs:
+  - kind: source
+outputs:
+  - id: work-diff
+executor:
+  type: agent-cli
+  model: work-model
+  settings:
+    maxTurns: 10
+instructions: stages/work/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - marker.txt
+advancement: auto

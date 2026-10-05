@@ -5,9 +5,6 @@ import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.console.InteractiveExternalCheckClient;
-import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
@@ -102,49 +99,40 @@ public final class CheckEquipment {
     }
 
     /**
-     * Selects and pin-guards the run's {@link ExternalCheckClient} over the discovered registry;
-     * see {@link #externalCheckClient(DialogConsole, RunLaw, CheckRunContext, Map)}.
+     * Builds and pin-guards the run's {@link ExternalCheckClient} over the discovered registry;
+     * see {@link #externalCheckClient(RunLaw, CheckRunContext, Map)}.
      */
-    ExternalCheckClient externalCheckClient(DialogConsole console, RunLaw runLaw, CheckRunContext runContext) {
-        return externalCheckClient(console, runLaw, runContext, checkClientRegistry);
+    ExternalCheckClient externalCheckClient(RunLaw runLaw, CheckRunContext runContext) {
+        return externalCheckClient(runLaw, runContext, checkClientRegistry);
     }
 
     /**
-     * Selects and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of add-sandbox-core;
-     * FR5, FR6, design D10 of add-plugin-architecture): with any {@code factory.check.<provider>}
-     * subsection configured, a {@link ProviderDispatchingExternalCheckClient} over {@code registry}
-     * — each check routed to its provider's client, built lazily on first selection so a dormant
-     * provider resolves no credential; otherwise the interactive console client, which contributes
-     * no pin paths.
+     * Builds and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of add-sandbox-core;
+     * FR5, FR6, design D10 of add-plugin-architecture): a {@link
+     * ProviderDispatchingExternalCheckClient} over {@code registry} and the operator's {@code
+     * factory.check.<provider>} subsections — each check routed to its provider's client, built
+     * lazily on first selection so a dormant provider resolves no credential.
      *
-     * <p>The engine port is unchanged either way: the composite <em>is</em> an {@code
-     * ExternalCheckClient}, so per-check provider selection stays wiring rather than engine
-     * semantics. Either client is pin-guarded by {@code runLaw} (FR16, D10; D12 of
-     * add-base-ref-resolution) against the very commit the law was frozen from. The pin
-     * contribution dispatches per provider too, so the guard unions the selected provider's paths
-     * exactly as the single-provider wiring did.
+     * <p>The composite is built unconditionally, even over an empty configuration (FR3, FR4, design
+     * D3 of remove-interactive-console): the pipeline load has already refused every {@code
+     * external} check whose provider has no subsection, so a check reaching this client always has
+     * one, and no console stands in for a provider that is not there. A pipeline with no {@code
+     * external} check never selects a provider, and so never resolves a credential.
+     *
+     * <p>The engine port is unchanged: the composite <em>is</em> an {@code ExternalCheckClient}, so
+     * per-check provider selection stays wiring rather than engine semantics. It is pin-guarded by
+     * {@code runLaw} (FR16, D10; D12 of add-base-ref-resolution) against the very commit the law
+     * was frozen from, and its pin contribution dispatches per provider, so the guard unions the
+     * selected provider's paths (NFR-S1 of remove-interactive-console).
      *
      * <p>The {@code registry} parameter is the package-private testing seam: specs reach it through
      * {@link ManualRunAssembly#externalCheckClient} with a hand-built registry.
      */
     ExternalCheckClient externalCheckClient(
-            DialogConsole console,
-            RunLaw runLaw,
-            CheckRunContext runContext,
-            Map<String, CheckClientFactory> registry) {
-        var configured = checkSubsections();
-        ExternalCheckClient client;
-        ExternalCheckPinContributor contributor;
-        if (configured.isEmpty()) {
-            client = new InteractiveExternalCheckClient(console);
-            contributor = ExternalCheckPinContributor.none();
-        } else {
-            var dispatching =
-                    new ProviderDispatchingExternalCheckClient(registry, configured, secretsProvider, runContext);
-            client = dispatching;
-            contributor = dispatching.pinContributor();
-        }
-        return runLaw.pinGuarded(client, contributor);
+            RunLaw runLaw, CheckRunContext runContext, Map<String, CheckClientFactory> registry) {
+        var dispatching =
+                new ProviderDispatchingExternalCheckClient(registry, checkSubsections(), secretsProvider, runContext);
+        return runLaw.pinGuarded(dispatching, dispatching.pinContributor());
     }
 
     /**

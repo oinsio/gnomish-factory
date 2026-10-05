@@ -91,9 +91,9 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // salvage in-box before the drive continues. Both docker.runs (the leased box's materialize
     // calls) and docker.starts (salvage's in-box "git status --porcelain" probe) are asserted, so
     // a negated-conditional mutant that skips either call is caught. Both calls happen before the
-    // drive's own interactive round — which (per ContainerTerminalDriveSpec/
-    // ContainerGitModeRunnerSpec) always aborts here, since an interactive round never closes with
-    // a snapshot commit — so the abort is expected and does not affect what is being asserted.
+    // drive's own round — which (per ContainerTerminalDriveSpec/ContainerGitModeRunnerSpec) always
+    // aborts here, since a round over the scripted docker never closes with a snapshot commit — so
+    // the abort is expected and does not affect what is being asserted.
     def "resuming an interrupted task at a recorded stage leases the environment and salvages leftovers"() {
         given: 'a freshly created task: no state.json yet, so the recorded position defaults to AtStage(build)'
         repository.createTask(context('T-SALV'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))

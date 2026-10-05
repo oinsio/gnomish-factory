@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 /**
  * The seam between the feed automaton and the slot body (scope boundary of task 4.2 vs 4.3): the
  * automaton claims a task and hands off only its identity — everything the take cycle needs
- * (clone dir, pipeline definition, interactive mode, the {@code Tracker}, the instance id,
+ * (clone dir, pipeline definition, the {@code Tracker}, the instance id,
  * heartbeat registration) is the real implementation's own closure state, wired by whatever
  * assembles {@link FeedAutomaton} (a later task). {@link FeedAutomaton} spawns one virtual thread
  * per slot and calls {@link #run(TaskRef)} on it (design D1); it releases the {@link

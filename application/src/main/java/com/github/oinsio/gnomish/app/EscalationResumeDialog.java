@@ -43,18 +43,11 @@ public final class EscalationResumeDialog {
 
     /**
      * Routes an {@code Escalated} outcome to its internal-error or resumable path
-     * (task 7.4/7.5, D8), then — for the resumable path only — applies the Case-1 EOF
-     * short-circuit (task 7.8, D2, FR13, NFR-R1): if the console's input is already
-     * exhausted, EOF happened earlier, deeper in the stack (inside an interactive
-     * adapter mid-stage), and the resulting infrastructure failure is what produced
-     * this very {@code Escalated} outcome. Prompting again would re-enter an
-     * input-requiring dialog on a console that cannot produce more input (NFR-R1), so
-     * this throws {@link InputExhaustedException} instead of running the resume
-     * dialog — {@link RunExitCodeMapper} maps that exception to exit code 4. No
-     * farewell line is printed here; see {@link InputExhaustedException}'s javadoc
-     * for why that is the CLI boundary's job.
+     * (task 7.4/7.5, D8). No engine port reads the console, so input can end only at
+     * this dialog's own prompt, which the caller maps to exit 10 — there is no earlier
+     * EOF to short-circuit (FR5 of remove-interactive-console).
      *
-     * <p>Implements FR9, FR13, NFR-R1, D2, D8 of add-manual-run.
+     * <p>Implements FR9, D8 of add-manual-run; FR5 of remove-interactive-console.
      *
      * @param context the task context the dispatched outcome was produced from;
      *     never null
@@ -65,9 +58,6 @@ public final class EscalationResumeDialog {
         String rendered = renderEscalation(escalated.report(), ReportPlane.CONSOLE);
         if (escalated.report() instanceof EscalationReport.PipelineMismatch) {
             throw new InternalErrorException(rendered);
-        }
-        if (console.inputExhausted()) {
-            throw new InputExhaustedException();
         }
         return handleResumable(context, escalated, rendered);
     }

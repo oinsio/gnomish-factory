@@ -105,8 +105,7 @@ record TakeEngineExecution(
      * <p>Implements FR9, FR12, FR13, FR18, D2, D3, D11, D12 of add-tracker-port.
      *
      * @param order the take order the run executes: the pipeline it advances through (the task's
-     *     own law on a fresh claim, design D6 of introduce-take-order), the interactive mode, and
-     *     the tracker, task identity and instance identity for the revocation check and the
+     *     own law on a fresh claim, design D6 of introduce-take-order), and the tracker, task identity and instance identity for the revocation check and the
      *     terminal write; never null
      * @param bootstrap the located/materialized bundle the worktree and taskId are read from
      * @param context the task context to run with — the caller's choice of original or

@@ -19,9 +19,7 @@ import org.springframework.boot.ApplicationArguments;
  * rejected up front, before the tracker is ever touched, mirroring {@link
  * TakeArgumentsParser}'s "Flag validation" refusal: {@code --mode}, {@code --task}, {@code
  * --task-file}, {@code --task-id}, {@code --from-stage}, {@code --resume}, {@code --base}, {@code
- * --discard-work}, {@code --takeover}. {@code --interactive} is rejected too — serve is
- * unconditionally non-interactive (FR4) — rather than merely left unparsed, so a caller who
- * mistakenly passes it gets a clear refusal instead of silent acceptance.
+ * --discard-work}, {@code --takeover}.
  *
  * <p>Implements FR2, FR4, D3 of add-factory-serve; FR3 of add-project-registry.
  */
@@ -33,17 +31,8 @@ final class ServeArgumentsParser {
     private static final String DRAIN = "drain";
 
     /** Flags {@code serve} never accepts: {@code take}'s single-task flag set (see class doc). */
-    private static final List<String> REJECTED_FLAGS = List.of(
-            "mode",
-            "task",
-            "task-file",
-            "task-id",
-            "from-stage",
-            "resume",
-            "base",
-            "discard-work",
-            "takeover",
-            "interactive");
+    private static final List<String> REJECTED_FLAGS =
+            List.of("mode", "task", "task-file", "task-id", "from-stage", "resume", "base", "discard-work", "takeover");
 
     /**
      * Every option {@code serve} knows (FR8 of fix-operator-blockers): its own flags plus {@link
@@ -73,7 +62,7 @@ final class ServeArgumentsParser {
         for (String flag : REJECTED_FLAGS) {
             if (args.containsOption(flag)) {
                 throw new UsageException("--" + flag + " is not accepted by 'gnomish serve': serve has no"
-                        + " single-task flags, no --mode/--resume, and is unconditionally non-interactive");
+                        + " single-task flags and no --mode/--resume");
             }
         }
     }

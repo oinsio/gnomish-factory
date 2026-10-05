@@ -10,9 +10,7 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish take}'s command-line flags into a {@link TakeArguments} (task 5.13): a
- * required-nothing {@code --dir} (the registered clone, defaulting to {@code .}), {@code
- * --interactive[=executor|judge]} (identical semantics to {@code gnomish run}'s, via {@link
- * InteractiveModeParser}), {@code --base} (explicit-mode fresh-claim only), {@code --discard-work},
+ * required-nothing {@code --dir} (the registered clone, defaulting to {@code .}), {@code --base} (explicit-mode fresh-claim only), {@code --discard-work},
  * and the positional refs — every non-{@code --}, non-{@code take}-token source argument, via
  * {@link ArgumentsParsingSupport#allPositionalsAfterSubcommand}: zero for bare mode, one for
  * explicit mode, two or more for batch mode (FR2 of add-factory-serve).
@@ -26,8 +24,7 @@ import org.springframework.boot.ApplicationArguments;
  * {@code <ref>}) additionally rejects {@code --base} — a start modifier meaningful only for an
  * explicit-mode fresh claim — and {@code --takeover}, the explicit-mode-only headless takeover
  * authorization (task 6.2 of add-claim-heartbeat, FR6). The batch form ({@code take <ref> <ref>
- * ...}, two or more positional refs) additionally rejects {@code --interactive} and {@code --base}
- * (FR2, FR3 of add-factory-serve; spec "take subcommand surface").
+ * ...}, two or more positional refs) additionally rejects {@code --base} (FR2, FR3 of add-factory-serve; spec "take subcommand surface").
  *
  * <p>Implements FR9 of add-tracker-port; FR6 of add-claim-heartbeat; FR2, FR3 of add-factory-serve;
  * FR3 of add-project-registry.
@@ -49,7 +46,7 @@ final class TakeArgumentsParser {
      * #REJECTED_FLAGS}, which stay known so their specific refusal wins over the generic one.
      */
     private static final List<String> ACCEPTED = Stream.concat(
-                    Stream.of(DIR, "interactive", BASE, DISCARD_WORK, TAKEOVER), REJECTED_FLAGS.stream())
+                    Stream.of(DIR, BASE, DISCARD_WORK, TAKEOVER), REJECTED_FLAGS.stream())
             .toList();
 
     /**
@@ -58,15 +55,13 @@ final class TakeArgumentsParser {
      *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
      * @return the validated flags
      * @throws UsageException if a rejected flag is present, {@code --base} is given on the bare
-     *     form, {@code --interactive} or {@code --base} is given on the batch form (2+ refs), or a
-     *     shared flag ({@code --interactive}) fails its own format check
+     *     form, or {@code --base} is given on the batch form (2+ refs)
      */
     TakeArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, TAKE_TOKEN, ACCEPTED, Map.of());
         rejectRunOnlyFlags(args);
         Path dir = clone.clonePath();
         List<String> refs = ArgumentsParsingSupport.allPositionalsAfterSubcommand(args, TAKE_TOKEN);
-        RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
         String base = ArgumentsParsingSupport.singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
         boolean takeover = args.containsOption(TAKEOVER);
@@ -79,22 +74,16 @@ final class TakeArgumentsParser {
                     "--takeover cannot be combined with bare 'take': it authorizes an explicit 'take <ref>' takeover only");
         }
         if (refs.size() >= 2) {
-            rejectBatchOnlyFlags(interactiveMode, base);
+            rejectBatchOnlyFlags(base);
         }
-        return new TakeArguments(dir, refs, interactiveMode, base, discardWork, takeover);
+        return new TakeArguments(dir, refs, base, discardWork, takeover);
     }
 
     /**
-     * FR3 of add-factory-serve: batch mode ({@code take <ref> <ref> ...}) rejects {@code
-     * --interactive} — no single console session makes sense across multiple concurrently worked
-     * refs — and {@code --base}, a start modifier meaningful only for one fresh explicit-mode claim.
+     * FR3 of add-factory-serve: batch mode ({@code take <ref> <ref> ...}) rejects {@code --base},
+     * a start modifier meaningful only for one fresh explicit-mode claim.
      */
-    private void rejectBatchOnlyFlags(RunArguments.InteractiveMode interactiveMode, @Nullable String base) {
-        if (interactiveMode != RunArguments.InteractiveMode.NONE) {
-            throw new UsageException(
-                    "--interactive cannot be combined with batch 'take <ref> <ref> ...': it names a single "
-                            + "console session, not one per ref");
-        }
+    private void rejectBatchOnlyFlags(@Nullable String base) {
         if (base != null) {
             throw new UsageException(
                     "--base cannot be combined with batch 'take <ref> <ref> ...': it is a start modifier for "

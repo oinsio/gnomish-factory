@@ -3,8 +3,9 @@
 # path (design D7, D11 of add-agent-executor). It does not parse its own
 # invocation: real CLI flags (`-p`, `--output-format stream-json --verbose`,
 # `--model`, ...) are accepted positionally on the command line for realism in
-# ProcessBuilder logs, but the fake's behaviour is driven entirely by the
-# GNOMISH_FAKE_SCENARIO env var, which names a scenario directory under
+# ProcessBuilder logs, but the fake's behaviour is driven by the
+# GNOMISH_FAKE_SCENARIO env var (the `--model` value is read only for the
+# opt-in judge selection below), which names a scenario directory under
 # scenarios/ (sibling to this script) — see README.md in that directory for
 # the per-scenario file contract.
 #
@@ -36,6 +37,10 @@
 #     scenario named in next-scenario instead — the multi-attempt stand-in
 #     for "the operator answered, so attempt 2 is a different round" (D1),
 #     relying on the workspace persisting across attempts of the same stage
+#   - if $GNOMISH_FAKE_JUDGE_SCENARIO and $GNOMISH_FAKE_JUDGE_MODEL are both
+#     set, an invocation whose argv carries `--model <judge model>` plays the
+#     judge scenario instead of $GNOMISH_FAKE_SCENARIO — one binary standing in
+#     for the executor and the judge (D4 of remove-interactive-console)
 #
 # Not production code: a test double, never PIT-mutated (Java-only gate).
 set -eu
@@ -66,6 +71,22 @@ fi
 if [ -n "${GNOMISH_FAKE_CAPTURE_STDIN:-}" ]; then
     cat >> "$GNOMISH_FAKE_CAPTURE_STDIN"
     printf -- '\n---\n' >> "$GNOMISH_FAKE_CAPTURE_STDIN"
+fi
+
+# Optional role selection, opt-in only (design D4 of remove-interactive-console): when both
+# GNOMISH_FAKE_JUDGE_SCENARIO and GNOMISH_FAKE_JUDGE_MODEL are set and argv carries
+# `--model <GNOMISH_FAKE_JUDGE_MODEL>`, this invocation is a judge vote and plays the judge
+# scenario; every other invocation plays GNOMISH_FAKE_SCENARIO. The real adapter passes
+# `--model` on every executor round and judge vote alike, and a manifest names the two models
+# apart, so one binary can stand in for both roles without reading the prompt.
+if [ -n "${GNOMISH_FAKE_JUDGE_SCENARIO:-}" ] && [ -n "${GNOMISH_FAKE_JUDGE_MODEL:-}" ]; then
+    PREVIOUS_ARG=''
+    for ARG in "$@"; do
+        if [ "$PREVIOUS_ARG" = '--model' ] && [ "$ARG" = "$GNOMISH_FAKE_JUDGE_MODEL" ]; then
+            GNOMISH_FAKE_SCENARIO=$GNOMISH_FAKE_JUDGE_SCENARIO
+        fi
+        PREVIOUS_ARG=$ARG
+    done
 fi
 
 SCENARIO_DIR="$SCENARIOS_DIR/$GNOMISH_FAKE_SCENARIO"

@@ -13,21 +13,20 @@ import java.util.List;
  * add-agent-executor): each method renders exactly one section into a shared
  * {@link StringBuilder}, taking only the pre-read data it needs — no coupling
  * to {@code StageExecutor.Request} or to file I/O. Callers pick and stitch
- * the subset they need (the interactive executor uses all five via {@link
- * #renderExecutorBriefing}; the judge, task 6/7, will use a different
- * subset — goal, decisions, criteria, verdict instruction — without prior-
- * attempt feedback or input artifacts).
+ * the subset they need: the stage round prompt uses all five via {@link
+ * #renderExecutorBriefing}; the judge prompt uses goal, decisions, criteria
+ * and the verdict instruction, without prior-attempt feedback or input
+ * artifacts.
  *
- * <p>Implements FR14 of add-agent-executor; the logic itself carries forward
- * FR3 of add-manual-run, moved here unchanged from {@code adapter.console}.
+ * <p>Implements FR14 of add-agent-executor; FR4 of remove-interactive-console.
+ * The logic itself carries forward FR3 of add-manual-run.
  */
 public final class BriefingSections {
 
     private BriefingSections() {}
 
     /**
-     * Renders the interactive/executor briefing exactly as {@code
-     * StageBriefing} did before extraction: task goal, input artifacts,
+     * Renders the executor briefing: task goal, input artifacts,
      * prior-attempt feedback, decisions, and the control-file section, in
      * that order. A convenience for the common five-section case; callers
      * needing a different subset (e.g. the judge) compose the individual

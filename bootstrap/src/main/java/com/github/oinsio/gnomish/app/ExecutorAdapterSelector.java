@@ -6,11 +6,7 @@ import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor;
 import com.github.oinsio.gnomish.adapter.agent.CompositeAgentProgressListener;
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener;
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor;
-import com.github.oinsio.gnomish.adapter.console.InteractiveJudgeVoter;
-import com.github.oinsio.gnomish.adapter.console.InteractiveStageExecutor;
-import com.github.oinsio.gnomish.adapter.console.StageBriefing;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
-import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
@@ -23,46 +19,29 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Selects the {@link StageExecutor}/{@link JudgeVoter} adapter pair {@link RunAssembly}
- * wires into {@code EnginePorts} (FR10, design D6 of add-agent-executor): the interactive console
- * adapter when {@code --interactive} covers the role, else the manifest-driven CLI adapter — every
- * stage reaching the engine is {@code agent-cli} by construction. Extracted from {@link
- * RunAssembly} purely to keep both files within the project's file-size guidance
- * (`.claude/rules/process-invariants.md`); the behavior is unchanged.
+ * Binds the {@link StageExecutor}/{@link JudgeVoter} pair {@link RunAssembler} wires into {@code
+ * EnginePorts} to the run's execution medium: the manifest-driven CLI adapters are the only binding
+ * (FR2 of remove-interactive-console) — every stage reaching the engine is {@code agent-cli} by
+ * construction — and what this class decides is where they run. On the host, the executor's rounds
+ * carry the host-git decoration; in container mode they go through the sandboxed round source, the
+ * executor is wrapped for resume re-verification, and the judge votes in the sandbox's judge
+ * environments. The executor and the judge get deliberately different progress listeners.
  *
- * <p>Implements FR7, FR10, D6, D10 of add-agent-executor.
+ * <p>Implements FR7, D6, D10 of add-agent-executor; FR2 of remove-interactive-console.
  */
 final class ExecutorAdapterSelector {
 
     private ExecutorAdapterSelector() {}
 
     /**
-     * Selects the stage executor: the interactive console adapter when {@code interactiveMode} is
-     * {@code ALL} or {@code EXECUTOR_ONLY} (FR10, design D6), else the manifest-driven CLI adapter
-     * wired with the renderer + status-enricher composite progress listener (task 9.4, FR7, D10)
-     * bound to {@code holder}.
-     */
-    static StageExecutor stageExecutor(
-            DialogConsole console,
-            RunArguments.InteractiveMode interactiveMode,
-            StatusSnapshotHolder holder,
-            ManualRunAssembly assembly,
-            ChildEnvAllowlist childEnv,
-            PipelineLaw law) {
-        return switch (interactiveMode) {
-            case ALL, EXECUTOR_ONLY -> new InteractiveStageExecutor(console, new StageBriefing(law));
-            case NONE, JUDGE_ONLY -> cliStageExecutor(holder, assembly, childEnv, law);
-        };
-    }
-
-    /**
-     * The manifest-driven CLI executor: the host construction unchanged, or — in container mode
-     * (the integration pass of add-sandbox-core) — rounds routed through the sandboxed round
-     * source and wrapped by {@link ResumeVerificationStageExecutor}, so an interrupted
+     * The manifest-driven CLI executor, wired with the renderer + status-enricher composite
+     * progress listener (task 9.4, FR7, D10) bound to {@code holder}: the host construction, or —
+     * in container mode (the integration pass of add-sandbox-core) — rounds routed through the
+     * sandboxed round source and wrapped by {@link ResumeVerificationStageExecutor}, so an interrupted
      * verification found on resume re-verifies its harvested attempt commit without an agent
      * re-run (FR21, D15).
      */
-    private static StageExecutor cliStageExecutor(
+    static StageExecutor stageExecutor(
             StatusSnapshotHolder holder, ManualRunAssembly assembly, ChildEnvAllowlist childEnv, PipelineLaw law) {
         SandboxRunPieces sandbox = assembly.sandbox;
         if (sandbox == null) {
@@ -87,30 +66,22 @@ final class ExecutorAdapterSelector {
     }
 
     /**
-     * Selects the judge voter: the interactive console adapter when {@code interactiveMode} is
-     * {@code ALL} or {@code JUDGE_ONLY} (FR10, design D6), else the manifest-driven CLI adapter
-     * wired with the shared renderer alone (task 9.4, design D10): a judge round runs under the
+     * The manifest-driven CLI judge voter, wired with the shared renderer alone (task 9.4, design D10): a judge round runs under the
      * verifying activity, so the executor-only status enricher is deliberately left out.
      */
     static JudgeVoter judgeVoter(
-            DialogConsole console,
-            RunArguments.InteractiveMode interactiveMode,
             FactoryProperties factoryProperties,
             SystemClock systemClock,
             ChildEnvAllowlist childEnv,
             PipelineLaw law,
             @Nullable SandboxRunPieces sandbox) {
-        return switch (interactiveMode) {
-            case ALL, JUDGE_ONLY -> new InteractiveJudgeVoter(console, law);
-            case NONE, EXECUTOR_ONLY ->
-                new CliJudgeVoter(
-                        factoryProperties,
-                        systemClock,
-                        new LoggingAgentProgressListener(),
-                        childEnv,
-                        law,
-                        sandbox == null ? null : sandbox.judgeEnvironments());
-        };
+        return new CliJudgeVoter(
+                factoryProperties,
+                systemClock,
+                new LoggingAgentProgressListener(),
+                childEnv,
+                law,
+                sandbox == null ? null : sandbox.judgeEnvironments());
     }
 
     /**

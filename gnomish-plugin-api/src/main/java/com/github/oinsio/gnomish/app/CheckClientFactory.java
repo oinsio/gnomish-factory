@@ -118,7 +118,7 @@ public interface CheckClientFactory {
      * declaration could not see.
      *
      * <p>The default returns an empty list — a provider that reads no credential from the
-     * environment (the interactive human oracle) needs no override; declaring this is mandatory for
+     * environment needs no override; declaring this is mandatory for
      * any provider that does.
      *
      * @param subsection this provider's {@code factory.check.<provider>} operator subsection;

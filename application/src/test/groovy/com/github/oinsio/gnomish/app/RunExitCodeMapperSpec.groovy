@@ -21,7 +21,6 @@ class RunExitCodeMapperSpec extends Specification {
         exception | expectedCode
         new UsageException('bad flag') | 2
         new PipelineLoadFailedException(['error line']) | 3
-        new InputExhaustedException() | 4
         new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb') | 5
         new TaskNotFoundException('PROJ-1') | 6
         new BranchShapeRefusedException('PROJ-1', new BranchShape.Corrupt('state.json: truncated')) | 7
@@ -29,6 +28,18 @@ class RunExitCodeMapperSpec extends Specification {
         new CheckpointEofException(new ConsoleClosedException()) | 11
         new AbortedException('persist failed') | 12
         new InternalErrorException('mismatch') | 1
+    }
+
+    // FR5, FR8 of remove-interactive-console: code 4 is retired — no type maps to it, so the
+    // mapper's whole range is the table above plus the fallback.
+    def "the retired code 4 is never returned"() {
+        expect:
+        [
+            new UsageException('bad flag'),
+            new PipelineLoadFailedException(['error line']),
+            new ConsoleClosedException(),
+            new RuntimeException('unexpected')
+        ].every { mapper.getExitCode(it) != 4 }
     }
 
     def "getExitCode falls back to 1 for an unrecognized Throwable"() {

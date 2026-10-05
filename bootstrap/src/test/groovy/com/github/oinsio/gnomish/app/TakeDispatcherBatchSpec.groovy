@@ -168,7 +168,7 @@ tracker:
     }
 
     private TakeArguments batchArgs(List<String> refs, boolean takeover = false) {
-        new TakeArguments(cloneDir, refs, RunArguments.InteractiveMode.NONE, null, false, takeover)
+        new TakeArguments(cloneDir, refs, null, false, takeover)
     }
 
     // FR3: every ref runs through the disposition matrix (Ready delivers, Finished/Working skip),

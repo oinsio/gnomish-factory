@@ -14,7 +14,7 @@ import spock.lang.Specification
  * Sanity check for the {@code .gnomish-fixtures/e2e} tree task 9.1 builds for the
  * reference E2E harness (M1): before spawning any real process against it, prove
  * the fixture is a genuinely loadable pipeline with one stage whose {@code verify}
- * list covers all four check types, matching {@link VerifyCheck}'s four variants.
+ * list covers three of {@link VerifyCheck}'s four variants (all but {@code external}).
  *
  * <p>This is a fixture sanity spec, not part of the E2E scenario itself (that is
  * tasks 9.2/9.3); it uses the same real {@link PipelineLoader} the pipeline-config
@@ -28,11 +28,8 @@ class E2eFixtureLoadSpec extends Specification {
     PipelineDefinition model
 
     def setupSpec() {
-        // The fixture's `external` check names no provider, so it resolves to the defaulted
-        // github (FR13) — which the load seam grades against the discovered providers, stood in
-        // for here (FR6 of add-plugin-architecture).
         def outcome = PipelineLoader.load(E2eFixture.gnomishDir(), [:],
-        TrackerValidatorStub.discoveredGithubCheckProvider())
+        TrackerValidatorStub.discoveredGithubCheckProvider(), [] as Set)
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }
@@ -43,18 +40,53 @@ class E2eFixtureLoadSpec extends Specification {
         model.stages()[0].advancement() == AdvancementMode.MANUAL
     }
 
-    def "M1: the work stage's verify list covers all four check types in order"() {
+    // D5 of remove-interactive-console: the fixture carries no `external` check — no provider can
+    // be configured for a packaged-jar run, and an unconfigured one is a startup refusal.
+    def "M1: the work stage's verify list covers three check kinds in order"() {
         given:
         def verify = model.stages()[0].verify()
 
         expect:
-        verify.size() == 4
+        verify.size() == 3
         verify[0] instanceof VerifyCheck.Builtin
         (verify[0] as VerifyCheck.Builtin).name() == 'files_exist'
         verify[1] instanceof VerifyCheck.Command
-        verify[2] instanceof VerifyCheck.External
-        verify[3] instanceof VerifyCheck.Judge
-        (verify[3] as VerifyCheck.Judge).votes() == 1
+        verify[2] instanceof VerifyCheck.Judge
+        (verify[2] as VerifyCheck.Judge).votes() == 1
+    }
+
+    // FR3, D5 of remove-interactive-console: the unconfigured-provider fixture is structurally a
+    // valid pipeline — its one `external` check names a discovered provider — so the only thing
+    // that refuses it is the factory-instance fact that no `factory.check.github` is configured.
+    def "FR3: the unconfigured-provider fixture loads once github is configured"() {
+        when:
+        def outcome = loadUnconfiguredProviderFixture(TrackerValidatorStub.configuredGithubCheckProvider())
+
+        then:
+        outcome instanceof LoadOutcome.Loaded
+        def verify = (outcome as LoadOutcome.Loaded).definition().stages()[0].verify()
+        verify.size() == 1
+        verify[0] instanceof VerifyCheck.External
+        (verify[0] as VerifyCheck.External).provider() == 'github'
+    }
+
+    def "FR3: the unconfigured-provider fixture is refused, located at its check's provider"() {
+        when:
+        def outcome = loadUnconfiguredProviderFixture([] as Set)
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        def errors = (outcome as LoadOutcome.Invalid).errors()
+        errors.size() == 1
+        errors[0].file() == 'stages/work/stage.yaml'
+        errors[0].where() == 'verify[0].provider'
+        errors[0].message().contains("check provider 'github' has no factory.check.github section")
+    }
+
+    private static LoadOutcome loadUnconfiguredProviderFixture(Set<String> configured) {
+        PipelineLoader.load(
+                E2eFixture.unconfiguredProviderRoot().resolve('.gnomish'), [:],
+                TrackerValidatorStub.discoveredGithubCheckProvider(), configured)
     }
 
     def "M1: the fixture project root carries marker.txt for the files_exist check"() {

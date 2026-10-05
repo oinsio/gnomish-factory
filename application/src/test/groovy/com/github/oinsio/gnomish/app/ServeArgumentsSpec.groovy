@@ -18,6 +18,6 @@ class ServeArgumentsSpec extends Specification implements RunChainFakes {
         def order = new ServeArguments(Path.of('/work/widgets'), 3, true).slotRunOrder(definition)
 
         then:
-        order == new RunOrder(Path.of('/work/widgets'), null, definition, RunArguments.InteractiveMode.NONE, false)
+        order == new RunOrder(Path.of('/work/widgets'), null, definition, false)
     }
 }

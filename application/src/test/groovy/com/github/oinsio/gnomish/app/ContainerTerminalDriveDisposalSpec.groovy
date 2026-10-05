@@ -45,7 +45,7 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
 
     private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(['']), Verdict verdict = new Verdict.Pass()) {
         ContainerTerminalDrive.run(assemblyRunningLoop(executor, io, verdict), support,
-                new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(CLONE_DIR, null, completingPipeline(), false),
                 CONTEXT, TaskState.atStageStart('build'), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD), null)
     }
 

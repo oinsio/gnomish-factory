@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -52,12 +53,14 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     }
 
     /**
-     * A {@link GitModeRunner} wired with the interactive console adapters (so a scripted bare
-     * Enter drives one round to completion without a real agent CLI), reading from {@code in}
-     * and writing to {@code out}.
+     * A {@link GitModeRunner} whose gnome is the fake agent playing {@code plain-round} (FR6 of
+     * remove-interactive-console), so every round completes without a real agent CLI and no
+     * operator dialog is reached — stdin is empty — writing to {@code output}.
      */
-    private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
+    private GitModeRunner newRunner(PrintStream output = System.out) {
+        new GitModeRunner(
+                newAssembly(new ByteArrayInputStream(new byte[0]), output, FakeAgentSupport.propertiesFor('plain-round')),
+                TaskGitFixture.real(), registeredClone, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {
@@ -66,16 +69,16 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
 
     // FR6, FR7, UX1: the banner prints before the pipeline runs, naming the deterministic branch
     // and worktree path. printBanner writes directly to System.out (the process's own console,
-    // not the injected interactive console adapter), so this spec redirects System.out itself.
+    // not the injected dialog console), so this spec redirects System.out itself.
     def "run() prints the branch and worktree banner before the pipeline runs"() {
         given:
         def originalOut = System.out
         def out = new ByteArrayOutputStream()
         System.out = new PrintStream(out, true, 'UTF-8')
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
+        def runner = newRunner()
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context('PROJ-1'), initialState())
 
         then:
@@ -98,12 +101,11 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     def "run() creates the branch and worktree, and leaves the clone's working copy untouched"() {
         given:
         def out = new ByteArrayOutputStream()
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
-                new PrintStream(out, true, 'UTF-8'))
+        def runner = newRunner(new PrintStream(out, true, 'UTF-8'))
         def cloneStatusBefore = gitOutput(cloneDir, 'status', '--porcelain')
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context('PROJ-2'), initialState())
 
         then: 'the branch exists'
@@ -117,11 +119,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     def "run() removes the worktree once the task completes, branch and history stay"() {
         given:
         def out = new ByteArrayOutputStream()
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
-                new PrintStream(out, true, 'UTF-8'))
+        def runner = newRunner(new PrintStream(out, true, 'UTF-8'))
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context('PROJ-3'), initialState())
 
         then:
@@ -147,10 +148,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         worktree.toFile().deleteDir()
         assert !Files.exists(worktree)
 
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
+        def runner = newRunner()
 
         when: 'a fresh run for the same taskId needs the identical worktree path'
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context('PROJ-7'), initialState())
 
         then: 'the stale registration was pruned first, so the fresh worktree add succeeded'
@@ -162,10 +163,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     def "run() throws UsageException when the task branch already exists"() {
         given:
         gitExitCode(cloneDir, 'branch', 'gnomish/PROJ-4', 'HEAD')
-        def runner = newRunner(new ByteArrayInputStream(new byte[0]), System.out)
+        def runner = newRunner()
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context('PROJ-4'), initialState())
 
         then:
@@ -175,10 +176,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
     // FR7, design D7: an unresolved --base is a usage error, not a resumable condition
     def "run() throws UsageException when --base does not resolve"() {
         given:
-        def runner = newRunner(new ByteArrayInputStream(new byte[0]), System.out)
+        def runner = newRunner()
 
         when:
-        runner.run(new RunOrder(cloneDir, 'does-not-exist', pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, 'does-not-exist', pipeline(), false),
                 context('PROJ-5'), initialState())
 
         then:
@@ -198,10 +199,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         def worktree = expectedWorktree(taskId)
         Files.createDirectories(worktree.getParent())
         gitExitCode(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString())
-        def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
+        def runner = newRunner()
 
         when:
-        runner.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context(taskId), initialState())
 
         then:

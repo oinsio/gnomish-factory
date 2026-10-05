@@ -152,7 +152,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     }
 
     // NFR-S1, D17: a fresh claim actually spawns the agent-cli stage executor's subprocess
-    // (InteractiveMode.NONE, no console fallback) — the strongest available proof that the
+    // (no console fallback) — the strongest available proof that the
     // declared credential never reaches the gnome, since this drives the real launcher.
     def "a fresh take claim never lets the declared tracker credential reach the spawned agent process"() {
         given: 'a Ready task, claimable, with no branch yet — a genuine fresh TakeFreshClaim run'

@@ -49,8 +49,8 @@ public interface RunAssembly {
     /**
      * Builds the per-run outcome loop and engine ports for one invocation.
      *
-     * @param order the run order: the pipeline the run advances through and which role(s), if
-     *     any, use the interactive console adapter (FR10, D6) — whole, as every caller holds one
+     * @param order the run order: the clone, the base and the pipeline the run advances through
+     *     — whole, as every caller holds one
      *     (design D4 of introduce-take-order); on a take, the order already re-bound to the task's
      *     own law (D6 of the same change); never null
      * @param context the task's identity and human decisions; never null

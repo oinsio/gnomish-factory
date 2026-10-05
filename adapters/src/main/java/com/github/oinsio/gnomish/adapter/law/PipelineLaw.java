@@ -21,8 +21,8 @@ import java.util.stream.Collectors;
  * acceptance criteria or rewrite its own instructions mid-task (reward hacking).
  *
  * <p>Built by {@link PipelineLawReader#freeze}; the readers ({@code
- * ExecutorPromptBuilder}, {@code JudgePromptBuilder}, {@code JudgeCriteriaPreflight},
- * {@code StageBriefing}, {@code InteractiveJudgeVoter}) look content up by the same
+ * ExecutorPromptBuilder}, {@code JudgePromptBuilder}, {@code JudgeCriteriaPreflight}) look
+ * content up by the same
  * {@code .gnomish/}-relative ref the {@link
  * com.github.oinsio.gnomish.domain.pipeline.StageDefinition} carries.
  *
@@ -35,8 +35,8 @@ public final class PipelineLaw {
 
     /**
      * One frozen law file's content, a {@code String} for the reason {@link LawSource.Text} states:
-     * its readers are the prompt builders and the console's human write path, and neither renders
-     * captured text differently for its being carried.
+     * its readers are the prompt builders, which render captured text no differently for its being
+     * carried.
      */
     record Content(String text) implements Entry {}
 

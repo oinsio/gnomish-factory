@@ -43,8 +43,7 @@ final class RunAssembler {
      * git-backed persistence rooted at the task worktree.
      *
      * @param assembly the assembly whose fields supply every collaborator; never null
-     * @param order the run order: the pipeline the run advances through and which role(s), if
-     *     any, use the interactive console adapter (FR10, D6); never null
+     * @param order the run order: the pipeline the run advances through; never null
      * @param context the synthesized task's identity; never null
      * @param initialState the synthesized task's initial state; never null
      * @param attemptPersistence the {@code AttemptPersistence} realization rounds commit through
@@ -74,7 +73,6 @@ final class RunAssembler {
             List<String> credentialEnvVarsToScrub,
             LawBinding lawBinding) {
         PipelineDefinition definition = order.definition();
-        RunArguments.InteractiveMode interactiveMode = order.interactiveMode();
         var runLaw = RunLaw.open(lawBinding);
         var law = runLaw.freeze(definition);
         var holder = new StatusSnapshotHolder(
@@ -102,18 +100,12 @@ final class RunAssembler {
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
         var ports = new EnginePorts(
-                ExecutorAdapterSelector.stageExecutor(console, interactiveMode, holder, assembly, childEnv, law),
+                ExecutorAdapterSelector.stageExecutor(holder, assembly, childEnv, law),
                 assembly.checks.builtinRunner(sandbox),
                 assembly.checks.commandRunner(childEnv, sandbox),
-                assembly.checks.externalCheckClient(console, runLaw, RunCheckRunContext.of(context, holder)),
+                assembly.checks.externalCheckClient(runLaw, RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
-                        console,
-                        interactiveMode,
-                        assembly.factoryProperties,
-                        assembly.systemClock,
-                        childEnv,
-                        law,
-                        sandbox),
+                        assembly.factoryProperties, assembly.systemClock, childEnv, law, sandbox),
                 listener,
                 attemptPersistence,
                 assembly.systemClock,

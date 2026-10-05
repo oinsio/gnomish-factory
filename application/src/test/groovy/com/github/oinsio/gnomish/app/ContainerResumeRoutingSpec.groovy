@@ -76,7 +76,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         System.out = new PrintStream(captured, true, 'UTF-8')
         try {
             runner.run(
-                    new RunOrder(CLONE_DIR, null, completingPipeline(), RunArguments.InteractiveMode.NONE, discardWork),
+                    new RunOrder(CLONE_DIR, null, completingPipeline(), discardWork),
                     'PROJ-1', [])
         } finally {
             System.out = originalOut

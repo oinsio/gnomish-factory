@@ -7,9 +7,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The parsed and first-tier-validated flags of one {@code gnomish serve} invocation, produced by
  * {@link ServeArgumentsParser} (task 5.1 of add-factory-serve). Unlike {@link TakeArguments},
- * {@code serve} has no {@code <ref>} — it processes the whole ready queue, not one task — and no
- * {@code --interactive}: serve is unconditionally non-interactive (FR4), so no interactive mode is
- * even parsed.
+ * {@code serve} has no {@code <ref>} — it processes the whole ready queue, not one task.
  *
  * <p>Implements FR2, FR4, FR13, D3 of add-factory-serve.
  *
@@ -30,12 +28,11 @@ record ServeArguments(Path dir, @Nullable Integer slots, boolean drain) {
 
     /**
      * The run order every slot of this daemon works to (FR13): the serve arguments become the
-     * slots' run order here and nowhere else (D1 of introduce-take-order) — serve is
-     * unconditionally non-interactive (FR4), takes no {@code --base}, and always salvages.
+     * slots' run order here and nowhere else (D1 of introduce-take-order) — serve takes no {@code --base}, and always salvages.
      *
      * @param definition the startup pipeline definition
      */
     RunOrder slotRunOrder(PipelineDefinition definition) {
-        return new RunOrder(dir, null, definition, RunArguments.InteractiveMode.NONE, false);
+        return new RunOrder(dir, null, definition, false);
     }
 }

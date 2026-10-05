@@ -147,7 +147,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
                 sandboxProps, factoryProps, trackedContainerSupport(), LiveConsoleIO.onStdout())
 
         when:
-        instanceOne.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
                 segments(),
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 TaskState.atStageStart('work'))
@@ -181,7 +181,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         when: 'a later resume runs from the branch alone'
         new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
                 trackedContainerSupport())
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, segments())
 
         then: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'

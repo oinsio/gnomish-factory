@@ -113,7 +113,7 @@ exec sh '${scriptPath}' "\$@"
 
         when: 'a fresh git-mode run based on release/1.18'
         runner(captureFile.absolutePath).run(
-                new RunOrder(cloneDir, 'release/1.18', pipeline(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(cloneDir, 'release/1.18', pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
         then: 'the run reached Completed and left the delivered branch behind'
@@ -146,7 +146,7 @@ exec sh '${scriptPath}' "\$@"
 
         when: 'a fresh git-mode run with no --base'
         runner(captureFile.absolutePath).run(
-                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
         then: 'the run reached Completed'

@@ -37,7 +37,7 @@ gnomish take 42 43 44                # batch: work three named refs, up to N con
 | `--slots=<n>`  | `serve`    | overrides `factory.serve.slots` for this run; must be a positive integer |
 | `--drain`      | `serve`    | stop-on-empty instead of running forever (see "Drain mode" below)        |
 
-`serve` has no `<ref>`, no `--interactive`, and none of `take`'s single-task
+`serve` has no `<ref>` and none of `take`'s single-task
 flags (`--mode`, `--task`/`--task-file`/`--task-id`, `--resume`, `--from-stage`,
 `--base`, `--discard-work`, `--takeover`) — it works the whole ready queue, not
 one named task, and it is unconditionally non-interactive: an escalation
@@ -49,9 +49,8 @@ Batch `take <ref> <ref> ...` (two or more positional refs) is the existing
 "Stuck `Working`" and "Explicit mode" behavior in `operator-guide.md` still
 apply per ref — plus:
 
-- `--interactive` and `--base` are rejected outright in batch mode (no single
-  console session across N concurrently worked refs; `--base` only makes
-  sense for one fresh explicit-mode claim).
+- `--base` is rejected outright in batch mode (it only makes sense for one
+  fresh explicit-mode claim).
 - `--takeover`, if given, authorizes takeover for **every** `Working` ref in
   the list (whole-run, not per-ref); without it, a `Working` ref held by
   another instance is skipped and named in the summary, exactly like a single

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -84,8 +85,11 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         registeredClone.worktrees().resolve(taskId)
     }
 
-    private GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        new GitResumeRunner(newAssembly(input, output), TaskGitFixture.real(), registeredClone, 'taskId')
+    /** The gnome is the fake agent playing {@code plain-round}; no operator dialog is reached, so stdin is empty. */
+    private GitResumeRunner newResumeRunner() {
+        new GitResumeRunner(
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, FakeAgentSupport.propertiesFor('plain-round')),
+                TaskGitFixture.real(), registeredClone, 'taskId')
     }
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
@@ -117,8 +121,8 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         assert gitOutput(worktree, 'status', '--porcelain') != ''
 
         when: 'a fresh process resumes via the same --resume code path, salvaging by default'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+        newResumeRunner()
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
 
         then: 'a salvage commit landed directly on top of the first round, ahead of the next round commit'
         def subjects = gitOutput(cloneDir, 'log', '--format=%s', "${branchTipAfterFirstRound}..gnomish/${taskId}")

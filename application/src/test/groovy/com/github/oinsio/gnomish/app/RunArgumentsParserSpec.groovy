@@ -185,65 +185,34 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ex.message.contains('--task')
     }
 
-    def "FR10: --interactive absent parses to InteractiveMode.NONE"() {
+    // FR1 of remove-interactive-console: no flag swaps a role for a human any more, so every
+    // spelling of the retired --interactive is refused the way any unknown option is.
+    def "FR1 of remove-interactive-console: #flag is rejected as an unknown option"() {
         when:
-        RunArguments result = parser.parse(args('--task=t'), CLONE)
-
-        then:
-        result.interactiveMode() == RunArguments.InteractiveMode.NONE
-    }
-
-    def "FR10/D6: bare --interactive parses to InteractiveMode.ALL"() {
-        when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive'), CLONE)
-
-        then:
-        result.interactiveMode() == RunArguments.InteractiveMode.ALL
-    }
-
-    def "FR10/D6: --interactive=executor parses to InteractiveMode.EXECUTOR_ONLY"() {
-        when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive=executor'), CLONE)
-
-        then:
-        result.interactiveMode() == RunArguments.InteractiveMode.EXECUTOR_ONLY
-    }
-
-    def "FR10/D6: --interactive=judge parses to InteractiveMode.JUDGE_ONLY"() {
-        when:
-        RunArguments result = parser.parse(args('--task=t', '--interactive=judge'), CLONE)
-
-        then:
-        result.interactiveMode() == RunArguments.InteractiveMode.JUDGE_ONLY
-    }
-
-    def "UX1: --interactive=garbage is a usage error naming the accepted values"() {
-        when:
-        parser.parse(args('--task=t', '--interactive=garbage'), CLONE)
+        parser.parse(args('--task=t', flag), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
-        ex.message.contains('--interactive')
-        ex.message.contains('executor')
-        ex.message.contains('judge')
+        ex.message.startsWith('unknown option --interactive')
+
+        where:
+        flag << [
+            '--interactive',
+            '--interactive=executor',
+            '--interactive=judge'
+        ]
     }
 
-    def "UX1: --interactive given twice (bare) is a usage error"() {
+    // FR1 of remove-interactive-console: the usage error is the operators' only --help, so its
+    // accepted list is the run flag surface — exactly these options, none of them a role swap.
+    def "FR1 of remove-interactive-console: the usage error lists exactly the run options"() {
         when:
-        parser.parse(args('--task=t', '--interactive', '--interactive'), CLONE)
+        parser.parse(args('--task=t', '--no-such-flag'), CLONE)
 
         then:
         UsageException ex = thrown(UsageException)
-        ex.message.contains('--interactive')
-    }
-
-    def "UX1: --interactive given twice with scoped values is a usage error"() {
-        when:
-        parser.parse(args('--task=t', '--interactive=executor', '--interactive=judge'), CLONE)
-
-        then:
-        UsageException ex = thrown(UsageException)
-        ex.message.contains('--interactive')
+        ex.message == "unknown option --no-such-flag for 'gnomish run'; accepted: --dir, --task, --task-file," +
+                ' --task-id, --from-stage, --mode, --base, --resume, --discard-work'
     }
 
     def "FR7/D7: --base parses through as a plain ref string"() {

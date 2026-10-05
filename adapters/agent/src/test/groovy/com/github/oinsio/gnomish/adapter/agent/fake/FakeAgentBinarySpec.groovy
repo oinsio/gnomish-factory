@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.fake
 
+import java.nio.file.Files
 import spock.lang.Specification
 
 /**
@@ -48,5 +49,35 @@ class FakeAgentBinarySpec extends Specification {
 
         then: 'it exits with the shell EX_USAGE convention'
         result.exitCode() == 64
+    }
+
+    // FR6, D4 of remove-interactive-console: one binary stands in for the executor and the judge —
+    // the `--model` token selects the judge scenario when the judge pair is set, and every other
+    // model plays the executor scenario.
+    def "the judge model plays the judge scenario and any other model plays the executor scenario"() {
+        given: 'one judge-selecting environment, invoked once per model'
+        def invocationWith = { String model ->
+            new FakeAgentInvocation(
+            scenario: 'plain-round',
+            judgeScenario: 'judge-verdict-pass',
+            judgeModel: 'judge-model',
+            extraArgs: ['-p', '--model', model])
+        }
+
+        when: 'the fake runs as the executor and then as the judge'
+        def executorRound = invocationWith('work-model').run()
+        def judgeVote = invocationWith('judge-model').run()
+
+        then: 'each plays its own scenario\'s scripted stream'
+        executorRound.exitCode() == 0
+        judgeVote.exitCode() == 0
+        executorRound.stdoutLines() == scriptedStdout('plain-round')
+        judgeVote.stdoutLines() == scriptedStdout('judge-verdict-pass')
+        executorRound.stdoutLines() != judgeVote.stdoutLines()
+    }
+
+    private static List<String> scriptedStdout(String scenario) {
+        Files.readAllLines(FakeAgentBinary.scenariosDir().resolve(scenario).resolve('stdout.jsonl'))
+                .findAll { !it.isEmpty() }
     }
 }

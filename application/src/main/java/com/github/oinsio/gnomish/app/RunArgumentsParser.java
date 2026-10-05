@@ -38,11 +38,10 @@ public final class RunArgumentsParser {
     private static final String BASE = "base";
     private static final String RESUME = "resume";
     private static final String DISCARD_WORK = "discard-work";
-    private static final String INTERACTIVE = "interactive";
 
     /** Every option {@code run} accepts (FR8 of fix-operator-blockers). */
     private static final List<String> ACCEPTED =
-            List.of(DIR, TASK, TASK_FILE, TASK_ID, FROM_STAGE, INTERACTIVE, MODE, BASE, RESUME, DISCARD_WORK);
+            List.of(DIR, TASK, TASK_FILE, TASK_ID, FROM_STAGE, MODE, BASE, RESUME, DISCARD_WORK);
 
     /**
      * Filesystem/git-ref-safe charset for {@code --task-id}: ASCII letters, digits, {@code -}
@@ -69,12 +68,11 @@ public final class RunArgumentsParser {
         TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);
         String fromStage = parseFromStage(args);
-        RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
         RunArguments.Mode mode = GitFlagsValidator.parseMode(singleValue(args, MODE));
         String base = singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
         GitFlagsValidator.validate(mode, resume, base, discardWork, args);
-        return new RunArguments(dir, taskSource, taskId, fromStage, interactiveMode, mode, base, resume, discardWork);
+        return new RunArguments(dir, taskSource, taskId, fromStage, mode, base, resume, discardWork);
     }
 
     private TaskSource parseTaskSource(ApplicationArguments args) {

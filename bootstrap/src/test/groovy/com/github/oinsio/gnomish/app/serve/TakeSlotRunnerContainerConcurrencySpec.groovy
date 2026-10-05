@@ -3,18 +3,7 @@ package com.github.oinsio.gnomish.app.serve
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
-import com.github.oinsio.gnomish.app.AppAssemblyFixture
-import com.github.oinsio.gnomish.app.ClaimTenure
-import com.github.oinsio.gnomish.app.ContainerE2eDocker
-import com.github.oinsio.gnomish.app.ContainerSupportFixture
-import com.github.oinsio.gnomish.app.ContainerTakeSupport
-import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
-import com.github.oinsio.gnomish.app.RegisteredCloneFixture
-import com.github.oinsio.gnomish.app.RunArguments
-import com.github.oinsio.gnomish.app.RunOrder
-import com.github.oinsio.gnomish.app.SlotWiring
-import com.github.oinsio.gnomish.app.TaskGitFixture
-import com.github.oinsio.gnomish.app.TrustedBaseContext
+import com.github.oinsio.gnomish.app.*
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -26,17 +15,8 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
-import com.github.oinsio.gnomish.sandbox.BindingNames
-import com.github.oinsio.gnomish.sandbox.BindingProperties
-import com.github.oinsio.gnomish.sandbox.BindingTrustTable
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.sandbox.*
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
@@ -45,12 +25,7 @@ import java.nio.file.Path
 import java.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import spock.lang.IgnoreIf
-import spock.lang.Retry
-import spock.lang.Specification
-import spock.lang.TempDir
-import spock.lang.Timeout
-
+import spock.lang.*
 /**
  * Task 5.3 of add-serve-sandbox-lifecycle: proves the {@code factory-serve} scenario "Two slots
  * run containers concurrently" — two {@link TakeSlotRunner#run} calls, one shared runner over one
@@ -177,7 +152,7 @@ autonomy:
                 containerTakeSupport, new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
-                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)
     }
 

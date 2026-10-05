@@ -5,8 +5,8 @@ import java.io.Serial;
 
 /**
  * Case 2 of the EOF flows (design D2), at the manual checkpoint prompt: the operator
- * pressed Ctrl-D right at {@link RunnerOutcomeLoop#handlePaused}, a deliberate exit
- * distinct from an escalation's Case 1/2 EOF. {@link RunnerOutcomeLoop} catches the
+ * pressed Ctrl-D right at {@code RunnerOutcomeLoop#handlePaused}, a deliberate exit
+ * distinct from an escalation's EOF. {@link RunnerOutcomeLoop} catches the
  * {@link ConsoleClosedException} thrown by that prompt and rethrows this type —
  * carrying it as the cause — so {@link RunExitCodeMapper} can tell this apart from
  * {@link EscalationEofException} and map it to the {@code Paused}-family exit code

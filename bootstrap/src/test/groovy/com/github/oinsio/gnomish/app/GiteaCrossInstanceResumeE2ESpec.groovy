@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -59,30 +60,30 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         originUrl = gitea.createRepository("cross-instance-${System.nanoTime()}")
     }
 
-    private static StageDefinition stage(String name) {
+    private static StageDefinition stage(String name, AdvancementMode advancement) {
         new StageDefinition(
                 name, 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
+                new AutonomyLimits(3), advancement)
     }
 
     /** Two stages: instance A's own round only completes stage "build", never the whole task —
-     * so the run stops mid-task with no Completed/cleanup commit of its own (that commit is not
-     * pushed, per design D11's push scope of "after every round"); instance B then resumes and
-     * finishes stage "verify" to completion, producing its own round push. */
+     * "build" ends at a manual checkpoint, where A's operator leaves — so the run stops mid-task
+     * with no Completed/cleanup commit of its own (that commit is not pushed, per design D11's
+     * push scope of "after every round"); instance B then resumes and finishes stage "verify" to
+     * completion, producing its own round push. */
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [
-            stage('build'),
-            stage('verify')
+            stage('build', AdvancementMode.MANUAL),
+            stage('verify', AdvancementMode.AUTO)
         ])
     }
 
-    /** A single Enter is the dominant literal at this spec's call sites — just enough buffered
-     * input for the console prompts these runs never drive interactively, matching the previous
-     * inline default (a single platform line separator, not the trait's 20-line default). */
-    private ManualRunAssembly assembly(InputStream input = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))) {
-        newAssembly(input)
+    /** An assembly whose gnome is the fake agent playing {@code plain-round} (FR6 of
+     * remove-interactive-console), reading the operator dialogs from {@code input}. */
+    private ManualRunAssembly assembly(InputStream input = new ByteArrayInputStream(new byte[0])) {
+        newAssembly(input, System.out, FakeAgentSupport.propertiesFor('plain-round'))
     }
 
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */
@@ -102,14 +103,13 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         def cloneA = RegisteredCloneFixture.registered(tempDir.resolve('home-a'), instanceA)
         def taskId = 'CROSS-1'
 
-        when: 'instance A completes only the first stage\'s round, then its stdin runs out mid-second-stage: only one Enter is supplied, enough for "build" to pass and advance, not enough for "verify" to also complete — simulating a died process (GitModeRunner deliberately leaves such an exit without any outcome write, per its own javadoc)'
-        new GitModeRunner(assembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))),
-                TaskGitFixture.real(), cloneA, LiveConsoleIO.onStdout())
-                .run(new RunOrder(instanceA, null, pipeline(), RunArguments.InteractiveMode.ALL, false),
+        when: 'instance A completes only the first stage\'s round, then its operator leaves at the manual checkpoint "build" ends at: stdin is empty, so "verify" never starts'
+        new GitModeRunner(assembly(), TaskGitFixture.real(), cloneA, LiveConsoleIO.onStdout())
+                .run(new RunOrder(instanceA, null, pipeline(), false),
                 context(taskId), TaskState.atStageStart('build'))
 
-        then: 'stdin exhaustion propagates — the task stopped mid-run, with only the first round durably committed'
-        thrown(InputExhaustedException)
+        then: 'the checkpoint EOF propagates — the task stopped mid-run, with only the first round durably committed'
+        thrown(CheckpointEofException)
         def tipAfterA = gitOutput(instanceA, 'rev-parse', "gnomish/${taskId}")
         tipAfterA
 
@@ -125,10 +125,8 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         gitOutput(instanceB, 'rev-parse', "gnomish/${taskId}") == tipAfterA
 
         when: 'instance B continues the task to completion, driving the second round ("verify") and pushing it'
-        def twoEnters = (System.lineSeparator() * 2)
-        new GitResumeRunner(assembly(new ByteArrayInputStream(twoEnters.getBytes('UTF-8'))),
-                TaskGitFixture.real(), cloneB, 'taskId')
-                .run(new RunOrder(instanceB, null, pipeline(), RunArguments.InteractiveMode.ALL, false), taskId)
+        new GitResumeRunner(assembly(), TaskGitFixture.real(), cloneB, 'taskId')
+                .run(new RunOrder(instanceB, null, pipeline(), false), taskId)
 
         then: 'instance B\'s own round commit for "verify" exists, distinct from instance A\'s "build" round'
         def verifyRoundSha = roundCommitSha(instanceB, taskId, 'verify')

@@ -71,8 +71,14 @@ tasks.named('test') {
 // where Spring Boot would embed a timestamped SBOM in the jar (`BootJarSbomSpec`).
 // `:bootstrap:cyclonedxDirectBom` writes `build/reports/cyclonedx-direct/bom.json`.
 def sbom = layout.buildDirectory.file('reports/cyclonedx-direct/bom.json')
+// The plugin's declared inputs miss a project dependency's version, so a bump of
+// `gnomish-plugin-api` left the task UP-TO-DATE (and FROM-CACHE on CI) with the old version in
+// the SBOM. The classpath's file names carry every version — the project jar's included.
 tasks.named('cyclonedxDirectBom') {
     includeConfigs = ['runtimeClasspath']
+    inputs.files(configurations.named('runtimeClasspath'))
+        .withPropertyName('runtimeClasspathFiles')
+        .withPathSensitivity(PathSensitivity.NAME_ONLY)
 }
 
 // Boot would add `spring-boot-jarmode-tools` from its own plugin classpath — no dependency of

@@ -136,7 +136,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
                 sandboxProps, factoryProps, ContainerSupportFixture.real(gitOne.epochs()), LiveConsoleIO.onStdout())
-        instanceOne.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+        instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
                 segments(), context, TaskState.atStageStart('work'))
 
         then: 'the dialog EOF killed the run'
@@ -160,7 +160,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def resumeGit = TaskGitFixture.real()
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, segments())
 
         then: 'the leftover was salvaged in-box and harvested (FR6)'
@@ -214,7 +214,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def resumeGit = TaskGitFixture.real()
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
-                .run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, segments())
 
         then: 'the task completed — verification judged the harvested attempt commit, no agent ran'

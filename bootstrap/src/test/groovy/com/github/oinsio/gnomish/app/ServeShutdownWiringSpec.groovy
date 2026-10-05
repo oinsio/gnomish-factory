@@ -135,7 +135,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
         new TakeSlotRunner(
-                wiring, new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.NONE, false),
+                wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)
     }
 

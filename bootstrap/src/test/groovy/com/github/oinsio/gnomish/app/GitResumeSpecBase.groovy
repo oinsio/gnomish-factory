@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 
 import java.nio.file.Files
@@ -24,11 +25,13 @@ abstract class GitResumeSpecBase extends ResumeSpecFixtureBase {
     /**
      * The same runner over a caller-supplied {@link com.github.oinsio.gnomish.app.port.git.TaskGit},
      * so a spec can drive the bootstrap with a tenure held on the task — the take path's shape,
-     * which is what authorizes FR8's automatic discard.
+     * which is what authorizes FR8's automatic discard. The gnome is the fake agent playing
+     * {@code plain-round} (FR6 of remove-interactive-console), so {@code input} carries only the
+     * operator dialogs — an escalation decision, a checkpoint confirmation — never a round.
      */
     protected GitResumeRunner newResumeRunner(
             InputStream input, PrintStream output, TaskGit git) {
-        def assembly = newAssembly(input, output, testProperties())
+        def assembly = newAssembly(input, output, FakeAgentSupport.propertiesFor('plain-round'))
         new GitResumeRunner(assembly, git, registeredClone, 'taskId')
     }
 

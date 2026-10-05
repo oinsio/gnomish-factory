@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.app.RunArguments;
 import com.github.oinsio.gnomish.app.RunOrder;
 import com.github.oinsio.gnomish.app.SlotWiring;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
@@ -29,8 +28,6 @@ import org.slf4j.MDC;
  * <p>Built once and reused across every slot invocation over the daemon's lifetime (unlike {@code
  * TakeBareAuto}, which {@code TakeDispatcher} builds fresh per bare-take run): the constructor
  * wires a single {@link TakeClaimAndWork} via {@link TakeClaimAndWorkFactory#forSlot} up front.
- * {@code serve} is unconditionally non-interactive (FR4): the {@link RunOrder} its caller builds
- * carries {@link RunArguments.InteractiveMode#NONE}.
  *
  * <p>MDC: since {@link FeedAutomaton} starts one fresh virtual thread per slot and MDC is
  * thread-local, setting the {@code taskId} key inside {@link #run(TaskRef)} tags only that slot's
@@ -85,7 +82,7 @@ public final class TakeSlotRunner implements SlotRunner {
      *     remote outage gate (D6), and its MDC key is set to the claimed ref's id for the slot's
      *     duration; never null
      * @param run the run order every slot dispatches under: the project clone, the loaded pipeline
-     *     every slot advances through, and serve's fixed non-interactive, no-base, salvaging
+     *     every slot advances through, and serve's fixed no-base, salvaging
      *     settings; never null
      * @param tracker the tracker port every slot fetches and dispatches through; never null
      * @param instanceId this factory instance's identity; never null

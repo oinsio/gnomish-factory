@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
@@ -89,7 +90,11 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         ]
     }
 
-    /** A resume runner whose per-run support runs over the scripted fake docker (seam ctor). */
+    /**
+     * A resume runner whose per-run support runs over the scripted fake docker (seam ctor), with
+     * the fake agent playing {@code plain-round} as the gnome (FR6 of remove-interactive-console):
+     * {@code input} carries only the operator dialogs.
+     */
     protected ContainerResumeRunner runner(InputStream input, PrintStream output) {
         def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(
@@ -97,12 +102,13 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         new ContainerResumeRunner(
-                newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), 'taskId', factory)
+                newAssembly(input, output, FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), sandbox,
+                FakeAgentSupport.propertiesFor('plain-round'), 'taskId', factory)
     }
 
     protected void resume(String taskId, InputStream input, PrintStream output, boolean discardWork = false) {
         runner(input, output).run(
-                new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, discardWork),
+                new RunOrder(cloneDir, null, pipeline(), discardWork),
                 taskId, segments())
     }
 

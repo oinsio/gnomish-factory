@@ -689,7 +689,6 @@ from the command line.
 | Flag                              | Applies to                         | Meaning                                                                                  |
 |-----------------------------------|------------------------------------|------------------------------------------------------------------------------------------|
 | `--dir=<path>`                    | both                               | project clone directory and `.gnomish/` location; defaults to `.`                        |
-| `--interactive[=executor\|judge]` | both                               | human stands in for the named role instead of the real adapter                           |
 | `--base=<ref>`                    | explicit mode only, fresh claim    | override the branch base; rejected on the bare form                                      |
 | `--discard-work`                  | explicit mode only, resume         | discard an interrupted round's leftovers instead of salvaging them                       |
 | `--takeover`                      | explicit mode only, `Working` task | confirm taking over a task held by another (possibly dead) instance without a TTY prompt |

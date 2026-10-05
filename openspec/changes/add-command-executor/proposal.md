@@ -24,12 +24,13 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 - **MODIFIED**: `executor.model` becomes conditional on executor type — still required
   non-blank for `api` and `agent-cli` (and for `judge` checks, unchanged), forbidden for
   `command` (a present model on a command stage is a located config error).
-- **MODIFIED**: the engine's executor result model gains an executor-reported quality
-  failure: command exit ≠ 0 completes the round as a quality failure carrying the exit
-  code and a bounded, sanitized output tail as findings, feeding the normal
-  attempt/retry loop. Exit 0 completes the round and the verify chain runs as usual.
-- **ADDED**: per-stage executor dispatch keyed on the declared executor type (today the
-  wiring assumes every stage reaching the engine is `agent-cli`).
+- **ADDED**: the command executor reports through the executor contract of
+  `define-executor-contract` (sequenced before this change): exit ≠ 0 is the contract's
+  `failed/quality` status carrying the exit code and a bounded, sanitized output tail as
+  findings, feeding the normal attempt/retry loop; exit 0 is `completed` and the verify
+  chain runs as usual. No engine result-model change is made here.
+- **ADDED**: `command` registers as the first **built-in executor** of the contract's
+  executor registry; the name-keyed dispatch itself comes from `define-executor-contract`.
 - No decision-file protocol for command stages — decisions are an agent concept.
   Round boundary checks, attempt persistence, and harvest apply unchanged: a command
   may legitimately modify the working copy — that is its purpose.
@@ -55,7 +56,9 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 - NG4: No engine-level pipeline entry precondition — that is the separately proposed
   `add-pipeline-entry-precondition`; this change complements it, not replaces it.
 - NG5: `api` stays unsupported — the startup rule rejecting it remains, with its
-  message updated to name both supported types.
+  message updated to name the supported types.
+- NG6: No change to the engine's result model or to dispatch — both are owned by
+  `define-executor-contract`; this change only registers a built-in and maps exit codes.
 
 ## Users & Scenarios
 
@@ -86,16 +89,16 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
   layered child-env allowlist and no `GNOMISH_DECISION_FILE`; the observed protocol
   (exit code, output) is identical in host and container modes.
 - FR5: Exit 0 completes the round; the stage's verify chain runs as usual.
-- FR6: Exit ≠ 0 is an executor-reported quality failure: the round is recorded and
-  persisted, the attempt is burned, and a finding naming the exit code with the
-  bounded, sanitized output tail as details feeds the next attempt's feedback; the
-  verify chain is not invoked for that round.
+- FR6: Exit ≠ 0 is reported as the contract's `failed/quality` status with one finding
+  naming the exit code and the bounded, sanitized output tail as details; the engine's
+  own rule (define-executor-contract FR7) then burns the attempt, records the round,
+  feeds the finding forward and skips the verify chain.
 - FR7: A command that cannot start (spawn failure, exit 126/127) or outlives its
-  timeout (process tree killed) is an infrastructure failure of the round — no attempt
+  timeout (process tree killed) is reported as `failed/infrastructure` — no attempt
   burned, escalation as "cannot execute".
-- FR8: The executor serving a stage is selected by the stage's declared executor type;
-  agent stages keep today's behavior, and the interactive-mode substitution applies to
-  agent-typed stages only — a command stage always runs its command for real.
+- FR8: The command executor is a built-in of the executor registry implementing the
+  contract's mirror interface; a `command` stage resolves to it by the registry; the
+  interactive-mode substitution applies to agent-typed stages only.
 - FR9: Round boundary checks, attempt persistence, and harvest apply to command rounds
   unchanged — the command's working-copy modifications are the stage product.
 
@@ -166,27 +169,24 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 - `pipeline-config`: the model-pinning rule becomes conditional on executor type
   (required for agent types, forbidden for `command`), and command stages gain the
   required `executor.command` field with located validation.
-- `stage-engine`: the executor result model gains an executor-reported quality failure
-  (`Failed`) that burns an attempt, records the round, and feeds findings forward
-  without invoking the verify chain.
+  (Layered on the `define-executor-contract` delta of the same requirement, which is
+  sequenced before this change.)
 
 ## Impact
 
 - `domain/.../pipeline/ExecutorType.java` — new `COMMAND` constant;
   `domain/.../pipeline/StageDefinition.java` — `Executor` carries the command;
   `domain/.../pipeline/StageSanityRule.java` — conditional model rule + command rule;
-  `domain/.../pipeline/ApiExecutorRule.java` — message names both supported types.
-- `domain/.../engine/ExecutionResult.java` — new `Failed` variant;
-  `domain/.../engine/RoundExecution.java` — one new switch arm; `StageAttemptLoop`,
-  persistence, and events are otherwise untouched.
+  `domain/.../pipeline/ApiExecutorRule.java` — message names the supported types.
+- No engine change: the command executor returns the contract's `ExecutorResult`;
+  `RoundExecution`, `StageAttemptLoop`, persistence and events are untouched.
 - `adapters/.../pipeline/` — `ExecutorDto`, `StructuralValidation` (wire token),
   `StageDefinitionMapper`, settings validation for command stages beside
   `AgentSettingsValidator`.
 - `adapters/.../check/CommandProcessRunner.java` — generalized into the shared
   command-run core reused by the new executor (see design.md, sync surfaces).
-- New `CommandStageExecutor` adapter beside the existing `StageExecutor`
-  implementations; `bootstrap/.../ExecutorAdapterSelector.java` — per-stage dispatch
-  keyed on executor type.
+- New `CommandStageExecutor` implementing the contract's `Executor` interface;
+  `bootstrap/.../ExecutorRegistry` — one built-in registration, no new dispatch.
 - `docs/glossary.md` — the Executor entry gains the `command` type, disambiguated from
   the `command` verify check.
 - No new dependencies; no port-family addition; no tracker or git protocol change.

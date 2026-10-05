@@ -20,9 +20,8 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
  *
  * <p>Drives a real attempt-limit-1 stage with a {@code files_exist} check on a missing file, so
  * the single attempt fails quality and the engine escalates with {@code AttemptsExhausted} —
- * deterministic, no scripted/mocked executor needed since {@code InteractiveMode.ALL} routes the
- * stage executor to the console adapter fed by blank input lines (see {@code
- * TakeResumeSpecBase#newTakeResumeRunner}).
+ * deterministic, no mocked executor needed since the fake agent plays a clean round every attempt
+ * (see {@code TakeResumeSpecBase#newTakeResumeRunner}).
  */
 class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
 

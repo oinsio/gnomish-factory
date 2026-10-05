@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryApplication
 import com.github.oinsio.gnomish.FactoryBoot
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
@@ -126,6 +127,19 @@ class ManualRunConfigurationSpec extends Specification {
         expect: 'the discovered providers reached the loader, github among them'
         source.checkProviderRegistry().containsKey('github')
         source.checkProviderRegistry().keySet() == context.getBean('checkClientRegistry', Map).keySet()
+    }
+
+    // FR3, design D3 of remove-interactive-console: the configured set the load grades `external`
+    // checks against is the operator's `factory.check` sections — the one fact this root alone holds.
+    def "the PipelineSource grades external checks against the configured factory.check sections"() {
+        given:
+        def properties = new FactoryProperties('instance', null, null, [github: [:], http: [:]])
+
+        when:
+        def source = new ManualRunConfiguration().pipelineSource([:], [:], properties) as GnomishDirPipelineSource
+
+        then:
+        source.configuredCheckProviders() == ['github', 'http'] as Set
     }
 
     // FR1, design D3 of wire-host-mid-round-push: the TaskGit bean carries the real mid-round

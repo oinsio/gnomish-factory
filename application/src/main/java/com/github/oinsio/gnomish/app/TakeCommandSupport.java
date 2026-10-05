@@ -31,7 +31,9 @@ final class TakeCommandSupport {
     /**
      * Loads the pipeline definition from {@code dir}'s working-tree {@code .gnomish/}, once — the
      * read {@code board} and {@code dashboard} display from, deliberately unchanged by
-     * add-base-ref-resolution.
+     * add-base-ref-resolution. A read-only load: an {@code external} check on a provider this
+     * factory has not configured does not refuse a view (FR3, design D3 of
+     * remove-interactive-console).
      *
      * @param dir the target project directory; never null
      * @param pipelineSource where the definition is loaded from; the configured realization also
@@ -42,7 +44,7 @@ final class TakeCommandSupport {
      * @throws IOException if the definition cannot be read (a genuine I/O fault)
      */
     static PipelineDefinition loadPipeline(Path dir, PipelineSource pipelineSource) throws IOException {
-        LoadOutcome outcome = pipelineSource.load(dir);
+        LoadOutcome outcome = pipelineSource.loadReadOnly(dir);
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> definition;
             case LoadOutcome.Invalid(List<ConfigError> errors) ->

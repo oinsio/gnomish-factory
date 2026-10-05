@@ -1,4 +1,4 @@
-purpose: do the work and pass all four kinds of quality control
+purpose: do the work and pass three kinds of quality control
 inputs:
   - kind: source
 outputs:
@@ -17,10 +17,6 @@ verify:
         - marker.txt
   - type: command
     command: test -f attempt-marker.txt && exit 0 || { touch attempt-marker.txt; exit 1; }
-  - type: external
-    checkId: ci/build
-    interval: 1s
-    timeout: 10s
   - type: judge
     criteriaFile: stages/work/acceptance.md
     model: judge-model

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.TaskStart
@@ -60,11 +61,12 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
-    // D19: a broken round (the interactive round never opened an environment, so the sandboxed
-    // persistence cannot durably commit it) aborts the run — the outcome commits on the branch,
+    // D19: a broken round (the fake agent's round completes inside a box no daemon backs, whose
+    // scripted harvest brings no snapshot commit back, so the sandboxed persistence cannot durably
+    // commit it) aborts the run — the outcome commits on the branch,
     // the AbortedException escapes to the CLI boundary, and the box is kept stopped.
     def "a persistence failure records the aborted outcome, keeps the box stopped, and rethrows"() {
-        given: 'a fresh container task whose round runs interactively (scripted console)'
+        given: 'a fresh container task whose round the fake agent plays over the scripted docker'
         def definition = new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -73,13 +75,13 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         def context = new TaskContext('T-ABORT', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         support.taskRepository().createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def assembly = newAssembly()
+        def assembly = newAssembly(FakeAgentSupport.propertiesFor('plain-round'))
         def originalErr = System.err
         System.err = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
 
         when:
         ContainerTerminalDrive.run(
-                assembly, support, new RunOrder(cloneDir, null, definition, RunArguments.InteractiveMode.ALL, false),
+                assembly, support, new RunOrder(cloneDir, null, definition, false),
                 context, TaskState.atStageStart('build'), LawBinding.atRevision(cloneDir, GitObjects.HEAD),
                 null)
 

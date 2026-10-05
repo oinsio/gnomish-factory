@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -58,7 +59,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         // fresh claim's base resolution; setup() wires a real 'origin' remote (TakeResumeSpecBase),
         // so this spec's claimed scenarios need the clone's actual default branch instead — which
         // is the trusted tier the fixture's slot wiring carries.
-        new TakeBareAuto(slotWiring(newAssembly(), TaskGitFixture.real()), BASE, CAP, CLOCK, wipLimit, random)
+        new TakeBareAuto(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real()), BASE, CAP, CLOCK, wipLimit, random)
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {
@@ -84,7 +85,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -107,7 +108,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
@@ -123,7 +124,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         result instanceof TakeResult.EmptyQueue
@@ -140,7 +141,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         result instanceof TakeResult.EmptyQueue
@@ -159,7 +160,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-x1y2z3')
@@ -178,7 +179,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-a1')
@@ -201,7 +202,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -219,7 +220,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(1, headPick())
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(*_)
@@ -252,7 +253,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(1, headPick())
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         0 * tracker.claim(*_)
@@ -271,7 +272,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto()
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.declineFinished(new TaskRef('PROJ-1'), _)
@@ -295,7 +296,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def bareAuto = newBareAuto(UNLIMITED_WIP, headPick(2))
 
         when:
-        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false), tracker, INSTANCE)
+        def result = bareAuto.run(new RunOrder(cloneDir, null, pipeline(), false), tracker, INSTANCE)
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-3'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))

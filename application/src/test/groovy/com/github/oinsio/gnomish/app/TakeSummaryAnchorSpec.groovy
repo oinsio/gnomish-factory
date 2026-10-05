@@ -102,7 +102,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     private void dispatch(List<String> refs) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
         TakeRefDispatch.run(dispatcher(assemblyRunning(new ScriptedExecutor([completedRound()])), heartbeat),
-        new TakeArguments(cloneDir, refs, RunArguments.InteractiveMode.NONE, null, false, false),
+        new TakeArguments(cloneDir, refs, null, false, false),
         new BoundTracker(completingPipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, Stub(TrackerAdapterFactory), tracker,
         INSTANCE), SERVE_PROPERTIES, LOG)
     }

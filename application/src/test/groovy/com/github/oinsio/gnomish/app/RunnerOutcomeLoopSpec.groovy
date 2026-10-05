@@ -129,31 +129,6 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         resumption.state().totals() == totals
     }
 
-    def "dispatch still issues the checkpoint prompt for Paused even when input was already exhausted (no pre-check on this branch, by design)"() {
-        given: 'a console whose EOF-then-resume behavior is scripted directly: readLine throws once, then a fake operator plugs in more lines — modeling "input exhausted earlier, then a human takes over the terminal again"'
-        def totals = ExecutorUsage.none()
-        def advancedState = new TaskState(new Position.AtStage('deploy'), 0, [], totals)
-        def outcome = new TaskOutcome.Paused(advancedState, 'build')
-        def reExhaustibleIo = new ReExhaustibleConsoleIO()
-        def consoleThatWasExhausted = consoleOver(reExhaustibleIo)
-        try {
-            consoleThatWasExhausted.prompt('earlier adapter prompt: ')
-        } catch (ignored) {
-            // latches inputExhausted() — mirrors Case 1 for Escalated
-        }
-        assert consoleThatWasExhausted.inputExhausted()
-        reExhaustibleIo.printed.clear()
-        reExhaustibleIo.resume([''])
-        def loopUnderTest = loopOver(consoleThatWasExhausted)
-
-        when:
-        def resumption = loopUnderTest.dispatch(CONTEXT, outcome)
-
-        then: 'the checkpoint prompt was issued and answered — handlePaused never consults the latched inputExhausted() flag'
-        reExhaustibleIo.printed.any { it.contains('Press Enter') }
-        resumption != null
-    }
-
     def "dispatch rethrows CheckpointEofException when the checkpoint prompt itself hits EOF (Case 2, deliberate Ctrl-D)"() {
         given: 'a console whose script runs out exactly at the checkpoint prompt'
         def totals = ExecutorUsage.none()
@@ -289,31 +264,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         }
     }
 
-    def "dispatch throws InputExhaustedException without prompting when the console's input is already exhausted (Case 1, FR13, NFR-R1, D2)"() {
-        given: 'a console whose input already hit EOF on a prior prompt, deeper in the stack'
-        def exhaustedIo = new ScriptedConsoleIO([])
-        def exhaustedConsole = consoleOver(exhaustedIo)
-        try {
-            exhaustedConsole.prompt('earlier adapter prompt: ')
-        } catch (ignored) {
-            // expected — this is what latches inputExhausted() before the escalation is dispatched
-        }
-        assert exhaustedConsole.inputExhausted()
-        exhaustedIo.printed.clear()
-        def exhaustedLoop = loopOver(exhaustedConsole)
-        def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
-
-        when:
-        exhaustedLoop.dispatch(CONTEXT, outcome)
-
-        then:
-        thrown(InputExhaustedException)
-
-        and: 'no resume-dialog prompt was issued — the console was not touched again'
-        exhaustedIo.printed.isEmpty()
-    }
-
-    def "dispatch still resumes normally through the decision prompt when input is not exhausted (regression)"() {
+    def "dispatch resumes through the decision prompt"() {
         given:
         def scriptedLoop = loopOver(consoleWithScript(['']))
         def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
@@ -333,7 +284,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         when:
         freshLoop.dispatch(CONTEXT, outcome)
 
-        then: 'the exception is EscalationEofException, not the Case-1 InputExhaustedException'
+        then: 'the exception is EscalationEofException, carrying the EOF as its cause'
         def ex = thrown(EscalationEofException)
         ex.cause instanceof ConsoleClosedException
     }
@@ -580,40 +531,5 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
         then:
         rendered.toSet().size() == reports.size()
-    }
-
-    /**
-     * A {@link com.github.oinsio.gnomish.app.port.console.ConsoleIO} fake that can hit EOF once
-     * and then be handed more script via {@link #resume}, unlike {@link ScriptedConsoleIO} which
-     * stays exhausted forever. Models "input exhausted earlier, then more lines become
-     * available" purely to test that {@code handlePaused} never consults {@code
-     * DialogConsole#inputExhausted()} — that flag stays latched {@code true} even once this fake
-     * has more lines to give.
-     */
-    private static class ReExhaustibleConsoleIO implements ConsoleIO {
-        private final List<String> script = []
-        final List<String> printed = []
-
-        void resume(List<String> lines) {
-            script.addAll(lines)
-        }
-
-        @Override
-        String readLine() {
-            if (script.isEmpty()) {
-                throw new ConsoleClosedException()
-            }
-            script.removeFirst()
-        }
-
-        @Override
-        void print(String text) {
-            printed << text
-        }
-
-        @Override
-        void printMachine(String text) {
-            printed << text
-        }
     }
 }

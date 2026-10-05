@@ -64,11 +64,7 @@ record TakeDispatcher(
         // already-claimed order (FR6 of collapse-composition-roots) — and the explicit-mode place
         // a TakeArguments becomes a run order.
         var run = new RunOrder(
-                takeArguments.dir(),
-                takeArguments.base(),
-                bound.definition(),
-                takeArguments.interactiveMode(),
-                takeArguments.discardWork());
+                takeArguments.dir(), takeArguments.base(), bound.definition(), takeArguments.discardWork());
         var order = new TakeOrder(run, bound.tracker().fetchTask(ref), bound.tracker(), bound.instanceId());
         var disposition = new TakeDisposition(wiring, takeArguments.takeover(), confirmation, clock);
         long startedNanos = System.nanoTime();
@@ -89,7 +85,7 @@ record TakeDispatcher(
         // The bare-mode place a TakeArguments becomes a run order (D1 of introduce-take-order). The
         // parser refuses --base on bare take, and a bare take has always salvaged — --discard-work
         // is not passed on here, exactly as before this order existed.
-        var run = new RunOrder(takeArguments.dir(), null, bound.definition(), takeArguments.interactiveMode(), false);
+        var run = new RunOrder(takeArguments.dir(), null, bound.definition(), false);
         long startedNanos = System.nanoTime();
         TakeResult result = bareAuto.run(run, bound.tracker(), bound.instanceId());
         summarize(result, startedNanos);

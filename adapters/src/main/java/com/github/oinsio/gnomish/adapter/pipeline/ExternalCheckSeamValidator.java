@@ -22,9 +22,9 @@ import java.util.Map;
  *
  * <p>Provider existence is checked at load time because it is in-process knowledge — which jars are
  * on the classpath — not target liveness (which the loader deliberately never probes, NG7 of
- * load-pipeline-config). It is checked identically whatever run mode follows, including manual run
- * whose interactive client replaces the whole external seam: a mode-dependent rule would let the
- * same manifest load in one mode and fail in another (design D10).
+ * load-pipeline-config). It is checked identically whatever command follows ({@code run},
+ * {@code take}, {@code serve}): a command-dependent rule would let the same manifest load under one
+ * command and fail under another (design D10).
  *
  * <p>Errors are located {@link ConfigError} data in stage-then-check order, never thrown, so they
  * aggregate with every other load problem in the loader's single pass (NFR-R1).

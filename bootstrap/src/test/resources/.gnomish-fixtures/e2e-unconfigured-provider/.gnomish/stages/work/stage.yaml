@@ -1,0 +1,16 @@
+purpose: wait on a CI the factory has no configuration for
+inputs:
+  - kind: source
+outputs:
+  - id: work-diff
+executor:
+  type: agent-cli
+  model: work-model
+instructions: stages/work/instructions.md
+verify:
+  - type: external
+    provider: github
+    checkId: ci/build
+    interval: 1s
+    timeout: 10s
+advancement: auto
