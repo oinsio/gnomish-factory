@@ -32,8 +32,8 @@ ones. Where they disagree with your working copy, `origin/main` decides the
 question "has it landed?".
 
 - **Never merge, rebase or pull.** You do not need the landed files, only the
-  knowledge of what landed — and this repository denies those commands outright,
-  so attempting one loses the round rather than updating anything.
+  knowledge of what landed — and this repository denies `merge` and `rebase`
+  outright, so attempting one loses the round rather than updating anything.
 - If `origin/main` does not resolve — a run outside a task branch — say so in the
   report's `## Notes` and judge from the working copy alone.
 
@@ -200,10 +200,14 @@ decision that already answers exactly this:
   counts — a stash is a stack shared with every worktree and every other session
   on the machine, and pushing onto it moves another author's files out from under
   them.
-- Never run a git command that writes: `commit`, `push`, `merge`, `rebase`,
-  `pull`, `checkout`, `reset`, `stash`, `restore`, `clean`. Reading is free;
-  `ls-tree`, `log`, `show` and `status` are all you need. The factory owns the
-  branch, and this repository denies several of the writing commands outright.
+- **Never push**: the remote is the factory's. Do not commit either — not because
+  the factory forbids it, but because there is no need and no way: the factory
+  commits whatever the working copy holds when your round ends, and this
+  repository's `.claude/settings.json` denies `git commit` (with `merge`, `rebase`,
+  `cherry-pick`, `revert`), so the attempt would only stall the round. Leave the
+  working copy and the branch alone otherwise too: no `checkout`, `reset`, `stash`,
+  `restore`, `clean` or `pull`. Reading is free; `ls-tree`, `log`, `show` and
+  `status` are all you need.
 - Write exactly one file, `temporary-docs/gnomish/dependencies.md`, plus the
   decision file on the escalating path. Everything else in the working copy —
   `openspec/`, `src/`, `.gnomish/`, `.gnomish-task/` — stays as you found it.

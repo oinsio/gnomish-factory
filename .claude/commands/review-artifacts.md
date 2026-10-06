@@ -44,7 +44,23 @@ completeness / consistency) and merge their findings; run them in parallel.
 
 ### 2. Freshness against the current project
 
-For every concrete claim the artifacts make about the existing project, verify it against
+A change is written once and implemented weeks later; in between other changes land and
+rename what it names, implement part of what it proposes, or decide the opposite. Start from
+what landed since the change was last revised:
+
+```
+git log -1 --format='%h %cs' -- openspec/changes/<name>/
+git log --format='%h %cs %s' <that-commit>..HEAD -- openspec/changes/archive/ <paths the change names>
+```
+
+For each change archived after that commit, read its proposal's opening sections and its
+delta-spec headings; where it touches the same capability, classes, modules, config keys or
+requirement headings, read what it actually did — design and code — before judging. When
+`origin/main` is ahead of the checkout (`git log HEAD..origin/main`), check what landed there
+too, reading files with `git show origin/main:<path>`, and say in each finding which of the
+two the gap is against. Report the overlaps found in a **Landed since** section.
+
+Then, for every concrete claim the artifacts make about the existing project, verify it against
 reality (grep/read; cite file:line):
 
 - Files, classes, methods, modules, Gradle projects, config keys mentioned as *existing* —
@@ -131,6 +147,7 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 | Internal consistency | N contradictions                 |
 | External consistency | N conflicts (specs/code/changes) |
 
+### Landed since         — each change/commit landed after the change was last revised: overlap or "none"
 ### Freshness            — each stale claim: artifact:line, current reality, suggested edit
 ### Coverage matrix      — requirement ID → proposal / delta spec / task (✅/❌ per column)
 ### Completeness         — missing sections/scenarios/tasks with the rule they violate
@@ -140,17 +157,39 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### Verdict              — ready to implement / needs revision (blockers listed)
 ```
 
-Each Recommendations item must be self-contained, with the same format as `/audit-implementation`:
+The Verdict section opens with exactly `ready to implement` or `needs revision`: `needs
+revision` whenever at least one CRITICAL or WARNING recommendation exists, `ready to
+implement` otherwise; the blockers follow on later lines.
+
+Each Recommendations item must be self-contained — the format of `/audit-implementation`,
+plus two lines that make the item refutable rather than a matter of taste:
 
 ```
 N. **SEVERITY — <short title>** (`artifact-or-file:line`)
-   Problem: what is wrong and why it matters, restated here.
+   Problem: what is wrong, restated here.
+   Impact: what concretely goes wrong if the change is implemented as written.
    Fix: the concrete edit to the artifact (or code reality to acknowledge).
+   Fix risk: what the edit could break or cost — checked against the code, the stable
+      specs, the ADRs and the change's own goals and non-goals — or `none`.
 ```
+
+An item earns its place only if it is **worth fixing**: the cited location shows the problem,
+the Impact names a concrete failure (not "clearer wording"), the fix costs less than the gap
+it closes, and the fix harms nothing. Drop an item that:
+
+- **widens the scope** — asks for what the proposal's Non-Goals exclude, or grows the change
+  past one initiative (`process-invariants.md`);
+- **reopens a settled decision** — proposes an alternative `design.md` already considered
+  and rejected, unless it cites what landed since and removed that decision's grounds;
+- **reverts what landed** — "refreshes" the change toward something a landed change
+  deliberately removed;
+- **is advice, not an edit** — "consider X", "add more tests" with no concrete failure;
+- **duplicates** another item.
 
 Severity: CRITICAL — implementing as written would build the wrong thing or break existing
 behavior undeclared; WARNING — gap or drift that will surface during implementation;
-SUGGESTION — clarity/traceability polish. When uncertain, verify against code before
+SUGGESTION — clarity/traceability polish. Severity follows the Impact, never the reverse:
+an Impact that only costs clarity is a SUGGESTION. When uncertain, verify against code before
 reporting; downgrade rather than guess. End with a reminder that nothing in the project was
 modified and the human decides what to apply.
 

@@ -1,8 +1,9 @@
 # Pipeline configuration for developing the factory with the factory itself.
 #
-# The pipeline is deliberately one stage wide while the setup is being debugged:
-# a task names an OpenSpec change, and the gnome decides whether that change can
-# be started now or is blocked by another active change that must land first.
+# A task names an existing OpenSpec change. The pipeline grows one stage at a
+# time while the setup is being debugged: first whether the change can start
+# now (check-dependencies), then how much of it still holds against what has
+# landed since it was written (review-artifacts).
 schemaVersion: "1"
 
 autonomy:

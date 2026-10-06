@@ -90,15 +90,17 @@ verify:
         echo "if you did not: an in-place run measures the operator's own clone, so these are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - write no report, and escalate through \$GNOMISH_DECISION_FILE naming the paths."
         exit 1
       fi
-      # Committed strays, measured against the base the branch was cut from.
+      # Committed strays, measured from the merge base with origin/main - not from
+      # origin/main itself: the factory keeps that ref current, and a plain diff
+      # against it would list everything that landed since the branch was cut.
       # Skipped off a task branch (an in-place run has no branch of its own to
       # measure) and when origin/main is not at hand. `.gnomish-task/` is the
       # factory's own bookkeeping, never the gnome's work.
       branch=$(git branch --show-current)
       case "$branch" in
         gnomish/*)
-          if git rev-parse --verify --quiet origin/main > /dev/null; then
-            committed=$(git diff --name-only origin/main HEAD | grep -v "^$report$" | grep -v "^\.gnomish-task/" || true)
+          if base=$(git merge-base origin/main HEAD 2>/dev/null); then
+            committed=$(git diff --name-only "$base" HEAD | grep -v "^$report$" | grep -v "^\.gnomish-task/" || true)
             if [ -n "$committed" ]; then
               echo "the branch carries committed changes this stage had no business making:"
               echo "$committed"

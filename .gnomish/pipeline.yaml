@@ -1,2 +1,3 @@
 stages:
   - check-dependencies
+  - review-artifacts

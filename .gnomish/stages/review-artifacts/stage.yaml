@@ -1,0 +1,143 @@
+purpose: review the OpenSpec change check-dependencies cleared for freshness against what has landed since it was written, completeness and consistency, and record every finding worth acting on in one report, changing no artifact
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: dependency-verdict
+# The review itself is the project's own /review-artifacts command
+# (.claude/commands/review-artifacts.md); the instructions add only what differs
+# because nobody is watching the round. What this stage leaves behind:
+#   finished  -> temporary-docs/gnomish/review-artifacts.md on the task branch: the
+#                command's whole step 6 report, ending in its numbered Recommendations
+#                and a Verdict (ready to implement / needs revision). The stage that
+#                revises the change works through the recommendations one by one.
+#   could not -> a question in the tracker thread and no report: the change is already
+#                implemented, or a landed change removed its premise - a rewrite or an
+#                abandonment is a human's call, not a list of recommendations.
+outputs:
+  - id: artifact-review
+executor:
+  type: agent-cli
+  # An independent reviewer of a change somebody else wrote, weighing it against code that
+  # moved since: the judgment is the whole stage, so it runs on the strongest model.
+  model: opus
+  settings:
+    # Every claim the artifacts make about the codebase is checked by grep/read, and the
+    # changes of this repository are large (proposal, design, several delta specs, 50+ tasks).
+    maxTurns: 80
+    roundTimeout: 1800s
+    # Bash is for read-only git (log, show, grep, diff, ls-tree, merge-base), the OpenSpec
+    # CLI's read commands and the decision-file echo. Every file is written through Write.
+    # `allowedTools` cannot widen what .claude/settings.json denies (git commit, merge, ...).
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+    disallowedTools:
+      - Agent
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/review-artifacts/instructions.md
+verify:
+  # Cheapest first: without the report there is nothing else to check.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/review-artifacts.md
+      if [ ! -f "$report" ]; then
+        echo "no review report at $report - write it before finishing the round, see .gnomish/stages/review-artifacts/instructions.md"
+        exit 1
+      fi
+  # The report names the change check-dependencies cleared, and keeps the layout of
+  # the command's step 6: the next stage reads it recommendation by recommendation.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/review-artifacts.md
+      expected=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      change=$(sed -n 's/^## Artifacts Review:[[:space:]]*//p' "$report" | head -1 | tr -d '`')
+      if [ "$change" != "$expected" ]; then
+        echo "the report's '## Artifacts Review:' heading names '$change', but temporary-docs/gnomish/dependencies.md cleared '$expected' - review that change and name it exactly"
+        exit 1
+      fi
+      for section in '### Summary' '### Landed since' '### Freshness' '### Coverage matrix' '### Completeness' '### Internal consistency' '### External consistency' '### Recommendations, ordered' '### Verdict'; do
+        grep -q "^$section" "$report" || { echo "the report has no '$section' section - keep the layout of step 6 of .claude/commands/review-artifacts.md"; exit 1; }
+      done
+      section() { awk -v heading="$1" 'index($0, heading) == 1 { inside = 1; next } /^##/ { inside = 0 } inside' "$report"; }
+      recommendations=$(section '### Recommendations, ordered')
+      items=$(printf '%s\n' "$recommendations" | grep -cE '^[0-9]+\. \*\*(CRITICAL|WARNING|SUGGESTION) — ' || true)
+      for field in Problem Impact Fix 'Fix risk'; do
+        count=$(printf '%s\n' "$recommendations" | grep -cE "^[[:space:]]+$field: " || true)
+        if [ "$count" != "$items" ]; then
+          echo "Recommendations has $items item(s) of the form 'N. **SEVERITY — title** (\`location\`)' but $count indented '$field:' line(s) - every item carries one Problem, Impact, Fix and Fix risk line each, as step 6 of the command shows"
+          exit 1
+        fi
+      done
+      # The verdict is what the next stage acts on, so it follows from the severities
+      # (the command's own rule) rather than standing beside them as a second opinion.
+      # Emphasis and case are tolerated: a usable verdict is not worth a round over markup.
+      verdict=$(section '### Verdict' | grep -v '^[[:space:]]*$' | head -1 | tr -d '*_`' | sed 's/^[[:space:]]*//' | tr '[:upper:]' '[:lower:]')
+      blocking=$(printf '%s\n' "$recommendations" | grep -cE '^[0-9]+\. \*\*(CRITICAL|WARNING) — ' || true)
+      case "$verdict" in
+        "needs revision"*) [ "$blocking" -gt 0 ] || { echo "the Verdict reads 'needs revision' but no recommendation is CRITICAL or WARNING - the Verdict opens with 'ready to implement'"; exit 1; } ;;
+        "ready to implement"*) [ "$blocking" -eq 0 ] || { echo "there are $blocking CRITICAL/WARNING recommendation(s), so the Verdict opens with 'needs revision', not 'ready to implement'"; exit 1; } ;;
+        *) echo "the Verdict section opens with '$verdict'; it must open with exactly 'ready to implement' or 'needs revision'"; exit 1 ;;
+      esac
+  # The stage is a review: the two reports are the only things the branch may carry beyond
+  # its base. Measured from the merge base, not origin/main itself: the factory keeps
+  # origin/main current, and a plain diff against it would list everything that landed since
+  # the branch was cut as if this task had changed it. `.gnomish-task/` is the factory's own.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/review-artifacts.md
+      allowed="temporary-docs/gnomish/dependencies.md
+      $report"
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -vxF "$allowed" | grep -v '^\.gnomish-task/' || true)
+      if [ -n "$dirty" ]; then
+        echo "this stage writes only $report, but the working copy also carries:"
+        echo "$dirty"
+        echo "if you made these edits, undo each of them yourself and nothing else."
+        echo "if you did not: they are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - and escalate through \$GNOMISH_DECISION_FILE naming the paths."
+        exit 1
+      fi
+      branch=$(git branch --show-current)
+      case "$branch" in
+        gnomish/*)
+          if base=$(git merge-base origin/main HEAD 2>/dev/null); then
+            committed=$(git diff --name-only "$base" HEAD | grep -vxF "$allowed" | grep -v '^\.gnomish-task/' || true)
+            if [ -n "$committed" ]; then
+              echo "the branch carries committed changes no stage so far had any business making:"
+              echo "$committed"
+              exit 1
+            fi
+          fi
+          ;;
+      esac
+  # Adversarial check of the substance: a wrong recommendation costs more than a missing one,
+  # because the next stage revises the change on its strength.
+  - type: judge
+    criteriaFile: stages/review-artifacts/acceptance.md
+    model: opus
+    settings:
+      # The judge is read-only (Read/Grep/Glob, hard-wired by the factory) and pays a turn
+      # per file it opens; time-zones' judges ran out at 30 on large changes.
+      maxTurns: 60
+      disallowedTools:
+        - Bash
+        - Agent
+        - ScheduleWakeup
+        - SendMessage
+        - ToolSearch
+        - Edit
+        - Write
+        - WebFetch
+        - WebSearch
+    votes: 1
+advancement: auto
+# The judge reviews the whole report adversarially, so a sound review can still need one
+# correction round; one extra attempt before escalating to a human.
+autonomy:
+  attemptLimit: 3
