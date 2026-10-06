@@ -29,3 +29,9 @@ factory:
     # subagents at all say so in their stage.yaml); the value comes from gnomish.env.
     env-passthrough:
       - CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
+      # `gh` in the deliver and usage-report stages (the pull request and its usage
+      # comment). The wrapper exports it from secrets/GH_TOKEN, or reuses the tracker
+      # token without one. Every process of every stage can read a
+      # passed-through name, so give it its own fine-grained token: contents and pull
+      # requests read/write on this repository, nothing more.
+      - GH_TOKEN

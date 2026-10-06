@@ -1,0 +1,87 @@
+purpose: open the pull request of the task branch against main - title and body as the project's /pr-description writes them, from the branch's own commits since its base - so a human reviews and merges a finished change
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: reports-removed
+# The title and the body are the project's own /pr-description command
+# (.claude/commands/pr-description.md), read against the commit the task branch was cut
+# from (`baseCommit` in .gnomish-task/task.json), so whatever main gained meanwhile never
+# leaks into the description. The usage report is the next stage's. What this stage leaves
+# behind:
+#   finished  -> one open pull request from gnomish/<task> into main, closing the task's
+#                issue on merge; the working copy unchanged.
+#   could not -> a question in the tracker thread: the branch missing on origin, a pull
+#                request for the branch already merged or closed.
+outputs:
+  - id: pull-request
+executor:
+  type: agent-cli
+  # Reads the branch's diff and the archived change, writes a short title and body.
+  model: sonnet
+  settings:
+    maxTurns: 60
+    roundTimeout: 1800s
+    # Bash is for read-only git, `gh pr list|create|edit` and the decision-file echo. `gh` authenticates with GH_TOKEN, which reaches the round through
+    # factory.sandbox.env-passthrough (project.yaml.example.host).
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Bash
+    disallowedTools:
+      - Agent
+      - Edit
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/deliver/instructions.md
+verify:
+  # The round writes nothing into the repository: the body lives outside the working copy.
+  - type: command
+    command: |
+      stray=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -v '^\.gnomish-task/' || true)
+      if [ -n "$stray" ]; then
+        echo "this stage changes no file of the repository, but the working copy carries:"
+        echo "$stray"
+        echo "write the pull request body under \$TMPDIR, not into the working copy; undo what you wrote here and nothing else."
+        exit 1
+      fi
+  # One open pull request from this branch into main, shaped as the command and the stage
+  # require. A failed GitHub query exits 126: the factory reads it as "cannot verify", an
+  # infrastructure failure that burns no attempt.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) echo "not on a task branch: $branch"; exit 1 ;; esac
+      issue=${task##*-}
+      if ! prs=$(gh pr list --head "$branch" --base main --state open --json number,title,body 2>&1); then
+        echo "cannot verify: gh pr list failed: $prs"
+        exit 126
+      fi
+      count=$(printf '%s' "$prs" | jq length)
+      if [ "$count" != 1 ]; then
+        echo "expected exactly one open pull request from $branch into main, found $count"
+        exit 1
+      fi
+      title=$(printf '%s' "$prs" | jq -r '.[0].title')
+      body=$(printf '%s' "$prs" | jq -r '.[0].body')
+      problems=""
+      printf '%s' "$title" | grep -qE '^(feat|fix|refactor|perf|test|docs|build|ci|chore)(\([a-z0-9-]+\))?!?: [^ ].*[^.]$' \
+        || problems="$problems\n- the title '$title' is not a Conventional Commits subject (type(scope): outcome, no trailing period)"
+      [ ${#title} -le 72 ] || problems="$problems\n- the title is ${#title} characters, the limit is 72"
+      for heading in '## Why' '## What changed'; do
+        printf '%s\n' "$body" | grep -qx "$heading" || problems="$problems\n- the body has no '$heading' section"
+      done
+      printf '%s\n' "$body" | grep -qE "(Closes|Fixes|Resolves) #$issue([^0-9]|$)" \
+        || problems="$problems\n- the body does not close the task's issue: add 'Closes #$issue'"
+      if [ -n "$problems" ]; then
+        printf 'pull request #%s:%b\n' "$(printf '%s' "$prs" | jq -r '.[0].number')" "$problems"
+        echo "fix it with gh pr edit, never a second pull request"
+        exit 1
+      fi
+advancement: auto
+autonomy:
+  attemptLimit: 2
