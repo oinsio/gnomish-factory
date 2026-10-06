@@ -1,10 +1,17 @@
 # Fix-artifacts stage instructions
 
 The previous stage reviewed this task's OpenSpec change and wrote its
-recommendations to `temporary-docs/gnomish/review-artifacts.md`. Now revise the
+recommendations to `temporary-docs/gnomish/<task>/review-artifacts.md`. Now revise the
 change from that review — but a review is a second opinion, not an order: some of
 its recommendations will be wrong, useless or harmful. You apply what holds up,
 reject the rest with evidence, and leave the change coherent and valid.
+
+`<task>` in the paths below is the name of this task's branch without its
+`gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`
+gives `github-oinsio-gnomish-factory-79`) — or `local` when the branch does not start
+with `gnomish/`. Every report of this pipeline lives under
+`temporary-docs/gnomish/<task>/`, so reports of different tasks never overlap
+and one directory holds everything to clean up after the task.
 
 **The work itself is the project's own `/update-from-review` command: read
 `.claude/commands/update-from-review.md` and carry it out in full**, together
@@ -18,8 +25,8 @@ decide.
 ## What differs in this stage
 
 1. **The arguments.** The change — the command's `$1` — is the `Change:` line of
-   `temporary-docs/gnomish/dependencies.md`; the report — `$2` — is
-   `temporary-docs/gnomish/review-artifacts.md`. There is nobody to ask, so never fall
+   `temporary-docs/gnomish/<task>/change.md`; the report — `$2` — is
+   `temporary-docs/gnomish/<task>/review-artifacts.md`. There is nobody to ask, so never fall
    back to AskUserQuestion.
 2. **Read the commands, do not invoke them.** The Skill tool is not available in this
    round: open the command files and follow their steps yourself. No subagents either.
@@ -29,7 +36,7 @@ decide.
    the check on it. Write every accepted edit directly.
 4. **Where the resolution goes.** Instead of the wrapper's dated file under
    `temporary-docs/`, write the resolution record of constraint 4 to
-   `temporary-docs/gnomish/fix-artifacts.md`, in English, keeping its layout exactly:
+   `temporary-docs/gnomish/<task>/fix-artifacts.md`, in English, keeping its layout exactly:
    a check after your round matches its `### <N> — applied|rejected` entries against
    the review's numbering and reads their fields.
 5. **No recommendations.** A review with an empty Recommendations section still gets
@@ -61,8 +68,8 @@ decide.
   harmful, apply a recommendation it says you wrongly rejected — then re-check the
   whole record against the review and the artifacts, not only the flagged entries.
 - Edit only the files under `openspec/changes/<change>/` and write
-  `temporary-docs/gnomish/fix-artifacts.md` (plus the decision file on the escalating
-  path). The review report, `dependencies.md`, `openspec/specs/`, the archive, other
+  `temporary-docs/gnomish/<task>/fix-artifacts.md` (plus the decision file on the escalating
+  path). The review report, `change.md`, `openspec/specs/`, the archive, other
   changes, the code, `.gnomish/` and `.claude/` stay as you found them.
 - **Never push**: the remote is the factory's. Do not commit either — not because the
   factory forbids it, but because there is no need and no way: the factory commits

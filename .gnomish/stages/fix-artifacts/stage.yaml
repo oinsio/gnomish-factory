@@ -2,7 +2,7 @@ purpose: work through every recommendation of the review-artifacts report - appl
 inputs:
   - kind: source
   - kind: internal
-    producerOutputId: dependency-verdict
+    producerOutputId: task-change
   - kind: internal
     producerOutputId: artifact-review
 # The work itself is the project's own /update-from-review command
@@ -10,7 +10,7 @@ inputs:
 # instructions add only what differs because nobody is watching the round. What this
 # stage leaves behind:
 #   finished  -> the change's artifacts revised on the task branch, `openspec validate
-#                --strict` clean, and temporary-docs/gnomish/fix-artifacts.md: one entry
+#                --strict` clean, and temporary-docs/gnomish/<task>/fix-artifacts.md: one entry
 #                per recommendation, applied (with the edit) or rejected (with evidence).
 #   could not -> a question in the tracker thread: a recommendation that would change the
 #                change's intent, or an invalid delta that needs a decision rather than a
@@ -48,7 +48,12 @@ verify:
   # Cheapest first: without the resolution there is nothing else to check.
   - type: command
     command: |
-      resolution=temporary-docs/gnomish/fix-artifacts.md
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      resolution=$dir/fix-artifacts.md
       if [ ! -f "$resolution" ]; then
         echo "no resolution record at $resolution - write it before finishing the round, see .gnomish/stages/fix-artifacts/instructions.md"
         exit 1
@@ -58,9 +63,14 @@ verify:
   # rejected one.
   - type: command
     command: |
-      review=temporary-docs/gnomish/review-artifacts.md
-      resolution=temporary-docs/gnomish/fix-artifacts.md
-      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      review=$dir/review-artifacts.md
+      resolution=$dir/fix-artifacts.md
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
       named=$(sed -n 's/^## Review Resolution:[[:space:]]*//p' "$resolution" | head -1 | tr -d '`')
       if [ "$named" != "$change" ]; then
         echo "the resolution's '## Review Resolution:' heading names '$named', but this task's change is '$change'"
@@ -91,7 +101,12 @@ verify:
   # The plan every later stage builds on must load: archive refuses an invalid delta.
   - type: command
     command: |
-      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
       if ! out=$(openspec validate "$change" --strict 2>&1); then
         printf '%s\n' "$out" | tail -20
         echo "openspec validate $change --strict must pass before the round ends - fix the errors above in the change's own artifacts; if one needs a decision rather than a faithful restatement, escalate through \$GNOMISH_DECISION_FILE"
@@ -102,14 +117,19 @@ verify:
   # origin/main itself, which the factory keeps current. `.gnomish-task/` is the factory's own.
   - type: command
     command: |
-      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
-      reports="temporary-docs/gnomish/dependencies.md
-      temporary-docs/gnomish/review-artifacts.md
-      temporary-docs/gnomish/fix-artifacts.md"
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
+      reports="$dir/change.md
+      $dir/review-artifacts.md
+      $dir/fix-artifacts.md"
       stray() { grep -vxF "$reports" | grep -v "^openspec/changes/$change/" | grep -v '^\.gnomish-task/' || true; }
       dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | stray)
       if [ -n "$dirty" ]; then
-        echo "this stage edits only openspec/changes/$change/ and writes temporary-docs/gnomish/fix-artifacts.md, but the working copy also carries:"
+        echo "this stage edits only openspec/changes/$change/ and writes $dir/fix-artifacts.md, but the working copy also carries:"
         echo "$dirty"
         echo "if you made these edits, undo each of them yourself and nothing else."
         echo "if you did not: they are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - and escalate through \$GNOMISH_DECISION_FILE naming the paths."

@@ -19,6 +19,10 @@
 factory:
   bindings:
     default: host
+  # A command check runs at most this long. The implement stage's last check is the
+  # whole ./gradlew check - Testcontainers suites and the mutation gate - which outgrows
+  # the factory's 30-minute default.
+  check-command-timeout: 120m
   sandbox:
     # Every child process gets a positive environment allowlist, host mode included.
     # The gnome's Claude Code runs its subagents one at a time (the stages that allow

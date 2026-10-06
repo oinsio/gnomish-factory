@@ -1,13 +1,20 @@
 # Acceptance criteria for the fix-artifacts stage
 
 This round revised one OpenSpec change from a review. Three files tell you what
-happened: `temporary-docs/gnomish/review-artifacts.md` (the review and its numbered
-recommendations), `temporary-docs/gnomish/fix-artifacts.md` (one entry per
+happened: `temporary-docs/gnomish/<task>/review-artifacts.md` (the review and its numbered
+recommendations), `temporary-docs/gnomish/<task>/fix-artifacts.md` (one entry per
 recommendation: applied with the edit, or rejected with evidence), and the change
 under `openspec/changes/<change>/` as it now stands. How a change is revised from a
 review — and when a recommendation is worth fixing — is defined by
 `.claude/commands/update-from-review.md` and step 6 of
 `.claude/commands/review-artifacts.md`; read them first and judge against them.
+
+`<task>` in the paths below is the name of this task's branch without its
+`gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`
+gives `github-oinsio-gnomish-factory-79`) — or `local` when the branch does not start
+with `gnomish/`. Every report of this pipeline lives under
+`temporary-docs/gnomish/<task>/`, so reports of different tasks never overlap
+and one directory holds everything to clean up after the task.
 
 A check before you has already confirmed that every recommendation has exactly one
 entry with its fields, that the change validates under `openspec validate --strict`,

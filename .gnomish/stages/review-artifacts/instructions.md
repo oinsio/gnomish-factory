@@ -4,6 +4,13 @@ The previous stage cleared one OpenSpec change: nothing it depends on is still
 waiting to land. Now review that change's artifacts — above all, how much of it
 still holds against what has landed since it was written.
 
+`<task>` in the paths below is the name of this task's branch without its
+`gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`
+gives `github-oinsio-gnomish-factory-79`) — or `local` when the branch does not start
+with `gnomish/`. Every report of this pipeline lives under
+`temporary-docs/gnomish/<task>/`, so reports of different tasks never overlap
+and one directory holds everything to clean up after the task.
+
 **The review itself is the project's own `/review-artifacts` command:
 read `.claude/commands/review-artifacts.md` and carry it out in full.** It is the
 one source of how this repository reviews a change, for a human at the keyboard
@@ -13,7 +20,7 @@ watching this round; where it is silent, the command decides.
 ## What differs in this stage
 
 1. **The change name** — the command's `$1` — is the `Change:` line of
-   `temporary-docs/gnomish/dependencies.md`. Review exactly that change; there is
+   `temporary-docs/gnomish/<task>/change.md`. Review exactly that change; there is
    nobody to ask, so never fall back to AskUserQuestion.
 2. **Explore subagents, one at a time.** The command's fan-out to Explore
    subagents is available, but sequential, not parallel: only one runs at a time
@@ -27,7 +34,7 @@ watching this round; where it is silent, the command decides.
 3. **Where the report goes.** Nobody reads your reply, so the reply is not a place
    for the report. Instead of the command's step 7 file, write the **whole report
    of step 6** — every section, from `## Artifacts Review: <name>` to the Verdict —
-   to `temporary-docs/gnomish/review-artifacts.md`, in English. Write no other
+   to `temporary-docs/gnomish/<task>/review-artifacts.md`, in English. Write no other
    file under `temporary-docs/`. The stage that revises the change reads this file
    recommendation by recommendation, and checks after your round read its
    structure, so keep the step 6 layout and the recommendation format exactly.
@@ -54,7 +61,7 @@ watching this round; where it is silent, the command decides.
 - **A retry is a full review.** If the report already exists, a previous round was
   rejected and its feedback is in your prompt. Fix every point it names, then
   re-verify the whole report rather than patching only the flagged points.
-- Write exactly one file, `temporary-docs/gnomish/review-artifacts.md`, plus the
+- Write exactly one file, `temporary-docs/gnomish/<task>/review-artifacts.md`, plus the
   decision file on the escalating path. Never undo work you did not do.
 - **Never push**: the remote is the factory's. Do not commit either — not because
   the factory forbids it, but because there is no need and no way: the factory

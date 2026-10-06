@@ -5,7 +5,8 @@
 # now (check-dependencies), then how much of it still holds against what has
 # landed since it was written (review-artifacts), then the change revised from
 # that review, every recommendation applied or rejected with evidence
-# (fix-artifacts).
+# (fix-artifacts), then the change implemented task by task until
+# ./gradlew check is green (implement).
 schemaVersion: "1"
 
 autonomy:

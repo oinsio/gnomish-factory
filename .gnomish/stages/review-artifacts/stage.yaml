@@ -2,11 +2,11 @@ purpose: review the OpenSpec change check-dependencies cleared for freshness aga
 inputs:
   - kind: source
   - kind: internal
-    producerOutputId: dependency-verdict
+    producerOutputId: task-change
 # The review itself is the project's own /review-artifacts command
 # (.claude/commands/review-artifacts.md); the instructions add only what differs
 # because nobody is watching the round. What this stage leaves behind:
-#   finished  -> temporary-docs/gnomish/review-artifacts.md on the task branch: the
+#   finished  -> temporary-docs/gnomish/<task>/review-artifacts.md on the task branch: the
 #                command's whole step 6 report, ending in its numbered Recommendations
 #                and a Verdict (ready to implement / needs revision). The stage that
 #                revises the change works through the recommendations one by one.
@@ -61,7 +61,12 @@ verify:
   # Cheapest first: without the report there is nothing else to check.
   - type: command
     command: |
-      report=temporary-docs/gnomish/review-artifacts.md
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      report=$dir/review-artifacts.md
       if [ ! -f "$report" ]; then
         echo "no review report at $report - write it before finishing the round, see .gnomish/stages/review-artifacts/instructions.md"
         exit 1
@@ -70,11 +75,16 @@ verify:
   # the command's step 6: the next stage reads it recommendation by recommendation.
   - type: command
     command: |
-      report=temporary-docs/gnomish/review-artifacts.md
-      expected=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      report=$dir/review-artifacts.md
+      expected=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
       change=$(sed -n 's/^## Artifacts Review:[[:space:]]*//p' "$report" | head -1 | tr -d '`')
       if [ "$change" != "$expected" ]; then
-        echo "the report's '## Artifacts Review:' heading names '$change', but temporary-docs/gnomish/dependencies.md cleared '$expected' - review that change and name it exactly"
+        echo "the report's '## Artifacts Review:' heading names '$change', but $dir/change.md cleared '$expected' - review that change and name it exactly"
         exit 1
       fi
       for section in '### Summary' '### Landed since' '### Freshness' '### Coverage matrix' '### Completeness' '### Internal consistency' '### External consistency' '### Recommendations, ordered' '### Verdict'; do
@@ -106,8 +116,13 @@ verify:
   # the branch was cut as if this task had changed it. `.gnomish-task/` is the factory's own.
   - type: command
     command: |
-      report=temporary-docs/gnomish/review-artifacts.md
-      allowed="temporary-docs/gnomish/dependencies.md
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      report=$dir/review-artifacts.md
+      allowed="$dir/change.md
       $report"
       dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -vxF "$allowed" | grep -v '^\.gnomish-task/' || true)
       if [ -n "$dirty" ]; then

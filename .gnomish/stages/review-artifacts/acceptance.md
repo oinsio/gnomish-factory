@@ -1,6 +1,6 @@
 # Acceptance criteria for the review-artifacts stage
 
-The task branch holds `temporary-docs/gnomish/review-artifacts.md`: the report of
+The task branch holds `temporary-docs/gnomish/<task>/review-artifacts.md`: the report of
 the project's `/review-artifacts` command, run on the change named in its
 `## Artifacts Review:` heading. That command —
 `.claude/commands/review-artifacts.md` — defines what the review checks, the
@@ -9,6 +9,13 @@ first and judge the report against it. A check before you has already confirmed
 the change name, the sections, that every recommendation carries its Problem,
 Impact, Fix and Fix risk lines, and that the Verdict follows from the severities.
 Do not recount them.
+
+`<task>` in the paths below is the name of this task's branch without its
+`gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`
+gives `github-oinsio-gnomish-factory-79`) — or `local` when the branch does not start
+with `gnomish/`. Every report of this pipeline lives under
+`temporary-docs/gnomish/<task>/`, so reports of different tasks never overlap
+and one directory holds everything to clean up after the task.
 
 Be adversarial toward the recommendations. A harmful or useless one costs more
 than a missing one: the next stage revises the change on its strength, and a
