@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
@@ -221,8 +222,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
 
     /** The park's durable intent (FR10, D12). Delegated to {@link ContainerRunTermination}. */
     @Override
-    public void recordPark(TaskOutcome outcome) {
-        ContainerRunTermination.recordPark(this, outcome);
+    public void recordPark(TaskOutcome outcome, TrackerWrite trackerWrite) {
+        ContainerRunTermination.recordPark(this, outcome, trackerWrite);
     }
 
     /** The terminal write's receipt (FR10). Delegated to {@link ContainerRunTermination}. */

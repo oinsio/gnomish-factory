@@ -138,13 +138,13 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     }
 
     def "sweep stops a zombie box (never disposes it), and a later resume salvages the surviving volume"() {
-        given: 'instance one dies at an escalation dialog (EOF console) — a real kept-stopped box'
+        given: 'instance one is killed at its escalation, before the park is recorded — a real kept-stopped box'
         taskId = "CTN-ZMB-${System.nanoTime() % 100000}"
         def sandboxProps = sandboxProperties('decision-then-plain')
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), TaskGitFixture.real(),
-                sandboxProps, factoryProps, trackedContainerSupport(), LiveConsoleIO.onStdout())
+                sandboxProps, factoryProps, RunKills.killedBeforeParkRecord(trackedContainerSupport()), LiveConsoleIO.onStdout())
 
         when:
         instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
@@ -153,7 +153,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
                 TaskState.atStageStart('work'))
 
         then:
-        thrown(EscalationEofException)
+        thrown(RunKills.SimulatedKill)
 
         and: 'the kept box is stopped, volume and network retained (keep semantics)'
         def boxName = "gnomish-box-${taskId}"
@@ -182,7 +182,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
                 trackedContainerSupport())
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
-                taskId, segments())
+                taskId, null, segments())
 
         then: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
         def branch = "gnomish/${taskId}"

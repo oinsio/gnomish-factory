@@ -1,21 +1,22 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Files
 
+import java.nio.file.Files
 /**
  * FR5, FR8, FR10, UX2 of add-git-workflow (task 4.7): {@code run()}'s outcome-driven
  * continuation — {@code null} continues the engine loop directly from {@code state.json}'s
  * recorded position (salvaging or discarding interrupted leftovers per {@code --discard-work});
- * {@code escalated}/{@code paused} run the same dialogs the in-process path uses (UX2) before
- * continuing; {@code completed} reports and exits without touching the worktree or branch again.
+ * {@code paused} continues without a prompt (UX2; FR5 of make-run-headless); {@code completed}
+ * reports and exits without touching the worktree or branch again. The {@code escalated} arm —
+ * the {@code --decision} resolution — is {@link GitResumeDecisionSpec}. Standard input is empty
+ * throughout: a headless resume reads nothing.
  */
 class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
@@ -29,7 +30,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when: 'resuming drives one more fake-agent round to completion'
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
         then: 'the branch records a Completed outcome and the worktree is removed'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -49,7 +50,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when: 'resuming with the default (no --discard-work) drives the task to completion'
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
         then: 'the branch history contains a distinct salvage commit ahead of the round commit'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -71,7 +72,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when: 'resuming with --discard-work drives the task to completion'
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId, null)
 
         then: 'no salvage commit landed on the branch — the leftovers were discarded, not committed'
         def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
@@ -95,78 +96,32 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when: 'resuming with --discard-work drives the task to completion'
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId, null)
 
         then: 'the leftover file itself was discarded from the worktree, not just left uncommitted'
         !Files.exists(worktree.resolve('half-done.txt'))
     }
 
-    // FR5, FR8, UX2: outcome escalated drives the same decision dialog the in-process path uses,
-    // appends the decision (resetting outcome to null in the same commit), and continues.
-    def "run() with outcome escalated drives the decision dialog then continues to completion"() {
-        given: 'a task escalated after one persisted round'
-        def taskId = 'PROJ-11'
-        repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def afterRound = TaskState.atStageStart('build')
-        persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
-            UntrustedText.agent('yes'),
-            UntrustedText.agent('no')
-        ])
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(afterRound, report))
-
-        and: 'stdin supplies only the decision answer; the resumed round is the fake agent\'s'
-        def script = 'go ahead' + System.lineSeparator()
-        def out = new ByteArrayOutputStream()
-
-        when:
-        newResumeRunner(new ByteArrayInputStream(script.getBytes('UTF-8')), new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
-
-        then: 'the rendered escalation and the resume prompt were printed — the same dialog as in-process'
-        def printed = out.toString('UTF-8')
-        printed.contains('continue?')
-        printed.contains('Decision (empty to resume without one)')
-
-        and: 'the branch records the appended decision and a new terminal outcome'
-        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
-        !Files.exists(expectedWorktree(taskId))
-
-        and: 'the answered decision text was actually committed via GitTaskRepository#appendDecision — proven'
-        // by finding it in some historical task.json blob on the branch, since the FR15 cleanup
-        // commit at Completed removes the tip's .gnomish-task/ entirely.
-        def historicalTaskJsons = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H')
-                .lines().collect { it as String }
-                .findAll {
-                    gitExitCode(cloneDir, 'show', "${it}:.gnomish-task/task.json") == 0
-                }
-                .collect {
-                    gitOutput(cloneDir, 'show', "${it}:.gnomish-task/task.json")
-                }
-        historicalTaskJsons.any { it.contains('go ahead') }
-    }
-
-    // FR8, UX2: outcome paused confirms with the same checkpoint dialog the in-process path uses,
-    // then continues to the next stage (here: the pipeline end, since there is only one stage).
-    def "run() with outcome paused confirms then continues to completion"() {
+    // FR8, UX2; FR5 of make-run-headless: outcome paused continues from the already-advanced
+    // position with no checkpoint line and no prompt — the resume is the confirmation.
+    def "run() with outcome paused continues to completion without a checkpoint line"() {
         given: 'a task paused after "build" passed — its recorded position already advanced to PipelineEnd'
         def taskId = 'PROJ-12'
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
         persistOneRound(taskId, endState)
-        repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'))
+        repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'), TrackerWrite.OWED)
 
         def out = new ByteArrayOutputStream()
 
-        when: 'a bare Enter confirms the checkpoint'
-        newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
-                new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+        when: 'stdin is empty'
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), new PrintStream(out, true, 'UTF-8'))
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
-        then: 'the checkpoint confirmation was printed — the same dialog as in-process'
+        then: 'nothing about the checkpoint was printed and nothing was asked'
         def printed = out.toString('UTF-8')
-        printed.contains("Stage 'build' passed")
-        printed.contains('Press Enter to continue')
+        !printed.contains('Manual checkpoint reached')
+        !printed.contains('Press Enter to continue')
 
         and: 'the branch records a fresh Completed outcome (the engine reaches PipelineEnd immediately)'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -199,7 +154,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when:
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
         then: 'a status report was printed, naming the task'
         out.toString('UTF-8').contains(taskId)
@@ -232,7 +187,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         when:
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
         then:
         def ex = thrown(AbortedException)

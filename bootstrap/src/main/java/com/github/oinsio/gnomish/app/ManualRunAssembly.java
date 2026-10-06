@@ -255,15 +255,14 @@ public final class ManualRunAssembly implements RunAssembly {
     }
 
     /**
-     * Builds a standalone {@link DialogConsole} for a resume dialog that runs before any {@link
-     * #assemble} call (design D9, task 4.7 of add-git-workflow), delegated to {@link
-     * ResumeDialogConsoleFactory} for file size.
-     * @param context the resumed task's identity and decisions, for the {@code status} meta-command
-     * @param state the resumed task's current state, seeding the status snapshot
-     * @return a fresh {@link DialogConsole} wired the same way {@link #assemble} wires its own
+     * The resume paths' output console (design D9, task 4.7 of add-git-workflow): the same
+     * {@code ConsoleIO} {@link #assemble} wires its own console over, with no read side (design D4
+     * of make-run-headless).
+     *
+     * @return a fresh {@link DialogConsole} over the run's console I/O
      */
     @Override
-    public DialogConsole dialogConsole(TaskContext context, TaskState state) {
-        return ResumeDialogConsoleFactory.build(systemConsoleIO, systemClock, context, state);
+    public DialogConsole dialogConsole() {
+        return new DialogConsole(systemConsoleIO);
     }
 }

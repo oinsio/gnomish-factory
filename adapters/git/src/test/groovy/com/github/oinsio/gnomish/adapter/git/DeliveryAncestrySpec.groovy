@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -62,7 +63,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
                 ])
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
                 .persist('PROJ-1', TaskState.atStageStart('implement'), trace)
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         def merge = runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
                 'merge', mergeMode, '-m', 'Merge PR: PROJ-1', 'gnomish/PROJ-1')

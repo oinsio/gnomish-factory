@@ -120,7 +120,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false, null, null, null, null)
     }
 
-    // M4 + FR23: instance one dies mid-escalation (EOF console) — the pending decision request
+    // M4 + FR23: instance one is killed at its escalation, before the park is recorded — the pending decision request
     // rides the snapshot commit to the remote; instance two resumes from the branch alone,
     // reattaches the kept (stopped) box, salvages a leftover planted after the death, and
     // completes.
@@ -131,16 +131,17 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
-        when: 'instance one runs with an immediately-EOF console and dies at the escalation dialog'
+        when: 'instance one escalates and is killed before its park outcome commit (the interrupted-run shape)'
         def gitOne = TaskGitFixture.real()
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
-                sandboxProps, factoryProps, ContainerSupportFixture.real(gitOne.epochs()), LiveConsoleIO.onStdout())
+                sandboxProps, factoryProps, RunKills.killedBeforeParkRecord(ContainerSupportFixture.real(gitOne.epochs())),
+                LiveConsoleIO.onStdout())
         instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
                 segments(), context, TaskState.atStageStart('work'))
 
-        then: 'the dialog EOF killed the run'
-        thrown(EscalationEofException)
+        then: 'the kill ended the run'
+        thrown(RunKills.SimulatedKill)
 
         and: 'the kept box is stopped, volume and network retained (keep semantics)'
         def boxName = "gnomish-box-${taskId}"
@@ -161,7 +162,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
-                taskId, segments())
+                taskId, null, segments())
 
         then: 'the leftover was salvaged in-box and harvested (FR6)'
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
@@ -215,7 +216,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
                 ContainerSupportFixture.real(resumeGit.epochs()))
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
-                taskId, segments())
+                taskId, null, segments())
 
         then: 'the task completed — verification judged the harvested attempt commit, no agent ran'
         def branch = "gnomish/${taskId}"

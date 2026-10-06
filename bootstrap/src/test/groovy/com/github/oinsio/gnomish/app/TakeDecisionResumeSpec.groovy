@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -44,7 +45,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('no')
         ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -79,7 +80,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('no')
         ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -124,7 +125,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('no')
         ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -154,7 +155,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.AttemptsExhausted(1)
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -182,7 +183,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.AttemptsExhausted(1)
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -223,7 +224,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.CannotVerify(
                 new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('boom'), UntrustedText.subprocess(''))
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)

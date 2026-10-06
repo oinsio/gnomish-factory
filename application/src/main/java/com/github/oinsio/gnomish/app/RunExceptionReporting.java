@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
@@ -20,7 +19,8 @@ import org.slf4j.Logger;
  * the project's file-size target (`.claude/rules/process-invariants.md`).
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
- * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry.
+ * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry;
+ * FR4, NFR-O1 of make-run-headless.
  */
 final class RunExceptionReporting {
 
@@ -34,15 +34,14 @@ final class RunExceptionReporting {
             UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
             ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
 
-    /** Families that mean the operator's input ran out at a prompt. */
-    private static final List<Class<? extends Throwable>> INPUT_EXHAUSTED = List.of(ConsoleClosedException.class);
-
     /** Families whose outcome the callee already put on the console. */
     private static final List<Class<? extends Throwable>> ALREADY_REPORTED = List.of(
             TaskNotFoundException.class, // UX3, D15: calm message already on the console
             BranchShapeRefusedException.class, // FR16: diagnosis already on the console
             TakeExitCodeException.class, // D16 of add-tracker-port: exit-code carriers, outcome
-            ServeExitCodeException.class); // already reported by the command itself
+            ServeExitCodeException.class, // already reported by the command itself
+            RunParkedException.class, // FR1, FR2 of make-run-headless: the stop render is on stdout
+            DecisionRequiredException.class); // FR4 of make-run-headless: the question is restated on stdout
 
     private RunExceptionReporting() {}
 
@@ -71,6 +70,13 @@ final class RunExceptionReporting {
         try {
             action.run();
         } catch (RuntimeException | IOException ex) {
+            // NFR-O1 of make-run-headless: the resume command reaches the log as well as stdout, so a
+            // reader of either finds it — for a fresh stop and for a resume refused without a decision.
+            if (ex instanceof RunParkedException parked) {
+                log.info("{}", parked.stopRecord());
+            } else if (ex instanceof DecisionRequiredException required) {
+                log.info("{}", required.stopRecord());
+            }
             String line = calmLine(ex);
             if (line == null) {
                 log.warn(
@@ -96,9 +102,6 @@ final class RunExceptionReporting {
     static @Nullable String calmLine(Throwable failure) {
         if (isAny(failure, PRINTS_OWN_MESSAGE)) {
             return String.valueOf(failure.getMessage());
-        }
-        if (isAny(failure, INPUT_EXHAUSTED)) {
-            return "Input exhausted — stopping.";
         }
         if (isAny(failure, ALREADY_REPORTED)) {
             return "";

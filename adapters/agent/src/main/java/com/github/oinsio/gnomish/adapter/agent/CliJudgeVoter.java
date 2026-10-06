@@ -41,9 +41,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The {@link AgentProgressListener} supplied at construction (task 9.4, design D10) is
  * threaded straight into {@link StreamJsonParser}: judge rounds feed the same live-progress
- * stream as executor rounds, indistinguishable in shape — the run assembly is expected to wire
- * the shared {@link LoggingAgentProgressListener} renderer alone here, never the executor-only
- * status enricher (FR7, D10).
+ * stream as executor rounds, indistinguishable in shape — the run assembly wires the shared
+ * {@link LoggingAgentProgressListener} renderer here (FR7, D10).
  *
  * <p>Implements FR7, FR8, FR9, FR12, FR13, D5, D7, D10 of add-agent-executor; FR15, FR19, D9,
  * D14 of add-sandbox-core; cross-references NFR-R1 of add-stage-engine.
@@ -97,7 +96,7 @@ public final class CliJudgeVoter implements JudgeVoter {
      * @param clock the read-time source for process start/exit stamping; never null
      * @param progressListener the live-progress subscriber for this judge's rounds (design D10,
      *     task 9.4); judge rounds feed the same {@link LoggingAgentProgressListener} renderer as
-     *     executor rounds, never the status enricher; never null — pass a no-op ({@code event ->
+     *     executor rounds; never null — pass a no-op ({@code event ->
      *     {}}) to reach none
      * @param childEnv the layered child-environment allowlist every vote's process environment is
      *     composed from (D6, FR9 of add-sandbox-core); never null, {@link

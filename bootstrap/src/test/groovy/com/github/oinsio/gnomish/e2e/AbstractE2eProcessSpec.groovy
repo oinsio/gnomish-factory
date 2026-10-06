@@ -10,7 +10,7 @@ import spock.lang.Timeout
  * {@code e2e} fixture: the process harness, the stateful command check's marker-file name,
  * the files the fake agent writes, and the cleanup that resets them so a later spec doesn't
  * see a stale already-passing check or a spent multi-attempt scenario left behind by an
- * earlier run ({@link ExitCodeMatrixSpec}, {@link ReferenceE2ESessionSpec},
+ * earlier run ({@link ExitCodeMatrixSpec}, {@link ParkExitCodeSpec}, {@link ReferenceE2ESessionSpec},
  * {@link E2eProcessHarnessSmokeSpec} all extend this rather than re-declaring the trio).
  */
 @Timeout(value = 120, unit = TimeUnit.SECONDS)

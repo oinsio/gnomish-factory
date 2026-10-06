@@ -313,6 +313,10 @@ class UntrustedTextSinkGateSpec extends Specification {
         // minted as at the stream: every other `name()` in the build — a stage, a branch, a check,
         // an enum constant — is a parsed identity that stays a String by D11, so the bare name
         // decides nothing on its own.
+        // `prompt` left with FR6 of make-run-headless: its only carrier, `Activity.AwaitingInput`,
+        // was deleted with the console's input side, so no carrier answers to it any more.
+        // `currentTool` left with it in task 3.7: `Activity` and its JSON twin `ActivityDto` were
+        // deleted together, so the name has neither a carrier nor a String twin left.
         // Each re-enters the scan by itself once its last String twin is typed.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
@@ -323,7 +327,6 @@ class UntrustedTextSinkGateSpec extends Specification {
         CarrierAccessors.ambiguousNamesIn(productionClasses).sort() == [
             'body',
             'cause',
-            'currentTool',
             'details',
             'humanText',
             'label',
@@ -331,7 +334,6 @@ class UntrustedTextSinkGateSpec extends Specification {
             'name',
             'note',
             'output',
-            'prompt',
             'question',
             'reason',
             'render',

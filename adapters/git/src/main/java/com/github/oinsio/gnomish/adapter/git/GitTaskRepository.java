@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
@@ -57,10 +59,12 @@ import org.slf4j.LoggerFactory;
  * ObjectId} — the caller's single peel of its law binding — resolve no base <em>name</em> of their
  * own, verify the object is a commit this repository holds, and record that same commit as {@code
  * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
- * revised 2026-09-10).
+ * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
+ * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
+ * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6).
  *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
- * harden-task-branch-contract; FR9 of add-project-registry.
+ * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
 
@@ -118,7 +122,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto currentDto = readCurrentDto(taskId, worktree, TaskLifecycleEvent.RESUMED);
+        TaskJsonDto currentDto =
+                readCommitted(taskId, worktree, TaskLifecycleEvent.RESUMED).dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         List<Decision> decisions = new ArrayList<>(current.context().decisions());
@@ -145,21 +150,23 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void recordOutcome(String taskId, TaskOutcome outcome) {
+    public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
         TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto currentDto = readCurrentDto(taskId, worktree, event);
+        CommittedTaskJson committed = readCommitted(taskId, worktree, event);
+        TaskJsonDto currentDto = committed.dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
         var lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
 
         // Durable "terminal write pending" marker (FR10, D10 of add-claim-heartbeat; FR10 of
-        // harden-task-branch-contract): every terminal outcome whose external effect is still owed
-        // sets it — a PARK (Escalated/Paused) until its tracker park confirms, a Completed until its
+        // harden-task-branch-contract): a terminal outcome whose external effect is still owed sets
+        // it — a PARK (Escalated/Paused) until its tracker park confirms, a Completed until its
         // tracker finish confirms and the cleanup commit removes the whole envelope. This commit is
-        // the durable intent, recorded before the tracker write, never after it. Aborted's tracker
-        // write is best-effort and carries no marker.
-        boolean pending = !(outcome instanceof TaskOutcome.Aborted);
+        // the durable intent, recorded before the tracker write, never after it. A record that owes
+        // no tracker write (a manual run's park, design D8 of make-run-headless) sets no marker, and
+        // Aborted's tracker write is best-effort and carries none either way.
+        boolean pending = trackerWrite == TrackerWrite.OWED && !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
                         current.context(),
                         current.baseCommit(),
@@ -169,7 +176,15 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                         pending,
                         current.pin())
                 .withEgressCursor(currentDto.egressCursor());
-        writeAndCommit(taskId, worktree, dto, event);
+        String json = serialize(taskId, dto, event);
+        // Idempotence (design D8 of make-run-headless; crash-consistency item 8): a park re-recorded
+        // identically leaves the tip as it is — the record is already there, and a commit of it would
+        // only fail on "nothing to commit".
+        if (committed.carries(json)) {
+            log.debug("outcome record for task {} is a no-op: the tip already carries it, event={}", taskId, event);
+            return;
+        }
+        writeAndCommit(taskId, worktree, json, event);
     }
 
     /**
@@ -224,13 +239,24 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * absence. Absence at the tip fails exactly as the worktree read's I/O failure did — every
      * transition that rewrites the envelope runs on a branch that carries one.
      */
-    private TaskJsonDto readCurrentDto(String taskId, Path worktree, TaskLifecycleEvent event) {
+    private CommittedTaskJson readCommitted(String taskId, Path worktree, TaskLifecycleEvent event) {
         return RequiredTaskJson.atTipOf(runner, worktree, taskId, event);
     }
 
-    private void writeAndCommit(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
+    private static String serialize(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
         try {
-            String json = TaskStateJson.mapper().writeValueAsString(dto);
+            return TaskStateJson.mapper().writeValueAsString(dto);
+        } catch (JsonProcessingException e) {
+            throw new GitTaskRepositoryException(taskId, event, "serializing task.json", e);
+        }
+    }
+
+    private void writeAndCommit(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
+        writeAndCommit(taskId, worktree, serialize(taskId, dto, event), event);
+    }
+
+    private void writeAndCommit(String taskId, Path worktree, String json, TaskLifecycleEvent event) {
+        try {
             AtomicFileWriter.write(worktree.resolve(EnvelopePaths.TASK_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing task.json", e);

@@ -212,7 +212,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         then:
         UsageException ex = thrown(UsageException)
         ex.message == "unknown option --no-such-flag for 'gnomish run'; accepted: --dir, --task, --task-file," +
-                ' --task-id, --from-stage, --mode, --base, --resume, --discard-work'
+                ' --task-id, --from-stage, --mode, --base, --resume, --discard-work, --decision'
     }
 
     def "FR7/D7: --base parses through as a plain ref string"() {
@@ -290,6 +290,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         gitOnlyFlag | gitOnlyFlagName
         '--base=main' | '--base'
         '--discard-work' | '--discard-work'
+        '--decision=x' | '--decision'
     }
 
     def "FR7/UX1: --resume with --mode=in-place is a usage error naming the conflict"() {
@@ -310,5 +311,90 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         UsageException ex = thrown(UsageException)
         ex.message.contains('--discard-work')
         ex.message.contains('--resume')
+    }
+
+    // FR3, FR9, design D2 of make-run-headless: --decision is the only source of an operator
+    // decision in `run`; it rides on --resume, is git-only, and never arrives blank.
+    def "FR3/D2 of make-run-headless: --decision with --resume parses through as the decision text"() {
+        when:
+        RunArguments result = parser.parse(args('--resume=my-task', '--decision=use approach A'), CLONE)
+
+        then:
+        result.resume() == 'my-task'
+        result.decision() == 'use approach A'
+    }
+
+    def "FR3/D2 of make-run-headless: --decision absent parses to null"() {
+        when:
+        RunArguments result = parser.parse(args('--resume=my-task'), CLONE)
+
+        then:
+        result.decision() == null
+    }
+
+    @Unroll
+    def "FR9/D2 of make-run-headless: #flags is a usage error naming #named"() {
+        when:
+        parser.parse(args(*flags), CLONE)
+
+        then:
+        UsageException ex = thrown(UsageException)
+        named.every { ex.message.contains(it) }
+
+        where:
+        flags | named
+        ['--task=t', '--decision=x'] | ['--decision', '--resume']
+        ['--decision=x'] | ['--decision', '--resume']
+        [
+            '--resume=my-task',
+            '--mode=in-place',
+            '--decision=x'
+        ] | [
+            '--decision',
+            '--mode=in-place'
+        ]
+        [
+            '--mode=in-place',
+            '--decision=x'
+        ] | [
+            '--decision',
+            '--mode=in-place'
+        ]
+        [
+            '--resume=my-task',
+            '--decision='
+        ] | ['--decision', 'blank']
+        [
+            '--resume=my-task',
+            '--decision=   '
+        ] | ['--decision', 'blank']
+        [
+            '--resume=my-task',
+            '--decision'
+        ] | ['--decision', 'value']
+        [
+            '--resume=my-task',
+            '--decision=a',
+            '--decision=b'
+        ] | ['--decision', 'once']
+    }
+
+    def "FR9 of make-run-headless (Typo re-prompts): --decison with --resume is an unknown option naming the accepted flags"() {
+        when:
+        parser.parse(args('--resume=my-task', '--decison=x'), CLONE)
+
+        then:
+        UsageException ex = thrown(UsageException)
+        ex.message.startsWith('unknown option --decison')
+        ex.message.contains('--decision')
+    }
+
+    def "FR9/D2 of make-run-headless: --decision without --resume is reported as the missing --resume, not as a missing task"() {
+        when:
+        parser.parse(args('--decision=x'), CLONE)
+
+        then:
+        UsageException ex = thrown(UsageException)
+        ex.message.startsWith('--decision requires --resume')
     }
 }

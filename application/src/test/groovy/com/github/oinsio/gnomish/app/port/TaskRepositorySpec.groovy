@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port
 
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -62,7 +63,7 @@ class TaskRepositorySpec extends Specification {
         }
 
         @Override
-        void recordOutcome(String taskId, TaskOutcome outcome) {
+        void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
             outcomes[taskId] = outcome
         }
     }
@@ -117,7 +118,7 @@ class TaskRepositorySpec extends Specification {
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('needs input'), [])
-        repository.recordOutcome('TASK-1', new TaskOutcome.Escalated(state, escalation))
+        repository.recordOutcome('TASK-1', new TaskOutcome.Escalated(state, escalation), TrackerWrite.OWED)
 
         expect: 'the outcome is recorded before resume'
         repository.outcomes['TASK-1'] != null
@@ -159,7 +160,7 @@ class TaskRepositorySpec extends Specification {
 
         when: 'the task completes'
         def outcome = new TaskOutcome.Completed(state)
-        repository.recordOutcome('TASK-1', outcome)
+        repository.recordOutcome('TASK-1', outcome, TrackerWrite.OWED)
 
         then: 'the outcome is retained by value'
         repository.outcomes['TASK-1'] == outcome

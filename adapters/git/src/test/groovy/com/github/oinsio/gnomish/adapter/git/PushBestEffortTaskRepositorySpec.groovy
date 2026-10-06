@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -73,10 +74,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String recorded = null
 
         when:
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('work'), 'work'))
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('work'), 'work'), TrackerWrite.OWED)
 
         then:
-        1 * delegate.recordOutcome(TASK_ID, _) >> {
+        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
             recorded = commitOnTaskBranch('paused')
         }
         remoteTip() == Optional.of(recorded)
@@ -91,10 +92,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String cleanupTip = null
 
         when:
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('work')))
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('work')), TrackerWrite.OWED)
 
         then:
-        1 * delegate.recordOutcome(TASK_ID, _) >> {
+        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
             commitOnTaskBranch('completed')
             cleanupTip = commitOnTaskBranch('cleanup')
         }
@@ -119,11 +120,11 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
                 new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
                     UntrustedText.agent('yes'),
                     UntrustedText.agent('no')
-                ])))
+                ])), TrackerWrite.OWED)
         def tipAtReturn = remoteTip()
 
         then:
-        1 * delegate.recordOutcome(TASK_ID, _) >> {
+        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
             recorded = commitOnTaskBranch('escalated')
         }
         tipAtReturn == Optional.of(recorded)

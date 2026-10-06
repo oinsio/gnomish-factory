@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
@@ -162,7 +163,7 @@ record TakeEngineExecution(
         // park lands; a give-up leaves it set for reconcile-on-resume.
         var park = new ParkTransition.Fresh(
                 () -> {
-                    GitOutcomeRecorder.recordIntent(git, taskRepository, cloneDir, taskId, outcome);
+                    GitOutcomeRecorder.recordIntent(git, taskRepository, cloneDir, taskId, outcome, TrackerWrite.OWED);
                     return git.branches().fenceParkDelivery(cloneDir, taskId);
                 },
                 // A park keeps its worktree by definition (FR6 of add-git-workflow), so the
@@ -172,7 +173,9 @@ record TakeEngineExecution(
         // .gnomish-task/ from the tip — and the worktree disposal behind it — is the destructive
         // last step, run only once the tracker finish has landed (FR9, FR10).
         var finish = new FinishTransition.Fresh(
-                () -> GitOutcomeRecorder.recordIntent(git, taskRepository, cloneDir, taskId, outcome), () -> {
+                () -> GitOutcomeRecorder.recordIntent(
+                        git, taskRepository, cloneDir, taskId, outcome, TrackerWrite.OWED),
+                () -> {
                     taskRepository.finishCleanup(taskId);
                     GitOutcomeRecorder.disposeWorkspace(git, cloneDir, worktree, outcome);
                 });

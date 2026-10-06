@@ -27,12 +27,14 @@ import spock.lang.Specification
 /**
  * FR21, FR25 (design D15, D19) of add-sandbox-core and FR5, FR8, UX2 of add-git-workflow:
  * {@code gnomish run --sandbox --resume}. It answers the same five recorded outcomes the host path
- * does, with the same dialogs (UX2), but the interrupted-visit case has an extra sandbox-specific
- * decision: a snapshot commit that {@code state.json} never recorded is an interrupted
- * VERIFICATION, so the round is already complete on the branch and must not be salvaged over.
+ * does, through the same {@code EscalationResume} and with no prompt (UX2; FR3, FR4, FR5, FR9 of
+ * make-run-headless), but the interrupted-visit case has an extra sandbox-specific decision: a
+ * snapshot commit that {@code state.json} never recorded is an interrupted VERIFICATION, so the
+ * round is already complete on the branch and must not be salvaged over — and both resume arms that
+ * continue dispose the kept box first, since its clone is behind the park commit.
  *
  * <p>Driven through ports only (design D13(c) of split-into-modules): {@code SandboxRunSupport} and
- * its factory are interfaces, so no container is ever started.
+ * its factory are interfaces, so no container is ever started. The console is never read (FR6).
  *
  * <p>Added by task 8.7 of split-into-modules.
  */
@@ -46,7 +48,13 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     TaskRecord record = freshRecord()
     TaskState recordedState = TaskState.atStageStart('build')
     Optional<PendingVerification> pending = Optional.empty()
-    ScriptedConsoleIO console = new ScriptedConsoleIO([''])
+    /** FR6 of make-run-headless: a console a resume may print to but never read from. */
+    ScriptedConsoleIO console = new ScriptedConsoleIO() {
+        @Override
+        String readLine() {
+            throw new AssertionError('a headless resume read the console')
+        }
+    }
 
     def setup() {
         branches.ensureLocalTaskBranch(_, _) >> true
@@ -63,7 +71,8 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     /** Every law binding the resumed chain assembled with, in order (FR12 of add-base-ref-resolution). */
     List lawBindings = []
 
-    private String resume(boolean discardWork = false) {
+    /** Resumes PROJ-1 with the given {@code --decision} ({@code null} for none). */
+    private String resume(String decision = null, boolean discardWork = false) {
         def runner = new ContainerResumeRunner(
                 assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
@@ -77,7 +86,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         try {
             runner.run(
                     new RunOrder(CLONE_DIR, null, completingPipeline(), discardWork),
-                    'PROJ-1', [])
+                    'PROJ-1', decision, [])
         } finally {
             System.out = originalOut
         }
@@ -169,7 +178,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // seeds a fresh clone at the recorded tip — no reattach, no salvage.
     def "disposes of the existing environment under --discard-work"() {
         when:
-        resume(true)
+        resume(null, true)
 
         then:
         1 * support.disposeExistingEnvironment()
@@ -207,34 +216,39 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         0 * support.reattachFor(_)
     }
 
-    // FR25, D19: outcome `escalated` re-opens the same dialog the host path uses, and a non-blank
-    // answer is committed FACTORY-SIDE over bare objects — before any environment materializes — so
-    // the in-box clone contains the decision from the start.
-    def "commits an escalation answer factory-side before the environment materializes"() {
+    // FR25, D19; FR3 of make-run-headless: outcome `escalated` with --decision is committed
+    // FACTORY-SIDE over bare objects — before any environment materializes — so the in-box clone
+    // contains the decision from the start; the kept box goes first, since its clone is behind.
+    def "commits a --decision factory-side after disposing the kept box and before the environment materializes"() {
         given:
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
             UntrustedText.agent('postgres'),
             UntrustedText.agent('sqlite')
         ])
         record = recordWith(new RecordedOutcome.Escalated(report), report)
-        console = new ScriptedConsoleIO(['use postgres'])
 
         when:
-        resume()
+        resume('use postgres')
+
+        then: 'the kept box that carried the park goes first: its clone cannot learn of the commits that follow'
+        1 * support.disposeExistingEnvironment()
 
         then:
         1 * taskRepository.appendDecision('PROJ-1', {
-            it.body() == 'use postgres'
-        }, _)
+            it.body() == 'use postgres' && it.author() == 'operator' && it.stage() == 'build'
+        }, {
+            it.attemptsUsed() == 0
+        })
 
         then: 'and only then does the environment come up'
         1 * support.sweepOrphans()
         executor.requests.size() == 1
     }
 
-    // FR5: a BLANK answer resumes on the return alone — nothing is committed, so the decision
-    // history stays truthful.
-    def "commits nothing when the escalation answer is blank"() {
+    // FR4 of make-run-headless: no --decision over an AttemptsExhausted park resumes on the reset
+    // alone — nothing is committed, so the decision history stays truthful; the box is still
+    // disposed, since its clone is behind the park commit.
+    def "commits nothing when an escalated task is resumed without --decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
@@ -243,8 +257,35 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
+        1 * support.disposeExistingEnvironment()
         0 * taskRepository.appendDecision(_, _, _)
         executor.requests.size() == 1
+    }
+
+    // FR4 of make-run-headless: a DecisionNeeded resumed without --decision is refused — the
+    // question restated, nothing committed, no box touched, no environment started.
+    def "restates a DecisionNeeded resumed without --decision, touching no box and writing nothing"() {
+        given:
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres')
+        ])
+        record = recordWith(new RecordedOutcome.Escalated(report), report)
+
+        when:
+        resume()
+
+        then:
+        def refused = thrown(DecisionRequiredException)
+        refused.stopRecord().contains('--resume=PROJ-1')
+        console.printed.any {
+            it.contains('which database?') && it.contains(CLONE_DIR.toString())
+        }
+
+        and:
+        executor.requests.isEmpty()
+        0 * taskRepository._
+        0 * support.disposeExistingEnvironment()
+        0 * support.sweepOrphans()
     }
 
     // FR5: `escalated` with no recorded report can only mean a corrupted branch — refused, not
@@ -261,9 +302,9 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         ex.message.contains('no lastEscalation recorded')
     }
 
-    // UX2: outcome `paused` is the same manual-checkpoint confirmation as the host path — it states
-    // which stage passed, waits for Enter, and appends no decision.
-    def "confirms a manual checkpoint, appending no decision"() {
+    // UX2; FR5 of make-run-headless: outcome `paused` continues as the host path does — no
+    // checkpoint line, no prompt, no decision — on a box materialized from the tip.
+    def "continues a paused task without a checkpoint line, disposing the kept box first"() {
         given:
         record = recordWith(new RecordedOutcome.Paused('build'))
 
@@ -271,11 +312,43 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
-        console.printed.any {
-            it.contains("Stage 'build' passed") && it.contains('Manual checkpoint')
+        !console.printed.any {
+            it.contains('Manual checkpoint')
         }
         0 * taskRepository.appendDecision(_, _, _)
+        // The kept box's clone is behind the park's outcome commit: the continuation runs on a box
+        // materialized from the tip, never on the one that carried the park.
+        1 * support.disposeExistingEnvironment()
         executor.requests.size() == 1
+    }
+
+    // FR9 of make-run-headless: a --decision over any recorded outcome but `escalated` is a usage
+    // error naming the conflict — raised after task.json is read, before any commit or any box.
+    def "refuses a --decision over a task whose recorded outcome is #label, touching nothing"() {
+        given:
+        record = recorded == null ? freshRecord() : recordWith(recorded)
+
+        when:
+        resume('nobody asked')
+
+        then:
+        def ex = thrown(UsageException)
+        ex.message.contains('--decision')
+        ex.message.contains('PROJ-1')
+        ex.message.contains(named)
+
+        and:
+        executor.requests.isEmpty()
+        0 * taskRepository._
+        0 * support.disposeExistingEnvironment()
+        0 * support.reattachFor(_)
+        0 * support.sweepOrphans()
+
+        where:
+        label | recorded | named
+        'paused' | new RecordedOutcome.Paused('build') | "paused at a manual checkpoint after stage 'build'"
+        'completed' | new RecordedOutcome.Completed() | 'completed'
+        'not recorded' | null | 'interrupted run with no recorded outcome'
     }
 
     // FR8: outcome `aborted` refuses, pointing at the KEPT task environment — the container twin of

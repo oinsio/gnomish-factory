@@ -7,10 +7,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
-import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import com.github.oinsio.gnomish.status.StatusSnapshotHolder
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 
@@ -22,7 +20,6 @@ import spock.lang.Specification
  */
 class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFixture {
 
-    def holder = new StatusSnapshotHolder(TaskState.atStageStart('build'), 3)
     def law = PipelineLaw.ofContent([:])
     def childEnv = ChildEnvAllowlist.none()
 
@@ -38,8 +35,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     // typed instance.
     def "stageExecutor binds a real host CliStageExecutor in host mode"() {
         when:
-        def executor = ExecutorAdapterSelector.stageExecutor(
-                holder, newAssembly(), childEnv, law)
+        def executor = ExecutorAdapterSelector.stageExecutor(newAssembly(), childEnv, law)
 
         then:
         executor != null
@@ -58,8 +54,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         def assembly = newAssembly().withHostGitPush(decoration)
 
         when:
-        def executor = ExecutorAdapterSelector.stageExecutor(
-                holder, assembly, childEnv, law)
+        def executor = ExecutorAdapterSelector.stageExecutor(assembly, childEnv, law)
 
         then:
         executor instanceof CliStageExecutor
@@ -78,8 +73,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         def assembly = newAssembly().withHostGitPush(decoration).withSandbox(pieces())
 
         when:
-        def executor = ExecutorAdapterSelector.stageExecutor(
-                holder, assembly, childEnv, law)
+        def executor = ExecutorAdapterSelector.stageExecutor(assembly, childEnv, law)
 
         then:
         executor instanceof ResumeVerificationStageExecutor
@@ -91,7 +85,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     // mutant would also collapse, so both shapes are pinned down explicitly.
     def "stageExecutor wraps the CLI executor with ResumeVerificationStageExecutor in container mode"() {
         when:
-        def executor = ExecutorAdapterSelector.stageExecutor(holder, newAssembly().withSandbox(pieces()), childEnv, law)
+        def executor = ExecutorAdapterSelector.stageExecutor(newAssembly().withSandbox(pieces()), childEnv, law)
 
         then:
         executor != null

@@ -38,7 +38,6 @@ import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -58,7 +57,6 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.ObjectId
-import com.github.oinsio.gnomish.status.StatusSnapshotHolder
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -223,9 +221,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
                 persistence, clock, new VirtualSleeper(clock))
-                new Run(null, ports, new StatusSnapshotHolder(state as TaskState, 1))
+                new Run(null, ports)
             },
-            dialogConsole: { context, state ->
+            dialogConsole: {
+                ->
                 throw new UnsupportedOperationException('no console in this spec')
             },
             withExtraListener: { listener ->
@@ -255,18 +254,16 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
 
     /**
      * The same fake, but carrying a REAL {@link RunnerOutcomeLoop} over a scripted console — for the
-     * paths that drive the loop rather than the engine directly (the git-mode resume chain), and
-     * whose dialogs therefore have to answer. {@code io} feeds those prompts in order, and a caller
-     * that wants to assert what the dialog PRINTED passes its own and reads {@code io.printed}.
+     * paths that drive the loop rather than the engine directly (the git-mode resume chains). No
+     * path reads {@code io} (FR6 of make-run-headless); a caller that wants to assert what a stop
+     * or a restated question PRINTED passes its own and reads {@code io.printed}.
      * {@code lawBindings} collects every {@link LawBinding} the chain assembles with, for the
      * specs that assert WHICH tree a resumed run binds its law from.
      */
-    RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(['']),
+    RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(),
             Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
         def clock = new VirtualClock()
-        def console = new DialogConsole(io, { json ->
-            'unused'
-        })
+        def console = new DialogConsole(io)
         def self = null
         self = [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
@@ -275,10 +272,9 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
                 persistence, clock, new VirtualSleeper(clock))
-                new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr(), FIXED_CLOCK), ports,
-                        new StatusSnapshotHolder(state as TaskState, 1))
+                new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
-            dialogConsole: { context, state -> console },
+            dialogConsole: { -> console },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
             withHostGitPush: { decoration ->

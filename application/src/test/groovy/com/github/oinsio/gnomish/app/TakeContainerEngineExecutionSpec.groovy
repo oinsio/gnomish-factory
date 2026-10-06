@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -117,7 +118,9 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         0 * support.recordAborted(_)
 
         and: 'FR10, D12 of harden-task-branch-contract: the park is recorded on the branch BEFORE the tracker write'
-        1 * support.recordPark({ it instanceof TaskOutcome.Escalated })
+        1 * support.recordPark({
+            it instanceof TaskOutcome.Escalated
+        }, TrackerWrite.OWED)
 
         then: 'and only then does the effect go out, followed by its receipt'
         1 * tracker.park(REF, ParkReason.ESCALATION, _)
@@ -149,7 +152,9 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         0 * support.completeAndDispose(_)
 
         and: 'FR10, D12 of harden-task-branch-contract: a checkpoint park is recorded on the branch too'
-        1 * support.recordPark({ it instanceof TaskOutcome.Paused })
+        1 * support.recordPark({
+            it instanceof TaskOutcome.Paused
+        }, TrackerWrite.OWED)
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, _)

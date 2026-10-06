@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
@@ -63,28 +62,37 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     }
 
     /**
-     * The tip's {@code task.json} as its raw wire DTO. The marker-clearing rewrite reads it this way
-     * rather than through the domain record: the recorded outcome, decisions, and escalation are
-     * preserved verbatim, which rebuilding from a domain outcome could not do (the host twin,
-     * {@link TerminalWriteMarker}, reads it the same way and for the same reason).
+     * The tip's {@code task.json}: the committed text and its raw wire DTO. The rewrites read it
+     * this way rather than through the domain record: the recorded outcome, decisions, and
+     * escalation are preserved verbatim, which rebuilding from a domain outcome could not do (the
+     * host twin, {@link RequiredTaskJson}, reads it the same way and for the same reason), and the
+     * outcome rewrite asks the committed text whether its document is already there ({@link
+     * CommittedTaskJson#carries}).
      */
-    TaskJsonDto readCurrentDto(String taskId, ObjectId tip, TaskLifecycleEvent event) {
+    CommittedTaskJson readCommitted(String taskId, ObjectId tip, TaskLifecycleEvent event) {
         byte[] bytes;
         try {
             bytes = gitObjects.readBlob(tip, EnvelopePaths.TASK_JSON_PATH, TASK_JSON_SIZE_CAP);
         } catch (RuntimeException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
-        return TaskJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
+        return CommittedTaskJson.parse(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
-    List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
+    String serializeTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
         try {
-            byte[] bytes = TaskStateJson.mapper().writeValueAsString(dto).getBytes(StandardCharsets.UTF_8);
-            return List.of(new TreeEdit.PutFile(EnvelopePaths.TASK_JSON_PATH, bytes));
+            return TaskStateJson.mapper().writeValueAsString(dto);
         } catch (JsonProcessingException e) {
             throw new GitTaskRepositoryException(taskId, event, "serializing task.json", e);
         }
+    }
+
+    List<TreeEdit> putTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {
+        return putTaskJson(serializeTaskJson(taskId, dto, event));
+    }
+
+    List<TreeEdit> putTaskJson(String json) {
+        return List.of(new TreeEdit.PutFile(EnvelopePaths.TASK_JSON_PATH, json.getBytes(StandardCharsets.UTF_8)));
     }
 
     /**

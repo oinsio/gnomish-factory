@@ -10,9 +10,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * EscalationDto} (task 6.5), by an exhaustive switch with no {@code default} arm.
  * {@code stage}/{@code at} render {@code null} for every variant: neither field
  * exists on {@code EscalationReport} itself, and no plumbing reachable from a
- * {@code StatusReport} (the report, its {@code StatusSnapshotHolder}, or the
- * {@code AttemptRecord}/{@code AttemptKey} history) attaches a stage name or
- * instant to a live escalation — see {@link EscalationDto}'s type-level note.
+ * {@code StatusReport} (the report or the {@code AttemptRecord}/{@code
+ * AttemptKey} history) attaches a stage name or instant to an escalation — see {@link EscalationDto}'s type-level note.
  *
  * <p>Annotated {@link UntrustedExit} for the same reason {@link AttemptMapper} is (design D2 of
  * type-untrusted-text): {@code status.json} is the machine plane, read by a parser rather than by

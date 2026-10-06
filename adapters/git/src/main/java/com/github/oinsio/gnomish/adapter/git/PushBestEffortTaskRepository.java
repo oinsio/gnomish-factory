@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.engine.Decision;
@@ -73,8 +74,8 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
     }
 
     @Override
-    public void recordOutcome(String taskId, TaskOutcome outcome) {
-        delegate.recordOutcome(taskId, outcome);
+    public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
+        delegate.recordOutcome(taskId, outcome, trackerWrite);
         pushFor(taskId, TaskOutcomeLifecycleEvent.of(outcome).name());
     }
 

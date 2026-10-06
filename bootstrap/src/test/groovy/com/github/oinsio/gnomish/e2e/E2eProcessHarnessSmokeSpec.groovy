@@ -16,20 +16,18 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
  * {@code judge-model} (D4 of remove-interactive-console). {@code files_exist} passes
  * against the fixture; the {@code command} check is stateful (task 9.2's
  * {@code attempt-marker.txt} fixture) — it fails and writes its marker on the first round,
- * so a second round runs before it passes; the judge then passes, and the only stdin line
- * answers the manual-checkpoint confirmation, after which the (only) stage is done and the
- * run completes.
+ * so a second round runs before it passes; the judge then passes, and the run stops at the
+ * stage's manual checkpoint with exit 11 — in-place, so there is nothing to resume (FR2 of
+ * make-run-headless).
  *
- * <p>M1 of add-manual-run; FR6 of remove-interactive-console.
+ * <p>M1 of add-manual-run; FR6 of remove-interactive-console; FR2, FR7 of make-run-headless.
  */
 class E2eProcessHarnessSmokeSpec extends AbstractE2eProcessSpec {
 
     def "M1: a real gnomish run process launches, is driven by the fake agent, and returns an exit code"() {
-        given: 'the fake agent as gnome and judge, and stdin carrying only the checkpoint confirmation'
+        given: 'the fake agent as gnome and judge, and no stdin at all'
         def agent = FakeAgentSupport.wrapperFor('plain-round', 'judge-model', 'judge-verdict-pass')
-        List<String> script = [
-            '' // manual-checkpoint confirmation
-        ]
+        List<String> script = []
 
         when:
         def result = harness.run(
@@ -45,8 +43,8 @@ class E2eProcessHarnessSmokeSpec extends AbstractE2eProcessSpec {
         then: 'FR6: run\'s parser passes the --factory.agent-cli-binary argument through'
         !result.stderr().contains('unknown option')
 
-        and: 'the harness mechanics themselves work: a process ran and reported an exit code'
-        result.exitCode() == 0
+        and: 'the harness mechanics themselves work: a process ran and reported the checkpoint exit code'
+        result.exitCode() == 11
 
         and: 'stdout carries the checkpoint the fake-agent rounds and the judge vote led to'
         result.stdout().contains("Stage 'work' passed. Manual checkpoint reached.")

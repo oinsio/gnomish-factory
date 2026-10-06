@@ -23,7 +23,8 @@ import org.springframework.boot.ApplicationArguments;
  * <p>Implements FR1, UX1 of add-manual-run; {@code --dir} (renamed from {@code --project}) and
  * {@code --mode} implement FR7, design D8 of add-git-workflow; {@code --base}, {@code --resume},
  * {@code --discard-work} and their exclusion matrix implement FR7, FR8, FR10, design D7, D9, D10
- * of add-git-workflow. The {@code dir} component is the registered clone's path, resolved by the
+ * of add-git-workflow; {@code --decision} implements FR3, FR9, design D2 of make-run-headless. The
+ * {@code dir} component is the registered clone's path, resolved by the
  * configuration loader before this parser runs (FR3, design D9 of add-project-registry).
  */
 public final class RunArgumentsParser {
@@ -38,10 +39,11 @@ public final class RunArgumentsParser {
     private static final String BASE = "base";
     private static final String RESUME = "resume";
     private static final String DISCARD_WORK = "discard-work";
+    private static final String DECISION = "decision";
 
     /** Every option {@code run} accepts (FR8 of fix-operator-blockers). */
     private static final List<String> ACCEPTED =
-            List.of(DIR, TASK, TASK_FILE, TASK_ID, FROM_STAGE, MODE, BASE, RESUME, DISCARD_WORK);
+            List.of(DIR, TASK, TASK_FILE, TASK_ID, FROM_STAGE, MODE, BASE, RESUME, DISCARD_WORK, DECISION);
 
     /**
      * Filesystem/git-ref-safe charset for {@code --task-id}: ASCII letters, digits, {@code -}
@@ -65,14 +67,15 @@ public final class RunArgumentsParser {
         ArgumentsParsingSupport.rejectUnknownOptions(args, RUN_TOKEN, ACCEPTED, Map.of());
         Path dir = clone.clonePath();
         String resume = singleValue(args, RESUME);
+        RunArguments.Mode mode = GitFlagsValidator.parseMode(singleValue(args, MODE));
+        String decision = GitFlagsValidator.parseDecision(singleValue(args, DECISION), mode, resume);
         TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);
         String fromStage = parseFromStage(args);
-        RunArguments.Mode mode = GitFlagsValidator.parseMode(singleValue(args, MODE));
         String base = singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
         GitFlagsValidator.validate(mode, resume, base, discardWork, args);
-        return new RunArguments(dir, taskSource, taskId, fromStage, mode, base, resume, discardWork);
+        return new RunArguments(dir, taskSource, taskId, fromStage, mode, base, resume, discardWork, decision);
     }
 
     private TaskSource parseTaskSource(ApplicationArguments args) {

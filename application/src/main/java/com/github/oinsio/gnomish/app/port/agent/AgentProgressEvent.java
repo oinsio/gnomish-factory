@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
  * AgentProgressListener} (design D10). Unlike {@code adapter.agent.AgentEvent} — the durable
  * per-line wire model later folded into {@link ExecutorUsage} / {@code
  * adapter.agent.ToolTraceBuilder} — a progress event exists only for the moment of observation:
- * it carries the minimum a live subscriber (an SLF4J renderer, a status enricher)
+ * it carries the minimum a live subscriber (an SLF4J renderer, a mid-round harvest poll)
  * needs to report a round in flight, not the full wire payload.
  *
  * <p>Three variants cover FR7's three live-progress facts: a round starting

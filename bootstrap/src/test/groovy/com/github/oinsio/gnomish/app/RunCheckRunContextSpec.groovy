@@ -18,7 +18,7 @@ class RunCheckRunContextSpec extends Specification {
     private static final TaskContext TASK = new TaskContext('PROJ-42', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     private static StatusSnapshotHolder holderAt(String stage) {
-        new StatusSnapshotHolder(TaskState.atStageStart(stage), 3)
+        new StatusSnapshotHolder(TaskState.atStageStart(stage))
     }
 
     def "supplies the task id and the branch derived from it"() {

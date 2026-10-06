@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -96,7 +97,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
             rounds
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitModeRunner(
-                assemblyRunningLoop(executor, new ScriptedConsoleIO(['']), new Verdict.Pass(), attached),
+                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Pass(), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, liveConsole())
 
         when:
@@ -153,7 +154,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-1'
         }, LAW_COMMIT, new BasePin('HEAD', null, BaseRule.LOCAL_HEAD), _)
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
         1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
 
         and: 'the pipeline really ran against the worktree — the recorded outcome is not a no-op'
@@ -195,7 +196,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         ex.message.contains('absent at HEAD')
 
         and: 'nothing was recorded from a state the branch never carried'
-        0 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+        0 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
     }
 
     def "records and disposes on an aborted run before rethrowing"() {
@@ -206,10 +207,34 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         runCapturingStdout()
 
         then:
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted, TrackerWrite.OWED)
         1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Aborted)
 
         and:
         thrown(AbortedException)
+    }
+
+    // FR1, FR10 of make-run-headless (design D8): a fresh run that stops records the park — the
+    // worktree kept by the outcome-driven disposal, no tracker write owed — and leaves by its outcome
+    // with the return path naming the clone and the task.
+    def "records the park of a run that escalates and exits by it"() {
+        given:
+        def runner = new GitModeRunner(
+                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Fail([])),
+                new TaskGit(store, branches, worktrees, new ClaimEpochBook()), registeredClone, liveConsole())
+
+        when:
+        runner.run(new RunOrder(cloneDir, null, completingPipeline(), false), context(), TaskState.atStageStart('build'))
+
+        then:
+        def stop = thrown(RunParkedException)
+        !stop.checkpoint()
+        stop.stopRecord().contains("--dir=${cloneDir} --resume=PROJ-1")
+
+        and:
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Escalated, TrackerWrite.NONE)
+        0 * lifecycleStore.confirmTerminalWrite(_)
+        0 * lifecycleStore.finishCleanup(_)
+        1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Escalated)
     }
 }

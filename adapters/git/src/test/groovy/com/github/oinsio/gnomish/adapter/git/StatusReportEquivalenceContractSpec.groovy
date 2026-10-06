@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -21,7 +22,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
@@ -34,11 +34,12 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR4, M2 of add-git-workflow: the equivalence contract test. A {@link StatusReport} rendered
- * from live engine events must be equivalent — modulo the live-only fields that a state-file
- * read can never reconstruct ({@code activity}, {@code attemptLimit}, see {@link
- * BranchStateReader}'s class javadoc) — to a {@link StatusReport} rendered from the same task's
- * persisted {@code .gnomish-task/} state files. Both renderings are anchored against the same
+ * FR4, M2 of add-git-workflow: the equivalence contract test. A {@link StatusReport} built in
+ * memory from a task's context, state and recorded escalation/outcome must render byte-identically
+ * to the {@link StatusReport} {@link BranchStateReader} builds from the same task's persisted
+ * {@code .gnomish-task/} state files — every field is state-derived, so there is nothing to except
+ * (FR6 of make-run-headless withdrew the live-only {@code activity} and {@code attemptLimit}). Both
+ * renderings are anchored against the same
  * task/attempt data that backs {@code status-report-v1.reference.json} ({@link
  * StatusReportReferenceFixture}, the one owner of that sample since FR2 of
  * fix-denial-attribution-durability — this spec rebuilt it by hand until then), so it stays the ground truth
@@ -65,14 +66,14 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
-    def "FR4: StatusReport rendered from state files is equivalent to the live-rendered report, anchored by status-report-v1.reference.json"() {
-        given: 'the same task/attempt data that backs the reference fixture, rendered live'
+    def "FR4: StatusReport rendered from state files is identical to the in-memory report, anchored by status-report-v1.reference.json"() {
+        given: 'the same task/attempt data that backs the reference fixture, built in memory'
         def taskId = StatusReportReferenceFixture.TASK_ID
         def context = StatusReportReferenceFixture.referenceContext()
         def state = StatusReportReferenceFixture.referenceTaskState()
 
         def escalation = StatusReportReferenceFixture.referenceEscalation()
-        def liveReport = StatusReportReferenceFixture.referenceReport()
+        def memoryReport = StatusReportReferenceFixture.referenceReport()
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
@@ -80,7 +81,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def worktree = registeredClone.worktrees().resolve(taskId)
 
         and: 'the task escalated (recording lastEscalation durably, FR5) and was then resumed with the decision — outcome resets to null while lastEscalation is retained, exactly like the reference fixture (outcome: null, lastEscalation populated)'
-        taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
+        taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation), TrackerWrite.OWED)
         // FR4 of harden-task-branch-contract: the decision's own commit carries the attempt-counter
         // reset, so the round the answered stage then runs is what puts the reference state back on
         // the branch — the same order a real resume writes these commits in.
@@ -91,23 +92,22 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
 
         when: 'both are rendered through the same JSON mapper'
-        def fullLiveJson = mapper.serialize(liveReport)
-        def liveJson = mapper.serialize(withoutLiveOnlyFields(liveReport))
+        def memoryJson = mapper.serialize(memoryReport)
 
         def result = new BranchStateReader(runner).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
         def stateFileJson = mapper.serialize(stateFileReport)
 
-        then: 'the fully-live rendering matches the shared reference fixture (the ground truth anchor)'
-        fullLiveJson == referenceJsonText()
+        then: 'the in-memory rendering matches the shared reference fixture (the ground truth anchor)'
+        memoryJson == referenceJsonText()
 
-        and: 'the state-file rendering is equivalent to the live rendering, live-only fields excepted'
-        stateFileJson == liveJson
+        and: 'the state-file rendering is byte-identical to it'
+        stateFileJson == memoryJson
     }
 
     // FR4, M1 of fix-denial-report-attachment: the equivalence must hold with denials present too
     //     — a denial the round recorded has to survive the commit and read back the same on both
-    //     sides, or a resuming instance would see a different history than the live run did
+    //     sides, or a resuming instance would see a different history than the run did
     def "FR4: a passing attempt's denial survives the state file and renders identically on both sides"() {
         given: 'a passing round that recorded one egress denial'
         def taskId = 'manual-20260716-143502-d1'
@@ -120,7 +120,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                 [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
         def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
         def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
-        def liveReport = StatusReport.build(context, state, 3, LiveActivity.idle())
+        def memoryReport = StatusReport.build(context, state, null, null)
 
         and: 'the round committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
@@ -138,13 +138,13 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         stateFileReport.attempts()[0].result() == AttemptRecord.Result.PASSED
 
         and: 'the two renderings are byte-identical, denials included'
-        mapper.serialize(stateFileReport) == mapper.serialize(withoutLiveOnlyFields(liveReport))
+        mapper.serialize(stateFileReport) == mapper.serialize(memoryReport)
     }
 
     // FR2, M1 of fix-denial-attribution-durability: the round that could not execute left no
     //     attempt record, so its denials ride the escalation. The equivalence has to hold for
     //     them too — a resuming instance reading task.json must see the same blocked egress the
-    //     live run reported, and the attempt history must stay untouched by their presence.
+    //     run reported, and the attempt history must stay untouched by their presence.
     def "FR2: a cannotExecute escalation's denials survive task.json and render identically on both sides"() {
         given: 'a task parked after a round was killed on its round timeout, having tried a denied egress'
         def taskId = 'manual-20260716-143502-c1'
@@ -153,13 +153,12 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out after 15m'), [denial])
         def state = TaskState.atStageStart('implement')
         def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
-        def liveReport = StatusReport.build(
-                context, state, 3, new LiveActivity(null, escalation, new Outcome.Escalated(escalation)))
+        def memoryReport = StatusReport.build(context, state, escalation, new Outcome.Escalated(escalation))
 
         and: 'the park committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), state)
-        taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
+        taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation), TrackerWrite.OWED)
 
         when: 'the branch is read back and both renderings go through the same mapper'
         def result = new BranchStateReader(runner).read(cloneDir, taskId)
@@ -173,21 +172,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         stateFileReport.attempts().isEmpty()
 
         and: 'the two renderings are byte-identical, escalation denials included'
-        mapper.serialize(stateFileReport) == mapper.serialize(withoutLiveOnlyFields(liveReport))
-    }
-
-    /**
-     * A state-file read never has a live process to observe: {@code activity} and {@code
-     * attemptLimit} are always null on that side (see {@link BranchStateReader}'s class
-     * javadoc). Equivalence is defined modulo those two fields, so the live side is stripped of
-     * them before comparison — everything else (task identity, position, attempts, totals,
-     * decisions, outcome, lastEscalation) must match exactly.
-     */
-    private static StatusReport withoutLiveOnlyFields(StatusReport report) {
-        new StatusReport(
-                report.taskId(), report.title(), report.body(), report.currentStage(),
-                report.attemptsUsed(), null, report.attempts(), report.decisions(), report.lastDecision(),
-                report.totals(), null, report.outcome(), report.lastEscalation())
+        mapper.serialize(stateFileReport) == mapper.serialize(memoryReport)
     }
 
     private static String referenceJsonText() {

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.MDC;
 
 /**
@@ -24,8 +25,8 @@ import org.slf4j.MDC;
  * line (FR8 of harden-task-branch-contract), exactly as {@link GitResumeRunner#bootstrap} does,
  * reads {@code task.json}/{@code state.json} as bare git objects (FR17), and
  * the outcome switch mirrors the host continuation byte-for-byte (UX2): {@code
- * escalated} runs the same {@link EscalationResumeDialog}; {@code paused} the
- * same checkpoint confirmation; {@code null} salvages the interrupted round
+ * escalated} resolves the operator's {@code --decision} through the same {@link
+ * EscalationResume}; {@code paused} continues without a prompt; {@code null} salvages the interrupted round
  * in-box (or {@code --discard-work} disposes and re-materializes fresh) and
  * continues; {@code completed} reports. A snapshot commit found unrecorded at
  * the tip resumes as an interrupted verification — re-verified against exactly
@@ -40,12 +41,14 @@ import org.slf4j.MDC;
  * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
  * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
  * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
- * runs the same {@link EscalationResumeDialog}, {@code paused} the same checkpoint confirmation,
- * {@code completed} reports without another engine run, and {@code aborted} refuses with a usage
- * error naming the kept working copy. Adding or re-meaning an arm on one side alone is the
+ * resolves the {@code --decision} through the same {@link EscalationResume}, {@code paused}
+ * continues without a prompt, {@code completed} reports without another engine run, and {@code
+ * aborted} refuses with a usage error naming the kept working copy; both refuse a {@code
+ * --decision} over a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
+ * write (FR9 of make-run-headless). Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
- * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core.
+ * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR9 of make-run-headless.
  */
 final class ContainerResumeRunner {
 
@@ -83,12 +86,14 @@ final class ContainerResumeRunner {
      * @param order the run order: the {@code --dir} clone, the loaded pipeline, the console mode
      *     and {@code --discard-work}; its {@code base} is not read, a resume starts from the branch
      * @param taskId the {@code --resume} taskId, as supplied by the operator
+     * @param decision the operator's {@code --decision}, or {@code null} when none was given (design
+     *     D2 of make-run-headless)
      * @param segments the run's container-bound segment plan; never empty
      *
-     * @throws UsageException if no branch for {@code taskId} is found, or its last recorded
-     *     outcome is Aborted
+     * @throws UsageException if no branch for {@code taskId} is found, its last recorded outcome is
+     *     Aborted, or a {@code decision} was given over an outcome that is not escalated (FR9)
      */
-    void run(RunOrder order, String taskId, List<Segment> segments) {
+    void run(RunOrder order, String taskId, @Nullable String decision, List<Segment> segments) {
         Path cloneDir = order.cloneDir();
         PipelineDefinition definition = order.definition();
         git.branches().harden(cloneDir);
@@ -110,6 +115,7 @@ final class ContainerResumeRunner {
                 support.readStateOrInitial(definition.stages().getFirst().name());
 
         RecordedOutcome outcome = taskJson.outcome();
+        ResumeDecisionGuard.requireEscalatedFor(recordedTaskId, outcome, decision);
         if (outcome == null) {
             ContainerResumeOutcomes.resumeFromRecordedPosition(this, support, order, taskJson, state);
             return;
@@ -117,9 +123,9 @@ final class ContainerResumeRunner {
         switch (outcome) {
             case RecordedOutcome.Completed ignored -> ContainerResumeOutcomes.reportCompleted(this, taskJson, state);
             case RecordedOutcome.Escalated ignored ->
-                ContainerResumeOutcomes.resumeEscalated(this, support, order, taskJson, state);
-            case RecordedOutcome.Paused paused ->
-                ContainerResumeOutcomes.resumePaused(this, support, order, taskJson, state, paused.passedStage());
+                ContainerResumeOutcomes.resumeEscalated(this, support, order, taskJson, state, decision);
+            case RecordedOutcome.Paused ignored ->
+                ContainerResumeOutcomes.resumePaused(this, support, order, taskJson, state);
             case RecordedOutcome.Aborted ignored ->
                 throw new UsageException("cannot resume task \"" + recordedTaskId
                         + "\": its last recorded outcome is Aborted — inspect the kept task environment and start a"

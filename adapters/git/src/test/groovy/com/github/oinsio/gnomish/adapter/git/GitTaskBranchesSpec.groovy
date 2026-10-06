@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
@@ -108,14 +109,14 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         given:
         seedTask('PROJ-10')
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
-        repository.recordOutcome('PROJ-10', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        repository.recordOutcome('PROJ-10', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
 
         expect:
         branches.classifyShape(cloneDir, 'PROJ-10') instanceof BranchShape.Parked
 
         and: 'the outcome commit without its cleanup behind it is the kill-window shape, not delivery'
         seedTask('PROJ-11')
-        repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         branches.classifyShape(cloneDir, 'PROJ-11') instanceof BranchShape.CompletedUncleaned
     }
 
@@ -144,7 +145,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         seedTask('PROJ-6')
         def finalState = TaskState.atStageStart('implement')
         new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
-                .recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
+                .recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
 
         when:
         DeliveredBranchState delivered = branches.readDelivered(cloneDir, 'PROJ-6')

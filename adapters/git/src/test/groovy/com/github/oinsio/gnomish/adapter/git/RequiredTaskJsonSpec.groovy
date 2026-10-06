@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -37,7 +38,7 @@ class RequiredTaskJsonSpec extends Specification implements BareGitRepoFixture {
         runner.run(cloneDir, 'branch', 'gnomish/PROJ-9', 'HEAD')
 
         when:
-        repository.recordOutcome('PROJ-9', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-9', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
 
         then: 'the failure names the task, the path and the exit code'
         def e = thrown(GitTaskRepositoryException)

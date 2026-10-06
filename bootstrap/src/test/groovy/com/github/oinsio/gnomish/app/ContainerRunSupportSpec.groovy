@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -192,7 +193,7 @@ exit 0
         createTask(support)
 
         when: 'the park\'s durable intent lands'
-        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
+        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'), TrackerWrite.OWED)
 
         then: 'the branch records the outcome and says the tracker write is still owed'
         def parked = support.readTaskJson()
@@ -270,7 +271,7 @@ exit 0
         def beforePark = tipOfTaskBranch()
 
         when: 'the park lands its durable intent, then its receipt, and the box is kept'
-        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
+        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'), TrackerWrite.OWED)
         def afterIntent = tipOfTaskBranch()
         support.confirmTerminalWrite()
         def afterReceipt = tipOfTaskBranch()
@@ -409,7 +410,7 @@ exit 0
                         TaskState.atStageStart('build'),
                         new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
                             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
-                        ])))
+                        ])), TrackerWrite.OWED)
 
         then: 'task.json carries the escalation, its denials, and the position they were read up to'
         def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(taskJsonAtTip()))
@@ -431,7 +432,7 @@ exit 0
                         TaskState.atStageStart('build'),
                         new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [
                             Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
-                        ])))
+                        ])), TrackerWrite.OWED)
 
         then:
         noExceptionThrown()

@@ -14,14 +14,12 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * state-derivable fields, so repeating it here would duplicate data the contract
  * gets elsewhere.
  *
- * <p>{@code null} at {@link StatusReport#outcome()} means the run has not yet
- * terminated (still mid-run); this differs from {@link LiveActivity#activity()}
- * being {@code null}, which means idle-but-still-running.
+ * <p>{@code null} at {@link StatusReport#outcome()} means the task has no recorded
+ * terminal outcome yet.
  *
- * <p>Live-only: populated by {@link StatusEventListener} from {@code
- * EngineEvent.TaskFinished} for all four {@link TaskOutcome} kinds, so it does not
- * survive into a persisted {@code TaskState} the way {@code lastEscalation} does
- * not (design D7).
+ * <p>Not carried on {@code TaskState}: {@code gnomish status} reads it from the
+ * outcome the task's record ({@code task.json}) holds, beside {@code
+ * lastEscalation} (design D7 of add-manual-run; D4 of make-run-headless).
  *
  * <p>Inert value data compared by content.
  *
@@ -67,25 +65,4 @@ public sealed interface Outcome permits Outcome.Completed, Outcome.Paused, Outco
      * @param cause the failure detail, stack trace preserved; never blank
      */
     record Aborted(AttemptKey failedAt, UntrustedText cause) implements Outcome {}
-
-    /**
-     * Derives the report-model {@code Outcome} from the engine's {@link
-     * TaskOutcome}, dropping the {@code finalState} each variant carries (already
-     * available elsewhere on the report) by an exhaustive switch over the sealed
-     * variants — no {@code default} arm, so a new {@code TaskOutcome} variant fails
-     * to compile here until its mapping is added.
-     *
-     * <p>Implements FR11, D7 of add-manual-run.
-     *
-     * @param outcome the engine's terminal outcome; never null
-     * @return the equivalent report-model outcome
-     */
-    static Outcome from(TaskOutcome outcome) {
-        return switch (outcome) {
-            case TaskOutcome.Completed ignored -> new Completed();
-            case TaskOutcome.Paused paused -> new Paused(paused.passedStage());
-            case TaskOutcome.Escalated escalated -> new Escalated(escalated.report());
-            case TaskOutcome.Aborted aborted -> new Aborted(aborted.failedAt(), aborted.cause());
-        };
-    }
 }

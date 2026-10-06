@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -194,7 +195,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         def result = resume(new BranchShape.InProgress())
 
         then:
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted, TrackerWrite.OWED)
 
         then:
         1 * worktrees.cleanUp(CLONE_DIR, worktree, _ as TaskOutcome.Aborted)

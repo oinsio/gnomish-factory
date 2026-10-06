@@ -103,10 +103,20 @@ public interface TaskRepository {
      * task parked with a known outcome from one whose process merely died
      * mid-flight, where outcome stays null (FR5, NFR-R2).
      *
-     * <p>Implements FR1 of add-git-workflow.
+     * <p>The record also states whether a tracker write follows it ({@link TrackerWrite}): with
+     * {@link TrackerWrite#OWED} a park or a completion carries the durable "tracker-write pending"
+     * marker its receipt later clears; with {@link TrackerWrite#NONE} no marker is set, because no
+     * write is coming and no receipt will follow (design D8 of make-run-headless).
+     *
+     * <p>Idempotent on identical content: a record whose {@code task.json} equals the tip's byte for
+     * byte makes no commit and returns normally, since the tip already carries it (design D8 of
+     * make-run-headless, "Idempotence"; crash-consistency item 8).
+     *
+     * <p>Implements FR1 of add-git-workflow; FR10 of make-run-headless.
      *
      * @param taskId the task the outcome belongs to; never blank
      * @param outcome the terminal outcome to record; never null
+     * @param trackerWrite whether a tracker write follows this record; never null
      */
-    void recordOutcome(String taskId, TaskOutcome outcome);
+    void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite);
 }

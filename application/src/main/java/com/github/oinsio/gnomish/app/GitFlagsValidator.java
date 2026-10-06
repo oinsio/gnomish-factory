@@ -21,9 +21,14 @@ import org.springframework.boot.ApplicationArguments;
  *   <li>{@code --discard-work} without {@code --resume} — replaying "the interrupted round" (D10)
  *       presupposes a round recorded on a branch being resumed; a fresh run has no interrupted
  *       round to replay.
+ *   <li>{@code --decision} with {@code --mode=in-place}, without {@code --resume}, or blank — the
+ *       decision answers a recorded escalation of a resumed task on its branch (FR3, FR9, design
+ *       D2 of make-run-headless). Checked by {@link #parseDecision} before the task source is
+ *       read, so a missing {@code --resume} is reported as that, not as a missing {@code --task}.
  * </ul>
  *
- * <p>Implements FR7, FR8, design D7, D9, D10 of add-git-workflow.
+ * <p>Implements FR7, FR8, design D7, D9, D10 of add-git-workflow; FR3, FR9, design D2 of
+ * make-run-headless.
  */
 final class GitFlagsValidator {
 
@@ -49,6 +54,26 @@ final class GitFlagsValidator {
                 throw new UsageException(
                         "--mode=" + value + " is invalid: accepted forms are --mode=git or --mode=in-place");
         };
+    }
+
+    /**
+     * Validates {@code --decision}'s single value (FR3, FR9, design D2 of make-run-headless):
+     * {@code null} (flag absent) passes through; a blank value, {@code --mode=in-place}, or an
+     * absent {@code --resume} is a usage error naming the conflict.
+     */
+    static @Nullable String parseDecision(@Nullable String decision, RunArguments.Mode mode, @Nullable String resume) {
+        if (decision == null) {
+            return null;
+        }
+        if (decision.isBlank()) {
+            throw new UsageException("--decision must not be blank (e.g. --decision=\"use approach A\")");
+        }
+        requireGitOnlyAbsentWithInPlace(mode == RunArguments.Mode.IN_PLACE, "--decision");
+        if (resume == null) {
+            throw new UsageException("--decision requires --resume=<task>: it answers the recorded escalation of a"
+                    + " resumed task, not a fresh run");
+        }
+        return decision;
     }
 
     static void validate(

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -203,7 +204,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
         persistence.persist('PROJ-1', TaskState.atStageStart('implement'), trace)
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         Files.writeString(worktree().resolve('note.txt'), 'after cleanup')
         commitAll(worktree(), 'a human commit after cleanup')

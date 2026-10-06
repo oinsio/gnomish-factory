@@ -72,7 +72,7 @@ class StatusTextRendererSpec extends Specification {
     }
 
     // FR10, UX2, D7: renderFull includes recognizable content for a fully populated report
-    def "renderFull includes stage, attempts, decisions, totals, activity, escalation and last decision"() {
+    def "renderFull includes stage, attempts, decisions, totals, escalation and last decision"() {
         given:
         def renderer = new StatusTextRenderer()
         def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0))
@@ -82,9 +82,7 @@ class StatusTextRendererSpec extends Specification {
             UntrustedText.agent('refactor'),
             UntrustedText.agent('patch')
         ])
-        def activity = new LiveActivity(new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), STARTED),
-                escalation, null)
-        def report = StatusReport.build(ctx, state, 3, activity)
+        def report = StatusReport.build(ctx, state, escalation, null)
 
         when:
         def text = renderer.renderFull(report)
@@ -92,24 +90,22 @@ class StatusTextRendererSpec extends Specification {
         then:
         text.contains(ctx.taskId())
         text.contains(ctx.title().forConsole())
-        text.contains('implement')
-        text.contains('1/3')
+        text.contains('Stage: implement\n')
         text.contains('Round 0')
         text.contains('Decisions:')
         text.contains('patch in place')
         text.contains('wallMillis=5000')
-        text.contains('verifying command:./gradlew test')
         text.contains('decision needed: Refactor or patch?')
         text.contains('Last decision:')
         text.contains('patch in place')
     }
 
-    // FR11: renderFull renders "pipeline complete" and no attempt-limit fraction at pipelineEnd
-    def "renderFull renders pipeline complete with no attempt limit at pipelineEnd"() {
+    // FR11: renderFull renders "pipeline complete" at pipelineEnd
+    def "renderFull renders pipeline complete at pipelineEnd"() {
         given:
         def renderer = new StatusTextRenderer()
         def state = TaskState.atStageStart('implement').advanceTo(new Position.PipelineEnd())
-        def report = StatusReport.build(context(), state, null, LiveActivity.idle())
+        def report = StatusReport.build(context(), state, null, null)
 
         when:
         def text = renderer.renderFull(report)
@@ -119,11 +115,11 @@ class StatusTextRendererSpec extends Specification {
     }
 
     // FR10, UX2: renderFull omits optional sections that are absent
-    def "renderFull omits attempts, decisions, activity, escalation and last-decision sections when absent"() {
+    def "renderFull omits attempts, decisions, escalation and last-decision sections when absent"() {
         given:
         def renderer = new StatusTextRenderer()
         def state = TaskState.atStageStart('implement')
-        def report = StatusReport.build(context(), state, 3, LiveActivity.idle())
+        def report = StatusReport.build(context(), state, null, null)
 
         when:
         def text = renderer.renderFull(report)
@@ -131,7 +127,6 @@ class StatusTextRendererSpec extends Specification {
         then:
         !text.contains('Attempts:')
         !text.contains('Decisions:')
-        !text.contains('Activity:')
         !text.contains('Last escalation:')
         !text.contains('Last decision:')
     }
@@ -140,7 +135,7 @@ class StatusTextRendererSpec extends Specification {
     def "renderFull renders unknown totals when usage is unreported"() {
         given:
         def renderer = new StatusTextRenderer()
-        def report = StatusReport.build(context(), TaskState.atStageStart('implement'), 3, LiveActivity.idle())
+        def report = StatusReport.build(context(), TaskState.atStageStart('implement'), null, null)
 
         when:
         def text = renderer.renderFull(report)
@@ -157,8 +152,7 @@ class StatusTextRendererSpec extends Specification {
         def state = TaskState.atStageStart('implement')
 
         expect:
-        renderer.renderFull(StatusReport.build(context(), state, 3,
-                new LiveActivity(null, escalation, null))).contains(expectedFragment)
+        renderer.renderFull(StatusReport.build(context(), state, escalation, null)).contains(expectedFragment)
 
         where:
         escalation | expectedFragment
@@ -172,54 +166,18 @@ class StatusTextRendererSpec extends Specification {
         new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []) | 'cannot execute'
     }
 
-    // FR11, D7: renderFull renders every Activity kind without throwing
-    def "renderFull renders every activity kind"() {
+    // FR6 of make-run-headless: the report carries no attempt limit, so the stage line names the
+    //     stage alone, with no "(attempt n/m)" fraction
+    def "renderFull renders the stage line without an attempt fraction"() {
         given:
-        def renderer = new StatusTextRenderer()
-        def state = TaskState.atStageStart('implement')
-
-        expect:
-        renderer.renderFull(StatusReport.build(context(), state, 3,
-                new LiveActivity(activity, null, null))).contains(expectedFragment)
-
-        where:
-        activity | expectedFragment
-        new Activity.Executing(STARTED) | 'executing'
-        new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), STARTED) | 'verifying builtin:files_exist'
-        new Activity.AwaitingInput(UntrustedText.agent('pass/fail? '), STARTED) | 'awaiting input: "pass/fail? "'
-    }
-
-    // FR7, UX1, D10, D12 of add-agent-executor: executing activity renders live tool detail when present
-    def "renderFull renders executing activity with currentTool and toolCalls when present"() {
-        given:
-        def renderer = new StatusTextRenderer()
-        def state = TaskState.atStageStart('implement')
-        def activity = new LiveActivity(new Activity.Executing(STARTED, UntrustedText.agent('Edit'), 3), null, null)
-        def report = StatusReport.build(context(), state, 3, activity)
+        def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0))
 
         when:
-        def text = renderer.renderFull(report)
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
 
         then:
-        text.contains('executing')
-        text.contains('Edit')
-        text.contains('3')
-    }
-
-    // FR7, D10, D12 of add-agent-executor: executing activity omits tool detail when absent
-    def "renderFull renders plain executing activity when no live tool detail is present"() {
-        given:
-        def renderer = new StatusTextRenderer()
-        def state = TaskState.atStageStart('implement')
-        def activity = new LiveActivity(new Activity.Executing(STARTED), null, null)
-        def report = StatusReport.build(context(), state, 3, activity)
-
-        when:
-        def text = renderer.renderFull(report)
-
-        then:
-        text.contains('executing (since')
-        !text.contains('tool')
+        text.contains('Stage: implement\n')
+        !text.contains('(attempt')
     }
 
     // UX1 of fix-denial-report-attachment: the reviewer reads the denial in the same block as the
@@ -234,7 +192,7 @@ class StatusTextRendererSpec extends Specification {
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
 
         then: 'the denied destination and path are readable right under the round that caused them'
         text.contains('Round 0: passed')
@@ -260,7 +218,7 @@ class StatusTextRendererSpec extends Specification {
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
 
         then: 'no control character survives, and the denial occupies exactly one line'
         !text.contains(esc)
@@ -283,7 +241,7 @@ class StatusTextRendererSpec extends Specification {
 
         when:
         def text = new StatusTextRenderer().renderFull(
-                StatusReport.build(context(), state, 3, new LiveActivity(null, escalation, null)))
+                StatusReport.build(context(), state, escalation, null))
 
         then: 'the reason and the denial read together, and no attempt was invented to hold it'
         text.contains('Last escalation: cannot execute: round timed out after 15m')
@@ -304,8 +262,7 @@ class StatusTextRendererSpec extends Specification {
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out'), [Denial.unidentified(denial)])
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(
-                        context(), TaskState.atStageStart('implement'), 3, new LiveActivity(null, escalation, null)))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), TaskState.atStageStart('implement'), escalation, null))
 
         then: 'no control character survives and the denial stays one line'
         !text.contains(esc)
@@ -324,8 +281,7 @@ class StatusTextRendererSpec extends Specification {
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), [])
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(
-                        context(), TaskState.atStageStart('implement'), 3, new LiveActivity(null, escalation, null)))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), TaskState.atStageStart('implement'), escalation, null))
 
         then:
         text.contains('Last escalation: cannot execute: adapter crashed')
@@ -338,7 +294,7 @@ class StatusTextRendererSpec extends Specification {
         def state = new TaskState(new Position.AtStage('implement'), 1, [passedRound(0)], ExecutorUsage.none())
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
 
         then:
         text.contains('Round 0: passed')
@@ -363,7 +319,7 @@ class StatusTextRendererSpec extends Specification {
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
-        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
 
         then: 'both lines are there, in read order, through the one funnel-fenced finding line'
         text.readLines().count { it.contains('egress denial:') } == 2

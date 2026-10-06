@@ -1,8 +1,7 @@
 /**
  * Application-layer console behaviour built on the {@code app.port.console} ports: {@link
- * com.github.oinsio.gnomish.app.console.DialogConsole}, the single input choke point that
- * intercepts the {@code status} / {@code status --json} meta-commands below every runner dialog
- * and marks {@code AWAITING_INPUT} around each blocking read; and
+ * com.github.oinsio.gnomish.app.console.DialogConsole}, the runner's output owner carrying the
+ * human and machine write paths with no read side (design D4 of make-run-headless); and
  * {@link com.github.oinsio.gnomish.app.console.SystemConsoleIO}, the stream realization of
  * {@link com.github.oinsio.gnomish.app.port.console.ConsoleIO}.
  *

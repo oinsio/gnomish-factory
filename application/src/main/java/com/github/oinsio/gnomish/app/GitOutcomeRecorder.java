@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -39,16 +40,20 @@ final class GitOutcomeRecorder {
      * earlier round's push was lost, this one's failed), the run's last act is one catch-up
      * attempt. An origin already holding the tip costs a single refs read.
      *
-     * <p>A park (Escalated/Paused) is exempt because the delivery fence its caller runs immediately
-     * afterwards ({@link TakeEngineExecution}, FR4) is a strict superset of this check over the same
-     * unchanged branch tip: same origin-presence gate, same remote-refs read, and a push with a
-     * bounded re-attempt where this one pushes once. Running both would spend a second {@code
-     * ls-remote} per park that can change nothing (NFR-C1's cost discipline). Only {@code take}
-     * reaches this method with a park at all — {@link GitModeRunner} and {@link
-     * GitResumeContinuation} pass only {@code Completed}/{@code Aborted}, both of which keep the
-     * reconciliation as their sole level-based net (NG6 keeps them out of the fence).
+     * <p>A park (Escalated/Paused) is exempt from the reconciliation: in {@code take} the delivery
+     * fence its caller runs immediately afterwards ({@link TakeEngineExecution}, FR4) is a strict
+     * superset of this check over the same unchanged branch tip, and running both would spend a
+     * second {@code ls-remote} per park that can change nothing (NFR-C1's cost discipline). A manual
+     * {@code run} park ({@link GitModeRunner}, {@link GitResumeContinuation}) relies on the recording
+     * push alone; a park left behind origin is delivered by the next run's own terminal boundary
+     * (design D8 of make-run-headless, "Crash consistency of the park"). Here — and only here, since
+     * {@code take} drives its park through the tracker protocol rather than this method — a park is
+     * recorded with {@link TrackerWrite#NONE}: no tracker write follows, so the record carries no
+     * pending marker and owes no receipt commit. {@code Completed} keeps {@link TrackerWrite#OWED}:
+     * its marker leaves with the envelope in the cleanup commit that follows at once.
      *
-     * <p>Implements FR6, FR8 of add-git-workflow; FR3 of fix-lifecycle-push.
+     * <p>Implements FR6, FR8 of add-git-workflow; FR3 of fix-lifecycle-push; FR10 of
+     * make-run-headless.
      *
      * @param git the task-git capability set: the worktree port cleanup runs through and the
      *     branch port the reconciliation runs through; never null
@@ -66,7 +71,8 @@ final class GitOutcomeRecorder {
             Path worktree,
             String taskId,
             TaskOutcome outcome) {
-        recordIntent(git, taskRepository, cloneDir, taskId, outcome);
+        TrackerWrite trackerWrite = TerminalPark.isPark(outcome) ? TrackerWrite.NONE : TrackerWrite.OWED;
+        recordIntent(git, taskRepository, cloneDir, taskId, outcome, trackerWrite);
         if (outcome instanceof TaskOutcome.Completed) {
             taskRepository.finishCleanup(taskId);
         }
@@ -88,10 +94,17 @@ final class GitOutcomeRecorder {
      * @param cloneDir the {@code --dir} project clone; never null
      * @param taskId the task the outcome belongs to; never blank
      * @param outcome the terminal outcome to record; never null
+     * @param trackerWrite whether a tracker write follows the record — {@link TrackerWrite#OWED}
+     *     from {@code take}, whose protocol clears the marker on receipt; never null
      */
     static void recordIntent(
-            TaskGit git, TaskRepository taskRepository, Path cloneDir, String taskId, TaskOutcome outcome) {
-        taskRepository.recordOutcome(taskId, outcome);
+            TaskGit git,
+            TaskRepository taskRepository,
+            Path cloneDir,
+            String taskId,
+            TaskOutcome outcome,
+            TrackerWrite trackerWrite) {
+        taskRepository.recordOutcome(taskId, outcome, trackerWrite);
         if (!TerminalPark.isPark(outcome)) {
             git.branches().reconcileRemote(cloneDir, taskId, "terminal-boundary");
         }

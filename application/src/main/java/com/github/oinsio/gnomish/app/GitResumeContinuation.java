@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
@@ -11,30 +10,28 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The four outcome-driven continuation paths {@link GitResumeRunner#run} switches on: {@link
  * #resumeFromRecordedPosition}, {@link #resumeEscalated}, {@link #resumePaused}, {@link
- * #reportCompleted}. Extracted from {@link GitResumeRunner} purely to keep both files within the
- * project's file-size guidance (`.claude/rules/process-invariants.md`). The three
- * engine-rerunning paths share {@link #runToTerminalBoundary}, mirroring {@link GitModeRunner}'s
- * terminal-boundary handling; {@code Escalated}/{@code Paused} are never observed here, since the
- * loop resolves them in-process via its own dialogs first.
+ * #reportCompleted}. The three engine-rerunning paths share {@link #runToTerminalBoundary},
+ * mirroring {@link GitModeRunner}'s terminal-boundary handling, park arm included (design D8 of
+ * make-run-headless).
  *
  * <p>Kept in sync with {@link ContainerResumeOutcomes}: both implement the same four outcome arms
  * dispatched by {@link GitResumeRunner}/{@link ContainerResumeRunner} — {@code null} salvages the
- * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, {@code
- * escalated} runs the same {@link EscalationResumeDialog} and appends any resulting decision
- * before continuing, {@code paused} prints the same checkpoint prompt before continuing, and
- * {@code completed} builds and prints the same status report with no further engine run —
- * differing only in medium (a git worktree here vs. the in-box sandbox environment there).
- * Adding or re-meaning an arm on one side alone is the divergence this pair guards against (UX2).
+ * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, both resolve
+ * the escalation through {@link EscalationResume} and continue a pause without a prompt, and {@code
+ * completed} builds and prints the same status report with no further engine run. The container
+ * arm additionally disposes the kept box before any branch write or round (its clone is behind
+ * the park commit); the host arm has none, since its worktree is the branch. Adding or re-meaning
+ * an arm on one side alone is the divergence this pair guards against (UX2).
  *
  * <p>Implements FR5, FR8, UX2 of add-git-workflow.
  */
@@ -85,20 +82,21 @@ final class GitResumeContinuation {
 
     /**
      * Outcome {@code escalated}: rebuilds the domain {@link TaskOutcome.Escalated} from {@code
-     * finalState} and {@link ResumeBootstrap#lastEscalation()}, then routes it through {@link
-     * EscalationResumeDialog#handle} — the same class {@link RunnerOutcomeLoop} calls in-process,
-     * so question, resume prompt, and EOF handling are byte-for-byte identical (UX2). A non-blank
-     * answer is appended as a Decision via {@link com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision} — also
-     * resetting {@code outcome} to null in the same commit (FR5) — before the engine loop resumes
-     * from the dialog's reset state.
+     * finalState} and {@link ResumeBootstrap#lastEscalation()}, then resolves it through {@link
+     * EscalationResume#decide} with the operator's {@code --decision} (design D2, D7 of
+     * make-run-headless). A decision is appended through {@link
+     * com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision}, which resets {@code outcome}
+     * and the attempts in the same commit (FR3, NFR-R1); no decision continues on the reset state
+     * alone, in memory until the next round commit lands it (FR4).
      *
-     * @throws InternalErrorException if {@code task.json} recorded outcome {@code escalated} with
-     *     no {@code lastEscalation} — a state {@link com.github.oinsio.gnomish.app.port.TaskRepository#recordOutcome} never
-     *     produces (always populates both together, FR5), so this can only mean a corrupted branch
+     * @throws InternalErrorException if {@code task.json} recorded outcome {@code escalated} with no
+     *     {@code lastEscalation} — a state the recorder never produces, so a corrupted branch
+     * @throws DecisionRequiredException for a {@code DecisionNeeded} report and no decision: the
+     *     question is restated, nothing is written, the process exits 10 (FR4 of make-run-headless)
      *
-     * <p>Implements FR5, FR8, UX2 of add-git-workflow.
+     * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR3, FR4 of make-run-headless.
      */
-    void resumeEscalated(RunOrder order, TaskState finalState) {
+    void resumeEscalated(RunOrder order, TaskState finalState, @Nullable String decision) {
         EscalationReport report = bootstrap.lastEscalation();
         if (report == null) {
             throw new InternalErrorException("task \"" + bootstrap.taskId()
@@ -106,29 +104,25 @@ final class GitResumeContinuation {
         }
         var escalated = new TaskOutcome.Escalated(finalState, report);
 
-        DialogConsole console = assembly.dialogConsole(bootstrap.context(), finalState);
-        var dialog = new EscalationResumeDialog(console, Clock.systemUTC());
-        RunnerOutcomeLoop.Resumption resumption = dialog.handle(bootstrap.context(), escalated);
-        recordDecisionIfAppended(resumption.context(), resumption.state());
+        DialogConsole console = assembly.dialogConsole();
+        var resumption = new EscalationResume(console, Clock.systemUTC(), returnPath())
+                .decide(bootstrap.context(), escalated, decision);
+        if (decision != null) {
+            // The decision and the attempts reset land in one commit (NFR-R1 of make-run-headless).
+            taskRepository.appendDecision(
+                    bootstrap.taskId(), resumption.context().decisions().getLast(), resumption.state());
+        }
         runToTerminalBoundary(order, resumption.context(), resumption.state());
     }
 
     /**
-     * Outcome {@code paused}: a checkpoint confirmation mirroring {@code
-     * RunnerOutcomeLoop.handlePaused} — "Press Enter to continue", nothing to reset, no decision
-     * appended, since a manual pause is not a question. Resumes from {@code finalState} directly
-     * (already advanced past the paused stage).
+     * Outcome {@code paused}: a manual checkpoint is not a question, so the resume is the
+     * confirmation — nothing printed, nothing reset, no decision appended (FR5 of
+     * make-run-headless); continues from {@code finalState}, already advanced past the paused stage.
      *
-     * <p>Implements FR8, UX2 of add-git-workflow.
+     * <p>Implements FR8, UX2 of add-git-workflow; FR5 of make-run-headless.
      */
-    void resumePaused(RunOrder order, TaskState finalState, String passedStage) {
-        DialogConsole console = assembly.dialogConsole(bootstrap.context(), finalState);
-        console.print("Stage '" + passedStage + "' passed. Manual checkpoint reached.");
-        try {
-            console.prompt("Press Enter to continue: ");
-        } catch (ConsoleClosedException closed) {
-            throw new CheckpointEofException(closed);
-        }
+    void resumePaused(RunOrder order, TaskState finalState) {
         runToTerminalBoundary(order, bootstrap.context(), finalState);
     }
 
@@ -140,19 +134,19 @@ final class GitResumeContinuation {
      * <p>Implements FR8, UX2 of add-git-workflow.
      */
     void reportCompleted(TaskState finalState) {
-        var report = StatusReport.build(bootstrap.context(), finalState, null, LiveActivity.idle());
-        // The same console the resume dialogs above used (FR5, FR6 of harden-untrusted-text-sinks):
-        // the summary is the last thing the operator reads on this path, and it carries the task's
-        // own stage names and decision text.
-        assembly.dialogConsole(bootstrap.context(), finalState)
-                .print(statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
+        var report = StatusReport.build(bootstrap.context(), finalState, null, null);
+        // The run's console owner (FR5, FR6 of harden-untrusted-text-sinks): the summary carries the
+        // task's own stage names and decision text.
+        assembly.dialogConsole().print(statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
     }
 
     /**
      * Shared tail for every path that re-runs the engine: assembles a fresh {@link
      * com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence} rooted at the worktree, runs {@link RunnerOutcomeLoop}, then records
-     * the new terminal outcome — {@code Completed} (read back from {@code state.json}) or {@code
-     * Aborted} (from the caught {@link AbortedException}) — through {@link GitOutcomeRecorder}.
+     * the new terminal outcome through {@link GitOutcomeRecorder} — {@code Completed} (read back from
+     * {@code state.json}), {@code Aborted} (from the caught {@link AbortedException}), or a park
+     * (returned by the loop), which then exits 10/11 through {@link RunParkedException} (design D8
+     * of make-run-headless).
      */
     private void runToTerminalBoundary(RunOrder order, TaskContext context, TaskState state) {
         PipelineDefinition definition = order.definition();
@@ -171,37 +165,33 @@ final class GitResumeContinuation {
                                 List.of(),
                                 ManualResumeLawBinding.of(cloneDir, bootstrap.pin(), bootstrap.baseCommit()));
 
+        var returnPath = returnPath();
+        TaskOutcome outcome;
         try {
-            assembled.loop().run(definition, context, state, workspace, assembled.ports());
+            outcome = assembled.loop().run(definition, context, state, workspace, assembled.ports(), returnPath);
         } catch (AbortedException aborted) {
-            TaskOutcome.Aborted outcome = aborted.outcome();
-            if (outcome != null) {
+            TaskOutcome.Aborted abortedOutcome = aborted.outcome();
+            if (abortedOutcome != null) {
                 GitOutcomeRecorder.recordAndCleanUp(
-                        git, taskRepository, cloneDir, worktree, bootstrap.taskId(), outcome);
+                        git, taskRepository, cloneDir, worktree, bootstrap.taskId(), abortedOutcome);
             }
             throw aborted;
         }
 
-        TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store()
-                .readRecordedState(worktree)
-                .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), worktree)));
-        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, bootstrap.taskId(), completed);
+        if (outcome instanceof TaskOutcome.Completed) {
+            TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store()
+                    .readRecordedState(worktree)
+                    .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), worktree)));
+            GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, bootstrap.taskId(), completed);
+            return;
+        }
+        // A stop (design D8 of make-run-headless): recorded as a park, worktree kept, exit 10/11.
+        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, bootstrap.taskId(), outcome);
+        throw new RunParkedException(outcome, returnPath);
     }
 
-    /**
-     * Appends a resume {@link com.github.oinsio.gnomish.domain.engine.Decision} through {@link
-     * com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision} when the escalation dialog added one to {@code
-     * resumedContext} (also resets {@code outcome} to null in the same commit, FR5). A blank
-     * answer resumes without a decision — detected by comparing decision-list sizes against the
-     * bootstrap's original context, since the dialog only returns the possibly-appended {@link
-     * TaskContext}, not a boolean flag.
-     */
-    private void recordDecisionIfAppended(TaskContext resumedContext, TaskState resetState) {
-        int before = bootstrap.context().decisions().size();
-        int after = resumedContext.decisions().size();
-        if (after > before) {
-            taskRepository.appendDecision(
-                    bootstrap.taskId(), resumedContext.decisions().get(after - 1), resetState);
-        }
+    /** Where this task resumes from: the {@code --dir} clone and the task id (FR1 of make-run-headless). */
+    private TerminalOutcomeRender.ReturnPath returnPath() {
+        return new TerminalOutcomeRender.ReturnPath(cloneDir, bootstrap.taskId());
     }
 }

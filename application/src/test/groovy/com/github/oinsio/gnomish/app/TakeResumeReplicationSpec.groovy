@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -134,7 +135,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
         resume(parkingChain())
 
         then: 'FR10: the park\'s durable intent — the outcome commit — is recorded first of all'
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Escalated)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Escalated, TrackerWrite.OWED)
 
         then: 'the fence is asked next'
         1 * branches.fenceParkDelivery(CLONE_DIR, 'PROJ-1') >> new ParkDeliveryVerdict.Delivered()

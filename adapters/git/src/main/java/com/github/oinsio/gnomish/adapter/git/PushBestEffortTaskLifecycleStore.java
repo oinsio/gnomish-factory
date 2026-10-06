@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.Decision;
@@ -82,8 +83,8 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     }
 
     @Override
-    public void recordOutcome(String taskId, TaskOutcome outcome) {
-        base.recordOutcome(taskId, outcome);
+    public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
+        base.recordOutcome(taskId, outcome, trackerWrite);
     }
 
     @Override

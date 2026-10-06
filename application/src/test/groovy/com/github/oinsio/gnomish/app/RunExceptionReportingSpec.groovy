@@ -1,11 +1,15 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -92,22 +96,6 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
         ]
     }
 
-    // UX3: an exhausted input is reported in the reporter's own words — the exception's message is
-    // an internal detail, while "stopping" is what the operator needs to understand.
-    def "reports an exhausted input in its own words"() {
-        when:
-        def output = reportOf({
-            throw failure
-        } as RunExceptionReporting.ThrowingAction)
-
-        then:
-        output.trim() == 'Input exhausted — stopping.'
-        rethrown.is(failure)
-
-        where:
-        failure << [new ConsoleClosedException()]
-    }
-
     // FR16 of fix-operator-blockers; UX3, design D15: a task-not-found already printed a calm
     // message on stdout, so printing a second line here would say the same thing twice. The
     // take/serve exit carriers are the same shape: the command reported its own outcome and throws
@@ -136,6 +124,64 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             new TakeExitCodeException(0),
             new ServeExitCodeException(1)
         ]
+    }
+
+    // FR1, FR2, NFR-O1 of make-run-headless: a stop's render is already on stdout, so nothing more
+    // reaches stderr — but the resume command reaches the log at INFO, with the task id.
+    def "a run stop prints nothing more and logs its return path at INFO"() {
+        given:
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+        def returnPath = new TerminalOutcomeRender.ReturnPath(Path.of('/work/clone'), 'manual-7')
+        def stop = new RunParkedException(
+                new TaskOutcome.Escalated(TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(3)), returnPath)
+
+        when:
+        def output = reportOf({
+            throw stop
+        } as RunExceptionReporting.ThrowingAction)
+
+        then:
+        output.isEmpty()
+        rethrown.is(stop)
+
+        and:
+        logs.list.size() == 1
+        logs.list[0].level == Level.INFO
+        logs.list[0].formattedMessage ==
+                'task manual-7 stopped escalated; To continue: gnomish run --dir=/work/clone --resume=manual-7 [--decision="..."]'
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR4, NFR-O1 of make-run-headless: a resume refused for want of a decision has already restated
+    // the question on stdout, so stderr stays empty — and the resume command, decision included,
+    // reaches the log at INFO with the task id.
+    def "a refused decision-less resume prints nothing more and logs its return path at INFO"() {
+        given:
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+        def returnPath = new TerminalOutcomeRender.ReturnPath(Path.of('/work/clone'), 'manual-7')
+        def refused = new DecisionRequiredException(
+                new TaskOutcome.Escalated(TaskState.atStageStart('build'),
+                new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [])), returnPath)
+
+        when:
+        def output = reportOf({
+            throw refused
+        } as RunExceptionReporting.ThrowingAction)
+
+        then:
+        output.isEmpty()
+        rethrown.is(refused)
+
+        and:
+        logs.list.size() == 1
+        logs.list[0].level == Level.INFO
+        logs.list[0].formattedMessage ==
+                'task manual-7 still needs a decision; To continue: gnomish run --dir=/work/clone --resume=manual-7 [--decision="..."]'
+
+        cleanup:
+        logs.detach()
     }
 
     // UX3: anything unclassified is the generic fallback — named as a run failure and carrying the

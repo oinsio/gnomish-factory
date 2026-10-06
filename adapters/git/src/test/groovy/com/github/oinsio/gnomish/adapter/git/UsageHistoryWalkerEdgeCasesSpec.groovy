@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -53,7 +54,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
 
         and: 'the task then completes, triggering the cleanup commit that removes .gnomish-task/'
         taskRepository().recordOutcome('PROJ-3',
-                new TaskOutcome.Completed(TaskState.atStageStart('implement').recordUnburnedRound(implementRound)))
+                new TaskOutcome.Completed(TaskState.atStageStart('implement').recordUnburnedRound(implementRound)), TrackerWrite.OWED)
 
         when:
         def result = (walker.walk(cloneDir, 'PROJ-3') as UsageHistoryResult.Found)

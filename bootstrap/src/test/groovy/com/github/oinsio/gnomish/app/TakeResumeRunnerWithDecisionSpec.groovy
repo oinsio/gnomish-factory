@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -15,7 +16,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * {@link TakeResumeRunner#resumeDecided} — the already-collected human reply is appended through
  * {@code GitTaskRepository#appendDecision} (resetting {@code outcome} to null in the same durable
  * write, FR12), the attempt counter is reset to 0 with an empty attempt history (mirroring {@code
- * EscalationResumeDialog#handleResumable}'s exact formula), and the engine then runs exactly once
+ * EscalationResume#decide}'s exact formula), and the engine then runs exactly once
  * with no console dialog. The two are separate calls because the tracker acknowledge belongs
  * between them (FR12 of harden-task-branch-contract).
  */
@@ -36,7 +37,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
             UntrustedText.agent('no')
         ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -65,8 +66,8 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
     }
 
     // FR9, D3: the attempt counter is reset to 0 (with an empty attempt history) before the
-    // engine resumes — the same formula EscalationResumeDialog#handleResumable applies for a live
-    // manual-run resume. Proven indirectly: an attempt limit of 1 would otherwise immediately
+    // engine resumes — the same formula EscalationResume#decide applies for a manual-run
+    // --decision resume. Proven indirectly: an attempt limit of 1 would otherwise immediately
     // re-escalate as AttemptsExhausted; instead the reset state lets the single-stage pipeline run
     // to completion.
     def "an ESCALATION resume resets the attempt counter so a previously-exhausted stage can run again"() {
@@ -77,7 +78,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.AttemptsExhausted(1)
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
@@ -105,7 +106,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -44,7 +45,7 @@ class GitOutcomeRecorderSpec extends Specification {
         GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, CLONE_DIR, WORKTREE, 'PROJ-1', outcome)
 
         then: 'the outcome is recorded for this task first'
-        1 * taskRepository.recordOutcome('PROJ-1', outcome)
+        1 * taskRepository.recordOutcome('PROJ-1', outcome, TrackerWrite.OWED)
 
         then: 'FR3 of fix-lifecycle-push: the terminal boundary closes with the reconciliation check'
         1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'terminal-boundary')
@@ -74,18 +75,21 @@ class GitOutcomeRecorderSpec extends Specification {
         GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, CLONE_DIR, WORKTREE, 'PROJ-2', outcome)
 
         then:
-        1 * taskRepository.recordOutcome('PROJ-2', outcome)
+        1 * taskRepository.recordOutcome('PROJ-2', outcome, trackerWrite)
         1 * worktrees.cleanUp(CLONE_DIR, WORKTREE, outcome)
         (outcome instanceof TaskOutcome.Completed ? 1 : 0) * taskRepository.finishCleanup('PROJ-2')
 
         and: 'FR3, NFR-C1: the reconciliation closes every NON-park boundary; a park is left to its fence'
         reconciliations * branches.reconcileRemote(CLONE_DIR, 'PROJ-2', 'terminal-boundary')
 
+        and: 'design D8 of make-run-headless: a manual run owes no tracker write for a park, so no receipt is ever written'
+        0 * taskRepository.confirmTerminalWrite(_)
+
         where:
-        outcome || reconciliations
-        new TaskOutcome.Completed(FINAL_STATE) || 1
-        new TaskOutcome.Aborted(FINAL_STATE, new AttemptKey('PROJ-2', 'build', 0), UntrustedText.subprocess('persistence failed')) || 1
-        new TaskOutcome.Paused(FINAL_STATE, 'build') || 0
-        new TaskOutcome.Escalated(FINAL_STATE, new EscalationReport.AttemptsExhausted(3)) || 0
+        outcome || reconciliations | trackerWrite
+        new TaskOutcome.Completed(FINAL_STATE) || 1 | TrackerWrite.OWED
+        new TaskOutcome.Aborted(FINAL_STATE, new AttemptKey('PROJ-2', 'build', 0), UntrustedText.subprocess('persistence failed')) || 1 | TrackerWrite.OWED
+        new TaskOutcome.Paused(FINAL_STATE, 'build') || 0 | TrackerWrite.NONE
+        new TaskOutcome.Escalated(FINAL_STATE, new EscalationReport.AttemptsExhausted(3)) || 0 | TrackerWrite.NONE
     }
 }

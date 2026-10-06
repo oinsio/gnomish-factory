@@ -15,7 +15,7 @@ class ArgumentsAbsoluteDirSpec extends Specification {
 
     private static final Map<String, Closure> RECORDS = [
         run : { Path d ->
-            new RunArguments(d, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false)
+            new RunArguments(d, new TaskSource.Inline('t'), null, null, RunArguments.Mode.GIT, null, null, false, null)
         },
         take : { Path d ->
             new TakeArguments(d, [], null, false, false)

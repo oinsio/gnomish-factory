@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
-import com.github.oinsio.gnomish.app.EscalationResumeDialog;
+import com.github.oinsio.gnomish.app.TerminalOutcomeRender;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -69,7 +69,7 @@ public final class TakeOutcomeMapper {
                 new TakeResult.AwaitingHuman(
                         paused.finalState(),
                         ParkReason.CHECKPOINT,
-                        "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.");
+                        TerminalOutcomeRender.checkpointLine(paused.passedStage()));
             case TaskOutcome.Escalated escalated -> mapEscalated(escalated);
             case TaskOutcome.Aborted ignored ->
                 throw new UnsupportedOperationException("TaskOutcome.Aborted is not mapped by TakeOutcomeMapper; "
@@ -120,6 +120,6 @@ public final class TakeOutcomeMapper {
         return new TakeResult.AwaitingHuman(
                 escalated.finalState(),
                 parkReason(escalated.report()),
-                EscalationResumeDialog.renderEscalation(escalated.report(), ReportPlane.COMMENT));
+                TerminalOutcomeRender.renderEscalation(escalated.report(), ReportPlane.COMMENT));
     }
 }

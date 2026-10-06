@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.GuardedPark
@@ -97,7 +98,7 @@ final class ParkKillPoints {
     private static void step(KillPointWorld world, int index, EscalationReport escalation) {
         if (index == 0) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(
-                            TaskState.atStageStart('build'), escalation))
+                            TaskState.atStageStart('build'), escalation), TrackerWrite.OWED)
         } else if (index == 1) {
             world.tracker.park(world.ref, ParkReason.ESCALATION, REPORT)
         } else {

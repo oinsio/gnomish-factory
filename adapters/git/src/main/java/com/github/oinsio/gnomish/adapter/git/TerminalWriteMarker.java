@@ -85,6 +85,7 @@ final class TerminalWriteMarker {
     static void clearPending(GitProcessRunner runner, Path worktree, String taskId) {
         Path taskJson = worktree.resolve(EnvelopePaths.TASK_JSON_PATH);
         TaskJsonDto cleared = RequiredTaskJson.atTipOf(runner, worktree, taskId, TaskLifecycleEvent.RESUMED)
+                .dto()
                 .withTrackerWritePending(null);
         try {
             AtomicFileWriter.write(taskJson, TaskStateJson.mapper().writeValueAsString(cleared));

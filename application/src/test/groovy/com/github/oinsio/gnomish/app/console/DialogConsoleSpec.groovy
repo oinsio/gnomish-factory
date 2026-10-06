@@ -1,226 +1,22 @@
 package com.github.oinsio.gnomish.app.console
 
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
-import com.github.oinsio.gnomish.app.port.console.fake.RecordingActivityTracker
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
-import com.github.oinsio.gnomish.status.Activity
-import java.time.Instant
 import spock.lang.Specification
 
 /**
- * FR10, FR13, UX1: {@link DialogConsole} is the single input choke point
- * (design D1) — it intercepts {@code status} / {@code status --json} below
- * every interactive adapter, latches the input-exhausted flag on EOF, and
- * offers a re-prompting helper for fixed-answer questions.
+ * {@link DialogConsole} is the runner's output owner with no read side (design D4 of
+ * make-run-headless): it carries the two write paths of the wrapped {@code ConsoleIO} and
+ * nothing else.
  */
 class DialogConsoleSpec extends Specification {
-
-    def "passes plain non-meta input through untouched"() {
-        given:
-        def io = new ScriptedConsoleIO(['hello'])
-        def console = new DialogConsole(io, { json -> 'unused' })
-
-        expect:
-        console.prompt('question? ') == 'hello'
-        io.printed == ['question? ']
-    }
-
-    def "intercepts status, renders text, and re-prompts for the original question"() {
-        given:
-        def io = new ScriptedConsoleIO(['status', 'answer'])
-        def console = new DialogConsole(io, { json ->
-            json ? 'json-report' : 'text-report'
-        })
-
-        expect:
-        console.prompt('question? ') == 'answer'
-        io.printed == [
-            'question? ',
-            'text-report',
-            'question? '
-        ]
-    }
-
-    def "intercepts status --json, renders json, and re-prompts for the original question"() {
-        given:
-        def io = new ScriptedConsoleIO(['status --json', 'answer'])
-        def console = new DialogConsole(io, { json ->
-            json ? 'json-report' : 'text-report'
-        })
-
-        expect:
-        console.prompt('question? ') == 'answer'
-        io.printed == [
-            'question? ',
-            'json-report',
-            'question? '
-        ]
-
-        and: 'FR5 of harden-untrusted-text-sinks: the render went the verbatim way, not the human one'
-        io.printedMachine == ['json-report']
-    }
-
-    def "handles several status interceptions before a real answer"() {
-        given:
-        def io = new ScriptedConsoleIO([
-            'status',
-            'status --json',
-            'answer'
-        ])
-        def console = new DialogConsole(io, { json ->
-            json ? 'json-report' : 'text-report'
-        })
-
-        expect:
-        console.prompt('question? ') == 'answer'
-        io.printed == [
-            'question? ',
-            'text-report',
-            'question? ',
-            'json-report',
-            'question? '
-        ]
-    }
-
-    def "rethrows EOF to the caller"() {
-        given:
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
-            'unused'
-        })
-
-        when:
-        console.prompt('question? ')
-
-        then:
-        thrown(ConsoleClosedException)
-    }
-
-    def "rethrows EOF even mid status-loop"() {
-        given:
-        def io = new ScriptedConsoleIO(['status'])
-        def console = new DialogConsole(io, { json -> 'text-report' })
-
-        when:
-        console.prompt('question? ')
-
-        then:
-        thrown(ConsoleClosedException)
-        io.printed == [
-            'question? ',
-            'text-report',
-            'question? '
-        ]
-    }
-
-    def "ask returns the first accepted answer"() {
-        given:
-        def io = new ScriptedConsoleIO(['pass'])
-        def console = new DialogConsole(io, { json -> 'unused' })
-
-        expect:
-        console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
-    }
-
-    def "ask re-prompts listing accepted answers on an unrecognized line"() {
-        given:
-        def io = new ScriptedConsoleIO(['pss', 'pass'])
-        def console = new DialogConsole(io, { json -> 'unused' })
-
-        expect:
-        console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
-        io.printed.any {
-            it.contains('pass') && it.contains('fail') && it.contains('running')
-        }
-    }
-
-    def "ask still intercepts status before checking accepted answers"() {
-        given:
-        def io = new ScriptedConsoleIO(['status', 'pass'])
-        def console = new DialogConsole(io, { json -> 'text-report' })
-
-        expect:
-        console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
-        io.printed.contains('text-report')
-    }
-
-    def "ask propagates EOF"() {
-        given:
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
-            'unused'
-        })
-
-        when:
-        console.ask('pass/fail/running? ', ['pass', 'fail', 'running'])
-
-        then:
-        thrown(ConsoleClosedException)
-    }
-
-    def "prompt marks awaitingInput before the blocking read and restores the prior activity after"() {
-        given:
-        def executing = new Activity.Executing(Instant.EPOCH)
-        def tracker = new RecordingActivityTracker(executing)
-        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json ->
-            'unused'
-        }, tracker)
-
-        expect:
-        console.prompt('question? ') == 'answer'
-        tracker.markCount == 1
-        tracker.restoredTo == [executing]
-        tracker.current() == executing
-        tracker.prompts == ['question? ']
-    }
-
-    def "prompt restores the prior activity even when the read hits EOF"() {
-        given:
-        def verifying = new Activity.Executing(Instant.EPOCH)
-        def tracker = new RecordingActivityTracker(verifying)
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
-            'unused'
-        }, tracker)
-
-        when:
-        console.prompt('question? ')
-
-        then:
-        thrown(ConsoleClosedException)
-        tracker.markCount == 1
-        tracker.restoredTo == [verifying]
-        tracker.current() == verifying
-    }
-
-    def "prompt marks and restores once per status interception, not just once per prompt call"() {
-        given:
-        def tracker = new RecordingActivityTracker()
-        def io = new ScriptedConsoleIO(['status', 'answer'])
-        def console = new DialogConsole(io, { json -> 'text-report' }, tracker)
-
-        expect:
-        console.prompt('question? ') == 'answer'
-        tracker.markCount == 2
-        tracker.restoredTo == [null, null]
-    }
-
-    def "ask marks and restores awaitingInput without duplicating prompt's logic"() {
-        given:
-        def tracker = new RecordingActivityTracker()
-        def io = new ScriptedConsoleIO(['pss', 'pass'])
-        def console = new DialogConsole(io, { json -> 'unused' }, tracker)
-
-        expect:
-        console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
-        tracker.markCount == 2
-        tracker.restoredTo == [null, null]
-    }
 
     // FR5 of harden-untrusted-text-sinks: the wrapper carries both write paths, so a dialog
     // holding it never has to reach past it for the machine-readable one — and the path a caller
     // chose is the path the console owner is asked for, not one the wrapper decides.
     def "carries both write paths through to the wrapped console"() {
         given:
-        def io = new ScriptedConsoleIO([])
-        def console = new DialogConsole(io, { json -> 'unused' })
+        def io = new ScriptedConsoleIO()
+        def console = new DialogConsole(io)
 
         when:
         console.print('a briefing for the operator')
@@ -234,15 +30,5 @@ class DialogConsoleSpec extends Specification {
 
         and: 'and only the second went the verbatim way'
         io.printedMachine == ['{"task":"GNOME-17"}']
-    }
-
-    def "the two-arg constructor defaults to a no-op activity tracker"() {
-        given:
-        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json ->
-            'unused'
-        })
-
-        expect:
-        console.prompt('question? ') == 'answer'
     }
 }

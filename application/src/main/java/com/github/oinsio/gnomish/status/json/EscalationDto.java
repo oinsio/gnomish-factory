@@ -10,8 +10,8 @@ import org.jspecify.annotations.Nullable;
  * EscalationReport} kinds (spec.md). Every variant carries {@code stage}/{@code at}
  * per the canonical example's {@code decisionNeeded} envelope; the domain's {@code
  * EscalationReport} itself carries neither field, and no plumbing reachable from
- * {@code StatusReport}/{@code StatusSnapshotHolder} attaches a stage/instant to a
- * live escalation, so both render as JSON {@code null} for every variant — a known
+ * {@code StatusReport} attaches a stage/instant to an
+ * escalation, so both render as JSON {@code null} for every variant — a known
  * gap in the mapper (see {@link StatusReportJsonMapper}), not fabricated data.
  *
  * <p>Implements FR11, M3 of add-manual-run.

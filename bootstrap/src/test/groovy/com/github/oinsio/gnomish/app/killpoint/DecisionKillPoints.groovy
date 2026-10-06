@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.killpoint
 
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.take.DecisionAck
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -51,7 +52,7 @@ final class DecisionKillPoints {
                         TaskState.atStageStart('build'), new EscalationReport.DecisionNeeded(UntrustedText.agent('which?'), [
                             UntrustedText.agent('a'),
                             UntrustedText.agent('b')
-                        ])))
+                        ])), TrackerWrite.OWED)
         world.store.confirmTerminalWrite(world.taskId)
         world.trackerHarness.reply(world.ref, REPLY)
         world

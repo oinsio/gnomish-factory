@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
@@ -24,6 +25,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The sandboxed-mode realization of {@link TaskRepository} (design D19): the same five lifecycle
@@ -62,13 +65,17 @@ import java.util.List;
  * ObjectId} — the caller's single peel of its law binding — resolve no base <em>name</em> of their
  * own, verify the object is a commit this repository holds, and record that same commit as {@code
  * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
- * revised 2026-09-10).
+ * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
+ * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
+ * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
- * add-sandbox-core.
+ * add-sandbox-core; FR10 of make-run-headless.
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
+
+    private static final Logger log = LoggerFactory.getLogger(GitObjectsTaskRepository.class);
 
     private static final String REF_PREFIX = "refs/heads/";
 
@@ -156,7 +163,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         String ref = refFor(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
-        TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED);
+        TaskJsonDto currentDto =
+                writer.readCommitted(taskId, tip, TaskLifecycleEvent.RESUMED).dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         List<Decision> decisions = new ArrayList<>(current.context().decisions());
@@ -194,21 +202,24 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void recordOutcome(String taskId, TaskOutcome outcome) {
+    public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
         TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
         String ref = refFor(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
-        TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, event);
+        CommittedTaskJson committed = writer.readCommitted(taskId, tip, event);
+        TaskJsonDto currentDto = committed.dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         EscalationReport lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
         // The durable "terminal write pending" marker, exactly as GitTaskRepository sets it (FR10,
-        // D10 of add-claim-heartbeat; FR10 of harden-task-branch-contract): every terminal outcome
-        // whose external effect is still owed carries it, and this commit is the durable intent the
-        // tracker write follows. Aborted's tracker write is best-effort and carries no marker.
-        boolean pending = !(outcome instanceof TaskOutcome.Aborted);
+        // D10 of add-claim-heartbeat; FR10 of harden-task-branch-contract): a terminal outcome whose
+        // external effect is still owed carries it, and this commit is the durable intent the
+        // tracker write follows. A record that owes no tracker write (a manual run's park, design
+        // D8 of make-run-headless) sets no marker; Aborted's tracker write is best-effort and
+        // carries none either way.
+        boolean pending = trackerWrite == TrackerWrite.OWED && !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
                         current.context(),
                         current.baseCommit(),
@@ -218,7 +229,14 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                         pending,
                         current.pin())
                 .withEgressCursor(egressCursors.forEscalation(lastEscalation, currentDto.egressCursor()));
-        writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto, event), event);
+        String json = writer.serializeTaskJson(taskId, dto, event);
+        // Idempotence (design D8 of make-run-headless; crash-consistency item 8), exactly as the host
+        // twin decides it: a park re-recorded identically leaves the tip as it is.
+        if (committed.carries(json)) {
+            log.debug("outcome record for task {} is a no-op: the tip already carries it, event={}", taskId, event);
+            return;
+        }
+        writer.commit(taskId, ref, false, tip, writer.putTaskJson(json), event);
     }
 
     /**

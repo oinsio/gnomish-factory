@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Resume bootstrap (FR8, design D9) and outcome-driven continuation (task 4.7): the {@code
@@ -13,14 +14,16 @@ import java.nio.file.Path;
  * the task branch, materializes the worktree, and loads/version-gates the {@code task.json} the
  * worktree's {@code HEAD} carries; {@link
  * #run} then switches on the recorded {@code outcome} (FR8), delegated to {@link
- * GitResumeContinuation}: {@code escalated} → the same decision dialog the in-process path uses;
- * {@code paused} → the same checkpoint confirmation; {@code null} (process died mid-visit) →
- * continue the engine loop straight from the recorded {@code state.json} position, no dialog;
- * {@code completed} → print a report and return without touching the worktree or branch again.
+ * GitResumeContinuation}: {@code escalated} → the operator's {@code --decision} resolved through
+ * {@link EscalationResume}; {@code paused} → continue, no prompt; {@code null} (process died
+ * mid-visit) → continue the engine loop straight from the recorded {@code state.json} position;
+ * {@code completed} → print a report and return without touching the worktree or branch again. A
+ * {@code --decision} over any outcome but {@code escalated} is refused by {@link
+ * ResumeDecisionGuard} before any branch write (FR9 of make-run-headless).
  *
- * <p>UX2 is met by reusing the exact in-process dialog machinery ({@link
- * EscalationResumeDialog#handle}, the same {@link RunAssembly}-built console) rather than a
- * parallel implementation, so prompts and EOF handling match a live run's.
+ * <p>UX2 is met by reusing the in-process machinery ({@link EscalationResume}, {@link
+ * TerminalOutcomeRender}, the same {@link RunAssembly}-built console) rather than a parallel
+ * implementation, so a resumed stop renders exactly as a live run's.
  *
  * <p>{@link #bootstrap} also reconciles local/origin divergence (FR9, NFR-R3, design D9) once,
  * right after the worktree is materialized and before {@code task.json} is read back from its
@@ -49,9 +52,11 @@ import java.nio.file.Path;
  * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
  * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
  * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
- * runs the same {@link EscalationResumeDialog}, {@code paused} the same checkpoint confirmation,
- * {@code completed} reports without another engine run, and {@code aborted} refuses with a usage
- * error naming the kept working copy. Adding or re-meaning an arm on one side alone is the
+ * resolves the {@code --decision} through the same {@link EscalationResume}, {@code paused}
+ * continues without a prompt, {@code completed} reports without another engine run, and {@code
+ * aborted} refuses with a usage error naming the kept working copy; both refuse a {@code
+ * --decision} over a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
+ * write (FR9 of make-run-headless). Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow; FR9 of add-project-registry.
@@ -65,8 +70,8 @@ final class GitResumeRunner {
 
     /**
      * @param assembly the shared engine/ports assembly, reused from the fresh-run path — builds
-     *     the same {@link com.github.oinsio.gnomish.app.console.DialogConsole} and {@link
-     *     RunnerOutcomeLoop} a live run uses, so resume dialogs are byte-for-byte the same (UX2)
+     *     the same {@link com.github.oinsio.gnomish.app.console.DialogConsole} output path and {@link
+     *     RunnerOutcomeLoop} a live run uses, so a resumed stop renders byte-for-byte the same (UX2)
      * @param git the task-git capability set: the run's repository and round persistence, branch
      *     lookup for the resume bootstrap, and salvage/materialization/cleanup
      * @param clone the registered clone whose own worktree folder the resumed worktree is
@@ -85,10 +90,10 @@ final class GitResumeRunner {
     /**
      * Bootstraps the resumed task named by {@code taskId}, sets the {@code taskId} MDC key from
      * the branch's own recorded identity, then drives the outcome-driven continuation (FR8): the
-     * decision dialog, the checkpoint confirmation, the direct continuation, or the completion
+     * decision resolution, the checkpoint continuation, the direct continuation, or the completion
      * report, per {@link #continueFrom}.
      *
-     * <p>Implements FR5, FR8, UX2 of add-git-workflow.
+     * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR3, FR9 of make-run-headless.
      *
      * @param order the run order: the {@code --dir} project clone (never mutated, FR7), the loaded
      *     pipeline, the console mode, and {@code --discard-work} (FR10, design D10) — which resets
@@ -96,11 +101,14 @@ final class GitResumeRunner {
      *     salvaging them, meaningful only for the {@code null}-outcome continuation, harmless
      *     otherwise; its {@code base} is not read, a resume starts from the branch
      * @param taskId the {@code --resume} taskId, as supplied by the operator
-     * @throws UsageException if no branch for {@code taskId} is found
+     * @param decision the operator's {@code --decision}, or {@code null} when none was given (design
+     *     D2 of make-run-headless)
+     * @throws UsageException if no branch for {@code taskId} is found, or a {@code decision} was
+     *     given over an outcome that is not escalated (FR9)
      */
-    void run(RunOrder order, String taskId) {
+    void run(RunOrder order, String taskId, @Nullable String decision) {
         ResumeBootstrap bootstrap = bootstrap(order.cloneDir(), taskId);
-        continueFrom(order, bootstrap);
+        continueFrom(order, bootstrap, decision);
     }
 
     /**
@@ -135,10 +143,11 @@ final class GitResumeRunner {
     /**
      * Switches on {@code bootstrap.outcome()} (FR8, design D9) and drives the matching
      * continuation, delegated to {@link GitResumeContinuation}: {@code null} continues the engine
-     * loop directly from {@code state.json}'s recorded position; {@code escalated}/{@code paused}
-     * run their dialogs first; {@code completed} reports and returns without another engine run.
+     * loop directly from {@code state.json}'s recorded position; {@code escalated} resolves the
+     * decision first; {@code paused} continues; {@code completed} reports and returns without
+     * another engine run. A decision over any other outcome is refused here, before any arm writes.
      */
-    private void continueFrom(RunOrder order, ResumeBootstrap bootstrap) {
+    private void continueFrom(RunOrder order, ResumeBootstrap bootstrap, @Nullable String decision) {
         Path cloneDir = order.cloneDir();
         var taskRepository = git.store().taskRepository(clone);
         TaskState finalState = git.store()
@@ -146,6 +155,7 @@ final class GitResumeRunner {
                 .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), bootstrap.worktreePath()));
 
         RecordedOutcome outcome = bootstrap.outcome();
+        ResumeDecisionGuard.requireEscalatedFor(bootstrap.taskId(), outcome, decision);
         var continuation = new GitResumeContinuation(assembly, git, taskRepository, cloneDir, bootstrap);
         if (outcome == null) {
             continuation.resumeFromRecordedPosition(order, finalState);
@@ -153,8 +163,8 @@ final class GitResumeRunner {
         }
         switch (outcome) {
             case RecordedOutcome.Completed ignored -> continuation.reportCompleted(finalState);
-            case RecordedOutcome.Escalated ignored -> continuation.resumeEscalated(order, finalState);
-            case RecordedOutcome.Paused paused -> continuation.resumePaused(order, finalState, paused.passedStage());
+            case RecordedOutcome.Escalated ignored -> continuation.resumeEscalated(order, finalState, decision);
+            case RecordedOutcome.Paused ignored -> continuation.resumePaused(order, finalState);
             case RecordedOutcome.Aborted ignored ->
                 // An Aborted task.json means a prior visit's durability guarantee broke; nothing
                 // to resume automatically. A plain usage error keeps the operator from building

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -65,7 +66,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     private void driveWithoutPushing() {
         def repository = undecoratedHostRepository()
         repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) during the duplication sweep. */
@@ -91,7 +92,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         assert new RefspecPush(runner).push(cloneDir, BRANCH).exitCode() == 0
         def deliveredTip = originTip()
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
         assert originTip() == deliveredTip
 
         when:

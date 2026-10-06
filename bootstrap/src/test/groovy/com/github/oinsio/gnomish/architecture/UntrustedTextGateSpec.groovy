@@ -227,8 +227,6 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.app.port.tracker.AbortRecord': ['cause'],
         'com.github.oinsio.gnomish.adapter.tracker.github.ParsedMarker': ['humanText'],
         'com.github.oinsio.gnomish.status.StatusReport': ['title', 'body'],
-        'com.github.oinsio.gnomish.status.Activity$AwaitingInput': ['prompt'],
-        'com.github.oinsio.gnomish.status.Activity$Executing': ['currentTool'],
     ]
 
     @Shared

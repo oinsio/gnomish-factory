@@ -15,8 +15,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.status.Activity
-import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
@@ -95,54 +93,24 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(report).currentStage() == null
     }
 
-    def "activity is null when idle"() {
+    // FR6 of make-run-headless: the live-only fields are withdrawn from contract v1 — no
+    //     document carries an activity section, and currentStage carries attemptsUsed and
+    //     attempts alone (the "Withdrawn live fields are absent" scenario)
+    def "FR6: no document carries an activity key or a currentStage attemptLimit"() {
         given:
-        def report = idleReport(new Position.AtStage("implement"))
+        def tree = StatusJson.mapper().readTree(mapper.serialize(report))
 
         expect:
-        mapper.toDto(report).activity() == null
-    }
+        !tree.has("activity")
+        tree.get("currentStage").isNull() || tree.get("currentStage").fieldNames().toList() == ["attemptsUsed", "attempts"]
 
-    def "activity executing renders with since and null currentTool/toolCalls when unspecified"() {
-        given:
-        def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.Executing(since))
-
-        expect:
-        mapper.toDto(report).activity() ==
-                new ActivityDto.Executing("executing", "2026-07-16T14:41:02Z", null, null)
-    }
-
-    // FR7, D10, D12 of add-agent-executor: executing activity carries live tool detail
-    def "activity executing renders currentTool and toolCalls when present"() {
-        given:
-        def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.Executing(since, UntrustedText.agent("Edit"), 3))
-
-        expect:
-        mapper.toDto(report).activity() ==
-                new ActivityDto.Executing("executing", "2026-07-16T14:41:02Z", "Edit", 3)
-    }
-
-    def "activity verifying renders checkRef label and since"() {
-        given:
-        def since = Instant.parse("2026-07-16T14:41:02Z")
-        def checkRef = new CheckRef(0, UntrustedText.manifest("command:./gradlew test"))
-        def report = activityReport(new Activity.Verifying(checkRef, since))
-
-        expect:
-        mapper.toDto(report).activity() ==
-                new ActivityDto.Verifying("verifying", "command:./gradlew test", "2026-07-16T14:41:02Z")
-    }
-
-    def "activity awaitingInput renders prompt and since"() {
-        given:
-        def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.AwaitingInput(UntrustedText.agent("Refactor or patch?"), since))
-
-        expect:
-        mapper.toDto(report).activity() ==
-                new ActivityDto.AwaitingInput("awaitingInput", "Refactor or patch?", "2026-07-16T14:41:02Z")
+        where:
+        report << [
+            referenceReport(),
+            idleReport(new Position.AtStage("implement")),
+            idleReport(new Position.PipelineEnd()),
+            outcomeReport(new Outcome.Completed())
+        ]
     }
 
     def "outcome is null mid-run"() {
@@ -286,12 +254,8 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     def "instants render as ISO-8601 UTC strings"() {
-        given:
-        def since = Instant.parse("2026-07-16T14:41:02Z")
-        def report = activityReport(new Activity.Executing(since))
-
         expect:
-        mapper.toDto(report).activity().since() == "2026-07-16T14:41:02Z"
+        mapper.toDto(referenceReport()).lastDecision().at() == "2026-07-16T14:21:30Z"
     }
 
     def "human-only run: empty tokensByModel map, empty byTool/perVote, wall time present"() {
@@ -317,7 +281,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 ],
                 [:])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], totals)
-        def report = StatusReport.build(context, state, 3, LiveActivity.idle())
+        def report = StatusReport.build(context, state, null, null)
 
         when:
         def byTool = mapper.toDto(report).totals().byTool()
@@ -344,7 +308,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
                 [], ExecutorUsage.none(), judgeUsage, [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
-        def report = StatusReport.build(context, state, 3, LiveActivity.idle())
+        def report = StatusReport.build(context, state, null, null)
 
         when:
         def perVote = mapper.toDto(report).currentStage().attempts()[0].judgeUsage().perVote()
@@ -366,7 +330,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
                 [], ExecutorUsage.none(), judgeUsage, [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
-        def report = StatusReport.build(context, state, 3, LiveActivity.idle())
+        def report = StatusReport.build(context, state, null, null)
 
         when:
         def perVote = mapper.toDto(report).currentStage().attempts()[0].judgeUsage().perVote()
@@ -379,13 +343,7 @@ class StatusReportJsonMapperSpec extends Specification {
     private static StatusReport idleReport(Position position) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(position, 0, [], ExecutorUsage.none())
-        return StatusReport.build(context, state, position instanceof Position.AtStage ? 3 : null, LiveActivity.idle())
-    }
-
-    private static StatusReport activityReport(Activity activity) {
-        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
-        return StatusReport.build(context, state, 3, new LiveActivity(activity, null, null))
+        return StatusReport.build(context, state, null, null)
     }
 
     // FR4, NFR-O1, NFR-S1, M1 of fix-denial-report-attachment: the whole point of the change —
@@ -427,13 +385,13 @@ class StatusReportJsonMapperSpec extends Specification {
     private static StatusReport reportOf(AttemptRecord attempt) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(new Position.AtStage("implement"), 1, [attempt], ExecutorUsage.none())
-        return StatusReport.build(context, state, 3, new LiveActivity(null, null, null))
+        return StatusReport.build(context, state, null, null)
     }
 
     private static StatusReport outcomeReport(Outcome outcome) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
-        return StatusReport.build(context, state, 3, new LiveActivity(null, null, outcome))
+        return StatusReport.build(context, state, null, outcome)
     }
 
     private static String[] corpusLines() {
