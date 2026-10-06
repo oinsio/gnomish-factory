@@ -104,6 +104,28 @@ Answer in the thread, then return the label. Useful things to say:
   a share of the task's budget. Answering properly is cheap; answering vaguely
   buys the same round again.
 
+## Models are pinned by exact id
+
+Every `model:` in `stages/*/stage.yaml` — the gnome's and the judge's — names an
+exact model id (`claude-opus-5-5`), never an alias (`opus`). The factory passes
+the value verbatim to `claude --model`, and an alias silently follows whatever
+model the CLI maps it to: the day a new model ships, every stage changes
+behavior with no change to this directory. A pinned id keeps a run repeatable,
+and keeps a regression traceable to the commit that moved the pin.
+
+The review stages (`review-artifacts`, `review-code`) run both the gnome and the
+judge on the strongest model (Fable); the fix stages (`fix-artifacts`,
+`fix-code`) keep Opus for the gnome and hand the judgment to Fable, so each fix is
+weighed by the model that made the recommendation.
+
+**Moving a stage to a new model is a change to test, not a find-and-replace.**
+Before the new pin reaches `main`, make trial runs of the affected stages on
+representative tasks (`factory/gnomish run` reads the working tree, see
+[Running it by hand](#running-it-by-hand)): check that the stage still passes its
+checks and judge, that its output is as good as before, and that repeated runs
+give stable results. A model that needs more turns may also need its `maxTurns`
+raised.
+
 ## If you add a stage
 
 Lessons that cost a round each to learn. They are about stages in general, so this

@@ -17,9 +17,9 @@ outputs:
   - id: code-fix
 executor:
   type: agent-cli
-  # Weighs an Opus auditor's recommendations on equal terms and changes production code
-  # under this repository's gates.
-  model: opus
+  # Weighs the auditor's recommendations and changes production code under this
+  # repository's gates; its outcomes are then judged by the auditor's model (Fable).
+  model: claude-opus-5-5
   settings:
     # Counts the orchestrator's turns only; the fixes run in subagents.
     maxTurns: 300
@@ -143,7 +143,7 @@ verify:
   # may have been a real defect.
   - type: judge
     criteriaFile: stages/fix-code/acceptance.md
-    model: opus
+    model: claude-fable-5-1
     settings:
       maxTurns: 60
       disallowedTools:

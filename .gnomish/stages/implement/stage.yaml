@@ -24,7 +24,7 @@ executor:
   # The orchestrator reads the design and judges every subagent's report; the subagents
   # inherit its model. This codebase's gates (Error Prone, NullAway, the 100% mutation
   # target, the architecture specs) reward the stronger model.
-  model: opus
+  model: claude-opus-5-5
   settings:
     # Counts the orchestrator's turns only - a subagent's turns are not counted (verified
     # on Claude Code 2.1.289). A few turns per task: brief, launch, read the report, tick.

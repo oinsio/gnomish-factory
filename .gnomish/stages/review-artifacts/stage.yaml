@@ -19,7 +19,7 @@ executor:
   type: agent-cli
   # An independent reviewer of a change somebody else wrote, weighing it against code that
   # moved since: the judgment is the whole stage, so it runs on the strongest model.
-  model: opus
+  model: claude-fable-5-1
   settings:
     # Every claim the artifacts make about the codebase is checked by grep/read, and the
     # changes of this repository are large (proposal, design, several delta specs, 50+ tasks).
@@ -149,7 +149,7 @@ verify:
   # because the next stage revises the change on its strength.
   - type: judge
     criteriaFile: stages/review-artifacts/acceptance.md
-    model: opus
+    model: claude-fable-5-1
     settings:
       # The judge is read-only (Read/Grep/Glob, hard-wired by the factory) and pays a turn
       # per file it opens; time-zones' judges ran out at 30 on large changes.

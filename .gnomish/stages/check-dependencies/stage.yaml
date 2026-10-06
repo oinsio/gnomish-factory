@@ -16,7 +16,7 @@ outputs:
   - id: task-change
 executor:
   type: agent-cli
-  model: sonnet
+  model: claude-sonnet-5-5
   settings:
     maxTurns: 40
     roundTimeout: 1200s

@@ -19,9 +19,9 @@ outputs:
   - id: artifact-revision
 executor:
   type: agent-cli
-  # It rewrites the contract every later stage builds on, and weighs an Opus reviewer's
-  # recommendations on equal terms: same model as the reviewer.
-  model: opus
+  # It rewrites the contract every later stage builds on, weighing the reviewer's
+  # recommendations; its outcomes are then judged by the reviewer's model (Fable).
+  model: claude-opus-5-5
   settings:
     # Each recommendation is re-verified against the source before it is applied, and
     # every edit is reconciled across the change's other artifacts.
@@ -152,7 +152,7 @@ verify:
   # one may have been a real gap.
   - type: judge
     criteriaFile: stages/fix-artifacts/acceptance.md
-    model: opus
+    model: claude-fable-5-1
     settings:
       maxTurns: 60
       disallowedTools:

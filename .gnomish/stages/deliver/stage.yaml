@@ -17,7 +17,7 @@ outputs:
 executor:
   type: agent-cli
   # Reads the branch's diff and the archived change, writes a short title and body.
-  model: sonnet
+  model: claude-sonnet-5-5
   settings:
     maxTurns: 60
     roundTimeout: 1800s

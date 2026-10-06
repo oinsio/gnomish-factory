@@ -12,7 +12,7 @@ outputs:
 executor:
   type: agent-cli
   # One `rm -r`: the cheapest model is enough.
-  model: haiku
+  model: claude-haiku-4-5-20251001
   settings:
     maxTurns: 10
     roundTimeout: 300s

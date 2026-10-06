@@ -19,7 +19,7 @@ outputs:
 executor:
   type: agent-cli
   # The spec merge rewrites the project's durable contract; a wrong merge outlives the change.
-  model: opus
+  model: claude-opus-5-5
   settings:
     maxTurns: 80
     roundTimeout: 1800s
@@ -120,7 +120,7 @@ verify:
   # The merge is the one step no command can check: every delta lands, nothing else moves.
   - type: judge
     criteriaFile: stages/archive/acceptance.md
-    model: opus
+    model: claude-opus-5-5
     settings:
       maxTurns: 60
       disallowedTools:

@@ -20,7 +20,7 @@ executor:
   type: agent-cli
   # An independent auditor of work another agent did, against rules a weaker model tends
   # to skim: the judgment is the whole stage.
-  model: opus
+  model: claude-fable-5-1
   settings:
     # Every task and requirement is checked against the code with file:line evidence.
     maxTurns: 150
@@ -120,7 +120,7 @@ verify:
   # a missing one, because the next stage changes the code on its strength.
   - type: judge
     criteriaFile: stages/review-code/acceptance.md
-    model: opus
+    model: claude-fable-5-1
     settings:
       maxTurns: 60
       disallowedTools:
