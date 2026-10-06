@@ -375,4 +375,16 @@ and after §4.
       CLI's own parser (plain, space, apostrophe, `$HOME` dirs); `ReferenceE2ESessionSpec` runs
       both resumes from the printed lines; `ParkExitCodeSpec`'s in-place check now
       `!contains('To continue:')`. `TerminalPark` javadoc fixed; guide quotes the line once.
-- [ ] 4.4 Gate: root `./gradlew check` green; record M1–M3 in this task.
+- [x] 4.4 Gate: root `./gradlew check` green; record M1–M3 in this task.
+      *Result (2026-10-06):* root `check --continue` 1 h 27 min — compile, Error Prone/NullAway,
+      unused-code, dependency analysis, Spotless and every gate spec green; two stale return-path
+      comparisons missed by 4.5 (`ContainerResumeRoutingSpec`, `GitModeRunnerFreshRunSpec`) fixed,
+      then `:application:check` green (2706 tests, PIT 2430/2430). PIT 100% in every module
+      (`:adapters` 996, `:adapters:git` 890, `:adapters:github` 600, `:sandbox:docker` 600,
+      `:bootstrap` 438, `:domain` 347, `:adapters:agent` 298, plugin API 115, `:sandbox:core` 89,
+      `gitobjects` 84). Only red: `ContainerDeclaredVolumesSpec` (2 features) — the known flake
+      under parallel Docker specs (whole-daemon volume set), green in isolation, file untouched.
+      M1 — `ConsoleOwnerGateSpec` 17/17; console reads only `ConsoleTakeoverConfirmation` and
+      `SystemConsoleIO`. M2 — no `Press Enter` in production; `Manual checkpoint reached` only in
+      `TerminalOutcomeRender.java` (`TerminalRenderOwnerSpec` 6/6). M3 — `ReferenceE2ESessionSpec`
+      1/1: three closed-stdin processes exit 10, 11, 0.

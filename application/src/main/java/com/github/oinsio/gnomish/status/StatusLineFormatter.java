@@ -6,12 +6,11 @@ import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 
 /**
  * Package-private line-formatting helpers for {@link StatusTextRenderer}: one
- * English line per domain concept (an activity, an escalation, a decision, an
+ * English line per domain concept (an escalation, a decision, a finding, an
  * attempt's result). Split out from {@link StatusTextRenderer} to keep both
  * files under the project's file-size guidance — the renderer assembles the
  * full-report block, this class formats the individual lines it assembles from.
@@ -21,28 +20,6 @@ import java.time.Duration;
 final class StatusLineFormatter {
 
     private StatusLineFormatter() {}
-
-    static String activityLine(Activity activity, ReportPlane plane) {
-        return switch (activity) {
-            case Activity.Executing executing -> executingLine(executing, plane);
-            case Activity.Verifying verifying ->
-                "verifying " + plane.render(verifying.checkRef().label()) + " (since " + verifying.since() + ")";
-            case Activity.AwaitingInput awaitingInput ->
-                "awaiting input: \"" + plane.render(awaitingInput.prompt()) + "\" (since " + awaitingInput.since()
-                        + ")";
-        };
-    }
-
-    // FR7, D10, D12 of add-agent-executor: appends live tool detail when present
-    private static String executingLine(Activity.Executing executing, ReportPlane plane) {
-        String base = "executing (since " + executing.since() + ")";
-        UntrustedText tool = executing.currentTool();
-        if (tool == null && executing.toolCalls() == 0) {
-            return base;
-        }
-        return base + " [tool: " + (tool == null ? "null" : plane.render(tool)) + ", toolCalls: "
-                + executing.toolCalls() + "]";
-    }
 
     static String escalationLine(EscalationReport escalation, ReportPlane plane) {
         return switch (escalation) {
