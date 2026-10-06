@@ -1,0 +1,162 @@
+purpose: work through every recommendation of the review-code audit - fix it with TDD, or reject it with evidence - and leave ./gradlew check green, so the change can be archived on an implementation that holds
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: task-change
+  - kind: internal
+    producerOutputId: code-review
+# The work itself is the project's own /fix-from-audit command
+# (.claude/commands/fix-from-audit.md); the instructions add only what differs because
+# nobody is watching the round. What this stage leaves behind:
+#   finished  -> the fixes and their specs on the task branch, ./gradlew check green, and
+#                temporary-docs/gnomish/<task>/fix-code.md: one entry per recommendation,
+#                applied (with the edit and its red spec) or rejected (with evidence).
+#   could not -> a question in the tracker thread: a recommendation that needs the plan
+#                changed, or a fix that cannot be made within the rules - a human's call.
+outputs:
+  - id: code-fix
+executor:
+  type: agent-cli
+  # Weighs an Opus auditor's recommendations on equal terms and changes production code
+  # under this repository's gates.
+  model: opus
+  settings:
+    # Counts the orchestrator's turns only; the fixes run in subagents.
+    maxTurns: 300
+    # Red-green per fix plus a full ./gradlew check at the end, possibly more than once.
+    roundTimeout: 28800s
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+      - Agent
+    # Subagents: general-purpose only - the command gives each accepted fix to a
+    # write-capable subagent - and one at a time, from CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1
+    # in the factory's env-passthrough. An allow rule restricts nothing, so every other type
+    # is denied by name (the `agents` field of the CLI's stream-json `init` event).
+    disallowedTools:
+      - Agent(claude)
+      - Agent(Explore)
+      - Agent(Plan)
+      - Agent(statusline-setup)
+      - Agent(web-fetch)
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/fix-code/instructions.md
+verify:
+  # Cheapest first: without the resolution there is nothing else to check.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      if [ ! -f "$dir/fix-code.md" ]; then
+        echo "no resolution record at $dir/fix-code.md - write it before finishing the round, see .gnomish/stages/fix-code/instructions.md"
+        exit 1
+      fi
+  # Every recommendation of the audit is resolved exactly once, with what makes the
+  # resolution checkable: the edit for an applied one, the evidence for a rejected one.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      review=$dir/review-code.md
+      resolution=$dir/fix-code.md
+      change=$(sed -n 's/^Change:[[:space:]]*//p' "$dir/change.md" | head -1)
+      named=$(sed -n 's/^## Audit Resolution:[[:space:]]*//p' "$resolution" | head -1 | tr -d '`')
+      if [ "$named" != "$change" ]; then
+        echo "the resolution's '## Audit Resolution:' heading names '$named', but this task's change is '$change'"
+        exit 1
+      fi
+      wanted=$(awk 'index($0, "### Recommendations, ordered") == 1 { inside = 1; next } /^##/ { inside = 0 } inside' "$review" \
+        | sed -nE 's/^([0-9]+)\. \*\*.*/\1/p' | sort -n)
+      got=$(sed -nE 's/^### ([0-9]+) — (applied|rejected)[[:space:]]*$/\1/p' "$resolution" | sort -n)
+      duplicates=$(printf '%s\n' "$got" | uniq -d)
+      [ -z "$duplicates" ] || { echo "$duplicates"; echo "each recommendation is resolved exactly once - these numbers have two entries"; exit 1; }
+      if [ "$wanted" != "$got" ]; then
+        echo "the audit has recommendations: $(echo $wanted)"
+        echo "the resolution resolves:       $(echo $got)"
+        echo "give every recommendation of the audit one '### <N> — applied' or '### <N> — rejected' entry, in the audit's numbering"
+        exit 1
+      fi
+      entries() { awk -v state="$1" '/^### [0-9]+ — / { inside = ($0 ~ (" — " state "[[:space:]]*$")) ; next } /^##/ { inside = 0 } inside' "$resolution"; }
+      applied=$(grep -cE '^### [0-9]+ — applied' "$resolution" || true)
+      rejected=$(grep -cE '^### [0-9]+ — rejected' "$resolution" || true)
+      for field in Recommendation Re-verified Edit; do
+        count=$(entries applied | grep -cE "^- $field: " || true)
+        [ "$count" = "$applied" ] || { echo "$applied applied entr(ies) but $count '- $field:' line(s) - every applied entry names the recommendation, what you re-verified, and the edit you made"; exit 1; }
+      done
+      for field in Recommendation Re-verified Evidence; do
+        count=$(entries rejected | grep -cE "^- $field: " || true)
+        [ "$count" = "$rejected" ] || { echo "$rejected rejected entr(ies) but $count '- $field:' line(s) - every rejected entry names the recommendation, what you re-verified, and the evidence it fails on"; exit 1; }
+      done
+  # Fixes change code and tests. Never the factory's view of this repository or the gnome's
+  # own permissions (.claude/, .gnomish/), never the stable specs or the archive - measured
+  # over the whole branch from the merge base - and never the change's plan (its proposal,
+  # design and delta specs, which fix-artifacts legitimately edited earlier on this branch,
+  # so for them only this round's working copy is measured).
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' "$dir/change.md" | head -1)
+      forbidden='^(\.claude/|\.gnomish/|openspec/specs/|openspec/changes/archive/)'
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//')
+      committed=""
+      case "$branch" in
+        gnomish/*)
+          if base=$(git merge-base origin/main HEAD 2>/dev/null); then
+            committed=$(git diff --name-only "$base" HEAD)
+          fi
+          ;;
+      esac
+      touched=$(printf '%s\n%s\n' "$dirty" "$committed" | grep -E "$forbidden" | sort -u || true)
+      plan=$(printf '%s\n' "$dirty" | grep -E "^openspec/changes/$change/(proposal\.md|design\.md|specs/)" || true)
+      if [ -n "$touched$plan" ]; then
+        echo "the fixes touched paths a fix may not change:"
+        printf '%s\n' "$touched" "$plan" | grep .
+        echo "undo your edits to these paths. A recommendation that needs the plan, the stable specs or the factory's configuration changed is not fixed in code: reject it with that reason, or escalate through \$GNOMISH_DECISION_FILE."
+        exit 1
+      fi
+  # The gate CI runs; the command's step 4 ends on it too.
+  - type: command
+    command: |
+      log=$(mktemp)
+      if ! ./gradlew check --console=plain > "$log" 2>&1; then
+        grep -E 'FAILED|What went wrong|error:|warning:.*\[|> Task .* FAILED|tests completed|mutation' "$log" | head -40
+        echo "..."
+        tail -40 "$log"
+        echo "./gradlew check failed - fix the cause in the code or the tests, never by weakening a gate (no @DoNotMutate, exclusion or suppression the rules in .claude/rules/testing.md do not allow), and list the fix under Other edits"
+        rm -f "$log"
+        exit 1
+      fi
+      rm -f "$log"
+  # Both outcomes are judged: an applied fix may harm the code, a rejected recommendation
+  # may have been a real defect.
+  - type: judge
+    criteriaFile: stages/fix-code/acceptance.md
+    model: opus
+    settings:
+      maxTurns: 60
+      disallowedTools:
+        - Bash
+        - Agent
+        - ScheduleWakeup
+        - SendMessage
+        - ToolSearch
+        - Edit
+        - Write
+        - WebFetch
+        - WebSearch
+    votes: 1
+advancement: auto
+autonomy:
+  attemptLimit: 3

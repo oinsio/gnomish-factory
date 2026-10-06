@@ -49,6 +49,8 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `lock-scope.md`         | every monitor / lock          | No blocking call under a state lock; three-phase shape, exceptions |
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
 | `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
+| `verification-scope.md`  | task-by-task implementation   | Per-task checks (named specs, scoped PIT); full `check` once at the end |
+| `review-recommendations.md` | review reports            | Recommendation format, worth-fixing tests, resolution record |
 | `stage-description.md`  | stage docs                    | IDEF0/ICOM + Quality Control format for pipeline stages    |
 | `proposal-format.md`    | `openspec/**/proposal.md`     | Required sections and format for PRD                       |
 | `delta-specs.md`        | `openspec/**/specs/**`        | Delta spec format with ADDED/MODIFIED/REMOVED              |

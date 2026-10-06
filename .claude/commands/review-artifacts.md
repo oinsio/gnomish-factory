@@ -44,7 +44,29 @@ completeness / consistency) and merge their findings; run them in parallel.
 
 ### 2. Freshness against the current project
 
-For every concrete claim the artifacts make about the existing project, verify it against
+A change is written once and implemented weeks later; in between other changes land and
+rename what it names, implement part of what it proposes, or decide the opposite. Start from
+what landed since the change was last revised:
+
+```
+git log -1 --format='%h %cs' -- openspec/changes/<name>/
+git log --format='%h %cs %s' <that-commit>..HEAD -- openspec/changes/archive/ <paths the change names>
+```
+
+For each change archived after that commit, read its proposal's opening sections and its
+delta-spec headings; where it touches the same capability, classes, modules, config keys or
+requirement headings, read what it actually did — design and code — before judging. When
+`origin/main` is ahead of the checkout (`git log HEAD..origin/main`), check what landed there
+too, reading files with `git show origin/main:<path>`, and say in each finding which of the
+two the gap is against. Report the overlaps found in a **Landed since** section.
+
+Run `openspec validate <name> --strict`. An `ERROR` is a stale or malformed delta; an
+`INFO` line "Archive would refuse this delta … MODIFIED failed for header … not found" means
+the stable spec no longer holds the requirement the delta modifies — either it moved since,
+or another active change adds it (then that is a sequencing fact, not staleness). Each one
+is a freshness finding until explained.
+
+Then, for every concrete claim the artifacts make about the existing project, verify it against
 reality (grep/read; cite file:line):
 
 - Files, classes, methods, modules, Gradle projects, config keys mentioned as *existing* —
@@ -131,6 +153,7 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 | Internal consistency | N contradictions                 |
 | External consistency | N conflicts (specs/code/changes) |
 
+### Landed since         — each change/commit landed after the change was last revised: overlap or "none"
 ### Freshness            — each stale claim: artifact:line, current reality, suggested edit
 ### Coverage matrix      — requirement ID → proposal / delta spec / task (✅/❌ per column)
 ### Completeness         — missing sections/scenarios/tasks with the rule they violate
@@ -140,19 +163,14 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### Verdict              — ready to implement / needs revision (blockers listed)
 ```
 
-Each Recommendations item must be self-contained, with the same format as `/audit-implementation`:
+Recommendations follow `.claude/rules/review-recommendations.md`: its item format (Problem,
+Impact, Fix, Fix risk), its "Worth fixing" tests and drop list — drop every item that fails
+them — and its verdict rule. Here the verdict reads `ready to implement` or `needs revision`.
 
-```
-N. **SEVERITY — <short title>** (`artifact-or-file:line`)
-   Problem: what is wrong and why it matters, restated here.
-   Fix: the concrete edit to the artifact (or code reality to acknowledge).
-```
-
-Severity: CRITICAL — implementing as written would build the wrong thing or break existing
-behavior undeclared; WARNING — gap or drift that will surface during implementation;
-SUGGESTION — clarity/traceability polish. When uncertain, verify against code before
-reporting; downgrade rather than guess. End with a reminder that nothing in the project was
-modified and the human decides what to apply.
+Severity for artifacts: CRITICAL — implementing as written would build the wrong thing,
+re-implement what already landed, or break existing behavior undeclared; WARNING — gap or
+drift that will surface during implementation; SUGGESTION — clarity/traceability polish. End
+with a reminder that nothing in the project was modified and the human decides what to apply.
 
 ### 7. Persist the actionable tail
 

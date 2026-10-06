@@ -1,0 +1,51 @@
+purpose: remove this task's pipeline reports from the branch, so the pull request carries the code, the specs and the archived change - not the scratch notes the stages wrote for one another
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: archived-change
+# Every stage of this pipeline writes its reports under temporary-docs/gnomish/<task>/ and
+# nowhere else, so one directory is all there is to remove. The reports stay readable in the
+# branch history after this stage. What this stage leaves behind:
+#   finished  -> temporary-docs/gnomish/<task>/ gone from the working copy, nothing else changed.
+outputs:
+  - id: reports-removed
+executor:
+  type: agent-cli
+  # One `rm -r`: the cheapest model is enough.
+  model: haiku
+  settings:
+    maxTurns: 10
+    roundTimeout: 300s
+    allowedTools:
+      - Bash
+    disallowedTools:
+      - Agent
+      - Edit
+      - Write
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/cleanup/instructions.md
+verify:
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      if [ -e "$dir" ]; then
+        echo "$dir still exists - remove it: rm -r $dir"
+        exit 1
+      fi
+      stray=$(git status --porcelain --untracked-files=all | sed 's/^...//' \
+        | grep -v "^$dir/" | grep -v '^\.gnomish-task/' || true)
+      if [ -n "$stray" ]; then
+        echo "this stage removes $dir/ and nothing else, but the working copy also carries:"
+        echo "$stray"
+        echo "if you made these edits, undo each of them yourself and nothing else; if you did not, leave them exactly as they are."
+        exit 1
+      fi
+advancement: auto
+autonomy:
+  attemptLimit: 2

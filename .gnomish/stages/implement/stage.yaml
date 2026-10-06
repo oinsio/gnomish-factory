@@ -1,0 +1,121 @@
+purpose: implement every task of the OpenSpec change revised by fix-artifacts, one task per sequential subagent as the project's /opsx:apply-sequential does it, until every task is ticked and ./gradlew check passes
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: task-change
+  - kind: internal
+    producerOutputId: artifact-revision
+# The work itself is the project's own /opsx:apply-sequential command
+# (.claude/commands/opsx/apply-sequential.md, a wrapper around /opsx:apply); the
+# instructions add only what differs because nobody is watching the round. What this
+# stage leaves behind:
+#   finished  -> the code and specs on the task branch, every task of the change's
+#                tasks.md ticked, `./gradlew check` green, and
+#                temporary-docs/gnomish/<task>/implement.md: one entry per task with what was done
+#                and, for a single-owner task, the old-way sweep.
+#   could not -> a question in the tracker thread: an unclear task, a design gap, work
+#                beyond what the change specifies - the pause points of both commands.
+#                The tasks already done stay on the branch; the round after the answer
+#                continues from the first unticked task.
+outputs:
+  - id: implementation
+executor:
+  type: agent-cli
+  # The orchestrator reads the design and judges every subagent's report; the subagents
+  # inherit its model. This codebase's gates (Error Prone, NullAway, the 100% mutation
+  # target, the architecture specs) reward the stronger model.
+  model: opus
+  settings:
+    # Counts the orchestrator's turns only - a subagent's turns are not counted (verified
+    # on Claude Code 2.1.289). A few turns per task: brief, launch, read the report, tick.
+    maxTurns: 400
+    # The changes of this repository run 12-35 tasks, and a whole implementation has taken
+    # eight hours. A round that outlives this is killed and parked as an infrastructure
+    # failure for a human to return - no attempt burned, the ticked tasks kept - so the
+    # budget is generous rather than tight.
+    roundTimeout: 28800s
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+      - Agent
+    # Subagents: general-purpose only - the command gives each task to a write-capable
+    # subagent - and one at a time, from CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1 in the
+    # factory's env-passthrough. An allow rule such as `Agent(general-purpose)` restricts
+    # nothing (a launch needs no permission), so every other type is denied by name; the
+    # list is the `agents` field of the CLI's stream-json `init` event.
+    disallowedTools:
+      - Agent(claude)
+      - Agent(Explore)
+      - Agent(Plan)
+      - Agent(statusline-setup)
+      - Agent(web-fetch)
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/implement/instructions.md
+verify:
+  # Cheapest first: an unticked task means the work is not done, whatever the build says.
+  - type: command
+    command: |
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
+      tasks="openspec/changes/$change/tasks.md"
+      open=$(grep -nE '^[[:space:]]*- \[ \]' "$tasks" || true)
+      if [ -n "$open" ]; then
+        echo "$tasks still has unticked tasks:"
+        echo "$open"
+        echo "implement each of them, one subagent per task, and tick it once you have verified its work - not when the subagent says so. If a task cannot be done as written, do not tick it: escalate through \$GNOMISH_DECISION_FILE."
+        exit 1
+      fi
+      if [ ! -f $dir/implement.md ]; then
+        echo "no implementation record at $dir/implement.md - write it before finishing the round, see .gnomish/stages/implement/instructions.md"
+        exit 1
+      fi
+  # The implementation may touch the code, the tests, docs and the change's tasks.md - never
+  # the factory's view of this repository, the gnome's own permissions, the stable specs or
+  # the archive. A change to .claude/ or .gnomish/ would let a round widen what the next one
+  # may do. Measured from the merge base: origin/main moves under the branch.
+  - type: command
+    command: |
+      forbidden='^(\.claude/|\.gnomish/|openspec/specs/|openspec/changes/archive/)'
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -E "$forbidden" || true)
+      committed=""
+      case "$(git branch --show-current)" in
+        gnomish/*)
+          if base=$(git merge-base origin/main HEAD 2>/dev/null); then
+            committed=$(git diff --name-only "$base" HEAD | grep -E "$forbidden" || true)
+          fi
+          ;;
+      esac
+      touched=$(printf '%s\n%s\n' "$dirty" "$committed" | grep . | sort -u || true)
+      if [ -n "$touched" ]; then
+        echo "the implementation touched paths no implementation may change:"
+        echo "$touched"
+        echo "undo your edits to these paths - .claude/ and .gnomish/ govern the factory's rounds, openspec/specs/ and the archive change only through archiving. If the change really requires editing one of them, escalate through \$GNOMISH_DECISION_FILE instead."
+        exit 1
+      fi
+  # The gate CI runs. Needs Docker for the Testcontainers suites and a check-command timeout
+  # above the factory's 30-minute default (factory.check-command-timeout in project.yaml).
+  - type: command
+    command: |
+      log=$(mktemp)
+      if ! ./gradlew check --console=plain > "$log" 2>&1; then
+        grep -E 'FAILED|What went wrong|error:|warning:.*\[|> Task .* FAILED|tests completed|mutation' "$log" | head -40
+        echo "..."
+        tail -40 "$log"
+        echo "./gradlew check failed - fix the cause in the code or the tests, never by weakening a gate (no @DoNotMutate, exclusion or suppression the rules in .claude/rules/testing.md do not allow)"
+        rm -f "$log"
+        exit 1
+      fi
+      rm -f "$log"
+advancement: auto

@@ -1,0 +1,139 @@
+purpose: archive the implemented OpenSpec change - merge its delta specs into openspec/specs/ and move the change under openspec/changes/archive/YYYY/MM/ - so the branch delivers the code and the contract it implements together
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: task-change
+  - kind: internal
+    producerOutputId: code-fix
+# The work itself is the project's /opsx:archive command (.claude/commands/opsx/archive.md,
+# with /opsx:sync for the spec merge); the instructions add only what differs because nobody
+# is watching the round. What this stage leaves behind:
+#   finished  -> openspec/specs/ carrying the change's delta specs, the change moved to
+#                openspec/changes/archive/YYYY/MM/YYYY-MM-DD-<change>/ (.claude/rules/archive-path.md),
+#                and temporary-docs/gnomish/<task>/archive.md naming the target and every
+#                capability synced.
+#   could not -> a question in the tracker thread: an incomplete task or artifact, a delta that
+#                no longer applies to the main spec, an archive target that already exists.
+outputs:
+  - id: archived-change
+executor:
+  type: agent-cli
+  # The spec merge rewrites the project's durable contract; a wrong merge outlives the change.
+  model: opus
+  settings:
+    maxTurns: 80
+    roundTimeout: 1800s
+    # Bash is for read-only git, the OpenSpec CLI (status, instructions, validate), `date`,
+    # `mkdir`/`mv` of the change directory and the decision-file echo.
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+    disallowedTools:
+      - Agent
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/archive/instructions.md
+verify:
+  # Where the change went: gone from openspec/changes/, present exactly once under the
+  # archive's year/month directory, every task ticked. Measured from the merge base, so a retry
+  # after a committed attempt still sees the move.
+  - type: command
+    command: |
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
+      if [ -e "openspec/changes/$change" ]; then
+        echo "openspec/changes/$change still exists - the change is not archived yet"
+        exit 1
+      fi
+      base=$(git merge-base origin/main HEAD 2>/dev/null || git rev-parse HEAD)
+      targets=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } \
+        | grep -E "^openspec/changes/archive/[0-9]{4}/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}-$change/proposal\.md$" \
+        | sort -u | sed 's|/proposal\.md$||')
+      count=$(printf '%s' "$targets" | grep -c . || true)
+      if [ "$count" != 1 ]; then
+        echo "expected exactly one new openspec/changes/archive/YYYY/MM/YYYY-MM-DD-$change/ holding the change's proposal.md, found $count:"
+        echo "$targets"
+        exit 1
+      fi
+      name=${targets##*/}
+      ym=$(printf '%s' "$targets" | cut -d/ -f4-5)
+      if [ "$ym" != "$(printf '%s' "$name" | cut -c1-4)/$(printf '%s' "$name" | cut -c6-7)" ]; then
+        echo "$targets: the year/month directories must come from the date prefix (.claude/rules/archive-path.md)"
+        exit 1
+      fi
+      if [ -f "$targets/tasks.md" ] && grep -nE '^[[:space:]]*- \[ \]' "$targets/tasks.md"; then
+        echo "the archived change has unticked tasks (above) - an incomplete change is escalated, never archived"
+        exit 1
+      fi
+      if ! grep -q "^Archived to: $targets/\?$" "$dir/archive.md" 2>/dev/null; then
+        echo "$dir/archive.md must carry the line 'Archived to: $targets/' - see .gnomish/stages/archive/instructions.md"
+        exit 1
+      fi
+  # The merged contract must load. Strict, like every other validation in this pipeline.
+  - type: command
+    command: |
+      if ! out=$(openspec validate --specs --strict --no-interactive 2>&1); then
+        printf '%s\n' "$out" | grep -v '^\s*ℹ' | tail -30
+        echo "openspec validate --specs --strict must pass - the merge left a main spec invalid; fix the merge, never the delta"
+        exit 1
+      fi
+  # This round moves one change and edits the main specs of the capabilities it has deltas
+  # for - nothing else, and no other capability. Measured over this round's working copy.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | sed 's/.* -> //')
+      stray=$(printf '%s\n' "$dirty" | grep -v '^$' \
+        | grep -vxF "$dir/archive.md" \
+        | grep -v "^openspec/changes/$change/" \
+        | grep -vE "^openspec/changes/archive/[0-9]{4}/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}-$change/" \
+        | grep -v '^openspec/specs/' \
+        | grep -v '^\.gnomish-task/' || true)
+      if [ -n "$stray" ]; then
+        echo "this stage moves openspec/changes/$change/, edits openspec/specs/ and writes $dir/archive.md, but the working copy also carries:"
+        echo "$stray"
+        echo "if you made these edits, undo each of them yourself and nothing else; if you did not, leave them exactly as they are and escalate through \$GNOMISH_DECISION_FILE naming the paths."
+        exit 1
+      fi
+      archived=$(ls -d openspec/changes/archive/*/*/????-??-??-"$change" 2>/dev/null | tail -1)
+      for spec in $(printf '%s\n' "$dirty" | grep '^openspec/specs/.*/spec\.md$' || true); do
+        capability=${spec#openspec/specs/}
+        if [ ! -f "$archived/specs/$capability" ]; then
+          echo "$spec changed, but the change has no delta spec for it ($archived/specs/$capability) - the merge touches only the capabilities the change carries deltas for"
+          exit 1
+        fi
+      done
+  # The merge is the one step no command can check: every delta lands, nothing else moves.
+  - type: judge
+    criteriaFile: stages/archive/acceptance.md
+    model: opus
+    settings:
+      maxTurns: 60
+      disallowedTools:
+        - Bash
+        - Agent
+        - ScheduleWakeup
+        - SendMessage
+        - ToolSearch
+        - Edit
+        - Write
+        - WebFetch
+        - WebSearch
+    votes: 1
+advancement: auto
+autonomy:
+  attemptLimit: 3

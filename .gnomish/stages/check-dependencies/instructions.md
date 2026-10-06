@@ -3,14 +3,21 @@
 The task names one OpenSpec change of this repository. Your job is to decide one
 thing: **can work on that change start now, or must something happen first?**
 
+`<task>` in the paths below is the name of this task's branch without its
+`gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`
+gives `github-oinsio-gnomish-factory-79`) — or `local` when the branch does not start
+with `gnomish/`. Every report of this pipeline lives under
+`temporary-docs/gnomish/<task>/`, so reports of different tasks never overlap
+and one directory holds everything to clean up after the task.
+
 You produce an answer, not a fix: no code, no edit to any change artifact.
 
 The round ends one of exactly two ways — the change is startable and you finish
 the round, or a human has to settle something and you escalate (step 6). Guessing
-is not a third way. And the report you write stops nothing: later stages run as
+is not a third way. And the change record you write stops nothing: later stages run as
 soon as this round finishes and its checks pass, and nothing reads your prose to
 decide whether to go on. So every finding that means "work must not start" leaves
-through the escalation exit; the report's notes are only for what a human would
+through the escalation exit; the change record's notes are only for what a human would
 like to know while the work proceeds anyway.
 
 ## Step 1: ask `origin/main` what has already landed
@@ -32,10 +39,10 @@ ones. Where they disagree with your working copy, `origin/main` decides the
 question "has it landed?".
 
 - **Never merge, rebase or pull.** You do not need the landed files, only the
-  knowledge of what landed — and this repository denies those commands outright,
-  so attempting one loses the round rather than updating anything.
+  knowledge of what landed — and this repository denies `merge` and `rebase`
+  outright, so attempting one loses the round rather than updating anything.
 - If `origin/main` does not resolve — a run outside a task branch — say so in the
-  report's `## Notes` and judge from the working copy alone.
+  change record's `## Notes` and judge from the working copy alone.
 
 ## Step 2: read what a human already decided
 
@@ -46,7 +53,7 @@ concluded — about what has not landed yet, and about whether work may proceed
 anyway. Where the two disagree, the decision wins.
 
 - A decision that says a dependency is resolved, or that work may proceed anyway,
-  settles that dependency: treat it as satisfied and name it in the report's
+  settles that dependency: treat it as satisfied and name it in the change record's
   `## Notes`, with the decision text you applied.
 - **Never escalate a question a decision has already answered.** The round that
   follows a reply is this same stage, so re-asking sends the task straight back
@@ -77,7 +84,7 @@ title, in the task body, or both.
 - the directory exists but holds no `proposal.md`: there is nothing to analyse.
 
 One lookalike is not an escalation: when the same name exists both actively and
-in the archive, use the active one and say so in the report's `## Notes`.
+in the archive, use the active one and say so in the change record's `## Notes`.
 
 ## Step 4: find the dependencies
 
@@ -117,16 +124,18 @@ of work resolves them:
   proposes is already there. Someone is mid-flight or has finished; starting
   again duplicates or undoes their work.
 
-## Step 5: write the report — on the startable path only
+## Step 5: write the change record — on the startable path only
 
-The report is what a startable change looks like. **A blocked change has no
-report**: its finding belongs in the decision file of step 6 and nowhere else.
-Writing both would say the same thing twice, and a report reading
+`temporary-docs/gnomish/<task>/change.md` is the task's change record: every later stage
+reads its `Change:` line to learn which change this task works on. Writing it is
+what a startable change looks like. **A blocked change has no
+change record**: its finding belongs in the decision file of step 6 and nowhere else.
+Writing both would say the same thing twice, and a change record reading
 `Verdict: blocked` could never pass this stage's checks anyway — finishing the
 round is precisely the claim that work may start.
 
 So when, and only when, nothing blocks the change, write
-`temporary-docs/gnomish/dependencies.md`, in English:
+`temporary-docs/gnomish/<task>/change.md`, in English:
 
 ```
 Change: <change-name>
@@ -140,7 +149,7 @@ The `Change:` and `Verdict:` lines are checked mechanically, so keep them exactl
 in this form; `Verdict:` has one legal value, because it is your assertion that
 the work may begin.
 
-**The whole report fits in 1200 bytes.** Nothing checks this — a rewrite would
+**The whole change record fits in 1200 bytes.** Nothing checks this — a rewrite would
 cost more than any overrun — so it is yours to keep. Count bytes, not lines: one
 600-character paragraph costs as much as ten real lines. It is a verdict, not a
 record of your reasoning, and every line of it is paid for twice — once to write
@@ -153,20 +162,20 @@ and once by whoever reads it. So:
   it — an archived namesake you disambiguated, a decision you applied, a
   dependency that turned out to have landed already, a call you are unsure of.
   Each is one line with a `file:line` pointer where there is one to give. Nothing
-  to say is the normal case: drop the section entirely and the report is three
+  to say is the normal case: drop the section entirely and the change record is three
   lines long.
 - No summary of the task, no description of your method, no restating these
   instructions back.
 
 ## Step 6: the two exits
 
-**No dependencies.** Report with `Verdict: no-blocking-dependencies`, finish your
+**No dependencies.** Write the change record with `Verdict: no-blocking-dependencies`, finish your
 turn, touch no decision file. That is the whole stage.
 
 **Anything else** — a chain, a cycle, a dangling reference, a superseded change,
 a change already under way, an unresolvable name, a tool the environment refused,
 or an analysis you cannot finish within the round's budget: do **not** finish the
-round as done, and write no report. Hand it to a human, unless step 2 shows a
+round as done, and write no change record. Hand it to a human, unless step 2 shows a
 decision that already answers exactly this:
 
 1. Run one shell command to learn where the decision file goes:
@@ -200,11 +209,15 @@ decision that already answers exactly this:
   counts — a stash is a stack shared with every worktree and every other session
   on the machine, and pushing onto it moves another author's files out from under
   them.
-- Never run a git command that writes: `commit`, `push`, `merge`, `rebase`,
-  `pull`, `checkout`, `reset`, `stash`, `restore`, `clean`. Reading is free;
-  `ls-tree`, `log`, `show` and `status` are all you need. The factory owns the
-  branch, and this repository denies several of the writing commands outright.
-- Write exactly one file, `temporary-docs/gnomish/dependencies.md`, plus the
+- **Never push**: the remote is the factory's. Do not commit either — not because
+  the factory forbids it, but because there is no need and no way: the factory
+  commits whatever the working copy holds when your round ends, and this
+  repository's `.claude/settings.json` denies `git commit` (with `merge`, `rebase`,
+  `cherry-pick`, `revert`), so the attempt would only stall the round. Leave the
+  working copy and the branch alone otherwise too: no `checkout`, `reset`, `stash`,
+  `restore`, `clean` or `pull`. Reading is free; `ls-tree`, `log`, `show` and
+  `status` are all you need.
+- Write exactly one file, `temporary-docs/gnomish/<task>/change.md`, plus the
   decision file on the escalating path. Everything else in the working copy —
   `openspec/`, `src/`, `.gnomish/`, `.gnomish-task/` — stays as you found it.
 - Use the shell only for step 1's two `ls-tree` reads and step 6's `echo`. Read

@@ -1,2 +1,11 @@
 stages:
   - check-dependencies
+  - review-artifacts
+  - fix-artifacts
+  - implement
+  - review-code
+  - fix-code
+  - archive
+  - cleanup
+  - deliver
+  - usage-report
