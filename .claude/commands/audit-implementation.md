@@ -194,18 +194,15 @@ Findings here use the same severity scale; anything exploitable or fail-open is 
 ### Verdict                   — ready to archive / not ready (blockers listed)
 ```
 
-Each Recommendations item must be self-contained — the reader acts on it without hunting
-through the report sections above. Format per item:
-
-```
-N. **SEVERITY — <short title>** (`file:line`)
-   Problem: what is wrong and why it matters, restated here even if described earlier.
-   Fix: the concrete change to make.
-```
+Recommendations follow `.claude/rules/review-recommendations.md`: its item format (Problem,
+Impact, Fix, Fix risk), its "Worth fixing" tests and drop list — drop every item that fails
+them — and its verdict rule. Here the verdict reads `ready to archive` or `not ready`.
 
 Every finding must carry a `file:line` reference and an actionable recommendation — no vague
-"consider reviewing". When uncertain, downgrade severity rather than guessing. End with a
-reminder that nothing in the project was modified and the human decides what to apply.
+"consider reviewing". Severity for an implementation: CRITICAL — wrong or missing behaviour, a
+task claimed but not done, a red gate, anything exploitable or fail-open; WARNING — a gap that
+will bite later (missing test or traceability, a rule violated); SUGGESTION — polish. End with
+a reminder that nothing in the project was modified and the human decides what to apply.
 
 ### 10. Persist the actionable tail
 

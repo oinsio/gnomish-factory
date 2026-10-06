@@ -3,9 +3,10 @@
 The task branch holds `temporary-docs/gnomish/<task>/review-artifacts.md`: the report of
 the project's `/review-artifacts` command, run on the change named in its
 `## Artifacts Review:` heading. That command —
-`.claude/commands/review-artifacts.md` — defines what the review checks, the
-severities, the recommendation format and when an item is worth fixing; read it
-first and judge the report against it. A check before you has already confirmed
+`.claude/commands/review-artifacts.md` — defines what the review checks and the
+severities; `.claude/rules/review-recommendations.md` defines the recommendation
+format and when an item is worth fixing. Read both first and judge the report
+against them. A check before you has already confirmed
 the change name, the sections, that every recommendation carries its Problem,
 Impact, Fix and Fix risk lines, and that the Verdict follows from the severities.
 Do not recount them.
@@ -39,10 +40,10 @@ wording.
    accepted ADRs in `docs/adr/`, `CLAUDE.md`, `.claude/rules/`, and the change's
    own goals and non-goals; its Fix risk is honest — `none` where you can name a
    risk fails this test.
-5. **Not on the command's drop list** (step 6): it does not widen the scope,
-   reopen a decision `design.md` already weighed without citing what removed its
-   grounds, revert what a landed change deliberately removed, give advice instead
-   of an edit, or duplicate another item.
+5. **Not on the drop list** of `.claude/rules/review-recommendations.md` ("Worth
+   fixing"): it does not widen the scope, reopen a decision `design.md` already
+   weighed without citing what removed its grounds, revert what a landed change
+   deliberately removed, give advice instead of an edit, or duplicate another item.
 6. **Right reference point.** Where the working copy and `origin/main` differ, the
    gap really exists against the one the item names; an item "fixing" what
    `origin/main` already fixed, or the reverse without saying so, fails.

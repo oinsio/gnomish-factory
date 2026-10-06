@@ -96,7 +96,7 @@ verify:
       for field in Problem Impact Fix 'Fix risk'; do
         count=$(printf '%s\n' "$recommendations" | grep -cE "^[[:space:]]+$field: " || true)
         if [ "$count" != "$items" ]; then
-          echo "Recommendations has $items item(s) of the form 'N. **SEVERITY — title** (\`location\`)' but $count indented '$field:' line(s) - every item carries one Problem, Impact, Fix and Fix risk line each, as step 6 of the command shows"
+          echo "Recommendations has $items item(s) of the form 'N. **SEVERITY — title** (\`location\`)' but $count indented '$field:' line(s) - every item carries one Problem, Impact, Fix and Fix risk line each, as .claude/rules/review-recommendations.md shows"
           exit 1
         fi
       done

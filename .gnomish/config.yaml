@@ -6,7 +6,9 @@
 # landed since it was written (review-artifacts), then the change revised from
 # that review, every recommendation applied or rejected with evidence
 # (fix-artifacts), then the change implemented task by task until
-# ./gradlew check is green (implement).
+# ./gradlew check is green (implement), then that implementation audited
+# (review-code) and fixed from the audit, each recommendation applied or
+# rejected with evidence (fix-code).
 schemaVersion: "1"
 
 autonomy:

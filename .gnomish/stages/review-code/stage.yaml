@@ -1,0 +1,139 @@
+purpose: audit how completely and how well the change is implemented - every task, every requirement, the project's rules, code and test quality, security - and record every finding worth acting on in one report, changing nothing
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: task-change
+  - kind: internal
+    producerOutputId: implementation
+# The audit itself is the project's own /audit-implementation command
+# (.claude/commands/audit-implementation.md), in its `quick` mode; the instructions add
+# only what differs because nobody is watching the round. What this stage leaves behind:
+#   finished  -> temporary-docs/gnomish/<task>/review-code.md on the task branch: the
+#                command's whole step 9 report, ending in its numbered Recommendations
+#                (format: .claude/rules/review-recommendations.md) and a Verdict (ready to
+#                archive / not ready). The fix-code stage works through them one by one.
+#   could not -> a question in the tracker thread: an implementation that departs from the
+#                plan so far that a human must decide which of the two is right.
+outputs:
+  - id: code-review
+executor:
+  type: agent-cli
+  # An independent auditor of work another agent did, against rules a weaker model tends
+  # to skim: the judgment is the whole stage.
+  model: opus
+  settings:
+    # Every task and requirement is checked against the code with file:line evidence.
+    maxTurns: 150
+    # Quick mode runs no Gradle - the implement stage left ./gradlew check green on this
+    # very commit - so the round is reading, not building.
+    roundTimeout: 3600s
+    # Bash is for read-only git and grep and the decision-file echo; the report is written
+    # through Write. `allowedTools` cannot widen .claude/settings.json.
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+      - Agent
+    # Subagents: Explore only (the command's per-section fan-out), one at a time from
+    # CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1 in the factory's env-passthrough. An allow rule
+    # restricts nothing, so every other type is denied by name (the `agents` field of the
+    # CLI's stream-json `init` event).
+    disallowedTools:
+      - Agent(claude)
+      - Agent(general-purpose)
+      - Agent(Plan)
+      - Agent(statusline-setup)
+      - Agent(web-fetch)
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/review-code/instructions.md
+verify:
+  # Cheapest first: without the report there is nothing else to check.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      if [ ! -f "$dir/review-code.md" ]; then
+        echo "no audit report at $dir/review-code.md - write it before finishing the round, see .gnomish/stages/review-code/instructions.md"
+        exit 1
+      fi
+  # The report names this task's change and keeps the layout of the command's step 9 and
+  # the recommendation format of the rule: the next stage reads it item by item.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      report=$dir/review-code.md
+      expected=$(sed -n 's/^Change:[[:space:]]*//p' "$dir/change.md" | head -1)
+      change=$(sed -n 's/^## Implementation Audit:[[:space:]]*//p' "$report" | head -1 | tr -d '`')
+      if [ "$change" != "$expected" ]; then
+        echo "the report's '## Implementation Audit:' heading names '$change', but this task's change is '$expected' - audit that change and name it exactly"
+        exit 1
+      fi
+      for section in '### Summary' '### Tasks' '### Requirements' '### Project rules' '### Code quality' '### Test quality' '### Security' '### Recommendations, ordered' '### Verdict'; do
+        grep -q "^$section" "$report" || { echo "the report has no '$section' section - keep the layout of step 9 of .claude/commands/audit-implementation.md"; exit 1; }
+      done
+      section() { awk -v heading="$1" 'index($0, heading) == 1 { inside = 1; next } /^##/ { inside = 0 } inside' "$report"; }
+      recommendations=$(section '### Recommendations, ordered')
+      items=$(printf '%s\n' "$recommendations" | grep -cE '^[0-9]+\. \*\*(CRITICAL|WARNING|SUGGESTION) — ' || true)
+      for field in Problem Impact Fix 'Fix risk'; do
+        count=$(printf '%s\n' "$recommendations" | grep -cE "^[[:space:]]+$field: " || true)
+        if [ "$count" != "$items" ]; then
+          echo "Recommendations has $items item(s) of the form 'N. **SEVERITY — title** (\`location\`)' but $count indented '$field:' line(s) - every item carries one Problem, Impact, Fix and Fix risk line each, as .claude/rules/review-recommendations.md shows"
+          exit 1
+        fi
+      done
+      # Emphasis and case are tolerated: a usable verdict is not worth a round over markup.
+      verdict=$(section '### Verdict' | grep -v '^[[:space:]]*$' | head -1 | tr -d '*_`' | sed 's/^[[:space:]]*//' | tr '[:upper:]' '[:lower:]')
+      blocking=$(printf '%s\n' "$recommendations" | grep -cE '^[0-9]+\. \*\*(CRITICAL|WARNING) — ' || true)
+      case "$verdict" in
+        "not ready"*) [ "$blocking" -gt 0 ] || { echo "the Verdict reads 'not ready' but no recommendation is CRITICAL or WARNING - the Verdict opens with 'ready to archive'"; exit 1; } ;;
+        "ready to archive"*) [ "$blocking" -eq 0 ] || { echo "there are $blocking CRITICAL/WARNING recommendation(s), so the Verdict opens with 'not ready', not 'ready to archive'"; exit 1; } ;;
+        *) echo "the Verdict section opens with '$verdict'; it must open with exactly 'ready to archive' or 'not ready'"; exit 1 ;;
+      esac
+  # The audit changes nothing: the report is all this round may leave in the working copy.
+  # Only the working copy is measured - the code on the branch is the implement stage's
+  # work - and that suffices: this repository's .claude/settings.json denies `git commit`, so
+  # the round cannot hide an edit in a commit of its own.
+  - type: command
+    command: |
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -vxF "$dir/review-code.md" | grep -v '^\.gnomish-task/' || true)
+      if [ -n "$dirty" ]; then
+        echo "this stage writes only $dir/review-code.md, but the working copy also carries:"
+        echo "$dirty"
+        echo "if you made these edits, undo each of them yourself and nothing else - an audit changes nothing; its recommendations are for the next stage."
+        echo "if you did not: leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - and escalate through \$GNOMISH_DECISION_FILE naming the paths."
+        exit 1
+      fi
+  # Adversarial check of the substance: a harmful or useless recommendation costs more than
+  # a missing one, because the next stage changes the code on its strength.
+  - type: judge
+    criteriaFile: stages/review-code/acceptance.md
+    model: opus
+    settings:
+      maxTurns: 60
+      disallowedTools:
+        - Bash
+        - Agent
+        - ScheduleWakeup
+        - SendMessage
+        - ToolSearch
+        - Edit
+        - Write
+        - WebFetch
+        - WebSearch
+    votes: 1
+advancement: auto
+autonomy:
+  attemptLimit: 3

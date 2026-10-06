@@ -163,41 +163,14 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### Verdict              — ready to implement / needs revision (blockers listed)
 ```
 
-The Verdict section opens with exactly `ready to implement` or `needs revision`: `needs
-revision` whenever at least one CRITICAL or WARNING recommendation exists, `ready to
-implement` otherwise; the blockers follow on later lines.
+Recommendations follow `.claude/rules/review-recommendations.md`: its item format (Problem,
+Impact, Fix, Fix risk), its "Worth fixing" tests and drop list — drop every item that fails
+them — and its verdict rule. Here the verdict reads `ready to implement` or `needs revision`.
 
-Each Recommendations item must be self-contained — the format of `/audit-implementation`,
-plus two lines that make the item refutable rather than a matter of taste:
-
-```
-N. **SEVERITY — <short title>** (`artifact-or-file:line`)
-   Problem: what is wrong, restated here.
-   Impact: what concretely goes wrong if the change is implemented as written.
-   Fix: the concrete edit to the artifact (or code reality to acknowledge).
-   Fix risk: what the edit could break or cost — checked against the code, the stable
-      specs, the ADRs and the change's own goals and non-goals — or `none`.
-```
-
-An item earns its place only if it is **worth fixing**: the cited location shows the problem,
-the Impact names a concrete failure (not "clearer wording"), the fix costs less than the gap
-it closes, and the fix harms nothing. Drop an item that:
-
-- **widens the scope** — asks for what the proposal's Non-Goals exclude, or grows the change
-  past one initiative (`process-invariants.md`);
-- **reopens a settled decision** — proposes an alternative `design.md` already considered
-  and rejected, unless it cites what landed since and removed that decision's grounds;
-- **reverts what landed** — "refreshes" the change toward something a landed change
-  deliberately removed;
-- **is advice, not an edit** — "consider X", "add more tests" with no concrete failure;
-- **duplicates** another item.
-
-Severity: CRITICAL — implementing as written would build the wrong thing or break existing
-behavior undeclared; WARNING — gap or drift that will surface during implementation;
-SUGGESTION — clarity/traceability polish. Severity follows the Impact, never the reverse:
-an Impact that only costs clarity is a SUGGESTION. When uncertain, verify against code before
-reporting; downgrade rather than guess. End with a reminder that nothing in the project was
-modified and the human decides what to apply.
+Severity for artifacts: CRITICAL — implementing as written would build the wrong thing,
+re-implement what already landed, or break existing behavior undeclared; WARNING — gap or
+drift that will surface during implementation; SUGGESTION — clarity/traceability polish. End
+with a reminder that nothing in the project was modified and the human decides what to apply.
 
 ### 7. Persist the actionable tail
 

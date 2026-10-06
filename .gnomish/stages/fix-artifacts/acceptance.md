@@ -6,8 +6,8 @@ recommendations), `temporary-docs/gnomish/<task>/fix-artifacts.md` (one entry pe
 recommendation: applied with the edit, or rejected with evidence), and the change
 under `openspec/changes/<change>/` as it now stands. How a change is revised from a
 review — and when a recommendation is worth fixing — is defined by
-`.claude/commands/update-from-review.md` and step 6 of
-`.claude/commands/review-artifacts.md`; read them first and judge against them.
+`.claude/commands/update-from-review.md` and `.claude/rules/review-recommendations.md`;
+read them first and judge against them.
 
 `<task>` in the paths below is the name of this task's branch without its
 `gnomish/` prefix — `git branch --show-current` shows it (`gnomish/github-oinsio-gnomish-factory-79`

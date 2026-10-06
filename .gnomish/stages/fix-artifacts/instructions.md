@@ -15,9 +15,9 @@ and one directory holds everything to clean up after the task.
 
 **The work itself is the project's own `/update-from-review` command: read
 `.claude/commands/update-from-review.md` and carry it out in full**, together
-with `.claude/commands/opsx/update.md`, the `/opsx:update` it wraps, and step 6 of
-`.claude/commands/review-artifacts.md`, which defines when a recommendation is worth
-fixing. They are the one source of how this repository revises a change from a
+with `.claude/commands/opsx/update.md`, the `/opsx:update` it wraps, and
+`.claude/rules/review-recommendations.md`, which defines when a recommendation is
+worth fixing and how a resolution is recorded. They are the one source of how this repository revises a change from a
 review, for a human at the keyboard and for you alike. Everything below is only what
 differs because nobody is watching this round; where it is silent, the commands
 decide.

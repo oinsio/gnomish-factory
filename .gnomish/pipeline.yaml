@@ -3,3 +3,5 @@ stages:
   - review-artifacts
   - fix-artifacts
   - implement
+  - review-code
+  - fix-code
