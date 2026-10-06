@@ -24,7 +24,7 @@ public final class TerminalOutcomeRender {
     /** The head of every return-path line; a gate keeps it spelled here alone. */
     static final String RETURN_PATH_PREFIX = "To continue: gnomish run --dir=";
 
-    /** A {@code --dir} value that reads the same to a POSIX shell unquoted. */
+    /** A value that reads the same to a POSIX shell unquoted. */
     private static final Pattern SHELL_SAFE = Pattern.compile("[A-Za-z0-9_./:@%+=,-]+");
 
     private TerminalOutcomeRender() {}
@@ -137,15 +137,17 @@ public final class TerminalOutcomeRender {
          * The return-path line: {@code To continue: gnomish run --dir=<dir> --resume=<task>}, with
          * {@code [--decision="..."]} appended when {@code decisionOptional}. Every value is joined to
          * its flag by {@code =}: the CLI's option parser reads {@code --dir <dir>} as a {@code --dir}
-         * without a value and refuses it (task 4.5 of make-run-headless). A {@code --dir} a shell
-         * would split or expand is single-quoted after the {@code =} ({@code --dir='/a b'}), which a
-         * POSIX shell still reads as one argument, so the line pastes as printed.
+         * without a value and refuses it (task 4.5 of make-run-headless). A value a shell would
+         * split or expand is single-quoted after the {@code =} ({@code --dir='/a b'}), which a POSIX
+         * shell still reads as one argument, so the line pastes as printed. That covers the task id
+         * too: on a resume it is read back from the branch's {@code task.json}, where no {@code
+         * --task-id} format check ever applied.
          *
          * @param decisionOptional whether the stop accepts an operator decision (an escalation)
          * @return the line, without a trailing line break
          */
         public String line(boolean decisionOptional) {
-            String command = RETURN_PATH_PREFIX + shellWord(dir.toString()) + " --resume=" + taskId;
+            String command = RETURN_PATH_PREFIX + shellWord(dir.toString()) + " --resume=" + shellWord(taskId);
             return decisionOptional ? command + " [--decision=\"...\"]" : command;
         }
 

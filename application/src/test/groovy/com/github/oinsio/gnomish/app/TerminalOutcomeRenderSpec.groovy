@@ -76,11 +76,23 @@ class TerminalOutcomeRenderSpec extends Specification {
         '/$HOME/clone' | "'/\$HOME/clone'"
     }
 
+    def "the return path quotes a resumed task id a shell would split or expand: #taskId"() {
+        expect:
+        new TerminalOutcomeRender.ReturnPath(Path.of('/work/clone'), taskId).line(false) ==
+                "To continue: gnomish run --dir=/work/clone --resume=${shown}"
+
+        where:
+        taskId | shown
+        'PROJ-1' | 'PROJ-1'
+        'my task' | "'my task'"
+        "it's \$HOME" | "'it'\\''s \$HOME'"
+    }
+
     // Task 4.5 of make-run-headless: the line is a command, so it is read back the way an operator
     // runs it — split by a real POSIX shell, then parsed by the CLI's own option parser.
-    def "FR1, UX1: the return path, split by a POSIX shell, parses to its --dir and --resume values: #dir"() {
+    def "FR1, UX1: the return path, split by a POSIX shell, parses to its --dir and --resume values: #dir #taskId"() {
         given:
-        def line = new TerminalOutcomeRender.ReturnPath(Path.of(dir), 'T-1').line(false)
+        def line = new TerminalOutcomeRender.ReturnPath(Path.of(dir), taskId).line(false)
         def argv = shellSplit(line - 'To continue: gnomish run ')
 
         when:
@@ -88,15 +100,17 @@ class TerminalOutcomeRenderSpec extends Specification {
 
         then:
         ArgumentsParsingSupport.singleValue(args, 'dir') == dir
-        ArgumentsParsingSupport.singleValue(args, 'resume') == 'T-1'
+        ArgumentsParsingSupport.singleValue(args, 'resume') == taskId
 
-        where:
-        dir << [
-            '/plain/clone',
-            '/with space/clone',
-            "/it's/clone",
-            '/$HOME/clone'
-        ]
+        where: 'a resumed id is read back from the branch, where no --task-id format check applied'
+        dir | taskId
+        '/plain/clone' | 'T-1'
+        '/with space/clone' | 'T-1'
+        "/it's/clone" | 'T-1'
+        '/$HOME/clone' | 'T-1'
+        '/plain/clone' | 'my task'
+        '/plain/clone' | 'owner/repo#12'
+        '/plain/clone' | "it's \$HOME"
     }
 
     def "a value separated from its flag by a space is no value to the CLI — the defect task 4.5 fixed"() {
