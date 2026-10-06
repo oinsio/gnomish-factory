@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Starts the factory daemon together with a view of what it is doing. Lives next to the
+# gnomish wrapper and drives the factory only through it, so gnomish.env, gnomish.local.env,
+# project.yaml and the secrets apply exactly as for any other invocation. Callable from any directory.
+#
+# Equivalent to running these three side by side, in three terminals:
+#   .gnomish/factory/gnomish dashboard --watch --out=.gnomish/factory/logs/dashboard.html
+#   tail -F ~/.gnomish/projects/gnomish-factory/logs/<instance>.log
+#   .gnomish/factory/gnomish serve --slots=1
+#
+# The dashboard renderer and the log follower go to the background, the daemon stays in the
+# foreground, and Ctrl-C stops all three: the daemon drains its in-flight slots as it does on
+# its own, then the other two are torn down with it.
+#
+# The log follower is there because the daemon's console carries only WARN and above: the
+# INFO narrative — what each gnome is doing, stage by stage — only reaches the log file.
+# Without it a healthy run looks like a silent terminal.
+#
+#   .gnomish/factory/gnomish-up                        # GNOMISH_UP_SLOTS slots, opens the dashboard
+#   .gnomish/factory/gnomish-up --slots=2              # any serve flag is passed straight through
+#   .gnomish/factory/gnomish-up --drain --no-open --no-logs
+#
+# --no-open (skip the browser) and --no-logs (skip the log follower) are this script's own
+# flags; everything else belongs to `gnomish serve`.
+set -euo pipefail
+
+factory_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+gnomish="$factory_dir/gnomish"
+
+# The settings this script reads, resolved the way the wrapper resolves them: gnomish.env,
+# then gnomish.local.env, then your shell. Read in a subshell, so nothing else from the env
+# files leaks into this process — the wrapper loads them itself.
+read_setting() {
+    local name="$1"
+    if [[ -n "${!name:-}" ]]; then
+        printf '%s' "${!name}"
+        return
+    fi
+    (
+        for env_file in "$factory_dir/gnomish.env" "$factory_dir/gnomish.local.env"; do
+            # shellcheck source=/dev/null
+            if [[ -f "$env_file" ]]; then source "$env_file"; fi
+        done
+        printf '%s' "${!name:-}"
+    )
+}
+
+# The factory writes one log per project and instance into its home:
+# <home>/projects/<project>/logs/<instance>.log. The instance is GNOMISH_INSTANCE_NAME when the
+# env files set it (the wrapper passes it on), the factory's `default` otherwise;
+# `gnomish project show` prints the path.
+factory_home="${GNOMISH_HOME:-$HOME/.gnomish}"
+project_name="$(read_setting GNOMISH_PROJECT_NAME)"
+instance_name="$(read_setting GNOMISH_INSTANCE_NAME)"
+factory_log_dir="$factory_home/projects/$project_name/logs"
+factory_log="$factory_log_dir/${instance_name:-default}.log"
+
+dashboard_dir="$(read_setting GNOMISH_DASHBOARD_DIR)"
+dashboard_out="$dashboard_dir/dashboard.html"
+dashboard_log="$dashboard_dir/dashboard-render.log"
+default_slots="$(read_setting GNOMISH_UP_SLOTS)"
+render_wait_seconds="$(read_setting GNOMISH_UP_RENDER_WAIT_SECONDS)"
+render_poll_interval_seconds=0.5
+
+open_browser=1
+follow_logs=1
+serve_args=()
+for arg in "$@"; do
+    case "$arg" in
+        --no-open) open_browser=0 ;;
+        --no-logs) follow_logs=0 ;;
+        *) serve_args+=("$arg") ;;
+    esac
+done
+
+# `--slots` is a real CLI flag, not a Spring property, so a second one is a usage error rather
+# than an override — only default it when the caller left it out.
+has_slots=0
+for arg in ${serve_args[@]+"${serve_args[@]}"}; do
+    case "$arg" in
+        --slots|--slots=*) has_slots=1 ;;
+    esac
+done
+if [[ $has_slots -eq 0 ]]; then
+    serve_args=(--slots="$default_slots" ${serve_args[@]+"${serve_args[@]}"})
+fi
+
+mkdir -p "$dashboard_dir" "$factory_log_dir"
+
+"$gnomish" dashboard --watch --out="$dashboard_out" >"$dashboard_log" 2>&1 &
+dashboard_pid=$!
+logs_pid=""
+
+# shellcheck disable=SC2329  # called from cleanup
+stop_pid() {
+    local pid="$1"
+    [[ -n "$pid" ]] || return 0
+    if kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+}
+
+# shellcheck disable=SC2329  # invoked by the trap
+cleanup() {
+    stop_pid "$dashboard_pid"
+    stop_pid "$logs_pid"
+}
+trap cleanup EXIT INT TERM
+
+echo "gnomish-up: dashboard renderer pid $dashboard_pid -> $dashboard_out (log: $dashboard_log)"
+
+if [[ $follow_logs -eq 1 ]]; then
+    # -n 0: this run's narrative only, not yesterday's. -F: follow by name, so the follower
+    # survives logback rolling the file.
+    # WARN and ERROR are dropped because the daemon's console already prints them — twice
+    # would read as two incidents. The filter is anchored on the log pattern's level field, so
+    # if the pattern changes it stops matching and every line passes: noisier, never quieter.
+    # A process substitution rather than a pipeline, so that $! is the tail itself: killing
+    # it closes the substitution and the filter exits on EOF.
+    tail -n 0 -F "$factory_log" 2>/dev/null \
+        > >(grep --line-buffered -Ev '\] (WARN|ERROR) +\[taskId=') &
+    logs_pid=$!
+    echo "gnomish-up: following $factory_log (INFO and below; WARN+ comes from the daemon itself)"
+fi
+
+# Wait for the first render before opening the browser: a tab on a file that is not there
+# yet is a blank page for no reason.
+render_polls="$(awk -v total="$render_wait_seconds" -v step="$render_poll_interval_seconds" \
+    'BEGIN { print int(total / step) }')"
+for _ in $(seq 1 "$render_polls"); do
+    [[ -s "$dashboard_out" ]] && break
+    kill -0 "$dashboard_pid" 2>/dev/null || break
+    sleep "$render_poll_interval_seconds"
+done
+
+if ! kill -0 "$dashboard_pid" 2>/dev/null; then
+    echo "gnomish-up: the dashboard renderer exited early, see $dashboard_log — starting the daemon anyway" >&2
+elif [[ ! -s "$dashboard_out" ]]; then
+    echo "gnomish-up: no page rendered within ${render_wait_seconds}s, see $dashboard_log — starting the daemon anyway" >&2
+elif [[ $open_browser -eq 1 ]] && command -v open >/dev/null 2>&1; then
+    open "file://$dashboard_out"
+fi
+
+echo "gnomish-up: starting the daemon — .gnomish/factory/gnomish serve ${serve_args[*]}"
+
+set +e
+"$gnomish" serve ${serve_args[@]+"${serve_args[@]}"}
+serve_status=$?
+set -e
+exit "$serve_status"

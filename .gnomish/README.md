@@ -1,8 +1,8 @@
 # Running this repository through the factory
 
 This directory is the whole configuration: what the pipeline is (`config.yaml`,
-`pipeline.yaml`, `stages/`) and how it is launched (`bin/`). The loader reads
-only the first three, so `bin/` and this file are invisible to it.
+`pipeline.yaml`, `stages/`) and how it is launched (`factory/`). The loader reads
+only the first three, so `factory/` and this file are invisible to it.
 
 **What the stages are is not written down here.** `pipeline.yaml` lists them in
 order, and each `stages/<name>/stage.yaml` opens with a `purpose` line saying what
@@ -11,21 +11,37 @@ about the things that are true whatever the stages happen to be.
 
 ## One-time setup
 
-```bash
-mkdir -p ~/.gnomish/secrets/gnomish-factory
-install -m 600 /dev/null ~/.gnomish/secrets/gnomish-factory/github-token
-# paste a token with issue read/write and label write - the whole file is the value
+The factory's settings and secrets live in its home (`~/.gnomish/`), never in
+this repository (`docs/adr/0011-operator-configuration-levels.md`): the
+repository under work cannot configure the factory that works on it. Every clone
+and worktree of this repository is registered under one project,
+`gnomish-factory`, so they share one token and one `project.yaml`.
 
-./gradlew :bootstrap:bootJar      # the jar bin/gnomish launches
+```bash
+# 1. A factory jar, copied out of the build tree (see the wrapper for why).
+./gradlew :bootstrap:bootJar
+cp bootstrap/build/libs/bootstrap-*.jar .gnomish/factory/gnomish.jar
+
+# 2. Register this clone; repeat `project add` for every further clone or worktree.
+.gnomish/factory/gnomish project add gnomish-factory --dir="$PWD"
+cat .gnomish/factory/project.yaml.example.host >> ~/.gnomish/projects/gnomish-factory/project.yaml
+
+# 3. The tracker token: issue read/write and label write. The whole file is the value.
+install -m 600 /dev/null ~/.gnomish/projects/gnomish-factory/secrets/GNOMISH_GITHUB_TOKEN
+
+# 4. Check what the factory resolved, with the origin of every value.
+.gnomish/factory/gnomish project show gnomish-factory
 ```
 
-The secrets directory is named for the repository, not the clone, so every clone
-and worktree uses the same token. Logs (`~/.gnomish/logs/<clone>/`) and the
-instance name stay per clone on purpose: two daemons must not interleave their
-narratives or overwrite each other's snapshot.
+Wrapper settings (project name, instance name, jar path) are in
+`factory/gnomish.env`; a git-ignored `factory/gnomish.local.env` overrides them
+per machine. Logs and serve state go to `~/.gnomish/projects/gnomish-factory/`,
+one file per instance — give a second clone its own `GNOMISH_INSTANCE_NAME`
+before running two daemons at once.
 
-If `./gradlew build` stops on the mutation gate, that gate is not needed for a
-runnable jar — `:bootstrap:bootJar` alone is enough.
+Refresh `factory/gnomish.jar` deliberately, from a commit you trust: the jar is
+a copy precisely so that a gnome building this repository never rebuilds the
+factory that runs it.
 
 ## Filing a task
 
@@ -75,7 +91,7 @@ Answer in the thread, then return the label. Useful things to say:
   on a broken manifest has to be re-filed, not repaired in place.
 - **`.gnomish/` has to be on `main`** (or whichever base the task branches from)
   before `take` or `serve` can use it at all. While it is only on a side branch,
-  the only way to run it is `bin/gnomish run`, which reads the working tree.
+  the only way to run it is `factory/gnomish run`, which reads the working tree.
 - **The lifecycle is one-way.** A finished task that is reopened is declined with
   a pointer to file a new one — reopening is never a way to ask for more work.
 - **Never rebase or force-push a task branch.** The factory harvests it
@@ -122,9 +138,10 @@ saying the same thing would be one of them too many.
 ## Running it by hand
 
 ```bash
-.gnomish/bin/gnomish take <issue-ref>          # one task from the tracker
-.gnomish/bin/gnomish run --task="add-claim-return" --mode=in-place
-.gnomish/bin/gnomish status --task=<id>
+.gnomish/factory/gnomish take <issue-ref>      # one task from the tracker
+.gnomish/factory/gnomish run --task="add-claim-return" --mode=in-place
+.gnomish/factory/gnomish status --task=<id>
+.gnomish/factory/gnomish-up                    # serve + dashboard + log follower
 ```
 
 `run` reads the pipeline from the working tree, so it is the way to try a change

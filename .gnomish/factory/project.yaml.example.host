@@ -1,0 +1,21 @@
+# Template of this project's file in the Gnomish Factory home, host binding:
+#   ~/.gnomish/projects/gnomish-factory/project.yaml   (mode 600, outside the clone)
+#
+# The template holds only the factory: section — `gnomish project add` writes clones: itself.
+# Register each clone (worktrees included), append the template once, check the result:
+#   .gnomish/factory/gnomish project add gnomish-factory --dir="$PWD"
+#   cat .gnomish/factory/project.yaml.example.host >> ~/.gnomish/projects/gnomish-factory/project.yaml
+#   .gnomish/factory/gnomish project show gnomish-factory     # every setting with its origin
+#
+# The sandbox-boundary keys (factory.bindings.*, factory.sandbox.image, egress-allowlist,
+# env-passthrough) are read from this file and nowhere else — not from the command line,
+# not from the environment (docs/adr/0011-operator-configuration-levels.md).
+#
+# Host only, for now: no sandbox image is built for this repository yet, and its E2E suites
+# need a Docker daemon (Testcontainers), which a box does not offer. Gnome processes therefore
+# run on this machine, as you: your files, your network, no egress guard, no resource limits.
+# Needs the build toolchain on the host (Java 25, git, Docker for the E2E suites). Without
+# CLAUDE_CODE_OAUTH_TOKEN the agent uses this machine's `claude` login.
+factory:
+  bindings:
+    default: host

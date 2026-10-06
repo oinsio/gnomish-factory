@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Wrapper around a copy of the factory jar (gnomish.jar next to it, git-ignored), for running
+# the factory against this repository itself. Everything that launches the factory lives here
+# in .gnomish/factory/; the rest of .gnomish/ (config.yaml, pipeline.yaml, stages/) is the
+# project's pipeline, which the factory reads itself. Callable from any directory.
+#
+# The jar is a COPY, not bootstrap/build/libs/: this repository is the factory's own source,
+# so a gnome running `./gradlew build` in an in-place run would otherwise rebuild the jar of
+# the very process that launched it. Refresh the copy deliberately, from a commit you trust:
+#
+#   ./gradlew :bootstrap:bootJar && cp bootstrap/build/libs/bootstrap-*.jar .gnomish/factory/gnomish.jar
+#
+# The factory's settings live in its home, not in this repository: each clone is registered
+# once in project gnomish-factory, and ~/.gnomish/projects/gnomish-factory/project.yaml holds
+# the binding and the rest (template beside this script: project.yaml.example.host). This
+# wrapper's own settings live in gnomish.env; gnomish.local.env (git-ignored) overrides it.
+#
+# Adds the defaults every invocation needs, then passes the rest through:
+#   --dir=<this clone, absolute>        (a relative --dir is not recognised as a git repo)
+#   --factory.instance-name=<name>      (only when GNOMISH_INSTANCE_NAME is set)
+# Your own --dir=... or --factory.instance-name=... REPLACES the default rather than joining
+# it: Spring joins a repeated command-line option with a comma instead of letting the last win.
+#
+#   .gnomish/factory/gnomish take <issue-ref>
+#   .gnomish/factory/gnomish run --task="add-claim-return" --mode=in-place
+#   .gnomish/factory/gnomish status --task=<id>
+#   .gnomish/factory/gnomish project show gnomish-factory   # every setting with its origin
+#
+# ---------------------------------------------------------------------------
+# Secrets
+#
+# The factory reads its own secrets (GNOMISH_GITHUB_TOKEN) from
+# ~/.gnomish/projects/gnomish-factory/secrets/<NAME>, then ~/.gnomish/secrets/<NAME> — the
+# file name is the variable name, the file IS the value, and anything wider than 600 is
+# refused:
+#
+#   install -m 600 /dev/null ~/.gnomish/projects/gnomish-factory/secrets/GNOMISH_GITHUB_TOKEN
+#
+# Two more credentials are not factory secrets but plain variables a child process reads from
+# its environment, so this wrapper exports them from the same folders (see below):
+# CLAUDE_CODE_OAUTH_TOKEN and GH_TOKEN.
+set -euo pipefail
+
+factory_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The project root holds .gnomish/factory/, wherever the script is called from.
+project_dir="$(cd "$factory_dir/../.." && pwd)"
+
+# Load gnomish.env, then gnomish.local.env, without letting either outrank the caller: every
+# GNOMISH_* variable already exported is snapshotted first and re-applied after. At top level
+# on purpose — the re-applying `declare` inside a function would make the variables local.
+caller_settings="$(while read -r name; do
+    [[ "$name" == GNOMISH_* ]] && declare -p "$name"
+done < <(compgen -e))" || true
+set -a  # every assignment in the env files is exported, as a .env file implies
+for env_file in "$factory_dir/gnomish.env" "$factory_dir/gnomish.local.env"; do
+    if [[ -f "$env_file" ]]; then
+        # shellcheck source=/dev/null
+        source "$env_file"
+    fi
+done
+set +a
+eval "$caller_settings"
+unset caller_settings env_file
+
+if [[ -z "${GNOMISH_PROJECT_NAME:-}" ]]; then
+    echo "gnomish: GNOMISH_PROJECT_NAME is not set — it belongs in $factory_dir/gnomish.env" >&2
+    exit 2
+fi
+
+jar="${GNOMISH_JAR:-$factory_dir/gnomish.jar}"
+if [[ ! -f "$jar" ]]; then
+    echo "gnomish: no factory jar at $jar — build and copy one:" >&2
+    echo "  ./gradlew :bootstrap:bootJar && cp bootstrap/build/libs/bootstrap-*.jar $factory_dir/gnomish.jar" >&2
+    exit 2
+fi
+
+factory_home="${GNOMISH_HOME:-$HOME/.gnomish}"
+# Project folder first, host folder second — the order the factory itself resolves secrets in.
+secret_dirs=("$factory_home/projects/$GNOMISH_PROJECT_NAME/secrets" "$factory_home/secrets")
+
+# The first non-empty file named $1 in the secret folders, printed as a path.
+find_secret_file() {
+    local name="$1" secret_dir
+    for secret_dir in "${secret_dirs[@]}"; do
+        if [[ -s "$secret_dir/$name" ]]; then
+            printf '%s' "$secret_dir/$name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Exports $1 with the contents of the first secret file among the remaining names, unless the
+# caller already exported it. Only a non-empty value is exported: an empty one would not read
+# as "unset" to the consumer — for the agent CLI it would override this host's keychain login
+# with a credential that cannot authenticate.
+export_from_secret() {
+    local var="$1" name file value
+    shift
+    [[ -z "${!var:-}" ]] || return 0
+    for name in "$@"; do
+        file="$(find_secret_file "$name")" || continue
+        value="$(tr -d '[:space:]' < "$file")"
+        if [[ -n "$value" ]]; then
+            export "$var=$value"
+        fi
+        return 0
+    done
+}
+
+# The agent CLI's credential. Optional on the host binding: without it the agent uses this
+# machine's `claude` login. The factory hands it to agent rounds and judge votes from its OWN
+# environment, not from the secrets folder, so it has to be exported here.
+export_from_secret CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN
+
+# For a stage that runs `gh` (a deliver stage): `gh` takes its credential from GH_TOKEN, and
+# the tracker's GNOMISH_GITHUB_TOKEN cannot serve it — the factory scrubs that name from every
+# child environment. GH_TOKEN reaches the children only through factory.sandbox.env-passthrough
+# in project.yaml. A fine-grained token in secrets/GH_TOKEN keeps the gnome from holding the
+# tracker's own rights; without it the tracker token is reused.
+export_from_secret GH_TOKEN GH_TOKEN GNOMISH_GITHUB_TOKEN
+
+# --dir and --factory.instance-name, unless the caller passed their own — see the note at the
+# top on why they are not simply outranked.
+dir_default=(--dir="$project_dir")
+instance_default=()
+if [[ -n "${GNOMISH_INSTANCE_NAME:-}" ]]; then
+    instance_default=(--factory.instance-name="$GNOMISH_INSTANCE_NAME")
+fi
+for arg in "$@"; do
+    case "$arg" in
+        --dir=*|--dir) dir_default=() ;;
+        --factory.instance-name=*) instance_default=() ;;
+    esac
+done
+
+exec "${GNOMISH_JAVA:-java}" -jar "$jar" \
+    ${dir_default[@]+"${dir_default[@]}"} \
+    ${instance_default[@]+"${instance_default[@]}"} \
+    "$@"
