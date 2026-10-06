@@ -37,7 +37,11 @@ because nobody is watching this round; where it is silent, the commands decide.
 4. **A subagent's report is a claim.** Before you tick a task, check its result
    yourself: the files it names exist and hold what it says, and the specs it
    names pass — run them (`./gradlew :<module>:test --tests '<Spec>'`). A task is
-   ticked when its work is verified, not when a subagent says so.
+   ticked when its work is verified, not when a subagent says so. Every subagent
+   prompt carries the per-task steps of `.claude/rules/verification-scope.md`: named
+   specs and PIT scoped to the task's own classes, never a module-wide `check` or a
+   branch-wide PIT run — those repeat hours of work per task and can push the round
+   past its timeout. The whole build is proven once, in item 7.
 5. **Every pause point becomes the escalation exit.** `/opsx:apply` step 6
    ("Pause if": unclear task, design issue, work beyond the spec, temptation to
    narrow or defer) and the wrapper's constraints 5 and 6 (a blocker, a single-owner

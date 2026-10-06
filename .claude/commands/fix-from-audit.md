@@ -60,8 +60,9 @@ For each accepted recommendation, in order:
    recommendation wrong: reject it after all, with that spec as evidence, and delete the spec.
 2. **Green.** Make the smallest change that passes it, within the project's rules — never by
    weakening a gate (`testing.md` lists the only accepted exemptions, each with its bar).
-3. **Run** the owning module's specs (`./gradlew :<module>:test`), and the single-owner sweep
-   of `implementation.md` where the fix touches such a mechanism.
+3. **Run** the per-task checks of `verification-scope.md` for the fix — the specs it wrote or
+   touched by name, PIT on the classes it changed with `-PpitScope` — and the single-owner
+   sweep of `implementation.md` where the fix touches such a mechanism.
 
 Recommendations that are not behaviour — a missing traceability link, a test-quality defect,
 a rule violation in structure — skip the red step but not the run.

@@ -22,3 +22,5 @@ Wrapper around `/opsx:apply` that enforces sequential sub-agent execution and no
 5. **Pause on issues** — if a sub-agent reports a blocker, unclear requirement, or design issue, stop and ask the user before continuing.
 
 6. **Single-owner tasks carry their consumer list** — for a task that wires or revises a mechanism named in the design's single-owner table (`.claude/rules/design-decisions.md`), the sub-agent prompt MUST include that table row verbatim and the definition of done from `.claude/rules/implementation.md`; the sub-agent's report MUST end with the old-way sweep (the grep run, every hit, what happened to each). A task whose consumers the design does not name is a design gap: stop and ask, do not let the sub-agent guess.
+
+7. **Verify per task, prove the build once** — the sub-agent prompt MUST include the per-task steps of `.claude/rules/verification-scope.md` (named specs, PIT scoped to the task's own classes with `-PpitScope`, never a module-wide `check` or a branch-wide PIT run). After the last task, run the full root `./gradlew check` once yourself and fix what fails.
