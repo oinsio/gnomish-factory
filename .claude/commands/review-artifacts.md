@@ -60,6 +60,12 @@ requirement headings, read what it actually did — design and code — before j
 too, reading files with `git show origin/main:<path>`, and say in each finding which of the
 two the gap is against. Report the overlaps found in a **Landed since** section.
 
+Run `openspec validate <name> --strict`. An `ERROR` is a stale or malformed delta; an
+`INFO` line "Archive would refuse this delta … MODIFIED failed for header … not found" means
+the stable spec no longer holds the requirement the delta modifies — either it moved since,
+or another active change adds it (then that is a sequencing fact, not staleness). Each one
+is a freshness finding until explained.
+
 Then, for every concrete claim the artifacts make about the existing project, verify it against
 reality (grep/read; cite file:line):
 

@@ -1,0 +1,151 @@
+purpose: work through every recommendation of the review-artifacts report - apply it to the change's artifacts, or reject it with evidence - and leave the change coherent and valid, so implementation starts from a plan that still holds
+inputs:
+  - kind: source
+  - kind: internal
+    producerOutputId: dependency-verdict
+  - kind: internal
+    producerOutputId: artifact-review
+# The work itself is the project's own /update-from-review command
+# (.claude/commands/update-from-review.md, a wrapper around /opsx:update); the
+# instructions add only what differs because nobody is watching the round. What this
+# stage leaves behind:
+#   finished  -> the change's artifacts revised on the task branch, `openspec validate
+#                --strict` clean, and temporary-docs/gnomish/fix-artifacts.md: one entry
+#                per recommendation, applied (with the edit) or rejected (with evidence).
+#   could not -> a question in the tracker thread: a recommendation that would change the
+#                change's intent, or an invalid delta that needs a decision rather than a
+#                restatement - a human's call.
+outputs:
+  - id: artifact-revision
+executor:
+  type: agent-cli
+  # It rewrites the contract every later stage builds on, and weighs an Opus reviewer's
+  # recommendations on equal terms: same model as the reviewer.
+  model: opus
+  settings:
+    # Each recommendation is re-verified against the source before it is applied, and
+    # every edit is reconciled across the change's other artifacts.
+    maxTurns: 80
+    roundTimeout: 1800s
+    # Bash is for read-only git, the OpenSpec CLI (status, instructions, show, validate)
+    # and the decision-file echo. `allowedTools` cannot widen .claude/settings.json.
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+    disallowedTools:
+      - Agent
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/fix-artifacts/instructions.md
+verify:
+  # Cheapest first: without the resolution there is nothing else to check.
+  - type: command
+    command: |
+      resolution=temporary-docs/gnomish/fix-artifacts.md
+      if [ ! -f "$resolution" ]; then
+        echo "no resolution record at $resolution - write it before finishing the round, see .gnomish/stages/fix-artifacts/instructions.md"
+        exit 1
+      fi
+  # Every recommendation of the review is resolved exactly once, and each resolution
+  # carries what makes it checkable: the edit for an applied one, the evidence for a
+  # rejected one.
+  - type: command
+    command: |
+      review=temporary-docs/gnomish/review-artifacts.md
+      resolution=temporary-docs/gnomish/fix-artifacts.md
+      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      named=$(sed -n 's/^## Review Resolution:[[:space:]]*//p' "$resolution" | head -1 | tr -d '`')
+      if [ "$named" != "$change" ]; then
+        echo "the resolution's '## Review Resolution:' heading names '$named', but this task's change is '$change'"
+        exit 1
+      fi
+      wanted=$(awk 'index($0, "### Recommendations, ordered") == 1 { inside = 1; next } /^##/ { inside = 0 } inside' "$review" \
+        | sed -nE 's/^([0-9]+)\. \*\*.*/\1/p' | sort -n)
+      got=$(sed -nE 's/^### ([0-9]+) — (applied|rejected)[[:space:]]*$/\1/p' "$resolution" | sort -n)
+      duplicates=$(printf '%s\n' "$got" | uniq -d)
+      [ -z "$duplicates" ] || { echo "$duplicates"; echo "each recommendation is resolved exactly once - these numbers have two entries"; exit 1; }
+      if [ "$wanted" != "$got" ]; then
+        echo "the review has recommendations: $(echo $wanted)"
+        echo "the resolution resolves:        $(echo $got)"
+        echo "give every recommendation of the review one '### <N> — applied' or '### <N> — rejected' entry, in the review's numbering"
+        exit 1
+      fi
+      entries() { awk -v state="$1" '/^### [0-9]+ — / { inside = ($0 ~ (" — " state "[[:space:]]*$")) ; next } /^##/ { inside = 0 } inside' "$resolution"; }
+      applied=$(grep -cE '^### [0-9]+ — applied' "$resolution" || true)
+      rejected=$(grep -cE '^### [0-9]+ — rejected' "$resolution" || true)
+      for field in Recommendation Re-verified Edit; do
+        count=$(entries applied | grep -cE "^- $field: " || true)
+        [ "$count" = "$applied" ] || { echo "$applied applied entr(ies) but $count '- $field:' line(s) - every applied entry names the recommendation, what you re-verified, and the edit you made"; exit 1; }
+      done
+      for field in Recommendation Re-verified Evidence; do
+        count=$(entries rejected | grep -cE "^- $field: " || true)
+        [ "$count" = "$rejected" ] || { echo "$rejected rejected entr(ies) but $count '- $field:' line(s) - every rejected entry names the recommendation, what you re-verified, and the evidence it fails on"; exit 1; }
+      done
+  # The plan every later stage builds on must load: archive refuses an invalid delta.
+  - type: command
+    command: |
+      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      if ! out=$(openspec validate "$change" --strict 2>&1); then
+        printf '%s\n' "$out" | tail -20
+        echo "openspec validate $change --strict must pass before the round ends - fix the errors above in the change's own artifacts; if one needs a decision rather than a faithful restatement, escalate through \$GNOMISH_DECISION_FILE"
+        exit 1
+      fi
+  # The stage revises one change: its artifacts and the resolution record are all the branch
+  # may carry beyond the reports of the earlier stages. Measured from the merge base, not
+  # origin/main itself, which the factory keeps current. `.gnomish-task/` is the factory's own.
+  - type: command
+    command: |
+      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/dependencies.md | head -1)
+      reports="temporary-docs/gnomish/dependencies.md
+      temporary-docs/gnomish/review-artifacts.md
+      temporary-docs/gnomish/fix-artifacts.md"
+      stray() { grep -vxF "$reports" | grep -v "^openspec/changes/$change/" | grep -v '^\.gnomish-task/' || true; }
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | stray)
+      if [ -n "$dirty" ]; then
+        echo "this stage edits only openspec/changes/$change/ and writes temporary-docs/gnomish/fix-artifacts.md, but the working copy also carries:"
+        echo "$dirty"
+        echo "if you made these edits, undo each of them yourself and nothing else."
+        echo "if you did not: they are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - and escalate through \$GNOMISH_DECISION_FILE naming the paths."
+        exit 1
+      fi
+      branch=$(git branch --show-current)
+      case "$branch" in
+        gnomish/*)
+          if base=$(git merge-base origin/main HEAD 2>/dev/null); then
+            committed=$(git diff --name-only "$base" HEAD | stray)
+            if [ -n "$committed" ]; then
+              echo "the branch carries committed changes outside openspec/changes/$change/ and the stage reports:"
+              echo "$committed"
+              exit 1
+            fi
+          fi
+          ;;
+      esac
+  # Both outcomes are judged: an applied recommendation may harm the change, a rejected
+  # one may have been a real gap.
+  - type: judge
+    criteriaFile: stages/fix-artifacts/acceptance.md
+    model: opus
+    settings:
+      maxTurns: 60
+      disallowedTools:
+        - Bash
+        - Agent
+        - ScheduleWakeup
+        - SendMessage
+        - ToolSearch
+        - Edit
+        - Write
+        - WebFetch
+        - WebSearch
+    votes: 1
+advancement: auto
+autonomy:
+  attemptLimit: 3
