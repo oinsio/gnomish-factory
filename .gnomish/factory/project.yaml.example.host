@@ -19,3 +19,9 @@
 factory:
   bindings:
     default: host
+  sandbox:
+    # Every child process gets a positive environment allowlist, host mode included.
+    # The gnome's Claude Code runs its subagents one at a time (the stages that allow
+    # subagents at all say so in their stage.yaml); the value comes from gnomish.env.
+    env-passthrough:
+      - CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS

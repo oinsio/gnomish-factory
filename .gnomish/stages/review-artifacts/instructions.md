@@ -15,9 +15,15 @@ watching this round; where it is silent, the command decides.
 1. **The change name** — the command's `$1` — is the `Change:` line of
    `temporary-docs/gnomish/dependencies.md`. Review exactly that change; there is
    nobody to ask, so never fall back to AskUserQuestion.
-2. **No subagents.** The command's fan-out to Explore subagents is not available
-   here (the `Agent` tool is disabled): cover the dimensions yourself, one after
-   another. The briefing's task text is in `.gnomish-task/task.json` (read-only).
+2. **Explore subagents, one at a time.** The command's fan-out to Explore
+   subagents is available, but sequential, not parallel: only one runs at a time
+   here. Launch the next one only after the previous one has returned; a launch
+   while one is running is refused with "Concurrent subagent limit reached … Do not
+   retry", which means "not now", not "never". Every other
+   subagent type is denied. A subagent's answer is a lead, not evidence: open every
+   `file:line` yourself before a recommendation or a Freshness line rests on it —
+   the judge checks each citation against the source. The briefing's task text is
+   in `.gnomish-task/task.json` (read-only).
 3. **Where the report goes.** Nobody reads your reply, so the reply is not a place
    for the report. Instead of the command's step 7 file, write the **whole report
    of step 6** — every section, from `## Artifacts Review: <name>` to the Verdict —

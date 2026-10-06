@@ -35,8 +35,22 @@ executor:
       - Write
       - Edit
       - Bash
-    disallowedTools:
       - Agent
+    # Subagents: Explore only, one at a time. A read-only Explore keeps the file dumps of
+    # a large change out of this round's context. Every other type is denied by name:
+    # an allow rule such as `Agent(Explore)` restricts nothing (a subagent launch needs no
+    # permission), so only deny rules bind - and a type a later Claude Code adds would pass
+    # until listed here. The list is the `agents` field of the CLI's stream-json `init`
+    # event. One at a time comes from CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1, handed in
+    # through factory.sandbox.env-passthrough (.gnomish/factory/project.yaml.example.host).
+    # Note that --max-turns counts the main agent's turns only: roundTimeout is what
+    # bounds a subagent.
+    disallowedTools:
+      - Agent(claude)
+      - Agent(general-purpose)
+      - Agent(Plan)
+      - Agent(statusline-setup)
+      - Agent(web-fetch)
       - ScheduleWakeup
       - SendMessage
       - ToolSearch
