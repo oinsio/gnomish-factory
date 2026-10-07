@@ -91,6 +91,15 @@ the receiver accepts only the current identity, and deletion is hygiene, never t
   transition that consumed it.
 - **MODIFIED**: an interrupted verification resumed from a snapshot that carries the round's
   decision request re-raises that request instead of reporting the round `Completed`.
+- **MODIFIED** (added 2026-10-07, same defect class as the round token — found by the sibling
+  audit of the #83 escalation): the recorded denial position is offered to a container round
+  environment **as part of building it**, read from the branch tip at that moment by the one
+  component that builds environments — not by a separate `restoreDenials` step whose ordering
+  against the resume's reattach is nobody's. Today the reattached box of a resumed task never
+  receives it and replays the guard's whole denial log.
+- **MODIFIED** (added 2026-10-07): the container resume preparation — pending-snapshot check,
+  discard or reattach, salvage — has one implementation shared by `run` and `take`, in place
+  of two copies.
 - **ADDED**: ADR 0003 gains the principle and its corollary for readers of a medium that keeps
   the past (liveness by identity, never by presence); `crash-consistency.md` gains a checklist
   item; the glossary gains *gate*, *awaiting approval*, *approval*, *resumed write*, *round
@@ -126,6 +135,8 @@ None.
 - `status-report`: "JSON contract v1, state-derived" (as `make-run-headless` left it): the
   `awaitingApproval(stage)` position and the attempt `stop` object; a consumed outcome reads
   null.
+- `execution-environment`: "Denial read position survives the process" (the offer is made as
+  the environment is built, on every path that builds one; no later offer exists).
 
 ## Goals
 
@@ -212,7 +223,9 @@ None.
   round of the task repeats; the decision path handed to the gnome SHALL be
   `.gnomish-task/decisions/<stage>-a<attempt>-<token>.json`, and the adapter SHALL read
   exactly that path after the round: a file under any other name, however it came to be on
-  the tip, SHALL change nothing.
+  the tip, SHALL change nothing. A resumed round SHALL reuse the token its snapshot recorded
+  and SHALL be checked against it exactly as a live round would be; no token is minted on
+  resume, and no step of a round SHALL re-read the branch tip to recover a token it was handed.
 - FR14: the three outcome-clearing writes (`appendDecision`, the approval, the resumed write)
   SHALL remove `.gnomish-task/decisions/` in the same commit, on both media (a no-op where the
   directory is absent).
@@ -222,6 +235,13 @@ None.
   as `Completed`, as today.
 - FR16: the harvested boundary carve-out SHALL name the token path and nothing else under
   `.gnomish-task/`.
+- FR17: the denial position the branch tip records SHALL be offered to a container round
+  environment as part of building it — read from the tip at that moment by the one component
+  that builds environments — on every path that builds one: the first round's open, a segment
+  boundary, and a resume's reattach. No separate offering step SHALL exist, and the run
+  support port SHALL expose no way to offer a position after an environment is built.
+- FR18: the container resume preparation — pending-snapshot check, discard or reattach,
+  salvage of leftovers — SHALL have one implementation, used by both `run` and `take`.
 
 ### Non-Functional Reliability
 
@@ -271,6 +291,10 @@ None.
 - M6: `grep -rn "decisionPath(\|DECISIONS_DIR" */src/main adapters/*/src/main` returns the
   allowlisted owner files only; the identity spec shows the request's name, the snapshot
   subject and the round's open tip to be one value.
+- M7: `grep -rn "restoreDenials" */src/main adapters/*/src/main sandbox/*/src/main` returns
+  the environment port, its adapters and the environment builder only — no run-support port,
+  no drive, no engine execution; a resumed container task whose guard survived with a
+  recorded cursor reports no denial twice.
 
 ## Impact
 
@@ -283,8 +307,21 @@ None.
   round token: `BranchDecisionFile`, `HarvestedBoundaryCheck`, `SandboxRoundEnvironmentSource`,
   `EnvironmentRoundSnapshot`, `EnvironmentAttemptPersistence`, `ServiceCommitMessages`,
   `SnapshotTipCheck`, `PendingVerification` (`:application`, port), both repositories
-  (`decisions/` removal).
-- `adapters/agent`: `ResumeVerificationStageExecutor` (re-raises the snapshot's request).
+  (`decisions/` removal); `RoundToken`, `ClosedRound` and the per-run `CurrentRound` cell in
+  `app/port/git` (`:application`), replacing `AttemptCommitRef`;
+  `RecordedAttemptCommitWorkspace` (`:application`) reads the cell.
+- `adapters/agent`: `ResumeVerificationStageExecutor` (re-raises the snapshot's request and
+  restores the round's identity from it).
+- `:bootstrap` wiring: `ContainerRunSupport` (one cell instead of two refs; the lease's
+  environment factory reads the recorded denials at build time; `restoreDenials()` removed),
+  `ContainerRunSupportFactory`, `ContainerTipReader` (the read becomes a supplier),
+  `ExecutorAdapterSelector` (hands the cell to the resume executor).
+- `sandbox/docker`: `ContainerEnvironments` (the `restoreDenials` setter and field removed;
+  `roundEnvironment()` takes the offer from a supplier given at construction).
+- `:application`, denial restoration and resume preparation: `SandboxRunSupport` port
+  (`restoreDenials()` removed), `ContainerTerminalDrive`, `TakeContainerEngineExecution` (the
+  call removed), new `ContainerResumePreparation` used by `ContainerResumeOutcomes` and
+  `TakeContainerResumeRunner`.
 - `:test-fixtures`: the fake agent's `decision-then-plain` scenario (reads the path from
   `$GNOMISH_DECISION_FILE`, never a spelled name).
 - `:application`: `TaskRepository` port, `ResumeMechanics` and both mechanics,

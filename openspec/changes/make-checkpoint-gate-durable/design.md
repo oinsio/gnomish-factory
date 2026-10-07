@@ -72,6 +72,16 @@ two container E2E specs red:
   component records and another reads: the snapshot records the attempt commit, persistence
   reads it. `EnvironmentAttemptPersistence.previousTip` (`:118, :140`) is the tip at round
   open under another name.
+- Found while implementing 7.3 (escalation of 2026-10-07, issue #83): the resume path is a
+  **second producer of a round**. `ResumeVerificationStageExecutor.execute` returns without
+  `openRound`, so it fills `AttemptCommitRef` (`attemptCommit.record(p.attemptCommit())`,
+  `:67`) and nothing fills the `RoundTokenRef` task 7.1 added; the engine still calls
+  `persist` for that round (`StageAttemptLoop.java:111,123` → `AttemptJournal.java:62`).
+  `SnapshotTipCheck.java:111` parses the token from the subject and drops it;
+  `PendingVerification` carries no token. The `previousTip` diff base compared the snapshot
+  with itself on that path (the tip *is* the snapshot) — a guard that cannot fire. Two
+  per-run cells filled by different steps make a half-populated round representable; that,
+  not the missing `record` call, is the defect (D10, amended).
 - External canon (research of 2026-10-07): the owner of "is this request live" is a
   receiver-side identity match — AWS Step Functions mints one task token per wait, invalid
   after use, re-minted on re-entry; EIP's Correlation Identifier; Kleppmann's fencing token
@@ -193,7 +203,21 @@ spec iterates `Position`'s and `Stop`'s permitted subclasses — no hand-listed 
 version 2 — every existing branch becomes `UnsupportedVersion` for one additive token, and the
 gate demands equality, so no mixed-version grace is possible anyway.
 
-**D6 — Sync surfaces.** Three declared pairs are touched; no new pair is added.
+**D6 — Sync surfaces.** Three declared pairs are touched; no new pair is added; one
+**undeclared** copy is dissolved (added 2026-10-07).
+
+- `ContainerResumeOutcomes.resumeFromRecordedPosition` (`:54-67`) and
+  `TakeContainerResumeRunner.resumeWithoutDecision` (`:81-92`) hold the same resume
+  preparation — pending-snapshot check, discard or reattach, salvage when no snapshot is
+  pending — shared only through `stageToReattach`; the javadoc's "exact sequence, reused here"
+  is reuse by copy, with no marker (`manual-sync-pairs.md`, preference 3 — an audit finding).
+  The denial-restoration ordering defect of D11 sits in both copies, which is the harm the rule
+  names. *Decision:* **one owner** (preference 1): `ContainerResumePreparation.prepare(support,
+  discardWork, position, taskId)` in `:application` returns the pending verification and
+  performs the discard/reattach/salvage sequence; `stageToReattach` moves into it; both callers
+  shrink to one call (FR18). *Alternative rejected:* declare the pair — a third caller is
+  already foreseeable (`add-stage-iteration`'s per-item resume), and the sequence has no
+  medium-specific half to justify two bodies.
 
 - `GitResumeContinuation ↔ ContainerResumeOutcomes` (declared at both ends): both
   `resumePaused` arms call `approveCheckpoint` before continuing, in the same task; the
@@ -241,7 +265,8 @@ gate demands equality, so no mixed-version grace is possible anyway.
 | `TaskRepository.resumeFrom` — the only way a consumed outcome is cleared besides `appendDecision` / `approveCheckpoint` | one commit; refuses when `outcome` already null | `EscalationResume.decide` null-decision path (`run`); `TakeDecisionResume` bare-return arm; `HostResumeMechanics.resumeFrom`, `ContainerResumeMechanics.resumeFrom` ← `TakeLoadedBranchRoutes.resumeWithoutDecision` when the tip's `outcome` is recorded | in-memory `finalState.resetAttempts()` with no write: `TakeDecisionResume.java:69`, `EscalationResume` (formerly `EscalationResumeDialog.java:83`) — replaced by the write; `TakeResumeRunner.resumeWithoutDecision` / `TakeContainerResumeRunner.resumeWithoutDecision` continuing over a recorded outcome — routed through `resumeFrom` first | `:bootstrap` grep gate `OutcomeConsumptionGateSpec`: `resetAttempts()` appears in `*/src/main` only in `TaskState` and the call sites that hand the result to one of the three writers (allowlisted by file); identity spec `ConsumedOutcomeIdentitySpec` (bare origin, both media): after any continuation, `task.json outcome == null` **iff** `state.json` carries the continuation's reset/approved state, one commit apart from the park |
 | `AttemptRecord.stop` — the one durable copy of a round's stop | `Stop` (sealed) | writer: `StageAttemptLoop` (DECISION_NEEDED / CANNOT_VERIFY arms); readers: `Engine.preflight`, `StatusReport`/`AttemptMapper` (render) | the in-memory-only `EscalationReport` as the sole carrier of the question — the report is now rebuilt from the record | the type: `AttemptRecord`'s constructor requires a `Stop`; `StageAttemptLoopSpec` asserts the stop on the recorded round for both results |
 | `BranchShapeClassifier` with the position among its facts — the one classification of a gate | `BranchShape.AwaitingApproval` | every shape reader (`TakeDispositionResume`, `BranchRepairLog`, `status`, `GitResumeRunner`/`ContainerResumeRunner` routing) | `InProgress` for a tip at a gate — the classifier now reads `BranchTipFacts.position` | the sealed `BranchShape` switch; `BranchShapeClassifierPropertySpec` generates positions |
-| `SandboxRoundEnvironmentSource.openRound` — the one minting of a round's identity (D10) | `RoundToken` (value type over the open tip's commit id), recorded in the per-run `RoundTokenRef` | `BranchDecisionFile.open(environment, key, token)` (the path the gnome is given and the one path read); `HarvestedBoundaryCheck.decisionPath(key, token)` (the one spelling, used by the handle and by `verify`'s carve-out); `EnvironmentRoundSnapshot` (subject); `EnvironmentAttemptPersistence` (carve-out and diff base, from the ref); `SnapshotTipCheck` (parses the token from the subject on the resume path and reads the request from the snapshot tree into `PendingVerification`) | `decisionPath(AttemptKey)` without a token — deleted; `BranchDecisionFile.open(environment, key)` — deleted; `EnvironmentAttemptPersistence.previousTip` and its `currentTip()` read at construction — removed in favour of the ref; the presence read "file at the key exists" as the liveness rule — replaced by the exact-path read | the parameter type (`RoundToken`, not `String`); `:bootstrap` grep gate `DecisionPathOwnerSpec`: `DECISIONS_DIR` and `decisionPath(` appear in `*/src/main` only in `EnvelopePaths`, `HarvestedBoundaryCheck`, `BranchDecisionFile`, `FactoryOwnedPaths`, `SnapshotTipCheck`, allowlisted by file, asserted reached; identity spec `RoundTokenIdentitySpec` (`:bootstrap`, bare origin, real adapters): after a round that asked, the request's file name, the snapshot subject's token and the commit the round opened on are one value, and after `appendDecision` the next round's handle names a path the tip does not hold |
+| `RoundToken.of(commitId)` (`app/port/git`) — the one parse of a commit id into a round's identity (D10); called by exactly two producers: `SandboxRoundEnvironmentSource.openRound` over the open tip (a fresh round mints) and `SnapshotTipCheck` over the snapshot subject (a resumed round reuses — never mints) | `RoundToken` (value type; blank or non-hex refused) and `ClosedRound(token, attemptCommit)` (a round that has its snapshot; neither half nullable) | the per-run cell `CurrentRound` (`app/port/git`, replaces `RoundTokenRef` and `AttemptCommitRef`): written by `openRound` (`open(token)`), `EnvironmentRoundSnapshot` (`snapshotted(commit)`), `ResumeVerificationStageExecutor` (`restore(PendingVerification)` — the same two transitions, run together); read as `opened()` by `BranchDecisionFile.open(environment, key, token)` (the path the gnome is given and the one path read), `HarvestedBoundaryCheck.decisionPath(key, token)` (the one spelling), `EnvironmentRoundSnapshot` (subject); read as `closed()` by `EnvironmentAttemptPersistence` (carve-out, diff base, parent check), `RecordedAttemptCommitWorkspace` (the check runners' attempt commit); `PendingVerification` carries the typed token from `SnapshotTipCheck` to the executor | `decisionPath(AttemptKey)` without a token — deleted; `BranchDecisionFile.open(environment, key)` — deleted; `RoundTokenRef` and `AttemptCommitRef` — deleted (two cells that could hold half a round); `EnvironmentAttemptPersistence.previousTip` and its `currentTip()` read at construction — removed (the diff base is the recorded token; the post-harvest `currentTip()` stays, it compares the record to a fresh observation); `SnapshotTipCheck`'s parse-and-drop of the token — the token travels; the presence read "file at the key exists" as the liveness rule — replaced by the exact-path read | the parameter types (`RoundToken`, `ClosedRound`, not `String`); `opened()`/`closed()` return distinct types, so a consumer of the closed round cannot compile against an open one; `:bootstrap` grep gate `DecisionPathOwnerSpec`: `DECISIONS_DIR` and `decisionPath(` appear in `*/src/main` only in `EnvelopePaths`, `HarvestedBoundaryCheck`, `BranchDecisionFile`, `FactoryOwnedPaths`, `SnapshotTipCheck`, allowlisted by file, asserted reached; `:bootstrap` grep gate `CurrentRoundWriterSpec`: `RoundToken.of(` appears in `*/src/main` only in `SandboxRoundEnvironmentSource` and `SnapshotTipCheck`, and the cell's three writers appear only in the three files above, allowlisted, asserted reached; identity spec `RoundTokenIdentitySpec` (`:bootstrap`, bare origin, real adapters): (live) after a round that asked, the request's file name, the snapshot subject's token and the commit the round opened on are one value, and after `appendDecision` the next round's handle names a path the tip does not hold; (resumed) after a kill between the snapshot and the state commit, the pickup's state commit lands with a boundary check whose carve-out and diff base are the snapshot's recorded token — no re-read tip — and the same three values are still one |
+| `ContainerEnvironments.roundEnvironment()` — the one place a round environment is built, and therefore the one place the tip's recorded denial position is offered to it (D11) | `DenialRestoration`, produced by a `Supplier<DenialRestoration>` the seam is constructed with (`ContainerTipReader.restorable(...)` over the branch tip, evaluated at build time) | `EnvironmentLease.environmentFor` (first open, segment boundary, `reattachFor` on resume) — the only caller of `roundEnvironment()`; every box it hands out already carries the offer | `ContainerEnvironments.restoreDenials(…)` setter and its field — deleted; `SandboxRunSupport.restoreDenials()` and `ContainerRunSupport.restoreDenials()` — deleted; the calls in `ContainerTerminalDrive.run` and `TakeContainerEngineExecution.run` — deleted; `ContainerTipReader.restoreDenials(support)` — becomes the supplier | the constructor parameter (no setter exists to call late); the port has no method to call out of order; `:bootstrap` grep gate `DenialRestorationOwnerSpec`: `restoreDenials(` in `*/src/main` only in the environment port and its adapters (`TaskExecutionEnvironment`, `SelfCheckedEnvironment`, `LeasedEnvironment`, `EgressGuard`) and `ContainerEnvironments`, allowlisted by file, asserted reached; `ContainerRunSupportSpec`: a box obtained through `reattachFor` on a tip with a recorded cursor received the offer (red with the supplier wired to `DenialRestoration.none()`); E2E `ContainerModeResumeE2ESpec`: resume onto a surviving guard with a recorded cursor reports no denial twice |
 | The three outcome-clearing writes — the one place a consumed request leaves the tip (D10 hygiene) | the commit removing `.gnomish-task/decisions/` | `GitTaskRepository` / `GitObjectsTaskRepository` `appendDecision`, `approveCheckpoint`, `resumeFrom` | `CleanupCommit` as the only remover — stays (the terminal sweep), no longer the only one | `ConsumedOutcomeIdentitySpec` (5.3) gains the assertion: after each continuation the tip holds no `decisions/` entry; the pair invariant of 2.5 names the removal |
 
 **D8 — Shapes and crash consistency** (`crash-consistency.md`, items 1–11).
@@ -274,7 +299,10 @@ at the token path, the token in the subject; 2. **state commit** — the round r
 stop (D3). A kill after 1, before 2 freezes the existing `PendingVerification` shape (a tip
 whose subject is a snapshot); its recovery owner stays `ResumeVerificationStageExecutor`,
 which now reads the request from the snapshot's tree and re-raises `DecisionNeeded` — roll
-forward, no agent re-run, no attempt burned. After 2 the stop is on the record and D3 governs.
+forward, no agent re-run, no attempt burned. The pickup rebuilds the round's in-memory
+identity from that record alone (`CurrentRound.restore`, D10): the state commit it then lands
+is checked against the recorded token, exactly as the live path would have checked it, so
+the resumed round is not a weaker round. After 2 the stop is on the record and D3 governs.
 A stale request file on the tip, under any name, is not a shape input: no reader looks for
 anything but the current round's path, so the three outcome-clearing commits may remove
 `decisions/` or die before pushing it with no change in recovery.
@@ -310,11 +338,28 @@ it.** A container-mode round has an identity no later round of the task repeats 
 **round token**, the task branch's tip commit at the moment the round opens. It is unique by
 construction: every round lands at least its snapshot commit (`--allow-empty`), and every
 reset rides a lifecycle commit of its own (`appendDecision`, `resumeFrom`,
-`approveCheckpoint`), so no two rounds open on the same tip. One owner mints it:
+`approveCheckpoint`), so no two rounds open on the same tip. A fresh round mints it:
 `SandboxRoundEnvironmentSource.openRound` reads `refs/heads/<branch>` (it already holds the
-runner, the clone and the branch) and records it in a per-run `RoundTokenRef` (the
-`AttemptCommitRef` shape), from which every consumer takes it as a `RoundToken` value — never
-re-reading the tip. The decision path becomes `decisions/<stage>-a<attempt>-<token>.json`:
+runner, the clone and the branch) and parses it through `RoundToken.of`, the one parse of a
+commit id into a round identity; a resumed round never mints — it reuses the token its
+snapshot recorded, parsed by `SnapshotTipCheck` through that same function (amended
+2026-10-07; the facts above). Every consumer takes the identity as a value from one per-run
+cell, `CurrentRound` (`app/port/git`), which replaces both `RoundTokenRef` and
+`AttemptCommitRef`: it is written by `open(token)` at round open, `snapshotted(commit)` at
+the snapshot, and `restore(PendingVerification)` on the resume path — implemented as those
+same two transitions run together, so there is one code path for the round's identity with
+two input sources (the live tip, the durable record), not two code paths. Its readers get
+distinct types: `opened()` yields the `RoundToken` (the decision path, the snapshot subject),
+`closed()` yields a `ClosedRound(token, attemptCommit)` with neither half nullable (the
+persistence's carve-out, diff base and parent check; the check runners' attempt commit
+through `RecordedAttemptCommitWorkspace`). A round with a snapshot and no token is not a
+value this type can hold. The cell itself is a **bridge at a port boundary, and the design
+names which:** `AttemptPersistence.persist(taskId, state, trace)` in `:domain` and the
+published SPI `AttemptCommitWorkspace` cannot carry a round identity without teaching the
+engine about commits, which D15 of `add-sandbox-core` deliberately refused ("the sequence
+hides in adapters"), and host mode has no such identity to carry. A per-run cell is allowed
+only there, and only holding a whole identity, never a fragment. The decision path becomes
+`decisions/<stage>-a<attempt>-<token>.json`:
 `BranchDecisionFile.open(environment, key, token)` names it, hands it to the gnome in
 `$GNOMISH_DECISION_FILE`, and `read()` reads exactly it — a file under any other name is not
 read, whether it was carried over on the tip, left by a killed round, or written by the gnome
@@ -323,11 +368,15 @@ the path; the token-less overload is deleted, so no caller can build the old nam
 snapshot subject carries the token (`gnomish: snapshot <stage>#<round> <token>`), which is
 what makes the crash path recoverable: `SnapshotTipCheck` parses it, reads the request —
 if any — from the snapshot's tree at the token path (`git show <snapshot>:<path>`, a read of
-the durable medium), and `PendingVerification` carries the raw content; `ResumeVerification-
-StageExecutor` maps it through the shared `DecisionFileReader` to `DecisionNeeded`, or to
-`Completed` when the snapshot holds none. `EnvironmentAttemptPersistence` takes the token from
-the ref for the carve-out and for its diff base — its own `previousTip` field, the same value
-under another name, is removed (one owner). **Hygiene, not judgement:** the three
+the durable medium), and `PendingVerification` carries the typed token and the raw content;
+`ResumeVerification-StageExecutor` restores the round into the cell from it and maps the
+content through the shared `DecisionFileReader` to `DecisionNeeded`, or to `Completed` when
+the snapshot holds none. `EnvironmentAttemptPersistence` takes the closed round from the cell
+for the carve-out, the diff base and the parent check — its own `previousTip` field is
+removed: on the live path it was the open tip under another name, on the resume path it was
+the snapshot itself, so the boundary diff compared a value with its own re-read (one owner;
+the post-harvest `currentTip()` stays, since it compares the record to a fresh observation of
+the branch, the shape of check the canon keeps). **Hygiene, not judgement:** the three
 outcome-clearing writes also remove `decisions/` in their commit (FR14) — the consumed request
 leaves the tip with the transition that consumed it, and a PR under escalation does not
 accumulate answered questions — but no reader relies on that removal; correctness is the
@@ -337,7 +386,33 @@ Functions' task token, EIP's Correlation Identifier, Kleppmann's fencing token) 
 deletion as hygiene with an at-least-once caveat (SQS); two independent liveness judgements
 would be two recovery owners for one shape (`crash-consistency.md` item 3). The tip at round
 open is the one identity the medium already provides, available to the one component that
-opens rounds, with no new durable step. *Alternatives rejected:*
+opens rounds, with no new durable step. For the amendment: recovery rebuilds in-memory
+context from the durable record and nothing else (ARIES's analysis pass rebuilds the
+transaction table from the log; Temporal replays the *same* workflow code against recorded
+history — one code path, recorded inputs; Argo and Tekton continue from `status`), the
+record carries the input that pinned the attempt (Tekton stores the spec, GitHub Actions
+re-runs the same SHA — the token is that input), and a holder filled by `record()` and read
+by `required()` is textbook hidden temporal coupling (DevIQ: "no mechanism to detect or
+prevent incorrect ordering"; Seemann's Ambient Context anti-pattern; Go's `context`: pass it,
+do not store it) — so the cell is tolerated only as a named bridge and only whole ("make
+illegal states unrepresentable"). *Alternatives rejected:*
+- **Two cells, token moved, the executor records both** (the implementer's option A). Steelman:
+  the smallest edit, the `AttemptCommitRef` precedent, one new `record` line. Where it breaks:
+  a half-populated round stays representable; the two `record` lines on the resume path are a
+  hand-synchronized pair with no marker (`manual-sync-pairs.md`, preference 3); and the
+  persistence constructor reaches eight parameters, so the two refs get grouped anyway —
+  grouped without the invariant that is the whole point. Borrowed: the executor as the one
+  recording site of the resume path; the types relocated to `app/port/git`.
+- **Thread the round through the engine's ports** — `ExecutionResult` carries an opaque
+  receipt, `persist` and the check workspace take it; no cell at all. Steelman: the canon's
+  first preference (pass the context), compile-time enforced end to end. Where it breaks: a
+  `:domain` port change (`StageExecutor`, `AttemptPersistence`) and a published-SPI change
+  (`AttemptCommitWorkspace`) for one medium — host mode would carry an empty opaque value —
+  against D15's standing decision; beyond this change's scope. Borrowed: the obligation to name
+  the port that forces the bridge, and a gate pinning the cell's writers to the two producers.
+- **Persistence falls back to re-reading the tip when no round opened on this run** (option
+  C). The self-comparing guard this amendment removes, kept on purpose; a second reader of the
+  open tip that task 7.4 exists to delete.
 - **Delete-before-open as the judge** — the round removes any file at its key in the box's
   working copy before launching the agent, and reads by presence at close (the implementer's
   proposal; Tekton's "unset results before retry"). Steelman: no new concept, no path change,
@@ -358,6 +433,47 @@ opens rounds, with no new durable step. *Alternatives rejected:*
   ordering and without a step (proposal NG5).
 - **A monotonic attempt number in the name** — breaks the contract that an answer restarts
   the stage's budget at zero (`resetAttempts`, FR4 of `harden-task-branch-contract`).
+
+**D11 — The recorded denial position is an input of building a box, never a step after it**
+(added 2026-10-07; FR17). Found by the sibling audit of the #83 escalation, in the class D10's
+amendment names: a value one step produces, another consumes, with a recovery path that runs
+the steps in another order. `ContainerEnvironments.restoreDenials(restoration)` (`:176`) only
+stores a field; `roundEnvironment()` (`:103-111`) applies it to the environment it builds *if
+the field is already set*; `environment(key)` (`:180`) builds a fresh `SelfCheckedEnvironment`
+each call. A fresh start calls `support.restoreDenials()` before the first `openRound`, so the
+first box gets the offer. A resume calls `support.reattachFor(stage)` — which builds the box
+through the lease — **before** `support.restoreDenials()` (`ContainerResumeOutcomes.java:62`
+then `ContainerTerminalDrive.java:47`; `TakeContainerResumeRunner.java:87` then
+`TakeContainerEngineExecution.java:111`), so the reattached box's guard never receives the
+recorded cursor and identities: its next read replays the container's whole denial log, the
+duplicate FR5/FR7 of `fix-denial-attribution-durability` exist to prevent. Green today
+because the routing specs drive a stubbed `SandboxRunSupport` and `ContainerEnvironmentsSpec`
+sets the field first. *Decision:* the offer is read **as the box is built**. `ContainerEnvironments`
+is constructed with a `Supplier<DenialRestoration>`; `roundEnvironment()` evaluates it and
+offers the result to the environment it returns; the supplier is `ContainerTipReader`'s read
+of the branch tip (`ContainerRunSupport` wires it, since it owns the runner, the clone and the
+branch). The setter, the field, `SandboxRunSupport.restoreDenials()`, its implementation and
+its two callers are deleted — there is then no step to order, and no API through which a
+late offer could be made. Reading the tip at build time is also what the fresh-start path
+meant: the position the tip records when the box is born, a read of the durable medium
+(`crash-consistency.md` item 11). *Rationale:* the same canon as D10's amendment — recovery
+rebuilds context from the record on the path that needs it, not from a step the normal path
+happened to run first (ARIES, Temporal); a setter applied only to objects built after it is
+hidden temporal coupling (DevIQ), and the project's own "Immutable after construction" clause
+(`process-invariants.md`) forbids the attach-after shape without a cycle that forces it — none
+does here. *Alternatives rejected:*
+- **Forward the late offer to the leased box** — `ContainerRunSupport.restoreDenials()` also
+  calls `lease.currentIfLeased().ifPresent(e -> e.restoreDenials(offer))` (`LeasedEnvironment`
+  already forwards, `:94`). Two lines, one spec. Where it breaks: it keeps the ordering
+  dependency between two port methods and fixes the one caller that got it wrong today; the
+  next caller (a per-item resume, a third medium) can get it wrong again, and nothing but a
+  review notices. The patch, not the mechanism.
+- **Move `support.restoreDenials()` before `reattachFor`** in both callers. Same objection,
+  and it leaves the setter whose semantics ("applies to boxes built later") caused the defect.
+- **Read the restoration once at `ContainerRunSupport` construction.** The tip moves between
+  construction and the first box (`appendDecision`, `resumeFrom`, `approveCheckpoint` land
+  first and may carry a newer escalation-side cursor); a value read early is the stale baseline
+  D10's `previousTip` was.
 
 ## Risks / Trade-offs
 
@@ -382,9 +498,20 @@ opens rounds, with no new durable step. *Alternatives rejected:*
   suffix is well inside any path limit; the gnome never spells the name — it reads
   `$GNOMISH_DECISION_FILE` — and the fake agent is checked to do the same.
 - [Two readers of "the tip at round open" could drift — the round source and
-  persistence] → there is one: persistence takes the token from the ref the round source
-  records; `RoundTokenIdentitySpec` pins the name, the subject and the open commit to one
-  value.
+  persistence] → there is one: persistence takes the closed round from the cell the two
+  producers fill; `RoundTokenIdentitySpec` pins the name, the subject and the open commit to
+  one value on both the live and the resumed path.
+- [D11 reads the tip once per box built — one more `git` read on a segment boundary and on
+  reattach] → the same read the deleted `restoreDenials()` step made once per run; a segment
+  boundary is rare and already harvests and materializes, so the read is noise against it.
+- [D11 and D6's dissolved copy widen a change that is already at its scope line] → both touch
+  files this change edits anyway (`ContainerResumeOutcomes`, `TakeContainerResumeRunner`,
+  `ContainerRunSupport`, the two drives); §8 is three tasks; the cut line stays D4 — if the
+  estimate overruns, D4 leaves first, never §8, whose defect is live in production today.
+- [The resume path is a second producer the first design missed; a third could appear
+  (salvage, `add-stage-iteration`'s per-item passes)] → `CurrentRoundWriterSpec` allowlists
+  the cell's writers and `RoundToken.of`'s callers by file, so a new producer fails the build
+  until it is added to the D7 row with its own identity assertion.
 - [`PendingVerification` grows a payload read from the snapshot tree] → the read is a
   `git show` on the factory clone, the medium ADR 0003 names; the executor only maps it.
 
@@ -402,4 +529,6 @@ opens rounds, with no new durable step. *Alternatives rejected:*
    snapshot subject and the resume path, the `decisions/` removal, the fake agent and the two
    container E2E specs — before task 4.3 is ticked, since its container features depend on
    it.
-6. Gates and kill-point rows, identity specs (§5); ADR, rule, glossary, review note (§6).
+6. Denial restoration at build time (§8, D11) and the one resume preparation (4.7, D6): after
+   §7, since both edit the same resume files; before the final gate.
+7. Gates and kill-point rows, identity specs (§5); ADR, rule, glossary, review note (§6).

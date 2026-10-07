@@ -23,6 +23,7 @@ In git modes the decision request SHALL live in the working copy at `.gnomish-ta
 #### Scenario: Pending decision survives factory death
 - **WHEN** a factory dies after the snapshot commit carrying a decision request but before the escalation is recorded
 - **THEN** a resuming instance reads the request from the snapshot's tree at the round's token path and escalates with that question, without replaying the round
+- **AND** the resumed round carries the token and the snapshot commit that record names — no new token is minted, no tip is re-read — so the state commit it lands is checked against that token as a live round's would be
 
 #### Scenario: An answered request is not asked again
 - **WHEN** a container-mode task parked on a decision request is answered, the stage restarts at attempt 0, and the next round's box is cloned from a tip that still carries the earlier request file

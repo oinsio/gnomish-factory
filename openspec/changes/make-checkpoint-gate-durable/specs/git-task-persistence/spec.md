@@ -91,18 +91,45 @@ A `TaskRepository` application-layer port SHALL own task-scoped lifecycle writes
 
 ### Requirement: Gnome commits within a round
 Gnome commits inside a round SHALL be allowed (encouraged via stage instructions, using plain git); the adapter's commit closes the round. Boundary verification SHALL run factory-side against harvested refs in sandboxed mode: history rewrite is refused by the fast-forward-only harvest itself; `.gnomish-task/` SHALL be untouched by the gnome between tips — with exactly one carve-out, the current round's token path `decisions/<stage>-a<attempt>-<token>.json` (FR23 of add-sandbox-core); a decision file under any other name is a violation like any other `.gnomish-task/` write; the in-box HEAD check before the snapshot commit is advisory only. In host mode the existing worktree checks (HEAD on the task branch, previous tip an ancestor, `.gnomish-task/` untouched) remain. A violation breaks durability: persist SHALL throw, aborting the task, with the evidence kept on the branch and in the kept environment.
-<!-- implements FR16 of make-checkpoint-gate-durable -->
+
+Boundary verification SHALL distinguish three outcomes, never two: clean,
+violated, and **cannot-verify**. A git invocation that fails while producing
+the evidence (non-zero exit, unreadable revs) SHALL classify as
+cannot-verify — an infrastructure failure that aborts the round without
+burning a stage attempt and without attributing a violation to the gnome —
+and SHALL never be read as clean. Both boundary-check media (worktree diff
+and harvested-ref check) SHALL implement the same three-outcome rule.
+<!-- implements FR13, FR16 of make-checkpoint-gate-durable -->
 <!-- implements FR12 of add-git-workflow -->
 <!-- implements FR21, FR23 of add-sandbox-core -->
 <!-- implements FR13 of harden-logging-observability -->
+
+#### Scenario: Fine-grained gnome history is preserved
+- **WHEN** the gnome makes three commits during a round
+- **THEN** the round-closing commit builds on them and all four commits reach the branch
+
+#### Scenario: History rewrite aborts
+- **WHEN** at the round boundary the previous tip is no longer an ancestor of the branch
+- **THEN** persist throws (host) or the ff-only harvest refuses (sandboxed) and the task ends Aborted
 
 #### Scenario: Decision request is the one permitted state-directory write
 - **WHEN** a gnome commit adds the current round's token path under `.gnomish-task/decisions/` and touches nothing else under `.gnomish-task/`
 - **THEN** boundary verification passes; any other `.gnomish-task/` change still aborts
 
+#### Scenario: A failed boundary probe never passes as clean
+- **WHEN** the git invocation backing the boundary check exits non-zero
+  (damaged repo, bad rev) while its output stream is empty
+- **THEN** the check reports cannot-verify, the round aborts as an
+  infrastructure failure with the git failure as evidence, no stage attempt
+  is burned, and no boundary violation is attributed to the gnome
+
 #### Scenario: A request under another round's name is a violation
 - **WHEN** a gnome commit adds a file under `.gnomish-task/decisions/` whose name is not the current round's token path
 - **THEN** boundary verification fails as a `.gnomish-task/` modification
+
+#### Scenario: A resumed round is checked against its recorded token
+- **WHEN** an interrupted verification is resumed from a snapshot commit and the resuming instance lands the round's state commit
+- **THEN** the boundary check's carve-out and diff base are the token the snapshot's subject records — not a re-read of the tip, which on this path is the snapshot itself — and a persist with no round identity in hand throws rather than falling back to the tip
 
 ### Requirement: State-file JSON contract v1
 `task.json` and `state.json` SHALL carry `"version": 1` and follow status-report v1 conventions (camelCase, ISO-8601 UTC, millisecond durations, sealed types via `"type"`). `state.json`'s position SHALL be `atStage(stage)` | `awaitingApproval(stage)` | `pipelineEnd`; each recorded attempt SHALL carry a `stop` object — `none` | `decisionNeeded(question, options)` | `cannotVerify(check, reason, details)` — with the field absent read as `none`. Both additions are pre-release amendments under version 1: no released branch carries either token, and a build older than this amendment reading a newer tip fails closed as an unreadable envelope rather than resuming past the gate. Readers SHALL ignore unknown fields; an unknown version SHALL refuse resume and the inspection commands (`status`/`usage`) alike, with a clear error naming the file and the unsupported version. Status-report DTOs SHALL NOT be reused; a contract test SHALL hold the StatusReport rendered from state files equivalent to one rendered from live events, anchored by `status-report-v1.reference.json`.
