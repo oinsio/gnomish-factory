@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -33,7 +34,7 @@ class StatusReportSpec extends Specification {
 
     private static AttemptRecord passedRound() {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
+        new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
     }
 
     // FR11: a task positioned AtStage produces a non-null currentStage matching the stage name
@@ -83,7 +84,7 @@ class StatusReportSpec extends Specification {
         def failedCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         def round = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [failedCheck],
-        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [])
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [], Stop.none())
         def state = TaskState.atStageStart('implement').recordQualityFailure(round)
         def decision = new Decision('patch in place', 'plan', 'operator', STARTED)
         def ctx = context([decision])

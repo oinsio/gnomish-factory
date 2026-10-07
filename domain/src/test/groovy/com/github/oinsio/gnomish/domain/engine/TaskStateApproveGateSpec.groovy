@@ -23,7 +23,7 @@ class TaskStateApproveGateSpec extends Specification {
     static final def TOTALS = new ExecutorUsage(Duration.ofSeconds(7), [], [:])
 
     static TaskState gateAt(String stage) {
-        def passed = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def passed = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         new TaskState(new Position.AwaitingApproval(stage), 2, [passed], TOTALS)
     }
 

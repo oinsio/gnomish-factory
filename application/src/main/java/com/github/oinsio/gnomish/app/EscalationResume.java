@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
+import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -17,7 +18,9 @@ import org.jspecify.annotations.Nullable;
  * (design D2, D7 of make-run-headless): the operator's {@code --decision}, or its absence, meets
  * the recorded {@code Escalated} outcome here and nowhere else. A decision is appended to the task
  * context (author {@code operator}, the current stage, now) and the attempts are reset; no decision
- * resets the attempts alone — an infrastructure fix needs no message (FR3, FR4). A {@code
+ * resets the attempts alone — an infrastructure fix needs no message (FR3, FR4). Either way {@link
+ * #land} writes the result before the engine runs: the decision commit, or the resumed commit —
+ * never a reset held in memory (FR7 of make-checkpoint-gate-durable). A {@code
  * DecisionNeeded} report resumed without a decision is refused: the question is restated on the
  * console with its return-path line and {@link DecisionRequiredException} leaves the process at
  * exit 10, no attempt burned, nothing written (FR4). A {@code PipelineMismatch} cannot be resumed
@@ -30,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  * deleted with their switch. {@code TakeDecisionResume} keeps its own reset: {@code take}'s decision
  * arrives as a tracker reply under an acknowledge protocol, not as a flag.
  *
- * <p>Implements FR3, FR4 of make-run-headless.
+ * <p>Implements FR3, FR4 of make-run-headless; FR7 of make-checkpoint-gate-durable.
  */
 public final class EscalationResume {
 
@@ -76,6 +79,34 @@ public final class EscalationResume {
         var finalState = escalated.finalState();
         var resumedContext = decision == null ? context : appendDecision(context, finalState.position(), decision);
         return new RunnerOutcomeLoop.Resumption(resumedContext, finalState.resetAttempts());
+    }
+
+    /**
+     * Lands what {@link #decide} resolved as the one lifecycle commit before the engine runs (FR4,
+     * FR7, design D4 of make-checkpoint-gate-durable): a decision through {@link
+     * TaskRepository#appendDecision} — the decision, the attempts reset and the cleared outcome in
+     * one commit — and no decision through {@link TaskRepository#resumeFrom}, the reset and the
+     * cleared outcome in one commit, so the budget a resume grants is granted once and never lives
+     * in memory alone. The two {@code run} continuations call it after {@link #decide}, the
+     * container one after disposing its kept box.
+     *
+     * <p>Implements FR3 of make-run-headless; FR7, FR8 of make-checkpoint-gate-durable.
+     *
+     * @param repository the medium's lifecycle writer; never null
+     * @param taskId the resumed task, as the branch records it
+     * @param resumption what {@link #decide} returned for {@code decision}
+     * @param decision the operator's {@code --decision}, or {@code null} when none was given
+     */
+    static void land(
+            TaskRepository repository,
+            String taskId,
+            RunnerOutcomeLoop.Resumption resumption,
+            @Nullable String decision) {
+        if (decision != null) {
+            repository.appendDecision(taskId, resumption.context().decisions().getLast(), resumption.state());
+        } else {
+            repository.resumeFrom(taskId, resumption.state());
+        }
     }
 
     /**

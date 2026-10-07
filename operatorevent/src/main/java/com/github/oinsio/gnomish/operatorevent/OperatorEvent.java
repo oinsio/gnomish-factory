@@ -218,7 +218,11 @@ public enum OperatorEvent {
     // product version (add-release-pipeline, design D2): the jar's build info is present but
     // unreadable, malformed or without a version, so the factory reports itself as the
     // development version; the release workflow's identity check is where such a jar is stopped.
-    FACTORY_VERSION_UNREADABLE("GF150");
+    FACTORY_VERSION_UNREADABLE("GF150"),
+    // checkpoint approval (make-checkpoint-gate-durable, design D2, NFR-O1): the approval write was
+    // asked to open a gate the branch tip is not at — another gate, a stage, the pipeline end — or
+    // to move it onto another gate; it refuses, writing nothing, and names the tip's position.
+    CHECKPOINT_APPROVAL_REFUSED("GF151");
 
     private final String code;
     private final String head;

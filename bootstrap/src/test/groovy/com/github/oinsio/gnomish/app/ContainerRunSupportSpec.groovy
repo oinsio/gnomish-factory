@@ -27,6 +27,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -583,7 +584,7 @@ exit 0
                             new Denial(
                                     new Finding('egress denied: paste.example.com:443', null, null),
                                     new DenialIdentity('sha256:guard-container', DENIAL_STAMP))
-                        ]))))
+                        ], Stop.none()))))
 
         when:
         support.restoreDenials()

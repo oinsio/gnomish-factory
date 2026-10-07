@@ -200,21 +200,40 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         0 * support.salvageLeftovers(_)
     }
 
-    // FR1 of make-checkpoint-gate-durable: a tip held at a gate reattaches the box of the stage that
-    // passed — the stage whose round the gate's commit recorded — and the engine pauses again there,
-    // running no round.
-    def "reattaches for the gate's stage when the recorded position is a gate"() {
+    // FR1, FR4, FR11 of make-checkpoint-gate-durable: a tip held at a gate takes the checkpoint arm
+    // whatever the outcome says, as on the host path — the kept box is disposed rather than
+    // reattached and salvaged, then the approval lands factory-side as one commit and the engine
+    // continues from the approved state (the pipeline end of a one-stage pipeline). The
+    // reattach-for-the-gate's-stage rule lives on in the take path (TakeContainerResumeRoutingSpec).
+    def "approves a tip at a gate in one commit after disposing the kept box when its outcome is #label"() {
         given:
+        record = recorded == null ? freshRecord() : recordWith(recorded, report)
         recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
 
         when:
         resume()
 
-        then:
-        thrown(RunParkedException)
-        1 * support.reattachFor('build')
-        1 * support.salvageLeftovers('PROJ-1')
+        then: 'the kept box goes first: its clone cannot learn of the approval'
+        1 * support.disposeExistingEnvironment()
+
+        then: 'one approval commit: the tip\'s gate and the state past it'
+        1 * taskRepository.approveCheckpoint('PROJ-1', new Position.AwaitingApproval('build'), {
+            it.position() == new Position.PipelineEnd()
+        })
+        0 * taskRepository.resumeFrom(_, _)
+        0 * taskRepository.appendDecision(_, _, _)
+
+        and: 'no reattach, no salvage, no re-park'
+        0 * support.reattachFor(_)
+        0 * support.salvageLeftovers(_)
+        0 * support.recordPark(_, _)
         executor.requests.isEmpty()
+
+        where:
+        label | recorded | report
+        'not recorded (park lost)' | null | null
+        'paused (park landed)' | new RecordedOutcome.Paused('build') | null
+        'a stale escalation' | new RecordedOutcome.Escalated(new EscalationReport.AttemptsExhausted(3)) | new EscalationReport.AttemptsExhausted(3)
     }
 
     // UX2: outcome `completed` prints the same final status summary as the host path and stops —
@@ -262,20 +281,29 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         executor.requests.size() == 1
     }
 
-    // FR4 of make-run-headless: no --decision over an AttemptsExhausted park resumes on the reset
-    // alone — nothing is committed, so the decision history stays truthful; the box is still
-    // disposed, since its clone is behind the park commit.
-    def "commits nothing when an escalated task is resumed without --decision"() {
+    // FR4 of make-run-headless: no --decision over an AttemptsExhausted park appends no decision, so
+    // the decision history stays truthful; FR7 of make-checkpoint-gate-durable: the reset lands as
+    // the one resumed commit, factory-side, after the kept box is disposed and before any round.
+    def "lands the resumed commit, appending no decision, when an escalated task is resumed without --decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
+        recordedState = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
 
         when:
         resume()
 
         then:
         1 * support.disposeExistingEnvironment()
+
+        then:
+        1 * taskRepository.resumeFrom('PROJ-1', {
+            it.attemptsUsed() == 0 && it.position() == new Position.AtStage('build')
+        })
         0 * taskRepository.appendDecision(_, _, _)
+
+        then:
+        1 * support.sweepOrphans()
         executor.requests.size() == 1
     }
 
@@ -319,23 +347,28 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         ex.message.contains('no lastEscalation recorded')
     }
 
-    // UX2; FR5 of make-run-headless: outcome `paused` continues as the host path does — no
-    // checkpoint line, no prompt, no decision — on a box materialized from the tip.
-    def "continues a paused task without a checkpoint line, disposing the kept box first"() {
+    // UX2; FR5 of make-run-headless; FR7 of make-checkpoint-gate-durable: a legacy `paused` outcome
+    // recorded past its stage holds no gate, so it is consumed by the resumed commit — state kept as
+    // recorded — and continues as the host path does: no checkpoint line, no prompt, no decision.
+    def "consumes a legacy pause recorded past its stage with the resumed commit, disposing the kept box first"() {
         given:
         record = recordWith(new RecordedOutcome.Paused('build'))
 
         when:
         resume()
 
+        then: 'the kept box\'s clone is behind the park commit: it goes before the factory-side commit'
+        1 * support.disposeExistingEnvironment()
+
         then:
+        1 * taskRepository.resumeFrom('PROJ-1', TaskState.atStageStart('build'))
+        0 * taskRepository.approveCheckpoint(_, _, _)
+        0 * taskRepository.appendDecision(_, _, _)
+
+        and:
         !console.printed.any {
             it.contains('Manual checkpoint')
         }
-        0 * taskRepository.appendDecision(_, _, _)
-        // The kept box's clone is behind the park's outcome commit: the continuation runs on a box
-        // materialized from the tip, never on the one that carried the park.
-        1 * support.disposeExistingEnvironment()
         executor.requests.size() == 1
     }
 
@@ -343,7 +376,10 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // error naming the conflict — raised after task.json is read, before any commit or any box.
     def "refuses a --decision over a task whose recorded outcome is #label, touching nothing"() {
         given:
-        record = recorded == null ? freshRecord() : recordWith(recorded)
+        record = recorded == null ? freshRecord() : recordWith(recorded, recorded instanceof RecordedOutcome.Escalated ? recorded.report() : null)
+        if (gate) {
+            recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        }
 
         when:
         resume('nobody asked')
@@ -361,11 +397,13 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         0 * support.reattachFor(_)
         0 * support.sweepOrphans()
 
-        where:
-        label | recorded | named
-        'paused' | new RecordedOutcome.Paused('build') | "paused at a manual checkpoint after stage 'build'"
-        'completed' | new RecordedOutcome.Completed() | 'completed'
-        'not recorded' | null | 'interrupted run with no recorded outcome'
+        where: 'FR4 of make-checkpoint-gate-durable: a gate refuses whatever its outcome says'
+        label | recorded | gate | named
+        'paused' | new RecordedOutcome.Paused('build') | false | "paused at a manual checkpoint after stage 'build'"
+        'completed' | new RecordedOutcome.Completed() | false | 'completed'
+        'not recorded' | null | false | 'interrupted run with no recorded outcome'
+        'paused at a gate' | new RecordedOutcome.Paused('build') | true | "awaiting approval after stage 'build'"
+        'escalated at a gate' | new RecordedOutcome.Escalated(new EscalationReport.AttemptsExhausted(3)) | true | "awaiting approval after stage 'build'"
     }
 
     // FR8: outcome `aborted` refuses, pointing at the KEPT task environment — the container twin of

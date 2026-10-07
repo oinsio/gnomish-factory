@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -70,6 +71,18 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         delegate.appendDecision(taskId, decision, resetState);
+        pushFor(taskId, TaskLifecycleEvent.RESUMED.name());
+    }
+
+    @Override
+    public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
+        delegate.approveCheckpoint(taskId, gate, approved);
+        pushFor(taskId, TaskLifecycleEvent.APPROVED.name());
+    }
+
+    @Override
+    public void resumeFrom(String taskId, TaskState reset) {
+        delegate.resumeFrom(taskId, reset);
         pushFor(taskId, TaskLifecycleEvent.RESUMED.name());
     }
 

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -62,6 +63,43 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
 
         then:
         1 * delegate.appendDecision(TASK_ID, _, _) >> {
+            recorded = commitOnTaskBranch('resumed')
+        }
+        remoteTip() == Optional.of(recorded)
+    }
+
+    // FR3 of make-checkpoint-gate-durable: the approval is a lifecycle write like the others, so
+    //     its commit is replicated before the call returns.
+    def "approveCheckpoint's commit reaches origin"() {
+        given:
+        def delegate = Mock(TaskRepository)
+        def repository = decorated(delegate)
+        def gate = new Position.AwaitingApproval('work')
+        String recorded = null
+
+        when:
+        repository.approveCheckpoint(TASK_ID, gate, TaskState.atStageStart('next'))
+
+        then:
+        1 * delegate.approveCheckpoint(TASK_ID, gate, TaskState.atStageStart('next')) >> {
+            recorded = commitOnTaskBranch('approved')
+        }
+        remoteTip() == Optional.of(recorded)
+    }
+
+    // FR7 of make-checkpoint-gate-durable: the resumed write is a lifecycle write like the others,
+    //     so its commit is replicated before the call returns.
+    def "resumeFrom's commit reaches origin"() {
+        given:
+        def delegate = Mock(TaskRepository)
+        def repository = decorated(delegate)
+        String recorded = null
+
+        when:
+        repository.resumeFrom(TASK_ID, TaskState.atStageStart('work'))
+
+        then:
+        1 * delegate.resumeFrom(TASK_ID, TaskState.atStageStart('work')) >> {
             recorded = commitOnTaskBranch('resumed')
         }
         remoteTip() == Optional.of(recorded)

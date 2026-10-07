@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
@@ -27,10 +28,14 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -115,9 +120,19 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 
-    private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs()) {
-        def run = new RunOrder(CLONE_DIR, null, completingPipeline(), discardWork)
+    private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs(),
+            PipelineDefinition definition = completingPipeline()) {
+        def run = new RunOrder(CLONE_DIR, null, definition, discardWork)
         chain.resumeExisting(takeOrder(task, tracker, run), new BranchShape.InProgress())
+    }
+
+    /** {@link #completingPipeline} with its one stage {@code manual}: a pass leaves the task at its gate. */
+    private PipelineDefinition gatedPipeline() {
+        def stage = completingPipeline().stages().first()
+        new PipelineDefinition('1', completingPipeline().defaultLimits(), [
+            new StageDefinition(stage.name(), stage.purpose(), stage.inputs(), stage.outputs(), stage.executor(),
+            stage.instructionsRef(), stage.verify(), stage.limits(), AdvancementMode.MANUAL)
+        ])
     }
 
     // FR10, D10, NFR-C1: the branch's `.gnomish-task/` is GONE — the delivery cleanup commit ran but
@@ -202,19 +217,52 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     // FR10: a CLEARED marker means the park did land — a human answered and returned the task — so
-    // this is an ordinary resume, not a reconcile. Same recorded outcome, opposite route.
+    // this is an ordinary resume, not a reconcile. Same recorded outcome, opposite route. The gate
+    // is opened by the approval write before the engine runs (FR4 of make-checkpoint-gate-durable);
+    // the manual last stage's approval writes the pipeline end, so the run completes with no round.
     def "resumes normally when the park's marker was already cleared"() {
         given:
+        def executor = new ScriptedExecutor([completedRound()])
+        recordedState = CheckpointMechanicsFixtures.gatedAt('build')
         store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
-        def result = resume(resumeChain())
+        def result = resume(resumeChain(executor), false, heldByUs(), gatedPipeline())
 
         then:
+        1 * lifecycleStore.approveCheckpoint('PROJ-1', new Position.AwaitingApproval('build'), {
+            it.position() == new Position.PipelineEnd() && it.attempts() == recordedState.attempts()
+        })
+        0 * lifecycleStore.resumeFrom(*_)
         0 * tracker.park(_, _, _)
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
+        executor.requests.isEmpty()
+    }
+
+    // FR4, FR11 of make-checkpoint-gate-durable: a gate whose park was never recorded (a kill
+    // between the round commit and the park commit) is delivered its park — the Paused outcome
+    // with its marker, the checkpoint park, the receipt — and nothing is approved or run.
+    def "FR11: delivers the park a gate is owed without approving or running anything"() {
+        given:
+        def executor = new ScriptedExecutor([completedRound()])
+        recordedState = CheckpointMechanicsFixtures.gatedAt('build')
+        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = resume(resumeChain(executor), false, heldByUs(), gatedPipeline())
+
+        then:
+        1 * lifecycleStore.recordOutcome('PROJ-1', new TaskOutcome.Paused(recordedState, 'build'), TrackerWrite.OWED)
+        1 * tracker.park(REF, ParkReason.CHECKPOINT, _)
+        1 * lifecycleStore.confirmTerminalWrite('PROJ-1')
+        0 * lifecycleStore.approveCheckpoint(*_)
+        0 * lifecycleStore.resumeFrom(*_)
+        0 * tracker.finish(*_)
+        result instanceof TakeResult.AwaitingHuman
+        executor.requests.isEmpty()
     }
 
     // FR7, NFR-S2 of add-base-ref-resolution (task 6.4): a resumed task never re-resolves its base
@@ -348,6 +396,27 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         1 * tracker.collectDecisions(REF) >> []
         0 * tracker.park(_, _, _)
         0 * lifecycleStore.appendDecision(_, _, _)
+        result instanceof TakeResult.Delivered
+
+        and: 'FR7 of make-checkpoint-gate-durable: the reset lands through the resumed write first'
+        1 * lifecycleStore.resumeFrom('PROJ-1', recordedState.resetAttempts())
+    }
+
+    // FR7 of make-checkpoint-gate-durable: an INFRA-kind return continues without a reply, so the
+    // recorded outcome is consumed — with the attempt reset — by the resumed write before the run.
+    def "FR7: consumes an infrastructure park through the resumed write before resuming"() {
+        given:
+        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), [])
+        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = resume(resumeChain())
+
+        then:
+        1 * lifecycleStore.resumeFrom('PROJ-1', recordedState.resetAttempts())
+        0 * tracker.collectDecisions(_)
+        1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
     }
 

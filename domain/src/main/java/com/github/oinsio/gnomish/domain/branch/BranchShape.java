@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.domain.branch;
 
 /**
  * The classification of a task branch tip: its file set and envelope versions mapped to exactly one
- * name from a closed set of ten. Sealed, so every reader switches without a default branch and
+ * name from a closed set of eleven. Sealed, so every reader switches without a default branch and
  * adding a shape fails the build until each reader names it (FR2).
  *
  * <p>The shapes and their meanings are owned by the {@code task-branch-contract} capability, in its
@@ -12,7 +12,8 @@ package com.github.oinsio.gnomish.domain.branch;
  * #disposition()}, which keep the whole mapping readable in one place rather than scattered over
  * ten bodies.
  *
- * <p>Implements FR1, FR2, FR15 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence.
+ * <p>Implements FR1, FR2, FR15 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence;
+ * FR11 of make-checkpoint-gate-durable.
  */
 public sealed interface BranchShape {
 
@@ -29,8 +30,19 @@ public sealed interface BranchShape {
     record InProgress() implements BranchShape {}
 
     /**
-     * An outcome is recorded and a human is awaited. The pending-write marker is a sub-state of
-     * this shape, not a shape of its own.
+     * A {@code manual} stage passed and its gate is not opened: the recorded position is {@code
+     * AwaitingApproval(stage)}. Whether the park outcome is also recorded is a sub-state of this
+     * shape, not a shape of its own — the owner re-delivers a lost park and never runs a stage
+     * (design D8 of make-checkpoint-gate-durable). Named like the position because the shape
+     * <em>is</em> the position.
+     *
+     * <p>Implements FR11 of make-checkpoint-gate-durable.
+     */
+    record AwaitingApproval() implements BranchShape {}
+
+    /**
+     * An outcome is recorded at a non-gate position and a human is awaited. The pending-write
+     * marker is a sub-state of this shape, not a shape of its own.
      */
     record Parked() implements BranchShape {}
 
@@ -75,7 +87,7 @@ public sealed interface BranchShape {
     default RecoveryOwner recoveryOwner() {
         return switch (this) {
             case Bare() -> RecoveryOwner.TAKE_ROUTING;
-            case Created(), InProgress(), Answered() -> RecoveryOwner.STAGE_ENGINE;
+            case Created(), InProgress(), AwaitingApproval(), Answered() -> RecoveryOwner.STAGE_ENGINE;
             case Parked() -> RecoveryOwner.TERMINAL_TRANSITION;
             case CompletedUncleaned() -> RecoveryOwner.COMPLETION_FINISH;
             case Delivered() -> RecoveryOwner.NONE;
@@ -93,7 +105,7 @@ public sealed interface BranchShape {
      */
     default RecoveryDisposition disposition() {
         return switch (this) {
-            case Bare(), Created(), InProgress(), Parked(), Answered(), CompletedUncleaned() ->
+            case Bare(), Created(), InProgress(), AwaitingApproval(), Parked(), Answered(), CompletedUncleaned() ->
                 RecoveryDisposition.ROLL_FORWARD;
             case Delivered() -> RecoveryDisposition.TERMINAL;
             case UnsupportedVersion ignoredVersion -> RecoveryDisposition.QUARANTINE;
@@ -117,7 +129,7 @@ public sealed interface BranchShape {
      */
     default boolean tipCarriesState() {
         return switch (this) {
-            case Created(), InProgress(), Parked(), Answered(), CompletedUncleaned() -> true;
+            case Created(), InProgress(), AwaitingApproval(), Parked(), Answered(), CompletedUncleaned() -> true;
             case Bare(), Delivered() -> false;
             case UnsupportedVersion ignoredVersion -> false;
             case Corrupt ignoredCorrupt -> false;
@@ -137,13 +149,15 @@ public sealed interface BranchShape {
 
     /**
      * Whether this is the shape a clean pickup expects — the classification that needs no repair
-     * line (NFR-O1). Every other shape is a repair worth one structured log entry.
+     * line (NFR-O1). Every other shape is a repair worth one structured log entry. A gate is clean:
+     * it is where every {@code manual} stage stops, not a repair (FR11 of
+     * make-checkpoint-gate-durable).
      *
      * @return {@code true} for the shapes a healthy progression passes through
      */
     default boolean isClean() {
         return switch (this) {
-            case Created(), InProgress(), Answered(), Delivered() -> true;
+            case Created(), InProgress(), AwaitingApproval(), Answered(), Delivered() -> true;
             case Bare(), Parked(), CompletedUncleaned() -> false;
             case UnsupportedVersion ignoredVersion -> false;
             case Corrupt ignoredCorrupt -> false;

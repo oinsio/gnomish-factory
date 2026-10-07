@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
@@ -59,7 +60,7 @@ class StateJsonMapperSpec extends Specification {
 
     def "toDto maps every AttemptRecord.Result to its lowerCamel discriminator"() {
         given:
-        def record = new AttemptRecord(0, result, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, result, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -79,7 +80,7 @@ class StateJsonMapperSpec extends Specification {
     def "toDto flattens every Verdict kind onto StateCheckDto"() {
         given:
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), verdict, Duration.ofMillis(500))
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -121,8 +122,8 @@ class StateJsonMapperSpec extends Specification {
                     new Finding("missing case", "Foo.java:10", null)
                 ]),
                 Duration.ofMillis(300))
-        def attempt0 = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, startedAt, [check2], usage, JudgeUsage.none(), [])
-        def attempt1 = new AttemptRecord(1, AttemptRecord.Result.PASSED, startedAt.plusSeconds(60), [check1], usage, judgeUsage, [])
+        def attempt0 = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, startedAt, [check2], usage, JudgeUsage.none(), [], Stop.none())
+        def attempt1 = new AttemptRecord(1, AttemptRecord.Result.PASSED, startedAt.plusSeconds(60), [check1], usage, judgeUsage, [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 1, [attempt0, attempt1], usage + usage)
 
         when:
@@ -169,7 +170,7 @@ class StateJsonMapperSpec extends Specification {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("external:ci")),
                 new Verdict.CannotVerify(UntrustedText.subprocess("timeout"), UntrustedText.subprocess("poll exceeded")),
                 Duration.ofMillis(1000))
-        def record = new AttemptRecord(0, AttemptRecord.Result.CANNOT_VERIFY, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.CANNOT_VERIFY, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         def state = new TaskState(new Position.AtStage("verify"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -187,7 +188,7 @@ class StateJsonMapperSpec extends Specification {
 
     def "round-trip: DecisionNeeded round with no checks survives"() {
         given:
-        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -216,7 +217,7 @@ class StateJsonMapperSpec extends Specification {
                             new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]),
                             new JudgeUsage([
                                 ["model-a": new TokenUsage(1, 2, 0, 0)]
-                            ]), [])
+                            ]), [], Stop.none())
                 ],
                 new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]))
         def dto = StateJsonMapper.toDto(state)
@@ -357,7 +358,7 @@ class StateJsonMapperSpec extends Specification {
         given:
         def roundUsage = new ExecutorUsage(Duration.ofSeconds(1), [], [:])
         def totals = new ExecutorUsage(Duration.ofSeconds(99), [], ["model-a": new TokenUsage(1, 1, 0, 0)])
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [], roundUsage, JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [], roundUsage, JudgeUsage.none(), [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], totals)
 
         when:
@@ -382,7 +383,7 @@ class StateJsonMapperSpec extends Specification {
                 [check],
                 ExecutorUsage.none(),
                 JudgeUsage.none(),
-                [Denial.unidentified(denial)])
+                [Denial.unidentified(denial)], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 1, [record], ExecutorUsage.none())
 
         when:
@@ -441,7 +442,7 @@ class StateJsonMapperSpec extends Specification {
                 new Finding("egress denied: paste.example.com:443", "paste.example.com:443", "kind=connect"),
                 new DenialIdentity('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
         def record = new AttemptRecord(
-                0, AttemptRecord.Result.PASSED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+                0, AttemptRecord.Result.PASSED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [denial], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 1, [record], ExecutorUsage.none())
 
         when:

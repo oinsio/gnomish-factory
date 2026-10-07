@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -261,17 +262,27 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     // FR4 of make-run-headless: no --decision over an AttemptsExhausted park resumes on the reset
-    // alone — nothing is appended, so the decision history stays truthful.
-    def "appends no decision when an escalated task is resumed without --decision"() {
+    // alone — nothing is appended, so the decision history stays truthful. FR7 of
+    // make-checkpoint-gate-durable: the reset lands as the one resumed commit before the engine runs.
+    def "lands the resumed commit, appending no decision, when an escalated task is resumed without --decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
+        stateRead = {
+            Optional.of(new TaskState(new Position.AtStage('build'), 2, [], TaskState.atStageStart('build').totals()))
+        }
 
         when:
         resume()
 
-        then:
+        then: 'one commit: the reset state, before any round'
+        1 * lifecycleStore.resumeFrom('PROJ-1', {
+            it.attemptsUsed() == 0 && it.position() == new Position.AtStage('build')
+        }) >> {
+            assert executor.requests.isEmpty()
+        }
         0 * lifecycleStore.appendDecision(_, _, _)
+        0 * lifecycleStore.approveCheckpoint(_, _, _)
         executor.requests.size() == 1
     }
 
@@ -314,10 +325,10 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         ex.message.contains('no lastEscalation recorded')
     }
 
-    // FR8, UX2; FR5 of make-run-headless: outcome `paused` is a manual checkpoint, not a question —
-    // the resume is the confirmation, so nothing is printed, nothing asked, nothing appended, and
-    // the engine continues from the recorded (already advanced) state.
-    def "continues a paused task without a checkpoint line, a prompt or a decision"() {
+    // FR7 of make-checkpoint-gate-durable: a legacy `paused` outcome recorded past its stage holds
+    // no gate, so the resume consumes it through the resumed commit — state kept as recorded — and
+    // continues; nothing is printed, nothing asked, nothing appended (FR5 of make-run-headless).
+    def "consumes a legacy pause recorded past its stage with the resumed commit, then continues"() {
         given:
         record = recordWith(new RecordedOutcome.Paused('build'))
 
@@ -328,8 +339,45 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         !console.printed.any {
             it.contains('Manual checkpoint')
         }
+        1 * lifecycleStore.resumeFrom('PROJ-1', TaskState.atStageStart('build'))
+        0 * lifecycleStore.approveCheckpoint(_, _, _)
         0 * lifecycleStore.appendDecision(_, _, _)
         executor.requests.size() == 1
+    }
+
+    // FR4, FR11 of make-checkpoint-gate-durable: a tip at a gate takes the checkpoint arm whatever
+    // the outcome says — a lost park (no outcome) or a stale earlier escalation is neither salvaged
+    // nor continued as an interrupted run nor routed to a decision. The resume IS the approval: one
+    // approval commit — the tip's gate, the state past it in the pinned definition — before the
+    // engine runs from the approved state (here the pipeline end of a one-stage pipeline: Completed).
+    def "approves a tip at a gate in one commit and continues when its outcome is #label"() {
+        given:
+        record = recorded == null ? freshRecord() : recordWith(recorded, report)
+        stateRead = {
+            Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals()))
+        }
+
+        when:
+        resume()
+
+        then: 'the approval commit names the gate read off the tip and the approved state'
+        1 * lifecycleStore.approveCheckpoint('PROJ-1', new Position.AwaitingApproval('build'), {
+            it.position() == new Position.PipelineEnd()
+        })
+        0 * lifecycleStore.resumeFrom(_, _)
+        0 * lifecycleStore.appendDecision(_, _, _)
+        0 * salvager._
+
+        and: 'the engine continued past the gate: no re-park, the pipeline end recorded'
+        executor.requests.isEmpty()
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
+        0 * lifecycleStore.recordOutcome(_, _ as TaskOutcome.Paused, _)
+
+        where:
+        label | recorded | report
+        'not recorded (park lost)' | null | null
+        'paused (park landed)' | new RecordedOutcome.Paused('build') | null
+        'a stale escalation' | new RecordedOutcome.Escalated(new EscalationReport.AttemptsExhausted(3)) | new EscalationReport.AttemptsExhausted(3)
     }
 
     // FR1, FR10 of make-run-headless (design D8): a resumed run that stops again records the park
@@ -355,7 +403,12 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // write or salvage.
     def "refuses a --decision over a task whose recorded outcome is #label, writing nothing"() {
         given:
-        record = recorded == null ? freshRecord() : recordWith(recorded)
+        record = recorded == null ? freshRecord() : recordWith(recorded, recorded instanceof RecordedOutcome.Escalated ? recorded.report() : null)
+        if (gate) {
+            stateRead = {
+                Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals()))
+            }
+        }
 
         when:
         resume('nobody asked')
@@ -371,12 +424,14 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         0 * lifecycleStore._
         0 * salvager._
 
-        where:
-        label | recorded | named
-        'paused' | new RecordedOutcome.Paused('build') | "paused at a manual checkpoint after stage 'build'"
-        'completed' | new RecordedOutcome.Completed() | 'completed'
-        'aborted' | new RecordedOutcome.Aborted('build', UntrustedText.branchDocument('persistence failed')) | 'aborted'
-        'not recorded' | null | 'interrupted run with no recorded outcome'
+        where: 'FR4 of make-checkpoint-gate-durable: a gate refuses whatever its outcome says'
+        label | recorded | gate | named
+        'paused' | new RecordedOutcome.Paused('build') | false | "paused at a manual checkpoint after stage 'build'"
+        'completed' | new RecordedOutcome.Completed() | false | 'completed'
+        'aborted' | new RecordedOutcome.Aborted('build', UntrustedText.branchDocument('persistence failed')) | false | 'aborted'
+        'not recorded' | null | false | 'interrupted run with no recorded outcome'
+        'paused at a gate' | new RecordedOutcome.Paused('build') | true | "awaiting approval after stage 'build'"
+        'escalated at a gate' | new RecordedOutcome.Escalated(new EscalationReport.AttemptsExhausted(3)) | true | "awaiting approval after stage 'build'"
     }
 
     // FR8: outcome `aborted` means a prior visit's durability guarantee broke. There is nothing to

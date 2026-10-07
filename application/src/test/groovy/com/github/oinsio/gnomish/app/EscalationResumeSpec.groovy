@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
+import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -141,5 +142,29 @@ class EscalationResumeSpec extends Specification {
 
         where:
         decision << ['anything', null]
+    }
+
+    // FR7, FR8 of make-checkpoint-gate-durable (design D4): what decide resolved lands as exactly one
+    //     lifecycle commit — the decision commit with a decision, the resumed commit without one —
+    //     carrying the reset state, never a reset held in memory alone
+    def "FR7: land writes the #write commit for decision #decision, once"() {
+        given:
+        def repository = Mock(TaskRepository)
+        def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(BURNED, ATTEMPTS_EXHAUSTED), decision)
+
+        when:
+        EscalationResume.land(repository, 'manual-1', resumption, decision)
+
+        then:
+        appends * repository.appendDecision('manual-1', new Decision('patch in place', 'build', 'operator', NOW), BURNED.resetAttempts())
+        resumes * repository.resumeFrom('manual-1', BURNED.resetAttempts())
+        0 * repository._
+
+        where:
+        decision | appends | resumes
+        'patch in place' | 1 | 0
+        null | 0 | 1
+
+        write = decision == null ? 'resumed' : 'decision'
     }
 }

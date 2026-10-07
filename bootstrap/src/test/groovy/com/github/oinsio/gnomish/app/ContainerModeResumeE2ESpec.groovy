@@ -9,7 +9,9 @@ import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -164,11 +166,30 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, null, segments())
 
-        then: 'the leftover was salvaged in-box and harvested (FR6)'
+        then: 'FR6, FR2 of make-checkpoint-gate-durable (design D3): the question the dead run never parked is re-raised from the round record and parked now'
+        def reparked = thrown(RunParkedException)
+        (reparked.outcome() as TaskOutcome.Escalated).report() instanceof EscalationReport.DecisionNeeded
+
+        and: 'the leftover was salvaged in-box and harvested before the engine re-raised it (FR6)'
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
                 '^gnomish: salvage$')
         salvageSha
         gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
+
+        when: 'the operator answers the re-raised question (the gnome, past its first attempt, plays a plain round)'
+        def answerGit = TaskGitFixture.real()
+        def parkTip = gitOutput(cloneDir, 'rev-parse', branch)
+        new ContainerResumeRunner(newAssembly(factoryProps), answerGit, sandboxProps, factoryProps, 'taskId',
+                ContainerSupportFixture.real(answerGit.epochs()))
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
+                taskId, 'use the default', segments())
+
+        then: 'FR7 of make-checkpoint-gate-durable: the continuation landed exactly one lifecycle commit — the decision — before its round'
+        def continued = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "${parkTip}..${branch}").readLines()
+        continued.first() == 'gnomish: task resumed'
+        continued.count {
+            it.startsWith('gnomish: task ') && it != 'gnomish: task completed'
+        } == 1
 
         and: 'the task completed: cleaned tip with the work present, environment disposed'
         def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)

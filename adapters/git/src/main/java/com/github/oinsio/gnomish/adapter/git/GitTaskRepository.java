@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
+import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -25,15 +27,15 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * The git realization of {@link TaskRepository} (design D1): creates the task branch and worktree
  * and writes the first {@code task.json} commit at start, appends resume {@link Decision}s
- * (resetting {@code outcome} to null in the same commit, FR5/D9), and records the terminal {@link
+ * (resetting {@code outcome} to null in the same commit, FR5/D9), opens a checkpoint gate
+ * ({@link #approveCheckpoint}, FR3 of make-checkpoint-gate-durable), consumes a recorded outcome
+ * without a decision ({@link #resumeFrom}, FR7), and records the terminal {@link
  * TaskOutcome} — populating {@code lastEscalation} for {@code Escalated} — at completion or parking.
  * Shares the branch with {@link GitAttemptPersistence}, split by file (D3): this class owns {@code
  * task.json} exclusively. Worktree setup is an internal concern (not on the port): every method
@@ -61,10 +63,16 @@ import org.slf4j.LoggerFactory;
  * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
  * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
  * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
- * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6).
+ * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6);
+ * and the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
+ * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
+ * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
+ * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
+ * make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
- * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless.
+ * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless; FR3, FR7 of
+ * make-checkpoint-gate-durable.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
 
@@ -122,31 +130,48 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto currentDto =
-                readCommitted(taskId, worktree, TaskLifecycleEvent.RESUMED).dto();
-        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
-
-        List<Decision> decisions = new ArrayList<>(current.context().decisions());
-        decisions.add(decision);
-        TaskContext updatedContext = new TaskContext(
-                current.context().taskId(),
-                current.context().title(),
-                current.context().body(),
-                decisions);
-
-        TaskJsonDto dto = TaskJsonMapper.toDto(
-                        updatedContext,
-                        current.baseCommit(),
-                        current.createdAt(),
-                        null,
-                        current.lastEscalation(),
-                        false,
-                        current.pin())
-                .withEgressCursor(currentDto.egressCursor());
+        TaskJsonDto dto = OutcomeClearingTaskJson.withDecision(
+                readCommitted(taskId, worktree, TaskLifecycleEvent.RESUMED).dto(), decision);
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
         StateFileWrite.write(runner, worktree, taskId, resetState, TaskLifecycleEvent.RESUMED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.RESUMED);
+    }
+
+    /**
+     * Opens the gate in one worktree commit (FR3 of make-checkpoint-gate-durable): refused on the
+     * tip's recorded position before anything is staged ({@link CheckpointApprovalCheck}), then
+     * {@code state.json} = {@code approved} and the outcome-cleared {@code task.json} land together.
+     */
+    @Override
+    public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
+        TaskLifecycleEvent event = TaskLifecycleEvent.APPROVED;
+        Path worktree = ensureWorktree(taskId);
+        Position tipPosition =
+                RequiredTaskState.atTipOf(runner, worktree, taskId, event).position();
+        CheckpointApprovalCheck.requireAdmitted(taskId, gate, tipPosition, approved);
+        TaskJsonDto dto = OutcomeClearingTaskJson.of(
+                readCommitted(taskId, worktree, event).dto());
+        StateFileWrite.write(runner, worktree, taskId, approved, event);
+        writeAndCommit(taskId, worktree, dto, event);
+        CheckpointApprovalCheck.approved(taskId, gate, approved);
+    }
+
+    /**
+     * Consumes the recorded outcome in one worktree commit (FR7, design D4 of
+     * make-checkpoint-gate-durable): refused on the tip's {@code task.json} before anything is
+     * staged ({@link ResumedWriteCheck}), then {@code state.json} = {@code reset} and the
+     * outcome-cleared {@code task.json} land together.
+     */
+    @Override
+    public void resumeFrom(String taskId, TaskState reset) {
+        TaskLifecycleEvent event = TaskLifecycleEvent.RESUMED;
+        Path worktree = ensureWorktree(taskId);
+        TaskJsonDto tip = readCommitted(taskId, worktree, event).dto();
+        RecordedOutcome consumed = ResumedWriteCheck.requireRecordedOutcome(taskId, TaskJsonMapper.fromDto(tip));
+        StateFileWrite.write(runner, worktree, taskId, reset, event);
+        writeAndCommit(taskId, worktree, OutcomeClearingTaskJson.of(tip), event);
+        ResumedWriteCheck.resumed(taskId, consumed, reset);
     }
 
     @Override

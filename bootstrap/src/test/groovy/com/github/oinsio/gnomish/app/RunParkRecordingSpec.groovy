@@ -2,10 +2,12 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -27,6 +29,7 @@ import spock.lang.TempDir
 class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     private static final String TASK_JSON = '.gnomish-task/task.json'
+    private static final String STATE_JSON = '.gnomish-task/state.json'
 
     @TempDir
     Path tempDir
@@ -63,6 +66,11 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
 
     private TaskJsonDto tipTask(String taskId) {
         TaskJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(cloneDir, 'show', "gnomish/${taskId}:${TASK_JSON}")))
+    }
+
+    private TaskState tipState(String taskId) {
+        StateJsonMapper.fromDto(StateJsonMapper.readDto(
+                        UntrustedText.branchDocument(gitOutput(cloneDir, 'show', "gnomish/${taskId}:${STATE_JSON}"))))
     }
 
     /** What every recorded park leaves behind, whichever boundary recorded it. */
@@ -102,6 +110,8 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         then:
         def stop = thrown(RunParkedException)
         assertParked('PARK-2', stop, TaskOutcomeDto.Paused, 11)
+        // FR1 of make-checkpoint-gate-durable: the tip's position is the gate of the stage that passed.
+        tipState('PARK-2').position() == new Position.AwaitingApproval('build')
     }
 
     def "FR1, FR10: a host resume that escalates records the park and exits 10"() {
@@ -121,7 +131,7 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         assertParked('PARK-3', stop, TaskOutcomeDto.Escalated, 10)
     }
 
-    def "FR2, FR10: a host resume that reaches a checkpoint records the park and exits 11"() {
+    def "FR4, FR10: a host resume over a gate whose park was lost approves it in one commit, runs the next stage and exits 11 at its gate"() {
         given: 'a run killed at its first checkpoint before the park was recorded'
         def order = new RunOrder(cloneDir, null, ParkPipelines.pausing(), false)
         when:
@@ -129,12 +139,22 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         then:
         thrown(RunKills.SimulatedKill)
 
-        when: 'the resume continues from the recorded position and stops at the second checkpoint'
+        and: 'the round commit already holds the task at the gate of the stage that passed'
+        tipState('PARK-4').position() == new Position.AwaitingApproval('build')
+
+        when: 'the resume finds the gate with no park recorded'
+        def beforeResume = gitOutput(cloneDir, 'rev-parse', 'gnomish/PARK-4')
         resumeRunner().run(order, 'PARK-4', null)
 
-        then:
+        then: 'FR4 of make-checkpoint-gate-durable (manual-run, "Resume of a gate whose park was lost"): the resume is the approval, exactly as over a recorded park'
         def stop = thrown(RunParkedException)
         (stop.outcome() as TaskOutcome.Paused).passedStage() == 'deploy'
+        tipState('PARK-4').position() == new Position.AwaitingApproval('deploy')
         assertParked('PARK-4', stop, TaskOutcomeDto.Paused, 11)
+
+        and: 'the first commit of the resume is the one approval commit, before the next stage\'s round'
+        def resumed = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "${beforeResume}..gnomish/PARK-4").readLines()
+        resumed.first() == 'gnomish: task approved'
+        resumed.count('gnomish: task approved') == 1
     }
 }

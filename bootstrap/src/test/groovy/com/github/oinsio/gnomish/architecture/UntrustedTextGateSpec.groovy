@@ -88,6 +88,10 @@ class UntrustedTextGateSpec extends Specification {
     private static final List<String> ANNOTATED_EXITS = [
         'com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor',
         'com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper',
+        // Joined at task 2.1 of make-checkpoint-gate-durable: the attempt `stop` object's
+        //     question, options, reason and details are written verbatim into state.json —
+        //     split out of StateJsonMapper, the same branch-document writer.
+        'com.github.oinsio.gnomish.adapter.git.state.StateStopMapper',
         'com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper',
         'com.github.oinsio.gnomish.board.json.BoardJsonMapper',
         'com.github.oinsio.gnomish.status.json.AttemptMapper',

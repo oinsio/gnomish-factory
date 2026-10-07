@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
@@ -26,10 +27,14 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingProperties
@@ -78,6 +83,14 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def mechanics = new ContainerResumeMechanics(
                 resumeRunner, [] as List<Segment>, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+    }
+
+    /** {@code definition} with every stage {@code manual}: a pass leaves the task at its gate. */
+    private static PipelineDefinition manual(PipelineDefinition definition) {
+        new PipelineDefinition(definition.schemaVersion(), definition.defaultLimits(), definition.stages().collect {
+            new StageDefinition(it.name(), it.purpose(), it.inputs(), it.outputs(), it.executor(), it.instructionsRef(),
+            it.verify(), it.limits(), AdvancementMode.MANUAL)
+        })
     }
 
     SandboxRunSupport builtSupport
@@ -203,17 +216,51 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         result instanceof TakeResult.Delivered
     }
 
-    // FR1 of make-checkpoint-gate-durable: a tip held at a gate reattaches the box of the stage that
-    // passed — the stage whose round the gate's commit recorded — and the engine runs no round there.
-    def "a resume from a gate reattaches for the gate's stage and runs no round"() {
+    // FR4, FR11 of make-checkpoint-gate-durable: a tip held at a gate whose park was never recorded
+    // is delivered the park it is owed — the Paused outcome recorded factory-side with its marker,
+    // the checkpoint park, the receipt — with no box reattached and no round run.
+    def "a gate whose park was lost is parked without reattaching or running"() {
         given:
+        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
-            fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
         }
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, BasePin.UNPINNED)
-            readFinalState() >> new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+            readFinalState() >> gated
+        }
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = disposition(gitWith(branches)).resumeExisting(
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.AwaitingApproval())
+
+        then:
+        1 * builtSupport.recordPark(new TaskOutcome.Paused(gated, 'build'), TrackerWrite.OWED)
+        1 * tracker.park(REF, ParkReason.CHECKPOINT, _)
+        1 * builtSupport.confirmTerminalWrite()
+        0 * builtSupport.reattachFor(_)
+        0 * builtSupport.salvageLeftovers(_)
+        0 * builtSupport.taskRepository()
+        0 * tracker.finish(_, _)
+        result instanceof TakeResult.AwaitingHuman
+    }
+
+    // FR4 of make-checkpoint-gate-durable: a returned checkpoint is approved over bare objects —
+    // the kept box disposed first — before the run continues from the approved position.
+    def "a returned gate is approved before the run continues"() {
+        given:
+        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        def repository = Mock(TaskRepository)
+        def calls = []
+        def branches = Mock(TaskBranchGit) {
+            ensureLocalTaskBranch(_, _) >> true
+        }
+        builtSupport = Mock(SandboxRunSupport) {
+            readTaskJson() >> new TaskRecord(
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Paused('build'), null, false, BasePin.UNPINNED)
+            readFinalState() >> gated
+            taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> pieces()
@@ -223,13 +270,22 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
+                takeOrder(heldByUs(), tracker, runOrder(manual(completingPipeline()))), new BranchShape.AwaitingApproval())
 
         then:
-        1 * builtSupport.reattachFor('build')
-        1 * builtSupport.salvageLeftovers('PROJ-1')
-        0 * tracker.finish(_, _)
-        result instanceof TakeResult.AwaitingHuman
+        1 * builtSupport.disposeExistingEnvironment() >> { calls << 'dispose' }
+        1 * repository.approveCheckpoint('PROJ-1', new Position.AwaitingApproval('build'), {
+            it.position() == new Position.PipelineEnd()
+        }) >> { calls << 'approve' }
+        1 * tracker.finish(REF, _) >> { calls << 'finish' }
+        0 * repository.resumeFrom(*_)
+        0 * tracker.park(*_)
+        calls == [
+            'dispose',
+            'approve',
+            'finish'
+        ]
+        result instanceof TakeResult.Delivered
     }
 
     // NFR-R4: --discard-work disposes the existing environment instead of reattaching/salvaging.
@@ -358,6 +414,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // alone — the engine runs once, resetting the attempt counter.
     def "an AttemptsExhausted escalation with no pending reply resumes on the return alone"() {
         given:
+        def repository = Mock(TaskRepository)
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
         }
@@ -366,6 +423,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             readTaskJson() >> new TaskRecord(
             taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
+            taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> pieces()
@@ -382,6 +440,9 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         0 * builtSupport.reattachFor(_)
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
+
+        and: 'FR7 of make-checkpoint-gate-durable: the reset lands through the resumed write first'
+        1 * repository.resumeFrom('PROJ-1', TaskState.atStageStart('build').resetAttempts())
     }
 
     // FR7, NFR-S2 of add-base-ref-resolution (task 6.4), container twin of the host feature of the
@@ -401,6 +462,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false,
             new BasePin('release/1.18', BaseRefKind.BRANCH, BaseRule.CONFIGURED_DEFAULT))
             readFinalState() >> TaskState.atStageStart('build')
+            taskRepository() >> Mock(TaskRepository)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> pieces()

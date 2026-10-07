@@ -168,18 +168,4 @@ class EngineSpec extends Specification {
         outcome.finalState().position() == new Position.AwaitingApproval('build')
         outcome.finalState().attempts()*.result() == [AttemptRecord.Result.PASSED]
     }
-
-    // FR2 of make-checkpoint-gate-durable: a run from a gate pauses again, reaching no port
-    def "returns Paused from an AwaitingApproval position without touching any port"() {
-        given: 'a state held at the gate of a stage'
-        def state = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
-
-        when: 'the run is driven'
-        def outcome = new Engine().run(pipeline(stage('build', 3)), CONTEXT, state, WORKSPACE, ports())
-
-        then: 'the outcome is Paused naming the gate, with the entry state'
-        outcome == new TaskOutcome.Paused(state, 'build')
-        executor.requests.isEmpty()
-        persistence.entries.isEmpty()
-    }
 }

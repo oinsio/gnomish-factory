@@ -20,7 +20,7 @@ class RecordedDenialIdentitiesSpec extends Specification {
     private static StateJsonDto stateWith(List<StateDenialDto> denials) {
         new StateJsonDto(1, new StatePositionDto.AtStage('atStage', 'build'), 1, [
             new StateAttemptDto(0, 'passed', '2026-08-19T10:00:00Z', [], denials,
-            emptyUsage(), new StateJudgeUsageDto([]))
+            emptyUsage(), new StateJudgeUsageDto([]), null)
         ], emptyUsage(), null)
     }
 

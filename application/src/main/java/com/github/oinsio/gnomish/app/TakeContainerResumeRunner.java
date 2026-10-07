@@ -18,14 +18,18 @@ import org.jspecify.annotations.Nullable;
  * instead of {@link RunnerOutcomeLoop} ({@code take} never opens a console dialog, design D12).
  *
  * <p>Two resume entry points mirror {@link TakeResumeRunner}'s own two shapes (design D3): {@link
- * #resumeWithoutDecision} for a {@code null}/{@code CHECKPOINT}/{@code INFRA} return, no decision
- * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context {@link
+ * #resumeWithoutDecision} for a tip whose outcome is {@code null} — never recorded, or consumed by
+ * the approval or the resumed write that preceded the call — no decision involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context {@link
  * #appendDecision} has already committed when there was a reply to commit.
  *
  * <p>Kept in sync with {@link TakeResumeRunner}: both resolve the resumed law binding through
  * {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution tail — the
  * current tip of the pinned base ref, narrow-fetched or read locally, parking or releasing the
- * claim exactly alike on the two failure branches.
+ * claim exactly alike on the two failure branches. The two outcome-clearing writes a reply-less
+ * continuation needs — the approval of a gate and the resumed write — are not part of this pair:
+ * they live in the shared seam, {@link ResumeMechanics#approveCheckpoint} and {@link
+ * ResumeMechanics#resumeFrom}, implemented once per medium by {@link HostResumeMechanics} and
+ * {@link ContainerResumeMechanics} (design D6 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR12,
  * D13 of add-base-ref-resolution.
@@ -59,8 +63,12 @@ final class TakeContainerResumeRunner {
     }
 
     /**
-     * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park:
-     * a snapshot commit found unrecorded at the branch tip is an interrupted verification (FR21 of
+     * Resumes a tip whose outcome is {@code null} — a process that died mid-visit, or a {@code
+     * CHECKPOINT}/{@code INFRA} return whose approval or resumed write already landed (FR4, FR7 of
+     * make-checkpoint-gate-durable). The snapshot check below therefore runs on every path: no
+     * recorded outcome can route around it, and a tip that carried an outcome was a lifecycle
+     * commit, never a snapshot, so the write that consumed it hid none (design D4, 6a). A snapshot
+     * commit found unrecorded at the branch tip is an interrupted verification (FR21 of
      * add-sandbox-core) — re-verified against exactly that attempt commit, no salvage, no agent
      * re-run; otherwise the environment is reattached and uncommitted leftovers salvaged in-box
      * (or, on {@code --discard-work}, disposed so the next reattach seeds a fresh clone at the

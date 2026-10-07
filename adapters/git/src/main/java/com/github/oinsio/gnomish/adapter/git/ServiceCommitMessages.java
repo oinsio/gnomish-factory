@@ -105,6 +105,7 @@ public final class ServiceCommitMessages {
         return switch (event) {
             case STARTED -> "started";
             case RESUMED -> "resumed";
+            case APPROVED -> "approved";
             case COMPLETED -> "completed";
             case PAUSED -> "paused";
             case ESCALATED -> "escalated";

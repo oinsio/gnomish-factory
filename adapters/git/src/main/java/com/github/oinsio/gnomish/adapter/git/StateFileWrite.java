@@ -19,8 +19,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The lifecycle store's writes of {@code state.json} (FR3, FR4 of harden-task-branch-contract):
- * the synthesized initial state at STARTED, and the attempt-counter reset a decision implies at
- * RESUMED. Every other write of that file is {@link GitAttemptPersistence}'s — the one-writer rule
+ * the synthesized initial state at STARTED, the attempt-counter reset a decision implies at
+ * RESUMED, and the state past a gate at APPROVED (FR3 of make-checkpoint-gate-durable). Every other write of that file is {@link GitAttemptPersistence}'s — the one-writer rule
  * of the state directory holds, with this narrow lifecycle exception named here.
  *
  * <p>The file is written but not committed: the {@code git add -A} of the lifecycle commit that
@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * The two windows differ, so neither claim covers both:
  *
  * <ul>
- *   <li><b>RESUMED</b> — the tip still carries the previous envelope pair, so the pickup resumes
+ *   <li><b>RESUMED</b> and <b>APPROVED</b> — the tip still carries the previous envelope pair, so the pickup resumes
  *       and re-drives the same lifecycle write. The state written here is synthesized from the same
  *       inputs the re-drive uses, so the orphan and the re-driven file carry the same value:
  *       recovery is a plain roll-forward and running it twice equals running it once.

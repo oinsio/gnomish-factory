@@ -168,8 +168,11 @@ class ReferenceRunSpec extends Specification {
         def ports2 = new EnginePorts(exec2, builtin2, command2, external2, judge2,
                 new RecordingEventListener(), persistence2, clock2, sleeper2)
 
-        and: 'run 2 resumes from the recorded design state'
-        def outcome2 = new Engine().run(pipeline, context1, outcome1.finalState(), WORKSPACE, ports2)
+        and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
+        // as every production decision resume does (EscalationResume, TakeDecisionResume): an
+        // un-reset state still carries the recorded stop and would re-escalate (FR6 of
+        // make-checkpoint-gate-durable)
+        def outcome2 = new Engine().run(pipeline, context1, outcome1.finalState().resetAttempts(), WORKSPACE, ports2)
 
         then: 'the run ends Paused held at the manual review gate, not the pipeline end (FR1 of make-checkpoint-gate-durable)'
         outcome2 instanceof TaskOutcome.Paused

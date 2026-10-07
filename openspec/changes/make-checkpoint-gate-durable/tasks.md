@@ -7,7 +7,7 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 
 ## 1. Domain: the gate and the stop on the record
 
-- [ ] 1.1 Add `Position.AwaitingApproval(String stage)` (`:domain`, `engine`; design D1), blank
+- [x] 1.1 Add `Position.AwaitingApproval(String stage)` (`:domain`, `engine`; design D1), blank
       name refused like `AtStage`. Make `Advancement.positionAfter(definition, stage)`
       mode-aware: `MANUAL` → `AwaitingApproval(stage)`, `AUTO` → next stage / `PipelineEnd`;
       add package-private `Advancement.afterGate(definition, stage)` (the AUTO branch) and the
@@ -19,11 +19,11 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       `Paused(passed.state(), stage)` — the state the round persisted. Verify `AdvancementSpec`
       data table over both modes × middle/last stage; `EngineSpec` asserts the MANUAL arm
       returns the persisted state unchanged.
-- [ ] 1.2 `Engine.preflight`: a state at `AwaitingApproval(stage)` returns
+- [x] 1.2 `Engine.preflight`: a state at `AwaitingApproval(stage)` returns
       `TaskOutcome.Paused(state, stage)` with RunStarted/TaskFinished emitted and no port call
       (design D1, FR2). Verify `EngineSpec` with a throwing executor and throwing check runners:
       Paused returned, nothing invoked, for a middle and a last stage.
-- [ ] 1.3 Add `Stop` (`:domain`, `engine`; design D3): sealed `None | DecisionNeeded(UntrustedText
+- [x] 1.3 Add `Stop` (`:domain`, `engine`; design D3): sealed `None | DecisionNeeded(UntrustedText
       question, List<UntrustedText> options) | CannotVerify(CheckRef check, UntrustedText reason,
       UntrustedText details)`; `AttemptRecord` gains the `stop` component (constructor requires
       it; `None` for PASSED/QUALITY_FAILURE). `StageAttemptLoop` sets it when recording a
@@ -33,14 +33,14 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       reference fixture, `StateJsonMapper` reader, every `new AttemptRecord(` in `*/src/test`
       (grep and list in the report). Verify `StageAttemptLoopSpec` asserts the stop content on
       both results and `None` on a pass.
-- [ ] 1.4 `Engine.preflight` re-escalates from the record (design D3, FR6): when the current
+- [x] 1.4 `Engine.preflight` re-escalates from the record (design D3, FR6): when the current
       stage's recorded history is non-empty and its last round carries a `Stop` other than
       `None`, return `Escalated` with the matching `EscalationReport` rebuilt from the record,
       no port call, `attemptsUsed` unchanged. Order: PipelineMismatch → AwaitingApproval →
       recorded stop → attempt limit. Verify `EngineSpec`: DecisionNeeded and CannotVerify lost-park
       states re-escalate with identical content; a state whose history was reset
       (`resetAttempts()` / `startOfStage()`) runs the stage instead.
-- [ ] 1.5 Fix every `Position` reader to name the gate (design D1, G3) — the compiler lists them;
+- [x] 1.5 Fix every `Position` reader to name the gate (design D1, G3) — the compiler lists them;
       by file: `TaskState`, `StatusReport` (position + `currentStage` describes the passed
       stage), `SummaryAccumulatorListener`, `MdcEventListener` (`stage` MDC = the gate's stage),
       `TaskSummaryAssembler`, `HeartbeatProgress`, `ResumeDecisionCommit`, `GitModeRunner`,
@@ -51,7 +51,7 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       `StateJsonMapper`/`StatePositionDto` (task 2.1). Record the list and each arm's choice in this task. Verify each file's existing
       spec gains the gate case; `StatusTextRenderer` prints "awaiting approval after '<stage>'"
       (UX1).
-- [ ] 1.6 Rewrite `ResumeMatrixSpec` "a post-pause resume starts at the next stage" (M3): a run
+- [x] 1.6 Rewrite `ResumeMatrixSpec` "a post-pause resume starts at the next stage" (M3): a run
       from the gate pauses; a run from the state `TaskState.approveGate` yields starts the next
       stage at round zero. Rewrite `stage-engine`'s "Manual pause on the last stage" expectation
       in every spec that asserts `PipelineEnd` after a MANUAL pass (grep `PipelineEnd` in
@@ -59,14 +59,14 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 
 ## 2. Wire and lifecycle writes
 
-- [ ] 2.1 `StateJsonMapper` / `StatePositionDto`: token `awaitingApproval(stage)`;
+- [x] 2.1 `StateJsonMapper` / `StatePositionDto`: token `awaitingApproval(stage)`;
       `StateAttemptDto`: `stop` object (`none` | `decisionNeeded` | `cannotVerify`), absent read
       as `none`; version stays 1 (design D5, FR10). Verify the round-trip spec iterates
       `Position.class.getPermittedSubclasses()` and `Stop.class.getPermittedSubclasses()` and
       rejects an unknown `stop.type`; the version gate's specs unchanged — both
       `UnsupportedStateFileVersionExceptionSpec`s (`adapters/git`, `:application`) and
       `StateJsonMapperSpec`'s version cases.
-- [ ] 2.2 `TaskRepository.approveCheckpoint(taskId, TaskState approved)` (`:application`, `port`;
+- [x] 2.2 `TaskRepository.approveCheckpoint(taskId, TaskState approved)` (`:application`, `port`;
       design D2, FR3) and `TaskLifecycleStore`: implement in `GitTaskRepository` and
       `GitObjectsTaskRepository` — read the tip, refuse with
       `CheckpointApprovalRefusedException(actualPosition)` unless the position is
@@ -78,29 +78,29 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       on refusal, one INFO on success (NFR-O1). Verify `GitTaskRepositorySpec` /
       `GitObjectsTaskRepositorySpec`: approve, refuse on `AtStage`, refuse on another gate,
       refuse on `PipelineEnd`; the commit count is one.
-- [ ] 2.3 `TaskRepository.resumeFrom(taskId, TaskState reset)` (design D4, FR7): both
+- [x] 2.3 `TaskRepository.resumeFrom(taskId, TaskState reset)` (design D4, FR7): both
       repositories — refuse when the tip's `outcome` is null, else one commit: `state.json` =
       `reset`, outcome null, marker false; decorator pass-through; INFO line. Verify both
       repository specs: resumed commit content; refusal on a null outcome; `appendDecision`
       unchanged.
-- [ ] 2.4 `GitObjectsTaskRepository.recordOutcome` (FR9): `egressCursors.forEscalation(...)`
+- [x] 2.4 `GitObjectsTaskRepository.recordOutcome` (FR9): `egressCursors.forEscalation(...)`
       receives the report of `outcome` when it is `Escalated`, otherwise no report — never the
       carried `lastEscalation`. Verify `GitObjectsTaskRepositorySpec`: a `Paused`/`Completed`/
       `Aborted` write after a tip carrying `cannotExecute` reads no cursor and preserves the
       committed one; the existing `GitObjectsTaskRepositorySpec` cursor cases unchanged
       (`LifecycleEgressCursor` has no spec of its own).
-- [ ] 2.5 Extend the existing `Kept in sync with` sentence of the already-declared pair
+- [x] 2.5 Extend the existing `Kept in sync with` sentence of the already-declared pair
       `GitTaskRepository ↔ GitObjectsTaskRepository` (`GitTaskRepository.java:57`,
       `GitObjectsTaskRepository.java:63`; design D6) with the invariant "the three
       outcome-clearing writes (`appendDecision`, `approveCheckpoint`, `resumeFrom`) land the same
       `task.json`/`state.json` fields in one commit and refuse on the same tip conditions" — no
       second marker; add the row to `.claude/rules/manual-sync-pairs.md`'s registry only if the
       `{@link}` cannot resolve (both are in `adapters/git` — it resolves, so no row).
-- [ ] 2.6 Gate: `./gradlew check` green.
+- [x] 2.6 Gate: `./gradlew check` green.
 
 ## 3. Branch shape
 
-- [ ] 3.1 `BranchTipFacts` gains the recorded position (`BranchTipFactsReader` reads it from
+- [x] 3.1 `BranchTipFacts` gains the recorded position (`BranchTipFactsReader` reads it from
       `state.json`); `BranchShape.AwaitingApproval` added (design D8, FR11), classified before
       `Parked`/`InProgress` whenever the position is a gate, whatever `outcome` says; owner
       STAGE_ENGINE; `isClean` true (a gate is not a repair). Fix every `BranchShape` reader the
@@ -109,18 +109,18 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       arms, `TakeDisposition`. Verify `BranchShapeClassifierSpec` (three outcome variants at a
       gate → `AwaitingApproval`), `BranchShapeClassifierPropertySpec` generates positions;
       `ClaimlessGitBoundarySpec`/`EnvelopeMediumBoundarySpec` unchanged.
-- [ ] 3.2 Update `openspec`-independent docs the shape set is mirrored in:
+- [x] 3.2 Update `openspec`-independent docs the shape set is mirrored in:
       `docs/adr/0003-crash-consistency.md`'s disposition table gains `AwaitingApproval` (task
       6.1 carries the ADR text; the glossary holds no shape list — task 6.3).
 
 ## 4. Continuations
 
-- [ ] 4.1 `ResumeMechanics<B>` (design D2, D4, D6): add `approveCheckpoint(order, branch)` and
+- [x] 4.1 `ResumeMechanics<B>` (design D2, D4, D6): add `approveCheckpoint(order, branch)` and
       `resumeFrom(order, branch, reset)`; implement in `HostResumeMechanics` (worktree
       repository) and `ContainerResumeMechanics` (bare-object repository, before
       materialization). Rewrite the `Kept in sync with` text of `TakeResumeRunner ↔
       TakeContainerResumeRunner` to say the two writes live in the mechanics.
-- [ ] 4.2 `take` arms (FR4, FR7): `TakeLoadedBranchRoutes.route` — a tip at a gate (shape
+- [x] 4.2 `take` arms (FR4, FR7): `TakeLoadedBranchRoutes.route` — a tip at a gate (shape
       `AwaitingApproval`) with the marker cleared → `mechanics.approveCheckpoint` then
       `resumeWithoutDecision` from the approved state; a gate with `outcome` null (park lost) →
       deliver the park (`GitOutcomeRecorder.recordIntent` / `recordPark` of `Paused(stage)`,

@@ -5,8 +5,12 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.DecisionAck;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.Position;
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -26,7 +30,8 @@ import org.jspecify.annotations.Nullable;
  * break the K-fuse retry loop.
  *
  * <p>Implements FR9, D3 of add-tracker-port; FR10, D10, NFR-C1 of add-claim-heartbeat; FR1 of
- * add-serve-sandbox-lifecycle; FR2, FR9, FR12 of harden-task-branch-contract.
+ * add-serve-sandbox-lifecycle; FR2, FR9, FR12 of harden-task-branch-contract; FR4, FR7, FR11 of
+ * make-checkpoint-gate-durable.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
  */
@@ -88,6 +93,13 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
                     branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), order);
         }
 
+        // The AwaitingApproval shape (FR4, FR11 of make-checkpoint-gate-durable): a manual stage
+        // passed and its gate is closed. Checked before the escalation routing, since a gate's tip
+        // may still carry a stale earlier outcome — which is not its park.
+        if (finalState.position() instanceof Position.AwaitingApproval(String gate)) {
+            return resumeAtGate(order, branch, finalState, gate);
+        }
+
         // Route only a genuine ESCALATION-kind park through the decision dialog (design D3). The
         // outcome guard matters because lastEscalation is carried forward across later non-escalated
         // rounds (GitTaskRepository#recordOutcome), so a Paused/Aborted/null outcome can still carry
@@ -103,7 +115,35 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         // read that detects it.
         redriveUnacknowledgedDecision(branch, order.tracker(), order.ref());
 
+        // FR7 of make-checkpoint-gate-durable: an outcome still recorded here is continued without
+        // a reply, so it is consumed by the resumed write before the engine runs — never left on
+        // the tip under a live run.
+        if (branch.outcome() != null) {
+            return decisionResume.resumeReturned(order, branch, finalState);
+        }
         return mechanics.resumeWithoutDecision(order, branch, finalState);
+    }
+
+    /**
+     * A tip at a gate (FR4, FR11, design D2, D8 of make-checkpoint-gate-durable). When the gate's
+     * own park is recorded — and, since an orphaned park was delivered above, its marker cleared —
+     * a human returned the checkpoint: the approval write opens the gate and the engine continues
+     * from the approved state. Otherwise the park was lost before it was recorded (a kill between
+     * the round commit and the park commit, or a stale earlier outcome on the tip): the park the
+     * gate is owed is recorded and delivered, and the run exits without running a stage.
+     */
+    private TakeResult resumeAtGate(TakeOrder order, B branch, TaskState finalState, String gate) {
+        if (branch.outcome() instanceof RecordedOutcome.Paused(String passed) && passed.equals(gate)) {
+            TaskState approved = mechanics.approveCheckpoint(order, branch);
+            return mechanics.resumeWithoutDecision(order, branch, approved);
+        }
+        var paused = new TaskOutcome.Paused(finalState, gate);
+        // A fresh park (its intent is not on the branch yet), receipt included.
+        var park = new ParkTransition.Fresh(
+                () -> mechanics.recordPark(order, branch, paused),
+                () -> mechanics.confirmTerminalWrite(order.run().cloneDir(), branch));
+        return TakePauseExit.finish(
+                paused, branch.context(), branch.branchName(), order, TerminalWriteRetry.system(), park);
     }
 
     /**

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -13,14 +14,14 @@ import java.nio.file.Path;
 
 /**
  * The {@link TaskLifecycleStore} decorator: {@link PushBestEffortTaskRepository}'s behavior for the
- * three base lifecycle writes, plus the same best-effort push after the two commits that only a
+ * base lifecycle writes, plus the same best-effort push after the two commits that only a
  * durable, branch-backed store records (design D1's port-shape note of fix-lifecycle-push) — the
  * tracker-write-confirmed commit and the {@code Completed} cleanup commit (FR10 of
  * harden-task-branch-contract). Each is a lifecycle operation of its own with its own push: the
  * terminal tracker write runs between the outcome commit and the cleanup commit, so the two cannot
  * share one push.
  *
- * <p>One decorator class per port rather than one class casting its delegate: the three shared
+ * <p>One decorator class per port rather than one class casting its delegate: the shared
  * writes are delegated to a {@link PushBestEffortTaskRepository} built over the same delegate, so
  * the push rule exists once and this file holds delegation shims only.
  *
@@ -80,6 +81,16 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         base.appendDecision(taskId, decision, resetState);
+    }
+
+    @Override
+    public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
+        base.approveCheckpoint(taskId, gate, approved);
+    }
+
+    @Override
+    public void resumeFrom(String taskId, TaskState reset) {
+        base.resumeFrom(taskId, reset);
     }
 
     @Override

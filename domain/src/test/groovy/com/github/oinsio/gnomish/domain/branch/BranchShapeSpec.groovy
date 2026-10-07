@@ -8,6 +8,8 @@ import spock.lang.Specification
  * transition forward, quarantines it, or has nothing left to do.
  * The table asserted here is the one owned by {@code docs/adr/0003-crash-consistency.md}.
  */
+// FR11 of make-checkpoint-gate-durable: the gate shape is owned by the stage engine, rolls
+// forward, carries state and is clean — a gate is where every manual stage stops, not a repair.
 class BranchShapeSpec extends Specification {
 
     // FR1: every shape names exactly one recovery owner and one disposition — the ADR's table.
@@ -21,6 +23,7 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Bare() || RecoveryOwner.TAKE_ROUTING | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.Created() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.InProgress() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
+        new BranchShape.AwaitingApproval() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.Parked() || RecoveryOwner.TERMINAL_TRANSITION | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.Answered() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.CompletedUncleaned() || RecoveryOwner.COMPLETION_FINISH | RecoveryDisposition.ROLL_FORWARD
@@ -41,6 +44,7 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Created() || true
         new BranchShape.InProgress() || true
         new BranchShape.Answered() || true
+        new BranchShape.AwaitingApproval() || true
         new BranchShape.Delivered() || true
         new BranchShape.Bare() || false
         new BranchShape.Parked() || false
@@ -72,6 +76,7 @@ class BranchShapeSpec extends Specification {
         shape || carries
         new BranchShape.Created() || true
         new BranchShape.InProgress() || true
+        new BranchShape.AwaitingApproval() || true
         new BranchShape.Parked() || true
         new BranchShape.Answered() || true
         new BranchShape.CompletedUncleaned() || true
@@ -85,13 +90,14 @@ class BranchShapeSpec extends Specification {
     // FR16: the closed set names itself once — a table cell, a log line and a diagnosis all read
     // the same word for the same shape. Labels are load-bearing (the kill-point harness asserts on
     // them), so every shape's label is pinned as a literal, and the pin is checked against the
-    // sealed set itself: a renamed shape fails its row, an eleventh shape fails the coverage check.
+    // sealed set itself: a renamed shape fails its row, an twelfth shape fails the coverage check.
     def "label() pins every shape of the closed set"() {
         given: 'one instance of every shape, each with its pinned label'
         def pinned = [
             (new BranchShape.Bare()): 'Bare',
             (new BranchShape.Created()): 'Created',
             (new BranchShape.InProgress()): 'InProgress',
+            (new BranchShape.AwaitingApproval()): 'AwaitingApproval',
             (new BranchShape.Parked()): 'Parked',
             (new BranchShape.Answered()): 'Answered',
             (new BranchShape.CompletedUncleaned()): 'CompletedUncleaned',

@@ -125,7 +125,8 @@ final class StageAttemptLoop {
                         return new StageResult.Terminal(aborted);
                     }
                     return new StageResult.Terminal(new TaskOutcome.Escalated(
-                            newState, new EscalationReport.DecisionNeeded(decision.question(), decision.options())));
+                            newState,
+                            StopEscalation.of(decision.record().stop()).orElseThrow()));
                 }
                 case RoundOutcome.CannotExecute ce -> {
                     // FR1 of fix-denial-attribution-durability: the failed round left no
@@ -173,7 +174,7 @@ final class StageAttemptLoop {
     private static StageResult route(TaskState newState, RoundOutcome.Verified verified, StageDefinition stage) {
         return switch (verified.verdict()) {
             case Verdict.Fail ignored -> exhausted(newState, stage) ? exhaust(newState, stage) : null;
-            case Verdict.CannotVerify cv -> escalate(newState, verified, cv);
+            case Verdict.CannotVerify ignored -> escalate(newState, verified);
             case Verdict.Pass ignored -> new StageResult.Passed(newState);
         };
     }
@@ -181,13 +182,12 @@ final class StageAttemptLoop {
     /**
      * Escalates a {@link Verdict.CannotVerify} round as a {@link StageResult.Terminal} carrying
      * {@link EscalationReport.CannotVerify} naming the failing check with its reason and details
-     * (FR4); the round is already recorded in {@code newState} and persisted, so this only names
-     * the terminal.
+     * (FR4), built from the round's recorded, persisted {@link Stop} by {@link StopEscalation} — the
+     * mapping pre-flight re-escalation reads too (FR6 of make-checkpoint-gate-durable).
      */
-    private static StageResult escalate(TaskState newState, RoundOutcome.Verified verified, Verdict.CannotVerify cv) {
-        var check = verified.record().checkResults().getLast().checkRef();
+    private static StageResult escalate(TaskState newState, RoundOutcome.Verified verified) {
         return new StageResult.Terminal(new TaskOutcome.Escalated(
-                newState, new EscalationReport.CannotVerify(check, cv.reason(), cv.details())));
+                newState, StopEscalation.of(verified.record().stop()).orElseThrow()));
     }
 
     /**

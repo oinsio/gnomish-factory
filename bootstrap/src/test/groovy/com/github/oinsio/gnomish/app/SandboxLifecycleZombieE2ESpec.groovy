@@ -184,11 +184,23 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, null, segments())
 
-        then: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
+        then: 'FR2 of make-checkpoint-gate-durable (design D3): the question the dead run never parked is re-raised from the round record'
+        thrown(RunParkedException)
+
+        and: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
         def branch = "gnomish/${taskId}"
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep', '^gnomish: salvage$')
         salvageSha
         gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
+
+        when: 'the operator answers it (the gnome, past its first attempt, plays a plain round)'
+        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
+                trackedContainerSupport())
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
+                taskId, 'use the default', segments())
+
+        then: 'no further stop'
+        noExceptionThrown()
 
         and: 'the task completed and the environment is fully disposed'
         def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)

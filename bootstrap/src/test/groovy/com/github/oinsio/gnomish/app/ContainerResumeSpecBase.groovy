@@ -84,6 +84,11 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
     }
 
+    /** At the gate of the one stage: a manual pass left it there (FR1 of make-checkpoint-gate-durable). */
+    protected static TaskState gateState() {
+        new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+    }
+
     protected List<Segment> segments() {
         [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -135,6 +140,13 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     protected void commitStateAtPipelineEnd(String taskId) {
         def bytes = TaskStateJson.mapper()
                 .writeValueAsString(StateJsonMapper.toDto(pipelineEndState())).getBytes('UTF-8')
+        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
+    }
+
+    /** Commits a state.json held at the gate of "build", as the round commit of a manual pass leaves it. */
+    protected void commitStateAtGate(String taskId) {
+        def bytes = TaskStateJson.mapper()
+                .writeValueAsString(StateJsonMapper.toDto(gateState())).getBytes('UTF-8')
         commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
     }
 

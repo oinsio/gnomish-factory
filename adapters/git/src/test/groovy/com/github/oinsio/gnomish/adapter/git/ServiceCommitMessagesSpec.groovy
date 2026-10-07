@@ -33,6 +33,7 @@ class ServiceCommitMessagesSpec extends Specification {
         event | expected
         TaskLifecycleEvent.STARTED | 'gnomish: task started'
         TaskLifecycleEvent.RESUMED | 'gnomish: task resumed'
+        TaskLifecycleEvent.APPROVED | 'gnomish: task approved'
         TaskLifecycleEvent.COMPLETED | 'gnomish: task completed'
         TaskLifecycleEvent.PAUSED | 'gnomish: task paused'
         TaskLifecycleEvent.ESCALATED | 'gnomish: task escalated'

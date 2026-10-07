@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -55,13 +57,62 @@ public interface ResumeMechanics<B extends ResumedBranch> {
     void finishCleanup(Path cloneDir, B branch);
 
     /**
-     * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park:
-     * salvages the interrupted round's leftovers — or discards them under the order's {@code
-     * discardWork} — and runs the engine once from {@code finalState}. The whole order is passed
-     * although the pipeline it carries is also bound into this mechanics (design D4 of
-     * introduce-take-order): both are the same startup definition on the resume path.
+     * Resumes a tip whose outcome is {@code null} — never recorded (process died mid-visit), or
+     * cleared by the {@link #approveCheckpoint approval} or the {@link #resumeFrom resumed write}
+     * that preceded this call (FR4, FR7 of make-checkpoint-gate-durable): salvages the interrupted
+     * round's leftovers — or discards them under the order's {@code discardWork} — and runs the
+     * engine once from {@code finalState}. The whole order is passed although the pipeline it
+     * carries is also bound into this mechanics (design D4 of introduce-take-order): both are the
+     * same startup definition on the resume path.
      */
     TakeResult resumeWithoutDecision(TakeOrder order, B branch, TaskState finalState);
+
+    /**
+     * Records the park a gate is owed when the tip holds the gate but not its park — the kill
+     * window between the round commit and the park commit (FR4, FR11, design D8 of
+     * make-checkpoint-gate-durable): the {@code Paused} outcome commit carrying the pending marker
+     * (the park's durable intent), then the medium's delivery fence. No environment is
+     * materialized and no stage runs.
+     *
+     * <p>Implements FR4, FR11 of make-checkpoint-gate-durable.
+     *
+     * @param paused the park the gate is owed; never null
+     * @return the delivery fence's verdict on the recorded park; never null
+     */
+    ParkDeliveryVerdict recordPark(TakeOrder order, B branch, TaskOutcome.Paused paused);
+
+    /**
+     * Opens the gate the branch tip is held at — the <em>approval</em>, the pivot write a returned
+     * checkpoint is continued through (FR3, design D2, D6 of make-checkpoint-gate-durable). Reads
+     * the tip's state, derives the position past the gate through {@link
+     * TaskState#approveGate} against the order's pinned definition, and hands both the gate read
+     * off the tip and that state to {@code TaskRepository#approveCheckpoint} — one commit,
+     * landed before any environment is materialized (in container mode the kept box is disposed
+     * first, as for {@link #appendDecision}).
+     *
+     * <p>Implements FR3, FR4 of make-checkpoint-gate-durable.
+     *
+     * @return the approved state the continuation runs from; never null, never at a gate
+     * @throws IllegalStateException when the tip is not at a gate the definition declares; nothing
+     *     was written
+     * @throws com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException when the
+     *     repository refuses on the tip; nothing was written
+     */
+    TaskState approveCheckpoint(TakeOrder order, B branch);
+
+    /**
+     * Consumes the tip's recorded outcome without a decision — the <em>resumed write</em> (FR7,
+     * design D4, D6 of make-checkpoint-gate-durable): {@code TaskRepository#resumeFrom} with
+     * {@code reset}, one commit, landed before any environment is materialized (in container mode
+     * the kept box is disposed first, as for {@link #appendDecision}).
+     *
+     * <p>Implements FR7 of make-checkpoint-gate-durable.
+     *
+     * @param reset the state the continued task resumes into; never null
+     * @throws com.github.oinsio.gnomish.app.port.ResumedWriteRefusedException when the tip records
+     *     no outcome; nothing was written
+     */
+    void resumeFrom(TakeOrder order, B branch, TaskState reset);
 
     /**
      * Appends {@code decisionText} to the branch as a human decision, in one commit with the

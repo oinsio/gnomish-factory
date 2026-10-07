@@ -23,7 +23,9 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
  * "tracker-write pending" marker can be cleared at all — is reached through {@link ResumeMechanics}.
  *
  * <p>Implements FR9, D3 of add-tracker-port; FR10, D10, NFR-C1 of add-claim-heartbeat; FR1 of
- * add-serve-sandbox-lifecycle; FR2, FR15 of harden-task-branch-contract.
+ * add-serve-sandbox-lifecycle; FR2, FR15 of harden-task-branch-contract; FR11 of
+ * make-checkpoint-gate-durable (a gate loads the branch like any resumable shape; the loaded
+ * routes decide approve-and-continue versus re-delivering a lost park).
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
  */
@@ -64,6 +66,7 @@ record TakeDispositionResume<B extends ResumedBranch>(
             case BranchShape.Delivered() -> TakeReconcileFinish.deliverCompleted(git, order);
             case BranchShape.Created(),
                     BranchShape.InProgress(),
+                    BranchShape.AwaitingApproval(),
                     BranchShape.Answered(),
                     BranchShape.Parked(),
                     BranchShape.CompletedUncleaned() -> routes().route(order);

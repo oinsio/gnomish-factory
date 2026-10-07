@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -85,7 +86,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         def worktree = worktreeFor(registeredClone, taskId)
         def state = TaskState.atStageStart(stage).recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), []))
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
     }

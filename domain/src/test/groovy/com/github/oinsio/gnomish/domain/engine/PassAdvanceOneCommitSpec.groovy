@@ -66,6 +66,6 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
 
     private static AttemptRecord passedRound() {
         new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
-        ExecutorUsage.none(), JudgeUsage.none(), [])
+        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
     }
 }

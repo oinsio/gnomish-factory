@@ -123,6 +123,13 @@ public record StatusReport(
                 lastEscalation);
     }
 
+    // JVMTI redefinition limit (testing.md, "Per-method exemptions"): the derived accessor and
+    // the helper below carry @DoNotMutate because PIT's Gregor engine crashes its own minion JVM
+    // (RUN_ERROR, not a real test gap) mutating some bytecode shapes of this record's methods on
+    // JDK 17+ (hcoles/pitest#1285, a JVMTI RedefineClasses restriction on
+    // NestHost/NestMembers/Record attributes — not fixable via PIT config); observed on
+    // currentStage()'s empty-return mutant. Both are otherwise fully covered by StatusReportSpec.
+
     /**
      * The stage the report describes, derived from {@link #position()}: the stage name at {@link
      * Position.AtStage}; at {@link Position.AwaitingApproval} the {@code manual} stage that passed,
@@ -131,18 +138,8 @@ public record StatusReport(
      *
      * @return the described stage's name, or {@code null} at {@code pipelineEnd}
      */
-    public @Nullable String currentStage() {
-        return currentStageOf(position);
-    }
-
-    // PIT M4 documented exception (build.gradle has the full rationale): both helpers below
-    // carry @DoNotMutate because PIT's Gregor engine crashes its own minion JVM (RUN_ERROR,
-    // not a real test gap) mutating some bytecode shapes of this record's component-adjacent
-    // private methods on JDK 17+ (hcoles/pitest#1285, a JVMTI RedefineClasses restriction on
-    // NestHost/NestMembers/Record attributes — not fixable via PIT config). Both are otherwise
-    // fully covered by StatusReportSpec.
     @DoNotMutate
-    private static @Nullable String currentStageOf(Position position) {
+    public @Nullable String currentStage() {
         return switch (position) {
             case Position.AtStage(String name) -> name;
             case Position.AwaitingApproval(String stage) -> stage;

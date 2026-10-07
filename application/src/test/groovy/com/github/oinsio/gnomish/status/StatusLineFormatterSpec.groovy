@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -64,7 +65,7 @@ class StatusLineFormatterSpec extends Specification {
             new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(120)),
             new CheckResult(new CheckRef(1, UntrustedText.manifest('command:./gradlew test')), new Verdict.Pass(), Duration.ofMillis(380))
         ]
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, checks, ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, checks, ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
 
         expect:
         StatusLineFormatter.checkHighlight(record) == '2 checks passed, 500ms'
@@ -72,7 +73,7 @@ class StatusLineFormatterSpec extends Specification {
 
     def "checkHighlight reports exactly 'no checks' when the round ran no checks at all"() {
         given:
-        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, STARTED, [], ExecutorUsage.none(), JudgeUsage.none(), [])
+        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, STARTED, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
 
         expect:
         StatusLineFormatter.checkHighlight(record) == 'no checks'

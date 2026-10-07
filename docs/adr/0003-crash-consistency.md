@@ -108,6 +108,7 @@ returns to a known-good tip.
 | `Bare`               | take routing (branch creation)                | roll forward: write the STARTED commit                                  |
 | `Created`            | take routing → stage engine                   | roll forward: run the first stage                                       |
 | `InProgress`         | stage engine                                  | roll forward: resume at the recorded position                           |
+| `AwaitingApproval`   | stage engine, then the human                  | roll forward: deliver a lost park; continue only after the approval write |
 | `Parked`             | terminal-transition component, then the human | roll forward: complete the pending tracker write; then wait             |
 | `Answered`           | stage engine                                  | roll forward: resume with the decision                                  |
 | `CompletedUncleaned` | completion-finish flow                        | roll forward: cleanup, push, tracker finish — never re-enter the engine |

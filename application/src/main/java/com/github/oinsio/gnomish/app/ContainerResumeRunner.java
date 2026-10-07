@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
@@ -39,16 +40,19 @@ import org.slf4j.MDC;
  * local/origin pair fails closed with {@link
  * com.github.oinsio.gnomish.app.port.git.DivergedBranchException} rather than discarding the
  * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
- * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
+ * one closed set, with the same meaning per arm — except that a recorded {@code AwaitingApproval}
+ * position takes the {@code paused} arm whatever the outcome says (FR11 of
+ * make-checkpoint-gate-durable): {@code null} salvages the interrupted round and
  * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
  * resolves the {@code --decision} through the same {@link EscalationResume}, {@code paused}
- * continues without a prompt, {@code completed} reports without another engine run, and {@code
+ * lands the approval commit and continues without a prompt, {@code completed} reports without another engine run, and {@code
  * aborted} refuses with a usage error naming the kept working copy; both refuse a {@code
- * --decision} over a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
+ * --decision} over a gate or a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
  * write (FR9 of make-run-headless). Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
- * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR9 of make-run-headless.
+ * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR9 of make-run-headless; FR11 of
+ * make-checkpoint-gate-durable.
  */
 final class ContainerResumeRunner {
 
@@ -115,7 +119,13 @@ final class ContainerResumeRunner {
                 support.readStateOrInitial(definition.stages().getFirst().name());
 
         RecordedOutcome outcome = taskJson.outcome();
-        ResumeDecisionGuard.requireEscalatedFor(recordedTaskId, outcome, decision);
+        ResumeDecisionGuard.requireEscalatedFor(recordedTaskId, outcome, state.position(), decision);
+        if (state.position() instanceof Position.AwaitingApproval) {
+            // FR11 of make-checkpoint-gate-durable: a gate takes the checkpoint continuation
+            // whatever the outcome says, as on the host path.
+            ContainerResumeOutcomes.resumePaused(this, support, order, taskJson, state);
+            return;
+        }
         if (outcome == null) {
             ContainerResumeOutcomes.resumeFromRecordedPosition(this, support, order, taskJson, state);
             return;

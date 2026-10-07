@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.domain.branch
 
+import com.github.oinsio.gnomish.domain.engine.Position
 import spock.lang.Specification
 
 /**
  * M2, FR1, NFR-R2 of harden-task-branch-contract, FR1 of fix-claim-epoch-fence:
- * property-generated branch tips — every combination of envelope statuses, recorded outcomes and
- * content flags — classify to exactly one shape, and no generated input throws.
+ * property-generated branch tips — every combination of envelope statuses, recorded outcomes,
+ * recorded positions (FR11 of make-checkpoint-gate-durable) and content flags — classify to exactly one shape, and no generated input throws.
  *
  * <p>The generation is exhaustive rather than random: the fact space is small enough to enumerate
  * in full (a few hundred tips), which is a stronger guarantee than sampling it and needs no seed
@@ -21,16 +22,26 @@ class BranchShapeClassifierPropertySpec extends Specification {
         new EnvelopeStatus.Unreadable('malformed JSON')
     ]
 
+    // FR11 of make-checkpoint-gate-durable: the recorded position is a fact, gate included.
+    private static final List<Optional<Position>> POSITIONS = [
+        Optional.empty(),
+        Optional.of(new Position.AtStage('implement')),
+        Optional.of(new Position.AwaitingApproval('review')),
+        Optional.of(new Position.PipelineEnd())
+    ]
+
     private static List<BranchTipFacts> everyTip() {
         def tips = []
         for (taskEnvelope in ENVELOPES) {
             for (stateEnvelope in ENVELOPES) {
                 for (outcome in RecordedTerminal.values()) {
-                    for (rounds in [true, false]) {
-                        for (decisions in [true, false]) {
-                            for (cleanup in [true, false]) {
-                                tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
-                                        rounds, decisions, cleanup)
+                    for (position in POSITIONS) {
+                        for (rounds in [true, false]) {
+                            for (decisions in [true, false]) {
+                                for (cleanup in [true, false]) {
+                                    tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
+                                            position, rounds, decisions, cleanup)
+                                }
                             }
                         }
                     }
@@ -51,14 +62,14 @@ class BranchShapeClassifierPropertySpec extends Specification {
         def shapes = tips.collect { classifier.classify(it) }
 
         then: 'the space really was enumerated, not silently emptied'
-        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * 8
+        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * POSITIONS.size() * 8
 
         and: 'each verdict is one shape of the closed set, with an owner and a disposition'
         shapes.every { it != null }
         shapes.every { it instanceof BranchShape }
         shapes.every { it.recoveryOwner() != null && it.disposition() != null }
 
-        and: 'no generated tip is left unnamed — every shape reached is one of the ten'
+        and: 'no generated tip is left unnamed — every shape reached is one of the eleven'
         shapes.collect {
             it.class
         }.toSet().every {
@@ -86,6 +97,7 @@ class BranchShapeClassifierPropertySpec extends Specification {
             BranchShape.Bare,
             BranchShape.Created,
             BranchShape.InProgress,
+            BranchShape.AwaitingApproval,
             BranchShape.Parked,
             BranchShape.Answered,
             BranchShape.CompletedUncleaned,
@@ -94,6 +106,24 @@ class BranchShapeClassifierPropertySpec extends Specification {
             BranchShape.Corrupt,
             BranchShape.Unknown
         ])
-        reached.size() == 10
+        reached.size() == 11
+    }
+
+    // FR11 of make-checkpoint-gate-durable: whenever the tip is readable, carries task.json and is
+    // not delivered, a gate position classifies as AwaitingApproval whatever the outcome says.
+    def "every readable undelivered tip at a gate is AwaitingApproval"() {
+        given:
+        def gates = everyTip().findAll {
+            it.recordedPosition().orElse(null) instanceof Position.AwaitingApproval &&
+            it.taskEnvelope() instanceof EnvelopeStatus.Parsed &&
+            it.stateEnvelope() instanceof EnvelopeStatus.Parsed &&
+            !it.cleanupCommitInHistory()
+        }
+
+        expect:
+        !gates.isEmpty()
+        gates.every {
+            classifier.classify(it) == new BranchShape.AwaitingApproval()
+        }
     }
 }
