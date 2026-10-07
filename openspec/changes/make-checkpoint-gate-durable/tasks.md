@@ -10,8 +10,10 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 - [ ] 1.1 Add `Position.AwaitingApproval(String stage)` (`:domain`, `engine`; design D1), blank
       name refused like `AtStage`. Make `Advancement.positionAfter(definition, stage)`
       mode-aware: `MANUAL` → `AwaitingApproval(stage)`, `AUTO` → next stage / `PipelineEnd`;
-      add package-visible `Advancement.afterGate(definition, stage)` (the AUTO branch, used by
-      the approval write's position computation through the port); rewrite the javadoc that
+      add package-private `Advancement.afterGate(definition, stage)` (the AUTO branch) and the
+      public `TaskState.approveGate(PipelineDefinition)` that delegates to it — the only way
+      the `run`/`take` callers holding the pinned definition compute the approved state
+      (design D2, D7); rewrite the javadoc that
       says the mode does not enter. Delete the `Advancement.nextPosition(next)` call in
       `Engine.runStages`' MANUAL arm (`Engine.java:185-187`): return
       `Paused(passed.state(), stage)` — the state the round persisted. Verify `AdvancementSpec`
@@ -41,15 +43,16 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 - [ ] 1.5 Fix every `Position` reader to name the gate (design D1, G3) — the compiler lists them;
       by file: `TaskState`, `StatusReport` (position + `currentStage` describes the passed
       stage), `SummaryAccumulatorListener`, `MdcEventListener` (`stage` MDC = the gate's stage),
-      `TaskSummaryAssembler`, `HeartbeatProgress`, `AttemptLimitResolver` (the gate's stage
-      resolves its limit), `ResumeDecisionCommit`, `GitModeRunner`, `EscalationResume`,
-      `ContainerResumeOutcomes`, `TakeContainerResumeRunner` (`reattachFor` the gate's stage —
-      the box of the stage that passed), `RunCheckRunContext` (`:bootstrap`), `StateJsonMapper`
-      (task 2.1). Record the list and each arm's choice in this task. Verify each file's existing
+      `TaskSummaryAssembler`, `HeartbeatProgress`, `ResumeDecisionCommit`, `GitModeRunner`,
+      `EscalationResume`, `ContainerResumeOutcomes`, `TakeContainerResumeRunner` (`reattachFor`
+      the gate's stage — the box of the stage that passed), `TakeFinishReport`, `StageResult`
+      (`:domain`), `status/json/PositionDto` and `StatusReportJsonMapper` (task 4.5),
+      `TaskBranchLister` (`adapters/git`), `RunCheckRunContext` (`:bootstrap`),
+      `StateJsonMapper`/`StatePositionDto` (task 2.1). Record the list and each arm's choice in this task. Verify each file's existing
       spec gains the gate case; `StatusTextRenderer` prints "awaiting approval after '<stage>'"
       (UX1).
 - [ ] 1.6 Rewrite `ResumeMatrixSpec` "a post-pause resume starts at the next stage" (M3): a run
-      from the gate pauses; a run from the state `Advancement.afterGate` yields starts the next
+      from the gate pauses; a run from the state `TaskState.approveGate` yields starts the next
       stage at round zero. Rewrite `stage-engine`'s "Manual pause on the last stage" expectation
       in every spec that asserts `PipelineEnd` after a MANUAL pass (grep `PipelineEnd` in
       `domain/src/test` and `application/src/test`; list the hits).
@@ -60,12 +63,16 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       `StateAttemptDto`: `stop` object (`none` | `decisionNeeded` | `cannotVerify`), absent read
       as `none`; version stays 1 (design D5, FR10). Verify the round-trip spec iterates
       `Position.class.getPermittedSubclasses()` and `Stop.class.getPermittedSubclasses()` and
-      rejects an unknown `stop.type`; `StateFileVersionGateSpec` unchanged.
+      rejects an unknown `stop.type`; the version gate's specs unchanged — both
+      `UnsupportedStateFileVersionExceptionSpec`s (`adapters/git`, `:application`) and
+      `StateJsonMapperSpec`'s version cases.
 - [ ] 2.2 `TaskRepository.approveCheckpoint(taskId, TaskState approved)` (`:application`, `port`;
       design D2, FR3) and `TaskLifecycleStore`: implement in `GitTaskRepository` and
       `GitObjectsTaskRepository` — read the tip, refuse with
       `CheckpointApprovalRefusedException(actualPosition)` unless the position is
-      `AwaitingApproval(s)` and `approved.position()` is `afterGate(s)`, then one commit:
+      `AwaitingApproval(s)` for the stage named and `approved.position()` is not a gate — the
+      repositories hold no pipeline definition; the caller computed `approved` through
+      `TaskState.approveGate` (task 1.1) — then one commit:
       `state.json` = `approved`, `task.json` outcome null, marker false, `lastEscalation` kept;
       pass through `PushBestEffortTaskLifecycleStore`. One WARN with a new `OperatorEvent` code
       on refusal, one INFO on success (NFR-O1). Verify `GitTaskRepositorySpec` /
@@ -80,12 +87,15 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       receives the report of `outcome` when it is `Escalated`, otherwise no report — never the
       carried `lastEscalation`. Verify `GitObjectsTaskRepositorySpec`: a `Paused`/`Completed`/
       `Aborted` write after a tip carrying `cannotExecute` reads no cursor and preserves the
-      committed one; `LifecycleEgressCursorSpec` unchanged.
-- [ ] 2.5 Declare the pair `GitTaskRepository ↔ GitObjectsTaskRepository` at both ends (design
-      D6): `Kept in sync with` + the invariant "the three outcome-clearing writes land the same
-      fields in one commit and refuse on the same tip conditions"; add the row to
-      `.claude/rules/manual-sync-pairs.md`'s registry only if the `{@link}` cannot resolve
-      (both are in `adapters/git` — it resolves, so no row).
+      committed one; the existing `GitObjectsTaskRepositorySpec` cursor cases unchanged
+      (`LifecycleEgressCursor` has no spec of its own).
+- [ ] 2.5 Extend the existing `Kept in sync with` sentence of the already-declared pair
+      `GitTaskRepository ↔ GitObjectsTaskRepository` (`GitTaskRepository.java:57`,
+      `GitObjectsTaskRepository.java:63`; design D6) with the invariant "the three
+      outcome-clearing writes (`appendDecision`, `approveCheckpoint`, `resumeFrom`) land the same
+      `task.json`/`state.json` fields in one commit and refuse on the same tip conditions" — no
+      second marker; add the row to `.claude/rules/manual-sync-pairs.md`'s registry only if the
+      `{@link}` cannot resolve (both are in `adapters/git` — it resolves, so no row).
 - [ ] 2.6 Gate: `./gradlew check` green.
 
 ## 3. Branch shape
@@ -99,9 +109,9 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       arms, `TakeDisposition`. Verify `BranchShapeClassifierSpec` (three outcome variants at a
       gate → `AwaitingApproval`), `BranchShapeClassifierPropertySpec` generates positions;
       `ClaimlessGitBoundarySpec`/`EnvelopeMediumBoundarySpec` unchanged.
-- [ ] 3.2 Update `openspec`-independent docs the shape set is mirrored in: the glossary's shape
-      list and `docs/adr/0003-crash-consistency.md`'s disposition table gain `AwaitingApproval`
-      (task 6.1 carries the ADR text).
+- [ ] 3.2 Update `openspec`-independent docs the shape set is mirrored in:
+      `docs/adr/0003-crash-consistency.md`'s disposition table gains `AwaitingApproval` (task
+      6.1 carries the ADR text; the glossary holds no shape list — task 6.3).
 
 ## 4. Continuations
 
@@ -139,8 +149,9 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       `StageAttemptLoop` only; record the result.
 - [ ] 4.5 `status` (FR12, UX1): `StatusReport.build` for a gate — position
       `awaitingApproval(stage)`, `currentStage` = the passed stage with its passing round last;
-      `StatusReportJsonMapper`/`StatusReportJsonReader` tokens for the position and the attempt
-      `stop`; `status-report-v1.reference.json` regenerated with `stop` on the first attempt
+      `StatusReportJsonMapper`/`PositionDto` tokens for the position and the attempt `stop` (the
+      mapper only serializes; the read-back is `StatusReportEquivalenceContractSpec` on the
+      reference); `status-report-v1.reference.json` regenerated with `stop` on the first attempt
       (the reference document changes — a pre-release amendment, noted in the spec). Verify
       `StatusReportJsonMapperSpec` round-trips every variant; `StatusReportEquivalenceContractSpec`
       green on the new reference.
@@ -151,9 +162,10 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 ## 5. Enforcement and crash consistency
 
 - [ ] 5.1 `PositionConstructionGateSpec` (`:bootstrap`; design D7): `new Position.AwaitingApproval(`
-      in `*/src/main` appears only in `Advancement.java`, `GitTaskRepository.java`,
-      `GitObjectsTaskRepository.java` (the refusal check), and `StateJsonMapper.java` (the wire
-      reader); allowlist by file, asserted reached. Red when a copy is planted in a scratch file.
+      in `*/src/main` appears only in `Advancement.java` and `StateJsonMapper.java` (the wire
+      reader) — the repositories' refusal checks pattern-match the variant, and
+      `TaskState.approveGate` constructs `AtStage`/`PipelineEnd` through `Advancement.afterGate`,
+      never the gate; allowlist by file, asserted reached. Red when a copy is planted in a scratch file.
 - [ ] 5.2 `OutcomeConsumptionGateSpec` (`:bootstrap`; design D7): `resetAttempts()` in `*/src/main`
       appears only in `TaskState.java`, `EscalationResume.java`, `TakeDecisionResume.java`, and
       the two mechanics; allowlist by file, asserted reached.
@@ -161,7 +173,8 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       across a flow"): `GateApprovalIdentitySpec` — after a `manual` pass and an approval, every
       tip in the branch history either carries `AwaitingApproval(s)` or carries the approval
       commit as itself/ancestor; the approved tip's position is past the gate iff `outcome` is
-      null. `ConsumedOutcomeIdentitySpec` — after each of the three continuations, `outcome ==
+      null, and equals the position following the gate in the pinned definition (the
+      repositories no longer check it, so this spec does). `ConsumedOutcomeIdentitySpec` — after each of the three continuations, `outcome ==
       null` iff `state.json` carries the continuation's state, in one commit.
 - [ ] 5.4 Kill-point rows in `TransitionKillPointSpec` (design D8, NFR-R1): `GateKillPoints`
       (host + container; `Paused` and `DecisionNeeded`; steps round commit → park commit →
@@ -183,11 +196,14 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 - [ ] 6.2 `.claude/rules/crash-consistency.md`: checklist item 12 "No write implies an
       authorisation a later write grants" with the question to ask of every earlier step.
 - [ ] 6.3 `docs/glossary.md` (Crash consistency): *gate*, *awaiting approval*, *approval* (the
-      pivot write), *resumed write*; the shape list gains `AwaitingApproval`.
+      pivot write), *resumed write*. The *Branch shape* entry carries no shape list (it defers
+      to the `task-branch-contract` table and ADR 0003), so its *Never:* clause gains only:
+      `Paused` for the `AwaitingApproval` shape (that name belongs to a `TaskOutcome` variant).
 - [ ] 6.4 `openspec/changes/add-stage-iteration/design.md`: a review note (design D9) naming the
       three instances (D6 overflow decision, "cursor exhausted, no stage verdict", D8 repair
       adoption) and the rule they must follow; `openspec/changes/add-stage-finished-event/
       design.md`: `StagePassed.advancedTo` reads `Advancement.positionAfter`.
-- [ ] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, take guide): a checkpoint reads
+- [ ] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, and the `take` section of
+      `docs/guides/operator-guide.md`): a checkpoint reads
       "awaiting approval"; `--resume` approves; a return-to-ready approves.
 - [ ] 6.6 Gate: root `./gradlew check` green; record M1–M4 in this task.

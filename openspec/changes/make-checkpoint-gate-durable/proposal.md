@@ -88,9 +88,9 @@ None.
 - `tracker-take`: "Escalation parks and exits" (a returned checkpoint is approved before the
   run continues; a return without a reply writes the reset), "Any instance can pick up a
   returned task" (the approval is on the branch, not in the picker's memory).
-- `manual-run`: "Resume invocation" — layered on `make-run-headless`'s delta: paused →
-  approve, then continue; escalated without `--decision` → resumed write, then continue.
-- `status-report`: "JSON contract v1" — layered on `make-run-headless`'s delta: the
+- `manual-run`: "Resume invocation" (as `make-run-headless` left it): paused → approve, then
+  continue; escalated without `--decision` → resumed write, then continue.
+- `status-report`: "JSON contract v1, state-derived" (as `make-run-headless` left it): the
   `awaitingApproval(stage)` position and the attempt `stop` object; a consumed outcome reads
   null.
 
@@ -196,8 +196,8 @@ None.
 
 - M1: `TransitionKillPointSpec` green with the new rows on the bare-origin fixtures, including
   the `manual`-last-stage case.
-- M2: `grep -rn "new Position.AwaitingApproval(" */src/main` returns `Advancement` and the two
-  repositories' approval refusal check only; `grep -rn "resetAttempts()" */src/main` returns the
+- M2: `grep -rn "new Position.AwaitingApproval(" */src/main` returns `Advancement.java` and
+  `StateJsonMapper.java` only; `grep -rn "resetAttempts()" */src/main` returns the
   three outcome-clearing writers' call sites only.
 - M3: `ResumeMatrixSpec`'s "a post-pause resume starts at the next stage" is rewritten to pass
   through the approval; `TakeResumeRunnerWithoutDecisionSpec` asserts the resumed commit.
@@ -206,18 +206,18 @@ None.
 ## Impact
 
 - `:domain`: `Position`, `Advancement`, `Engine` (preflight), `StageAttemptLoop`,
-  `AttemptRecord` (stop payload), `TaskState`, `BranchShapeClassifier`/`BranchShape`/
-  `BranchTipFacts`.
+  `AttemptRecord` (stop payload), `TaskState`, `StageResult`, `BranchShapeClassifier`/
+  `BranchShape`/`BranchTipFacts`.
 - `adapters/git`: `GitTaskRepository`, `GitObjectsTaskRepository`,
   `PushBestEffortTaskLifecycleStore`, `StateJsonMapper`/`StatePositionDto`/`StateAttemptDto`,
-  `BranchTipFactsReader`, `TaskJsonMapper` (outcome clearing).
+  `BranchTipFactsReader`, `TaskBranchLister`, `TaskJsonMapper` (outcome clearing).
 - `:application`: `TaskRepository` port, `ResumeMechanics` and both mechanics,
   `GitResumeContinuation`, `ContainerResumeOutcomes`, `TakeResumeRunner`,
   `TakeContainerResumeRunner`, `TakeDecisionResume`, `TakeLoadedBranchRoutes`,
   `TakeReconcile`, `EscalationResume` (from `make-run-headless`), `TerminalOutcomeRender`,
   `StatusReport`/`StatusTextRenderer`/`StatusReportJsonMapper`, `SummaryAccumulatorListener`,
-  `TaskSummaryAssembler`, `HeartbeatProgress`, `MdcEventListener`, `AttemptLimitResolver`,
-  `ResumeDecisionCommit`.
+  `TaskSummaryAssembler`, `HeartbeatProgress`, `MdcEventListener`, `ResumeDecisionCommit`,
+  `TakeFinishReport`, `status/json/PositionDto`.
 - `:bootstrap`: `RunCheckRunContext`, `ContainerRunTermination`, kill-point worlds and rows,
   the two new grep gates, `UntrustedTextGateSpec` allowlist.
 - Docs: `docs/adr/0003-crash-consistency.md`, `.claude/rules/crash-consistency.md`,

@@ -30,15 +30,16 @@ See `proposal.md` — Why. Facts the approach rests on (verified in code on 2026
   and the cleanup flag — not the position; `BranchShapeClassifier.java:94-113` maps
   "rounds recorded, outcome null" to `InProgress`.
 - `StateFileVersionGate.readGated` demands `version == supportedVersion` exactly.
-- Readers that switch on `Position` today (17 files): `Engine`, `TaskState`, `Advancement`
-  (`:domain`); `StatusReport`, `SummaryAccumulatorListener`, `MdcEventListener`,
-  `TaskSummaryAssembler`, `HeartbeatProgress`, `AttemptLimitResolver`, `ResumeDecisionCommit`,
-  `GitModeRunner`, `EscalationResumeDialog` (→ `EscalationResume` after `make-run-headless`),
-  `ContainerResumeOutcomes`, `TakeContainerResumeRunner` (`:application`); `StateJsonMapper`
-  (`adapters/git`); `RunCheckRunContext` (`:bootstrap`).
+- Readers that switch on `Position` today (22 files): `Engine`, `TaskState`, `Advancement`,
+  `StageResult` (`:domain`); `StatusReport`, `SummaryAccumulatorListener`, `MdcEventListener`,
+  `TaskSummaryAssembler`, `HeartbeatProgress`, `ResumeDecisionCommit`, `GitModeRunner`,
+  `EscalationResumeDialog` (→ `EscalationResume` after `make-run-headless`),
+  `ContainerResumeOutcomes`, `TakeContainerResumeRunner`, `TakeFinishReport`,
+  `status/json/PositionDto`, `StatusReportJsonMapper` (`:application`); `StateJsonMapper`,
+  `StatePositionDto`, `TaskBranchLister` (`adapters/git`); `RunCheckRunContext` (`:bootstrap`).
 - `ResumeMechanics<B>` with `HostResumeMechanics` / `ContainerResumeMechanics` is the existing
   shared abstraction over the two `take` resume media (`manual-sync-pairs.md`, preference 1).
-- Active changes touching the same regions: `make-run-headless` (sequenced before; its
+- Changes touching the same regions: `make-run-headless` (archived; its
   `EscalationResume.decide` is the `run` caller of the resumed write), `add-stage-iteration`
   (D2 relies on "trailing PASSED means stage done"; D6/D8 introduce new stops), `add-stage-
   finished-event` (`StagePassed(advancedTo)` payload reads `Advancement.nextPosition`),
@@ -85,11 +86,14 @@ stop, but from an explicit fact.
 
 **D2 — The approval is the pivot write.** `TaskRepository.approveCheckpoint(taskId,
 TaskState approved)` lands one commit: `state.json` position `AwaitingApproval(s)` → the
-position after `s` (computed by `Advancement.positionAfter`'s AUTO branch from the pinned
-definition — one owner for "what follows a stage"), `task.json` `outcome` null,
-`trackerWritePending` false, attempt history untouched (a checkpoint resets nothing). It
-refuses, writing nothing, when the tip's position is not `AwaitingApproval(s)` for the stage
-named — the refusal is `CheckpointApprovalRefusedException` carrying the tip's actual position,
+position after `s`, `task.json` `outcome` null, `trackerWritePending` false, attempt history
+untouched (a checkpoint resets nothing). The approved state is computed by the caller that
+holds the pinned definition, through the public `TaskState.approveGate(PipelineDefinition)`,
+which delegates to the package-private `Advancement.afterGate` (the AUTO branch of
+`positionAfter`) — one owner for "what follows a stage"; the repositories hold no pipeline
+definition and do not recompute it. It refuses, writing nothing, on what the tip alone shows:
+the tip's position is not `AwaitingApproval(s)` for the stage named, or `approved.position()`
+is itself a gate — the refusal is `CheckpointApprovalRefusedException` carrying the tip's actual position,
 reported once at WARN with a catalog code (NFR-O1). Keyed by the gate stage only: a `manual`
 stage that passed does not retry, so no later visit of the same stage can be confused with the
 approved one (proposal Q1 deferred to `add-stage-iteration`). Callers: `run`
@@ -159,8 +163,10 @@ gate demands equality, so no mixed-version grace is possible anyway.
 - `GitTaskRepository ↔ GitObjectsTaskRepository` (the lifecycle writers; their terminal-commit
   helpers `TerminalWriteMarker ↔ GitObjectsTerminalCommits` are declared): both gain
   `approveCheckpoint` and `resumeFrom` in the same task with mirrored refusal rules. *Decision:*
-  declare the pair at both ends with the invariant "the three outcome-clearing writes land the
-  same `task.json`/`state.json` fields in one commit and refuse on the same tip conditions";
+  keep the pair already declared at both ends (`GitTaskRepository.java:57`,
+  `GitObjectsTaskRepository.java:63`) and extend its `Kept in sync with` sentence with the
+  invariant "the three outcome-clearing writes land the same `task.json`/`state.json` fields in
+  one commit and refuse on the same tip conditions";
   the identity spec of D7(c) pins it on both media. *Alternative rejected:* a shared
   `LifecycleWrites` abstraction — the two media differ in the whole write mechanics (worktree
   commit vs. bare-object commit), and the rule-of-three is not reached.
@@ -171,8 +177,8 @@ gate demands equality, so no mixed-version grace is possible anyway.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `Advancement.positionAfter(definition, stage)` — the one decision of what a pass leaves as position | `Position` (sealed; `AwaitingApproval` for `MANUAL`) | `StageAttemptLoop.java:157` (the round commit); `Engine.runStages` MANUAL arm (returns the persisted state, no in-memory advance); `approveCheckpoint`'s "position after the gate" (the AUTO branch, reached through a package-visible `Advancement.afterGate`); `add-stage-finished-event`'s `StagePassed.advancedTo` (reads the same value) | `Advancement.nextPosition(next)` call in `Engine.java:185-187` — deleted; the mode-blind javadoc — rewritten | the sealed `Position` switch (17 readers fail to compile until they name the gate); `AdvancementSpec` mode table; `:bootstrap` grep gate `PositionConstructionGateSpec`: `new Position.AwaitingApproval(` appears in `*/src/main` only in `Advancement.java` and the two repositories' refusal checks |
-| `TaskRepository.approveCheckpoint` — the only writer past a gate | one commit; refuses as `CheckpointApprovalRefusedException` | `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`); `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` ← `TakeLoadedBranchRoutes` Paused arm (`take`) | "continue with `finalState`" in both `resumePaused` arms and in `TakeLoadedBranchRoutes` → `resumeWithoutDecision` for a `Paused` tip — deleted | the Engine refuses to run from `AwaitingApproval` (D1), so a path that skips the approval cannot make progress; `PositionConstructionGateSpec` above; identity spec `GateApprovalIdentitySpec` (`:bootstrap`, bare origin, both media): after any approval the tip's position is past the gate **iff** its `outcome` is null, in the same commit |
+| `Advancement.positionAfter(definition, stage)` — the one decision of what a pass leaves as position | `Position` (sealed; `AwaitingApproval` for `MANUAL`) | `StageAttemptLoop.java:157` (the round commit); `Engine.runStages` MANUAL arm (returns the persisted state, no in-memory advance); the approval's "position after the gate" (the AUTO branch, `Advancement.afterGate`, reached only through the public `TaskState.approveGate(definition)`), computed by the four callers that hold the pinned definition: `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`), `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` (`take`), and handed to the repository as `approved`; `add-stage-finished-event`'s `StagePassed.advancedTo` (reads the same value) | `Advancement.nextPosition(next)` call in `Engine.java:185-187` — deleted; the mode-blind javadoc — rewritten | the sealed `Position` switch (22 readers fail to compile until they name the gate); `AdvancementSpec` mode table; `:bootstrap` grep gate `PositionConstructionGateSpec`: `new Position.AwaitingApproval(` appears in `*/src/main` only in `Advancement.java` and `StateJsonMapper.java` (the wire reader; the repositories' refusal checks pattern-match the variant, they do not construct it) |
+| `TaskRepository.approveCheckpoint` — the only writer past a gate | one commit; refuses as `CheckpointApprovalRefusedException` | `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`); `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` ← `TakeLoadedBranchRoutes` Paused arm (`take`) | "continue with `finalState`" in both `resumePaused` arms and in `TakeLoadedBranchRoutes` → `resumeWithoutDecision` for a `Paused` tip — deleted | the Engine refuses to run from `AwaitingApproval` (D1), so a path that skips the approval cannot make progress; `PositionConstructionGateSpec` above; identity spec `GateApprovalIdentitySpec` (`:bootstrap`, bare origin, both media): after any approval the tip's position is past the gate **iff** its `outcome` is null, in the same commit, and that position is the one following the gate in the pinned definition |
 | `TaskRepository.resumeFrom` — the only way a consumed outcome is cleared besides `appendDecision` / `approveCheckpoint` | one commit; refuses when `outcome` already null | `EscalationResume.decide` null-decision path (`run`); `TakeDecisionResume` bare-return arm; `HostResumeMechanics.resumeFrom`, `ContainerResumeMechanics.resumeFrom` ← `TakeLoadedBranchRoutes.resumeWithoutDecision` when the tip's `outcome` is recorded | in-memory `finalState.resetAttempts()` with no write: `TakeDecisionResume.java:69`, `EscalationResume` (formerly `EscalationResumeDialog.java:83`) — replaced by the write; `TakeResumeRunner.resumeWithoutDecision` / `TakeContainerResumeRunner.resumeWithoutDecision` continuing over a recorded outcome — routed through `resumeFrom` first | `:bootstrap` grep gate `OutcomeConsumptionGateSpec`: `resetAttempts()` appears in `*/src/main` only in `TaskState` and the call sites that hand the result to one of the three writers (allowlisted by file); identity spec `ConsumedOutcomeIdentitySpec` (bare origin, both media): after any continuation, `task.json outcome == null` **iff** `state.json` carries the continuation's reset/approved state, one commit apart from the park |
 | `AttemptRecord.stop` — the one durable copy of a round's stop | `Stop` (sealed) | writer: `StageAttemptLoop` (DECISION_NEEDED / CANNOT_VERIFY arms); readers: `Engine.preflight`, `StatusReport`/`AttemptMapper` (render) | the in-memory-only `EscalationReport` as the sole carrier of the question — the report is now rebuilt from the record | the type: `AttemptRecord`'s constructor requires a `Stop`; `StageAttemptLoopSpec` asserts the stop on the recorded round for both results |
 | `BranchShapeClassifier` with the position among its facts — the one classification of a gate | `BranchShape.AwaitingApproval` | every shape reader (`TakeDispositionResume`, `BranchRepairLog`, `status`, `GitResumeRunner`/`ContainerResumeRunner` routing) | `InProgress` for a tip at a gate — the classifier now reads `BranchTipFacts.position` | the sealed `BranchShape` switch; `BranchShapeClassifierPropertySpec` generates positions |
@@ -225,7 +231,7 @@ written into its `design.md` as a task of this change, not a silent assumption.
 
 ## Risks / Trade-offs
 
-- [17 `Position` readers must change at once] → the compiler lists them; most are render or
+- [22 `Position` readers must change at once] → the compiler lists them; most are render or
   MDC arms with an obvious text; the tasks name every file.
 - [`ResumeMatrixSpec` "a post-pause resume starts at the next stage" and the `stage-engine`
   spec text encode the old contract] → both are rewritten in this change (M3); the archived
