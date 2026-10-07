@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
-import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.StatusReport;
@@ -31,19 +30,18 @@ import org.jspecify.annotations.Nullable;
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR4, FR5 of make-run-headless; FR4,
- * FR7 of make-checkpoint-gate-durable.
+ * FR7, FR18 of make-checkpoint-gate-durable.
  */
 final class ContainerResumeOutcomes {
 
     private ContainerResumeOutcomes() {}
 
     /**
-     * Outcome {@code null}: an interrupted visit. A snapshot commit unrecorded in {@code
-     * state.json} is an interrupted verification (FR21) — no salvage runs, the round is complete
-     * on the branch. Otherwise the environment is reattached (start stopped box, recreate over a
-     * surviving volume, or fresh clone) and uncommitted leftovers are salvaged in-box; {@code
-     * --discard-work} instead disposes whatever survives so the next materialize seeds a fresh
-     * clone at the recorded tip.
+     * Outcome {@code null}: an interrupted visit. The box is prepared by {@link
+     * ContainerResumePreparation#prepare} — the one preparation {@code take} shares (FR18 of
+     * make-checkpoint-gate-durable): a pending snapshot is re-verified rather than salvaged over,
+     * {@code --discard-work} disposes whatever survives, otherwise the box is reattached and its
+     * leftovers salvaged — then the run is driven through {@link ContainerTerminalDrive}.
      */
     static void resumeFromRecordedPosition(
             ContainerResumeRunner runner,
@@ -51,20 +49,11 @@ final class ContainerResumeOutcomes {
             RunOrder order,
             TaskRecord taskJson,
             TaskState state) {
-        PendingVerification pending = support.pendingVerification().orElse(null);
-        if (order.discardWork()) {
-            support.disposeExistingEnvironment();
-        } else {
-            String stage = stageToReattach(state.position());
-            if (stage != null) {
-                // Reattach now (start stopped box / recreate over volume / fresh clone) so both the
-                // salvage below and same-box verification of a pending snapshot have a live box.
-                support.reattachFor(stage);
-                if (pending == null) {
-                    support.salvageLeftovers(taskJson.context().taskId());
-                }
-            }
-        }
+        PendingVerification pending = ContainerResumePreparation.prepare(
+                support,
+                order.discardWork(),
+                state.position(),
+                taskJson.context().taskId());
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
@@ -73,24 +62,6 @@ final class ContainerResumeOutcomes {
                 state,
                 ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 pending);
-    }
-
-    /**
-     * The stage whose box a resume reattaches before salvage or same-box verification: the stage the
-     * position names, and at a gate the {@code manual} stage that passed — the box of the stage whose
-     * round the gate's commit recorded (FR1 of make-checkpoint-gate-durable). Past the pipeline's end
-     * there is no stage and nothing to reattach. Shared by this class and {@link
-     * TakeContainerResumeRunner#resumeWithoutDecision}, the two media of the same decision.
-     *
-     * @param position the recorded position the resume starts from; never null
-     * @return the stage to reattach for, or {@code null} at the pipeline end
-     */
-    static @Nullable String stageToReattach(Position position) {
-        return switch (position) {
-            case Position.AtStage(String stage) -> stage;
-            case Position.AwaitingApproval(String gate) -> gate;
-            case Position.PipelineEnd() -> null;
-        };
     }
 
     /**

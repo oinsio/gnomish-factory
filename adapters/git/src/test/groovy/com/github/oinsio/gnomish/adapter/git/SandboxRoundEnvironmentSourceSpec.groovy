@@ -2,8 +2,9 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -29,7 +30,8 @@ import spock.lang.TempDir
  * environment, wires the in-branch decision transport (path and env
  * fragment), exposes the rate-limited mid-round harvest listener, and closes
  * the round with the snapshot-commit protocol. FR13 of make-checkpoint-gate-durable (D10):
- * the round's token is the tip it opened on, recorded in the run's {@link RoundTokenRef}.
+ * the round's token is the tip it opened on, opened in the run's {@link CurrentRound}, and the
+ * snapshot closes that same round in it.
  */
 class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGitRepoFixture, FailingSubcommandGitFixture {
 
@@ -41,8 +43,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
     Path tempDir
 
     Path cloneDir
-    AttemptCommitRef attemptRef = new AttemptCommitRef()
-    RoundTokenRef tokenRef = new RoundTokenRef()
+    CurrentRound rounds = new CurrentRound()
     EnvironmentLease lease
 
     def setup() {
@@ -79,7 +80,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
     }
 
     private SandboxRoundEnvironmentSource source() {
-        new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), cloneDir, TASK, attemptRef, tokenRef, new VirtualClock())
+        new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), cloneDir, TASK, rounds, new VirtualClock())
     }
 
     private String branchTip() {
@@ -115,7 +116,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         given: 'a first round records the tip it opened on, then closes with its snapshot commit'
         def openTip = branchTip()
         def first = source().openRound(request(0))
-        assert tokenRef.required() == new RoundToken(openTip)
+        assert rounds.opened() == RoundToken.of(openTip)
         def firstPath = first.decisionFilePath().toString()
         first.closeRound()
 
@@ -123,7 +124,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def second = source().openRound(request(0))
 
         then: 'the token follows the tip, so the same key names a different file'
-        tokenRef.required() == new RoundToken(branchTip())
+        rounds.opened() == RoundToken.of(branchTip())
         second.decisionFilePath().toString() == tokenPath(0)
         second.decisionFilePath().toString() != firstPath
     }
@@ -133,14 +134,14 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def failing = new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString())
 
         when:
-        new SandboxRoundEnvironmentSource(lease, failing, cloneDir, TASK, attemptRef, tokenRef, new VirtualClock())
+        new SandboxRoundEnvironmentSource(lease, failing, cloneDir, TASK, rounds, new VirtualClock())
                 .openRound(request(1))
 
         then:
         thrown(BranchTipUnavailableException)
 
         when:
-        tokenRef.required()
+        rounds.opened()
 
         then:
         thrown(IllegalStateException)
@@ -189,8 +190,10 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         when:
         round.closeRound()
 
-        then: 'the attempt commit ref now carries the harvested snapshot commit'
-        def attempt = attemptRef.required()
+        then: 'the cell now holds the round closed by the harvested snapshot commit, under the token it opened with'
+        def closed = rounds.closed()
+        closed.token() == RoundToken.of(openTip)
+        def attempt = closed.attemptCommit()
 
         and: 'FR15 of make-checkpoint-gate-durable: its subject names the token the round opened with'
         gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot ' + STAGE + '#1 ' + openTip

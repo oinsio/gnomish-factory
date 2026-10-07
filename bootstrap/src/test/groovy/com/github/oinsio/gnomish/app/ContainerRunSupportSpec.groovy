@@ -12,10 +12,12 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.PendingVerification
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -266,8 +268,7 @@ exit 0
         given: 'a created task and a materialized box, about to be parked and kept'
         def support = support()
         createTask(support)
-        def attemptCommit = new AttemptCommitRef()
-        attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
+        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
         support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
         def beforePark = tipOfTaskBranch()
 
@@ -308,8 +309,7 @@ exit 0
         given: 'a judge box materialized for an attempt commit (scripted docker, self-check passes)'
         def support = support()
         createTask(support)
-        def attemptCommit = new AttemptCommitRef()
-        attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
+        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
         support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
@@ -714,8 +714,7 @@ exit 0
         def support = support()
         createTask(support)
         support.lease().environmentFor('build')
-        def attemptCommit = new AttemptCommitRef()
-        attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
+        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
         support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
@@ -812,6 +811,21 @@ exit 0
     def "workspace returns a real RecordedAttemptCommitWorkspace"() {
         expect:
         support().workspace() instanceof RecordedAttemptCommitWorkspace
+    }
+
+    // FR13 of make-checkpoint-gate-durable (design D10): the run holds one round cell, so the round
+    // a resume restores through the pieces is the round the check workspace reads.
+    def "FR13: the pieces and the workspace share the run's one round cell"() {
+        given:
+        def support = support()
+        def pieces = support.pieces(null)
+
+        when: 'the resume executor would restore an interrupted round into the pieces cell'
+        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), Optional.empty()))
+
+        then: 'the check workspace reads that round, and a second pieces bundle hands the same cell'
+        support.workspace().attemptCommitSha() == 'abc123'
+        support.pieces(null).rounds().is(pieces.rounds())
     }
 
     // FR6: salvage() is wired to the run's real lease, not a disconnected stub — proven by

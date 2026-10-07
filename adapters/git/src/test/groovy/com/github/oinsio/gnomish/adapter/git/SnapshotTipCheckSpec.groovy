@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -55,9 +56,9 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
         commitAll(clone, subject)
     }
 
-    def "FR15: a well-formed subject yields the attempt commit, stage, round and no request"() {
+    def "FR15, FR13: a well-formed subject yields the attempt commit, stage, round, the typed token and no request"() {
         given: 'a round opened on the current tip and closed without asking'
-        def token = new RoundToken(tip())
+        def token = RoundToken.of(tip())
         tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
 
         when:
@@ -70,11 +71,15 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
             round() == 3
             request().isEmpty()
         }
+
+        and: 'FR13 (design D10 as amended): the recorded token travels on, typed — the round it names, not the snapshot'
+        pending.get().token() == token
+        pending.get().token() != RoundToken.of(pending.get().attemptCommit())
     }
 
     def "FR15: the request the round asked is read from the snapshot's tree at its token path"() {
         given:
-        def token = new RoundToken(tip())
+        def token = RoundToken.of(tip())
         def path = HarvestedBoundaryCheck.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
         commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
 
@@ -87,12 +92,12 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
 
     def "NFR-R4: a request at the same key under another round's token is not read"() {
         given: 'an earlier round left its request on the branch'
-        def earlier = new RoundToken(tip())
+        def earlier = RoundToken.of(tip())
         commitFile(HarvestedBoundaryCheck.decisionPath(new AttemptKey(TASK, 'implement', 0), earlier),
                 '{"question":"stale?"}', 'gnomish: task approved')
 
         and: 'the current round, opened on the next tip, asked nothing'
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 0, new RoundToken(tip())))
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 0, RoundToken.of(tip())))
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().isEmpty()

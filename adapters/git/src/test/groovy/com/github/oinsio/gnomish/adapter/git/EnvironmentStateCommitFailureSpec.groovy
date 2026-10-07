@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -32,7 +32,7 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
     def runner = new GitProcessRunner()
     Path cloneDir
     LocalBoxEnvironment box
-    AttemptCommitRef attemptRef = new AttemptCommitRef()
+    CurrentRound rounds = new CurrentRound()
     EnvironmentRoundSnapshot snapshotStep
     EnvironmentAttemptPersistence persistence
 
@@ -44,8 +44,8 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
-        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
     }
 
     // FR21, FR22: the exception's detail is the in-box command output read back through the

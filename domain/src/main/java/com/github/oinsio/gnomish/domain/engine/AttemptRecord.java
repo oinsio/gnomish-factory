@@ -18,8 +18,9 @@ import java.util.List;
  * {@link AttemptKey}. So there is intentionally no trace field here.
  *
  * <p>{@code round} is non-negative — it is the round's position within the current
- * stage, the same 0-based numbering the engine assigns; monotonicity and uniqueness
- * are the engine's concern and are not enforced here. {@code checkResults} is defensively
+ * visit of the stage, the same 0-based numbering the engine assigns (it restarts on a
+ * repeated visit; see {@link AttemptKey}); its ordering within a visit is the engine's
+ * concern and is not enforced here. {@code checkResults} is defensively
  * copied, unmodifiable, and MAY be empty: a {@code DecisionNeeded} round records
  * no checks, and a verdict-less execution records none either. {@code executorUsage}
  * and {@code judgeUsage} are required non-null; callers with nothing to report pass

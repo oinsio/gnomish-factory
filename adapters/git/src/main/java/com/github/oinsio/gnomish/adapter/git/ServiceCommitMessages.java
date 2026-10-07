@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 
 /**
@@ -68,7 +69,7 @@ public final class ServiceCommitMessages {
      *
      * @param stage the stage id the round belongs to
      * @param round the round's 1-based sequence number within the current stage visit
-     * @param token the round's token, from the run's {@link RoundTokenRef} — never re-read here
+     * @param token the round's token, from the run's {@link com.github.oinsio.gnomish.app.port.git.CurrentRound} — never re-read here
      * @return the formatted commit message
      */
     public static String snapshot(String stage, int round, RoundToken token) {

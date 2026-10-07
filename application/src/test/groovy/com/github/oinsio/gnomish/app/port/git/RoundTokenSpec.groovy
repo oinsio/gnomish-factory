@@ -1,16 +1,17 @@
-package com.github.oinsio.gnomish.adapter.git
+package com.github.oinsio.gnomish.app.port.git
 
 import spock.lang.Specification
 
 /**
  * FR13 of make-checkpoint-gate-durable (design D10): the round token is a commit id in the one
- * form git prints it, because it is spelled into the decision file's name.
+ * form git prints it, because it is spelled into the decision file's name, and {@code
+ * RoundToken.of} is the one parse that makes one.
  */
 class RoundTokenSpec extends Specification {
 
     def "FR13: a commit id is a round token, carried unchanged"() {
         expect:
-        new RoundToken(commit).commit() == commit
+        RoundToken.of(commit).commit() == commit
 
         where:
         commit << [
@@ -21,7 +22,7 @@ class RoundTokenSpec extends Specification {
 
     def "FR13: a blank or non-hex value is refused: #description"() {
         when:
-        new RoundToken(commit)
+        RoundToken.of(commit)
 
         then:
         def refused = thrown(IllegalArgumentException)
@@ -35,5 +36,19 @@ class RoundTokenSpec extends Specification {
         'uppercase spelling' | '0A1B2C'
         'trailing newline' | '0a1b2c\n'
         'path separator' | '0a1b/../x'
+    }
+
+    def "FR13: two parses of one commit id are one identity, and another commit id is another"() {
+        expect:
+        RoundToken.of('0a1b2c') == RoundToken.of('0a1b2c')
+        RoundToken.of('0a1b2c').hashCode() == RoundToken.of('0a1b2c').hashCode()
+        RoundToken.of('0a1b2c') != RoundToken.of('0a1b2d')
+        RoundToken.of('0a1b2c').hashCode() == '0a1b2c'.hashCode()
+        !RoundToken.of('0a1b2c').equals('0a1b2c')
+    }
+
+    def "FR13: the token renders with its commit id for diagnostics"() {
+        expect:
+        RoundToken.of('0a1b2c').toString() == 'RoundToken[0a1b2c]'
     }
 }

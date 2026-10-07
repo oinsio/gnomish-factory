@@ -2,7 +2,8 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.git.ClosedRound;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -26,17 +27,26 @@ import java.util.List;
  *
  * <p>Harvest-boundary integrity (D16) is factory-side and trusted, and owned by
  * two checks this class only sequences: the <b>boundary protocol</b> — {@code
- * .gnomish-task/} untouched by the gnome between the previous tip and the
- * snapshot commit, with the single decision-file carve-out ({@link
+ * .gnomish-task/} untouched by the gnome between the tip the round opened on and
+ * the snapshot commit, with the single decision-file carve-out ({@link
  * HarvestedBoundaryCheck}, FR23) — and, on the harvested state commit itself, the
  * parent-check and the byte-exact read-back ({@link HarvestedStateCommitCheck},
  * FR22).
  *
- * <p>The branch tip this class resolves — the baseline for the next round's
- * boundary check and the commit the read-back reads from — is verified before
- * use ({@link VerifiedTip}): a failed or blank resolution fails the persist with
- * the git evidence rather than being recorded, the same rule its host twin
- * {@link GitAttemptPersistence} applies to its own round baseline.
+ * <p>The round being persisted is read whole from the run's {@link CurrentRound}
+ * cell (design D10 of make-checkpoint-gate-durable): its token is both the
+ * carve-out's name and the diff base, its attempt commit the parent the state
+ * commit must sit on. A live round put them there when it opened and snapshotted;
+ * a resumed round restored them from the snapshot's durable record. This class
+ * keeps no baseline of its own and never re-reads the tip to stand in for a round
+ * the cell does not hold: a persist with no closed round throws, so the boundary
+ * is never judged against a value compared with its own re-read.
+ *
+ * <p>The one tip this class resolves — the harvested state commit, the commit the
+ * read-back reads from — is verified before use ({@link VerifiedTip}): a failed or
+ * blank resolution fails the persist with the git evidence rather than being
+ * judged, the same rule its host twin {@link GitAttemptPersistence} applies to
+ * its own round baseline.
  *
  * <p>Any mismatch throws {@link RoundBoundaryViolationException}; the engine
  * turns a thrown persist into {@code Aborted}, the branch keeps the evidence,
@@ -50,7 +60,12 @@ import java.util.List;
  * its trace (or the other way round). The denial cursor this class commits inside
  * {@code state.json} ({@link EnvironmentRoundDocuments}) is deliberately
  * environment-side only and is not part of the synchronized invariant: host mode
- * has no egress guard, so there is no denial source to mirror.
+ * has no egress guard, so there is no denial source to mirror. Nor is the round
+ * identity this class reads from {@link CurrentRound} (design D6, D10 of
+ * make-checkpoint-gate-durable): it names the harvested carve-out and the diff
+ * base, and host mode has no carve-out — {@link RoundBoundaryCheck} treats any
+ * {@code .gnomish-task/} change as a violation and the host request never enters
+ * the working copy — so the host end needs no mirrored change.
  *
  * <p>Kill windows (crash-consistency rule). The durable step is the harvest: the
  * in-box commit lives in a disposable environment, so it becomes branch state only
@@ -65,7 +80,7 @@ import java.util.List;
  * across those steps and does not claim to be.
  *
  * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
- * harden-logging-observability.
+ * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable.
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
@@ -80,12 +95,11 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private final GitProcessRunner runner;
     private final Path cloneDir;
     private final String branch;
-    private final AttemptCommitRef attemptCommit;
+    private final CurrentRound rounds;
     private final HarvestedBoundaryCheck boundaryCheck;
     private final HarvestedStateCommitCheck stateCommitCheck;
     private final EnvironmentRoundDocuments documents;
     private final ClaimEpochSource epochs;
-    private String previousTip;
 
     /**
      * @param environment the task's bound environment; state files and the state commit cross it
@@ -94,7 +108,8 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
      * @param gitObjects the bare-object facade opened against the factory clone, for byte-exact
      *     read-back (D16)
      * @param taskId the tracker's original taskId; sanitized into the task branch name
-     * @param attemptCommit the run's attempt-commit ref, recorded by the snapshot step
+     * @param rounds the run's round cell; the closed round names the carve-out, the diff base and the
+     *     snapshot this persist judges
      * @param epochs the tenure the in-box state commits are stamped with (FR13 of
      *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
      */
@@ -104,29 +119,30 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
             Path cloneDir,
             GitObjects gitObjects,
             String taskId,
-            AttemptCommitRef attemptCommit,
+            CurrentRound rounds,
             ClaimEpochSource epochs) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.branch = TaskIdSanitizer.branchName(taskId);
-        this.attemptCommit = attemptCommit;
+        this.rounds = rounds;
         this.boundaryCheck = new HarvestedBoundaryCheck(runner, cloneDir);
         this.stateCommitCheck = new HarvestedStateCommitCheck(gitObjects);
         this.documents = new EnvironmentRoundDocuments(environment);
         this.epochs = epochs;
-        this.previousTip = currentTip();
     }
 
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         AttemptKey key = trace.key();
-        String snapshot = attemptCommit.required();
+        // Throws when the cell holds no closed round: there is no fallback read of the tip (design
+        // D10 of make-checkpoint-gate-durable, alternative C rejected).
+        ClosedRound round = rounds.closed();
+        String snapshot = round.attemptCommit();
 
-        // Interim until task 7.3 of make-checkpoint-gate-durable routes the token here from the
-        // run's RoundTokenRef: previousTip is the tip the round opened on (design D10 — "the same
-        // value under another name"), so the carve-out names the path the round source minted.
-        boundaryCheck.verify(taskId, previousTip, snapshot, key, new RoundToken(previousTip));
+        // The token is the tip the round opened on, so it is both the diff base and the name of
+        // the one permitted decision file — one value, recorded once (FR13, FR15).
+        boundaryCheck.verify(taskId, round.token().commit(), snapshot, key, round.token());
 
         byte[] stateBytes = documents.state(taskId, key, state);
         byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);
@@ -137,10 +153,9 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         commitInBox(taskId, key, tracePath);
         environment.harvest();
 
-        String tip = currentTip();
-        stateCommitCheck.verify(taskId, tip, snapshot, tracePath, stateBytes, traceBytes);
-
-        previousTip = tip;
+        // A fresh observation of the branch, judged against the record: the state commit must sit
+        // on the round's own snapshot.
+        stateCommitCheck.verify(taskId, currentTip(), snapshot, tracePath, stateBytes, traceBytes);
     }
 
     private void commitInBox(String taskId, AttemptKey key, String tracePath) {
@@ -162,9 +177,8 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
     /**
      * The harvested branch tip, verified before it is used (FR13 of harden-logging-observability):
-     * this value becomes the previous tip the next round's boundary check compares against and the
-     * commit the read-back reads its blobs from, so a failed resolution must fail the persist
-     * rather than travel on as the empty string.
+     * it is the commit the parent check judges and the read-back reads its blobs from, so a failed
+     * resolution must fail the persist rather than travel on as the empty string.
      */
     private String currentTip() {
         String revision = "refs/heads/" + branch;

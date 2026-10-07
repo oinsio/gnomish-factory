@@ -68,11 +68,13 @@ import org.slf4j.LoggerFactory;
  * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
  * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
  * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
- * make-checkpoint-gate-durable).
+ * make-checkpoint-gate-durable) — and remove the consumed requests under {@code decisions/} in that
+ * same commit, the removal owned by {@link ConsumedRequestRemoval} (an index removal staged after
+ * the envelope here, a tree edit there; FR14, design D7 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
- * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless; FR3, FR7 of
- * make-checkpoint-gate-durable.
+ * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless; FR3, FR7, FR14
+ * of make-checkpoint-gate-durable.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
 
@@ -135,7 +137,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
         StateFileWrite.write(runner, worktree, taskId, resetState, TaskLifecycleEvent.RESUMED);
-        writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.RESUMED);
+        writeAndCommitConsuming(taskId, worktree, dto, TaskLifecycleEvent.RESUMED);
     }
 
     /**
@@ -153,7 +155,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         TaskJsonDto dto = OutcomeClearingTaskJson.of(
                 readCommitted(taskId, worktree, event).dto());
         StateFileWrite.write(runner, worktree, taskId, approved, event);
-        writeAndCommit(taskId, worktree, dto, event);
+        writeAndCommitConsuming(taskId, worktree, dto, event);
         CheckpointApprovalCheck.approved(taskId, gate, approved);
     }
 
@@ -170,7 +172,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         TaskJsonDto tip = readCommitted(taskId, worktree, event).dto();
         RecordedOutcome consumed = ResumedWriteCheck.requireRecordedOutcome(taskId, TaskJsonMapper.fromDto(tip));
         StateFileWrite.write(runner, worktree, taskId, reset, event);
-        writeAndCommit(taskId, worktree, OutcomeClearingTaskJson.of(tip), event);
+        writeAndCommitConsuming(taskId, worktree, OutcomeClearingTaskJson.of(tip), event);
         ResumedWriteCheck.resumed(taskId, consumed, reset);
     }
 
@@ -281,19 +283,49 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     private void writeAndCommit(String taskId, Path worktree, String json, TaskLifecycleEvent event) {
+        writeTaskJson(taskId, worktree, json, event);
+        commitWith(taskId, worktree, ServiceCommitMessages.taskEvent(event), event);
+    }
+
+    /**
+     * The commit of an outcome-clearing write ({@code appendDecision}, {@code approveCheckpoint},
+     * {@code resumeFrom}): the envelope is staged, then the consumed requests' removal is staged on
+     * top of it ({@link ConsumedRequestRemoval}, FR14 of make-checkpoint-gate-durable), and one
+     * commit lands both — the removal after {@code add -A}, so nothing under {@code decisions/} the
+     * worktree held is re-added by the staging.
+     */
+    private void writeAndCommitConsuming(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
+        writeTaskJson(taskId, worktree, serialize(taskId, dto, event), event);
+        stageAll(taskId, worktree, event);
+        ConsumedRequestRemoval.stage(runner, worktree, taskId, event);
+        commitStaged(taskId, worktree, ServiceCommitMessages.taskEvent(event), event);
+    }
+
+    private static void writeTaskJson(String taskId, Path worktree, String json, TaskLifecycleEvent event) {
         try {
             AtomicFileWriter.write(worktree.resolve(EnvelopePaths.TASK_JSON_PATH), json);
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing task.json", e);
         }
+    }
 
-        commitWith(taskId, worktree, ServiceCommitMessages.taskEvent(event), event);
+    /** Stages the worktree whole and commits it — every transition but the outcome-clearing three. */
+    private void commitWith(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
+        stageAll(taskId, worktree, event);
+        commitStaged(taskId, worktree, message, event);
+    }
+
+    private void stageAll(String taskId, Path worktree, TaskLifecycleEvent event) {
+        GitCommandResult add = runner.run(worktree, "add", "-A");
+        if (add.exitCode() != 0) {
+            throw new GitTaskRepositoryException(taskId, event, "git add -A", add.stderr());
+        }
     }
 
     /**
-     * The host medium's task-lifecycle commit choke point for the four transitions this class
-     * commits itself — start, resume, outcome, terminal-write receipt — which is why the FR2 anchor
-     * of harden-logging-observability sits here and not at each of those callers. The {@code
+     * The host medium's task-lifecycle commit choke point for the transitions this class commits
+     * itself — start, the outcome-clearing writes, outcome, terminal-write receipt — which is why the
+     * FR2 anchor of harden-logging-observability sits here and not at each of those callers. The {@code
      * Completed} cleanup stages with {@code git rm -r} rather than {@code git add -A}, so it
      * commits and emits the same anchor inside {@link CleanupCommit} instead.
      *
@@ -304,11 +336,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * <p>Kept in sync with {@link TaskLifecycleCommitWriter#build}: both media log one INFO line
      * per lifecycle transition, after the commit succeeds, naming the task and the event.
      */
-    private void commitWith(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
-        GitCommandResult add = runner.run(worktree, "add", "-A");
-        if (add.exitCode() != 0) {
-            throw new GitTaskRepositoryException(taskId, event, "git add -A", add.stderr());
-        }
+    private void commitStaged(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
         GitCommandResult commit = runner.run(
                 worktree,
                 "commit",

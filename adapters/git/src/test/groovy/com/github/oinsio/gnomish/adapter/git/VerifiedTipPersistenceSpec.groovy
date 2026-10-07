@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,7 +29,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
 
     Path cloneDir
     LocalBoxEnvironment box
-    AttemptCommitRef attemptRef = new AttemptCommitRef()
+    CurrentRound rounds = new CurrentRound()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'factory-clone')
@@ -43,7 +46,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
 
     def "FR13: a snapshot whose tip cannot be resolved records no attempt commit"() {
         given:
-        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
+        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
@@ -57,23 +60,29 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         noAttemptCommitRecorded()
     }
 
-    /** True when the round left {@link AttemptCommitRef} untouched — its own "not closed" signal. */
+    /** True when the open round was left without a snapshot — the cell's own "not closed" signal. */
     private boolean noAttemptCommitRecorded() {
         try {
-            attemptRef.required()
+            rounds.closed()
             return false
         } catch (IllegalStateException ignored) {
             return true
         }
     }
 
-    def "FR13: the sandboxed persist refuses to start from a blank baseline tip"() {
-        given:
+    // FR13 of make-checkpoint-gate-durable: the baseline is the round's token, so the one tip the
+    //     sandboxed persist still resolves is the harvested state commit it judges
+    def "FR13: the sandboxed persist refuses to judge a harvested tip it cannot resolve"() {
+        given: 'a closed round, and a persistence whose git cannot resolve the tip after the harvest'
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
+        def closed = OpenedRound.reopen(rounds, cloneDir, BRANCH)
+        new EnvironmentRoundSnapshot(box, new GitProcessRunner(), cloneDir, TASK, closed).snapshot(TASK, 'implement', 1)
+        def persistence = new EnvironmentAttemptPersistence(
+                box, blindToTips(), cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
 
         when:
-        new EnvironmentAttemptPersistence(
-                box, blindToTips(), cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
+        persistence.persist(TASK, TaskState.atStageStart('implement'),
+                new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
 
         then:
         def failure = thrown(BranchTipUnavailableException)

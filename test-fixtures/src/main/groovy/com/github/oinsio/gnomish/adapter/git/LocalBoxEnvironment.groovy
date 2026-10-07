@@ -24,6 +24,10 @@ import org.jspecify.annotations.Nullable
  * snapshot-first round protocol (FR21/FR22) and the boundary checks run as
  * fast local-bare-repo specs (task 5.5/5.6) with the identical git mechanics
  * the Docker-gated suite proves end-to-end.
+ *
+ * <p>Shared from {@code :test-fixtures} since task 7.7 of make-checkpoint-gate-durable: {@code
+ * :bootstrap}'s {@code RoundTokenIdentitySpec} drives a whole round — agent, in-box snapshot,
+ * harvest, state commit — through the same box the {@code adapters/git} protocol specs use.
  */
 class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixture {
 

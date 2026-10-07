@@ -5,13 +5,13 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.RoundToken
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -161,7 +161,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
                 .writeValueAsString(StateJsonMapper.toDto(TaskState.atStageStart(stage))).getBytes('UTF-8')
         // The round opened on the current tip, so that tip is the token the subject names (design
         // D10 of make-checkpoint-gate-durable).
-        def token = new RoundToken(gitObjects.resolveRef('refs/heads/' + TaskIdSanitizer.branchName(taskId)).get().hex())
+        def token = RoundToken.of(gitObjects.resolveRef('refs/heads/' + TaskIdSanitizer.branchName(taskId)).get().hex())
         commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round, token))
     }
 

@@ -11,13 +11,12 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore;
 import com.github.oinsio.gnomish.adapter.git.RemoteAttemptDelivery;
-import com.github.oinsio.gnomish.adapter.git.RoundTokenRef;
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
@@ -46,7 +45,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The per-run bundle of container-mode collaborators (the integration pass of
  * add-sandbox-core): one place that assembles the environment lease over the
- * segment plan, the attempt-commit ref, the sandboxed persistence with
+ * segment plan, the round cell, the sandboxed persistence with
  * best-effort push, the factory-side lifecycle repository over bare git
  * objects (D19), salvage, and the {@link SandboxRunPieces} handed to {@link
  * RunAssembly#withSandbox}. Both the fresh container run and the
@@ -56,7 +55,8 @@ import org.jspecify.annotations.Nullable;
  * Docker, the git subprocess, the bare-object reader — stops here, and the runners above it see
  * the port alone (task 4.4, D12 of split-into-modules).
  *
- * <p>Implements FR3, FR5, FR6, FR12, FR21, FR25 of add-sandbox-core.
+ * <p>Implements FR3, FR5, FR6, FR12, FR21, FR25 of add-sandbox-core; FR13 of
+ * make-checkpoint-gate-durable.
  */
 final class ContainerRunSupport implements SandboxRunSupport {
 
@@ -66,10 +66,10 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final String branch;
     final ContainerEnvironments environments;
     final EnvironmentLease lease;
-    final AttemptCommitRef attemptCommit = new AttemptCommitRef();
-    // The run's one round-token ref (design D10 of make-checkpoint-gate-durable): the round source
-    // records each round's token here; task 7.3 hands the same ref to the persistence.
-    final RoundTokenRef roundToken = new RoundTokenRef();
+    // The run's one round cell (design D10 of make-checkpoint-gate-durable): the round source
+    // opens each round in it, the snapshot closes it, the resume executor restores an interrupted
+    // one; the persistence and the check workspace read the closed round from it.
+    final CurrentRound rounds = new CurrentRound();
     final GitObjects gitObjects;
     final TaskLifecycleStore taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
@@ -128,7 +128,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public AttemptPersistence persistence() {
         var strict = new EnvironmentAttemptPersistence(
-                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, taskId, attemptCommit, epochs);
+                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, taskId, rounds, epochs);
         return new PushBestEffortAttemptPersistence(strict, push, cloneDir, branch);
     }
 
@@ -136,20 +136,19 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public SandboxRunPieces pieces(@Nullable PendingVerification pendingVerification) {
         return new SandboxRunPieces(
-                new SandboxRoundEnvironmentSource(
-                        lease, runner, cloneDir, taskId, attemptCommit, roundToken, new SystemClock()),
+                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, new SystemClock()),
                 judgeEnvironments,
                 new SandboxCheckEnvironmentSource(lease, environments, branch),
                 gitObjects,
                 new RemoteAttemptDelivery(runner, cloneDir, branch),
-                attemptCommit,
+                rounds,
                 pendingVerification);
     }
 
-    /** The engine workspace of a sandboxed run: the attempt-commit ref, never a host path (D15). */
+    /** The engine workspace of a sandboxed run: the round cell, never a host path (D15). */
     @Override
     public RecordedAttemptCommitWorkspace workspace() {
-        return new RecordedAttemptCommitWorkspace(attemptCommit);
+        return new RecordedAttemptCommitWorkspace(rounds);
     }
 
     /**

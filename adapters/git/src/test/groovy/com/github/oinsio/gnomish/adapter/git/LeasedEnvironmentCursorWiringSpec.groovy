@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -44,7 +44,7 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
     Path cloneDir
     LocalBoxEnvironment box
     LeasedEnvironment leased
-    AttemptCommitRef attemptRef = new AttemptCommitRef()
+    CurrentRound rounds = new CurrentRound()
     EnvironmentRoundSnapshot snapshotStep
     EnvironmentAttemptPersistence persistence
 
@@ -59,9 +59,9 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
         // the stage in flight, exactly as ContainerRunSupport.persistence() builds them.
         leased = new LeasedEnvironment({ box })
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         persistence = new EnvironmentAttemptPersistence(
-                leased, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
+                leased, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
     }
 
     private void closeRound(int round) {

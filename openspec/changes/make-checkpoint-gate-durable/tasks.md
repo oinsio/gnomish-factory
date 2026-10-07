@@ -132,7 +132,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       the write; infrastructure returns in `resumeWithoutDecision`). Verify
       `TakeLoadedBranchRoutesSpec`, `TakeResumeRoutingSpec`, `TakeResumeRunnerWithoutDecisionSpec`
       (asserts the resumed commit, M3), `TakeDecisionResumeSpec`.
-- [ ] 4.3 `run` arms (FR4, FR7): `GitResumeContinuation.resumePaused` and
+- [x] 4.3 `run` arms (FR4, FR7): `GitResumeContinuation.resumePaused` and
       `ContainerResumeOutcomes.resumePaused` → `taskRepository.approveCheckpoint` then continue
       from the approved state; `GitResumeRunner`/`ContainerResumeRunner` routing switches on the
       shape (`AwaitingApproval` with any outcome → `resumePaused`); `EscalationResume.decide`
@@ -160,7 +160,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
 - [ ] 4.6 Gate: `./gradlew check` green; `grep -rn "resetAttempts()" */src/main` lists only
       `TaskState` and the call sites that hand the result to `appendDecision` / `resumeFrom`
       (record the list).
-- [ ] 4.7 One resume preparation (design D6, dissolved copy; FR18): `ContainerResumePreparation`
+- [x] 4.7 One resume preparation (design D6, dissolved copy; FR18): `ContainerResumePreparation`
       (`:application`) with `prepare(SandboxRunSupport support, boolean discardWork, Position
       position, String taskId) → @Nullable PendingVerification` — the sequence of
       `ContainerResumeOutcomes.resumeFromRecordedPosition:54-67` (pending check; `discardWork` →
@@ -283,7 +283,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       `TransitionKillPointSpec` (container: kill after the snapshot carrying a request, before
       the state commit → the pickup escalates with that question, no agent round; second pickup
       no-op; then an answer, and the next round's read is empty).
-- [ ] 7.3 The round identity as one value with two producers (design D10 as amended
+- [x] 7.3 The round identity as one value with two producers (design D10 as amended
       2026-10-07, D7 row; FR13, FR15). Move `RoundToken` to `app/port/git` beside
       `PendingVerification`; `RoundToken.of(commitId)` is the one parse (blank or non-hex
       refused). Add `ClosedRound(token, attemptCommit)` (record, neither half nullable) and the
@@ -307,7 +307,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       `ResumeVerificationStageExecutorSpec` (the cell holds the recorded token and commit after a
       matching round; untouched by a non-matching one); the `OpenedRound` fixture builds a
       `CurrentRound` instead of a `RoundTokenRef`.
-- [ ] 7.4 `EnvironmentAttemptPersistence` takes the closed round from `CurrentRound` for the
+- [x] 7.4 `EnvironmentAttemptPersistence` takes the closed round from `CurrentRound` for the
       carve-out (`verify(taskId, openTip, snapshot, key, token)`, open tip = token), the diff
       base and the parent check; remove the `previousTip` field and the `currentTip()` read at
       construction, keep the post-harvest `currentTip()` (record against fresh observation).
@@ -318,18 +318,18 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       fallback read of the tip — design D10, alternative C). `ContainerModeResumeE2ESpec`'s
       interrupted-verification feature passes with the resumed round's state commit checked
       against the snapshot's recorded token.
-- [ ] 7.5 The three outcome-clearing writes remove `.gnomish-task/decisions/` in their commit
+- [x] 7.5 The three outcome-clearing writes remove `.gnomish-task/decisions/` in their commit
       (FR14): `GitTaskRepository` (worktree: `git rm -r --ignore-unmatch`, staged into the same
       commit) and `GitObjectsTaskRepository` (tree edit dropping the entry) for
       `appendDecision`, `approveCheckpoint`, `resumeFrom`; extend the 2.5 pair invariant with
       the removal. Verify both repository specs: the tip after each write holds no `decisions/`
       entry, the tip before it still does; a tip without the directory writes unchanged.
-- [ ] 7.6 Fixtures and E2E (M5): confirm the fake agent writes only to `$GNOMISH_DECISION_FILE`
+- [x] 7.6 Fixtures and E2E (M5): confirm the fake agent writes only to `$GNOMISH_DECISION_FILE`
       (`fake-agent.sh:147-149`; never a spelled name); `ContainerModeResumeE2ESpec:153-156`
       asserts the request under `decisions/work-a0-<token>.json` (match by prefix and the
       snapshot subject's token, not a literal), and both `ContainerModeResumeE2ESpec` and
       `SandboxLifecycleZombieE2ESpec` pass through the `--decision` answer; tick 4.3 after.
-- [ ] 7.7 Gates (design D7): `DecisionPathOwnerSpec` (`:bootstrap`): `DECISIONS_DIR` and
+- [x] 7.7 Gates (design D7): `DecisionPathOwnerSpec` (`:bootstrap`): `DECISIONS_DIR` and
       `decisionPath(` in `*/src/main` only in `EnvelopePaths`, `HarvestedBoundaryCheck`,
       `BranchDecisionFile`, `FactoryOwnedPaths`, `SnapshotTipCheck`, allowlisted by file,
       asserted reached. `CurrentRoundWriterSpec` (`:bootstrap`): `RoundToken.of(` in
@@ -346,7 +346,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       throws). `ConsumedOutcomeIdentitySpec` (5.3) gains "no `decisions/` entry after each
       continuation". PIT 100% on the touched classes (`verification-scope.md`: `-PpitScope`
       over 7.1–7.5's classes).
-- [ ] 7.8 Javadoc truth: `BranchDecisionFile` and `HarvestedBoundaryCheck` ("stale files are
+- [x] 7.8 Javadoc truth: `BranchDecisionFile` and `HarvestedBoundaryCheck` ("stale files are
       self-excluding" → "a request is live only under its round's token"), `AttemptKey`
       ("monotonic" → "unique within one visit of a stage; the round token is the identity
       across visits"), `TraceLineWriter` ("every stage attempt gets its own directory" → "the

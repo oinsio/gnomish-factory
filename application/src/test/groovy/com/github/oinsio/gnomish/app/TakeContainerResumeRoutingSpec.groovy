@@ -188,8 +188,10 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     }
 
     // FR9: outcome null (process died mid-visit) reattaches, salvages, and runs the engine once to
-    // a terminal Completed/Delivered result.
-    def "an interrupted (null-outcome) resume reattaches, salvages, and finishes on the tracker"() {
+    // a terminal Completed/Delivered result. FR18 of make-checkpoint-gate-durable: the box is
+    // prepared by the shared ContainerResumePreparation (its own spec covers the branches) before
+    // the drive starts.
+    def "an interrupted (null-outcome) resume prepares the box, then finishes on the tracker"() {
         given:
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
@@ -211,7 +213,11 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         then:
         1 * branches.harden(CLONE_DIR)
         1 * builtSupport.reattachFor('build')
+
+        then:
         1 * builtSupport.salvageLeftovers('PROJ-1')
+
+        then:
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
     }

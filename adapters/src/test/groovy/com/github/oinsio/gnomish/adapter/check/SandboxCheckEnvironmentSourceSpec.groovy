@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
@@ -43,8 +43,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     }
 
     private static Workspace attemptWorkspace() {
-        def ref = new AttemptCommitRef()
-        ref.record(SHA)
+        def ref = ClosedRounds.at(SHA)
         new RecordedAttemptCommitWorkspace(ref)
     }
 

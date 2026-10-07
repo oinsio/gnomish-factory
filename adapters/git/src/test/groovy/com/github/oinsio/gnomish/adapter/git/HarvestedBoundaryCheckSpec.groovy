@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import java.nio.file.Path
 import spock.lang.Specification
@@ -14,7 +15,7 @@ import spock.lang.TempDir
 class HarvestedBoundaryCheckSpec extends Specification implements BareGitRepoFixture {
 
     static final AttemptKey KEY = new AttemptKey('PROJ-1', 'implement', 0)
-    static final RoundToken OTHER = new RoundToken('ffffffffffffffffffffffffffffffffffffffff')
+    static final RoundToken OTHER = RoundToken.of('ffffffffffffffffffffffffffffffffffffffff')
 
     @TempDir
     Path tempDir
@@ -48,7 +49,7 @@ class HarvestedBoundaryCheckSpec extends Specification implements BareGitRepoFix
     def "FR16: the current round's token path is the one permitted state-directory write"() {
         given:
         def openTip = head()
-        def token = new RoundToken(openTip)
+        def token = RoundToken.of(openTip)
         def snapshot = gnomeWrites(HarvestedBoundaryCheck.decisionPath(KEY, token))
 
         when:
@@ -65,7 +66,7 @@ class HarvestedBoundaryCheckSpec extends Specification implements BareGitRepoFix
 
         when:
         new HarvestedBoundaryCheck(new GitProcessRunner(), repo)
-                .verify('PROJ-1', openTip, snapshot, KEY, new RoundToken(openTip))
+                .verify('PROJ-1', openTip, snapshot, KEY, RoundToken.of(openTip))
 
         then:
         def violation = thrown(RoundBoundaryViolationException)

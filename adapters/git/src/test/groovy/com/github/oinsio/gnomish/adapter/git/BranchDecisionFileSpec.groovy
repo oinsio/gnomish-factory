@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,7 +20,7 @@ import spock.lang.TempDir
 class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture {
 
     static final AttemptKey KEY = new AttemptKey('PROT-1', 'implement', 1)
-    static final RoundToken TOKEN = new RoundToken('0a1b2c3d4e5f60718293a4b5c6d7e8f901234567')
+    static final RoundToken TOKEN = RoundToken.of('0a1b2c3d4e5f60718293a4b5c6d7e8f901234567')
     static final String TOKEN_PATH = '.gnomish-task/decisions/implement-a1-0a1b2c3d4e5f60718293a4b5c6d7e8f901234567.json'
 
     @TempDir

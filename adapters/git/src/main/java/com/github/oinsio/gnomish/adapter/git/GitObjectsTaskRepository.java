@@ -24,9 +24,12 @@ import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
+import com.github.oinsio.gnomish.gitobjects.TreeEdit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,11 +77,13 @@ import org.slf4j.LoggerFactory;
  * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
  * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
  * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
- * make-checkpoint-gate-durable).
+ * make-checkpoint-gate-durable) — and remove the consumed requests under {@code decisions/} in that
+ * same commit, the removal owned by {@link ConsumedRequestRemoval} (a tree edit here, an index
+ * removal staged after the envelope there; FR14, design D7 of make-checkpoint-gate-durable).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
- * add-sandbox-core; FR10 of make-run-headless; FR3, FR7, FR9 of make-checkpoint-gate-durable.
+ * add-sandbox-core; FR10 of make-run-headless; FR3, FR7, FR9, FR14 of make-checkpoint-gate-durable.
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
@@ -184,8 +189,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 ref,
                 false,
                 tip,
-                writer.putTaskAndState(
-                        taskId, dto, resetState, writer.tipStateCursor(taskId, tip), TaskLifecycleEvent.RESUMED),
+                consuming(writer.putTaskAndState(
+                        taskId, dto, resetState, writer.tipStateCursor(taskId, tip), TaskLifecycleEvent.RESUMED)),
                 TaskLifecycleEvent.RESUMED);
     }
 
@@ -212,7 +217,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 ref,
                 false,
                 tip,
-                writer.putTaskAndState(taskId, dto, approved, tipState.egressCursor(), event),
+                consuming(writer.putTaskAndState(taskId, dto, approved, tipState.egressCursor(), event)),
                 event);
         CheckpointApprovalCheck.approved(taskId, gate, approved);
     }
@@ -238,8 +243,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 ref,
                 false,
                 tip,
-                writer.putTaskAndState(
-                        taskId, OutcomeClearingTaskJson.of(tipTask), reset, writer.tipStateCursor(taskId, tip), event),
+                consuming(writer.putTaskAndState(
+                        taskId, OutcomeClearingTaskJson.of(tipTask), reset, writer.tipStateCursor(taskId, tip), event)),
                 event);
         ResumedWriteCheck.resumed(taskId, consumed, reset);
     }
@@ -311,6 +316,17 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void finishCleanup(String taskId) {
         GitObjectsTerminalCommits.cleanUp(gitObjects, writerFor(), taskId, refFor(taskId));
+    }
+
+    /**
+     * The edits of an outcome-clearing write: its envelope edits, then the removal of the requests
+     * it consumes ({@link ConsumedRequestRemoval}, FR14 of make-checkpoint-gate-durable) — one tree,
+     * one commit, so no tip shows the outcome cleared with the request still beside it.
+     */
+    private static List<TreeEdit> consuming(List<TreeEdit> envelope) {
+        List<TreeEdit> edits = new ArrayList<>(envelope);
+        edits.add(ConsumedRequestRemoval.treeEdit());
+        return List.copyOf(edits);
     }
 
     private TaskLifecycleCommitWriter writerFor() {

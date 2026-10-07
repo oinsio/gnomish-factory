@@ -4,11 +4,10 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.EnvironmentRoundSnapshot
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.RoundToken
-import com.github.oinsio.gnomish.adapter.git.RoundTokenRef
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -154,9 +153,18 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         !ContainerE2eDocker.containerRunning(boxName)
 
         and: 'the pending decision request rode the snapshot commit into the branch (FR23)'
+        // FR13 of make-checkpoint-gate-durable (design D10, task 7.6): the request is named by the
+        //     round token its snapshot subject carries — matched by that token, never a spelled name
         def branch = "gnomish/${taskId}"
-        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
-                .contains(".gnomish-task/decisions/work-a0.json")
+        def snapshotSubject = gitOutput(cloneDir, 'log', branch, '-1', '--format=%s', '--grep',
+                '^gnomish: snapshot work#0 ')
+        def roundToken = snapshotSubject.substring('gnomish: snapshot work#0 '.length())
+        roundToken ==~ /[0-9a-f]{40,64}/
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch).readLines().findAll {
+            it.startsWith('.gnomish-task/decisions/')
+        } == [
+            ".gnomish-task/decisions/work-a0-${roundToken}.json".toString()
+        ]
 
         when: 'a leftover is planted in the kept box (the uncommitted tail of a dead round)'
         ContainerE2eDocker.start(boxName)
@@ -232,11 +240,12 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         handle.output().readAllBytes()
         assert handle.waitForExit() == 0
         // The round opened on the current tip: that tip is the token its snapshot subject names
-        // (design D10 of make-checkpoint-gate-durable), recorded as SandboxRoundEnvironmentSource
-        // would record it.
-        def roundToken = new RoundTokenRef()
-        roundToken.record(new RoundToken(gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()))
-        new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, new AttemptCommitRef(), roundToken)
+        // (design D10 of make-checkpoint-gate-durable), opened as SandboxRoundEnvironmentSource
+        // would open it.
+        def rounds = new CurrentRound()
+        def openTip = gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()
+        rounds.open(RoundToken.of(openTip))
+        def snapshot = new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, rounds)
                 .snapshot(taskId, 'work', 0)
         support.keepStopped()
 
@@ -261,5 +270,11 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         stateShas.size() == 1
         gitOutput(cloneDir, 'log', branch, '--grep', '^gnomish: round work#1$', '--format=%H')
                 .isEmpty()
+
+        and: 'the resumed state commit sits on the snapshot whose recorded token the persistence judged it by'
+        // FR13, FR15 of make-checkpoint-gate-durable (task 7.4): the resumed round's carve-out and
+        //     diff base are the snapshot subject's token, restored into the cell, never a re-read tip
+        gitOutput(cloneDir, 'rev-parse', stateShas[0] + '^') == snapshot
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == 'gnomish: snapshot work#0 ' + openTip
     }
 }

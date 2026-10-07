@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -44,7 +44,7 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     def "container mode: the runner runs checks in the sandbox pieces' check environments"() {
         given:
         def checkEnvironments = Mock(CheckEnvironmentSource)
-        def pieces = new SandboxRunPieces(null, null, checkEnvironments, null, null, new AttemptCommitRef(), null)
+        def pieces = new SandboxRunPieces(null, null, checkEnvironments, null, null, new CurrentRound(), null)
 
         when:
         def runner = equipment.commandRunner(childEnv, pieces)

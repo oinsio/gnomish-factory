@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.util.List;
@@ -12,8 +12,8 @@ import java.util.List;
  * hooks disabled at argv level, as the in-box user, {@code --allow-empty} so a
  * round that changed nothing still yields a distinct attempt commit for
  * verification to judge — then a harvest, and the harvested tip is recorded
- * into the round's {@link AttemptCommitRef}. Verification then judges exactly
- * that commit: builtin checks read it as bare objects in the factory clone,
+ * into the run's {@link CurrentRound} as the snapshot that closes the open
+ * round. Verification then judges exactly that commit: builtin checks read it as bare objects in the factory clone,
  * fresh-box checks and judge votes materialize from it, external checks poll
  * CI runs of exactly the pushed commit.
  *
@@ -23,8 +23,8 @@ import java.util.List;
  * survives any death. A {@link HarvestRefusedException} (rewritten history)
  * propagates as the existing violation.
  *
- * <p>The subject carries the round's token, taken from the run's {@link RoundTokenRef} — the
- * one minting is {@link SandboxRoundEnvironmentSource#openRound}, never a tip read here — so a
+ * <p>The subject carries the round's token, taken from the run's {@link CurrentRound#opened()} —
+ * the one minting is {@link SandboxRoundEnvironmentSource#openRound}, never a tip read here — so a
  * resume after a death between this commit and the state commit reads the request at exactly
  * this round's path in the snapshot's tree (FR15 of make-checkpoint-gate-durable, design D10).
  *
@@ -42,30 +42,27 @@ public final class EnvironmentRoundSnapshot {
     private final GitProcessRunner runner;
     private final Path cloneDir;
     private final String branch;
-    private final AttemptCommitRef attemptCommit;
-    private final RoundTokenRef roundToken;
+    private final CurrentRound rounds;
 
     /**
      * @param environment the task's bound environment; snapshot commits run through its exec
      * @param runner the git subprocess runner reading the harvested tip factory-side
      * @param cloneDir the factory clone harvest lands in
      * @param taskId the tracker's original taskId; sanitized into the task branch name
-     * @param attemptCommit the run's attempt-commit ref, updated with each harvested snapshot
-     * @param roundToken the run's round-token ref; the subject names the token the round opened with
+     * @param rounds the run's round cell; the subject names the token the round opened with, and
+     *     the harvested snapshot closes that round in it
      */
     public EnvironmentRoundSnapshot(
             TaskExecutionEnvironment environment,
             GitProcessRunner runner,
             Path cloneDir,
             String taskId,
-            AttemptCommitRef attemptCommit,
-            RoundTokenRef roundToken) {
+            CurrentRound rounds) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.branch = TaskIdSanitizer.branchName(taskId);
-        this.attemptCommit = attemptCommit;
-        this.roundToken = roundToken;
+        this.rounds = rounds;
     }
 
     /**
@@ -84,7 +81,7 @@ public final class EnvironmentRoundSnapshot {
      *     harden-logging-observability)
      */
     public String snapshot(String taskId, String stage, int round) {
-        String message = ServiceCommitMessages.snapshot(stage, round, roundToken.required());
+        String message = ServiceCommitMessages.snapshot(stage, round, rounds.opened());
         // Run through the medium's one outcome seam (D14): the wait is drained concurrently
         // (FR2, FR11 of bound-subprocess-commands) and an interrupted wait comes back named
         // rather than as an exception this site would have to classify itself.
@@ -101,7 +98,7 @@ public final class EnvironmentRoundSnapshot {
         // than record the empty string as a commit (FR13 of harden-logging-observability).
         String revision = "refs/heads/" + branch;
         String tip = VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision));
-        attemptCommit.record(tip);
+        rounds.snapshotted(tip);
         return tip;
     }
 }

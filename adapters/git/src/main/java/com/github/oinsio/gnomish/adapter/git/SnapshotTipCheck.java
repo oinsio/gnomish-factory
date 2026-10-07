@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
@@ -28,7 +29,11 @@ import org.slf4j.LoggerFactory;
  * HarvestedBoundaryCheck#decisionPath}, the one spelling): the request — if any — is read from the
  * snapshot's own tree, so a round killed after asking re-raises its question rather than passing
  * as completed (FR15, NFR-R4 of make-checkpoint-gate-durable, design D10). A subject without a
- * readable token is refused like any other malformed one.
+ * readable token is refused like any other malformed one. The token itself travels on, typed, in
+ * the {@link PendingVerification} ({@link RoundToken#of} — the resumed round's one producer of its
+ * identity, which reuses the recorded token and never mints), so the resuming executor restores
+ * the round from the record rather than from a re-read tip (FR13 of make-checkpoint-gate-durable,
+ * design D10 as amended 2026-10-07).
  *
  * <p>Reads only the commit subject and one blob as bare-object queries in the factory clone
  * — no checkout, no hooks (FR17). The snapshot message is the one service
@@ -108,9 +113,9 @@ public final class SnapshotTipCheck {
             warnMalformed(branch, rest);
             return Optional.empty();
         }
-        RoundToken token = new RoundToken(subject.group(3));
+        RoundToken token = RoundToken.of(subject.group(3));
         return Optional.of(
-                new PendingVerification(parts[0], key.stage(), key.attempt(), request(parts[0], key, token)));
+                new PendingVerification(parts[0], key.stage(), key.attempt(), token, request(parts[0], key, token)));
     }
 
     /**

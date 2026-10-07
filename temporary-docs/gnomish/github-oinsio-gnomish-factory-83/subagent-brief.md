@@ -6,7 +6,7 @@ Working directory: /Users/oinsio/.gnomish/projects/gnomish-factory/worktrees/gno
 Change: `make-checkpoint-gate-durable`. Artifacts (read what your task needs; design.md and
 tasks.md always):
 - openspec/changes/make-checkpoint-gate-durable/proposal.md
-- openspec/changes/make-checkpoint-gate-durable/design.md (D1–D9; single-owner table D7 at lines 176–184; kill-window table after it)
+- openspec/changes/make-checkpoint-gate-durable/design.md (D1–D11; single-owner table D7 at lines 259–270; kill-window table after it; D10 round token at 336–436 (amended 2026-10-07: CurrentRound); D11 denial restoration at 437–477)
 - openspec/changes/make-checkpoint-gate-durable/tasks.md
 - openspec/changes/make-checkpoint-gate-durable/specs/**/spec.md (git-task-persistence,
   lifecycle/task-branch-contract, manual-run, stage-engine, status-report, tracker-take)

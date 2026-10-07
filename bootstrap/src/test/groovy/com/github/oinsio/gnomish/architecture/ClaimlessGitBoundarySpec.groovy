@@ -93,7 +93,10 @@ class ClaimlessGitBoundarySpec extends Specification {
      *   <li><b>The plain-{@code run} and {@code run --resume} paths.</b> {@code gnomish run} claims
      *       nothing, so the container and git-mode runner specs, the run-mode resume specs, and the
      *       sandbox lifecycle E2E specs drive writers that hold no tenure — the same shape the
-     *       production {@code run} wiring has.
+     *       production {@code run} wiring has. {@code RoundTokenIdentitySpec} belongs here too: it
+     *       drives the container-mode round adapters (round source, snapshot, persistence, resume
+     *       re-verification) as a {@code run} wires them, and asserts the round's identity, not a
+     *       claim's.
      *   <li><b>Claimless branch readers.</b> The two kill-point worlds build a {@code
      *       GitTaskBranches} only to classify a tip. Classification takes no epoch at all since FR1,
      *       and these readers never write, so there is no tenure for them to stamp from.
@@ -110,6 +113,7 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitKillResumeSalvageCompletionSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitModeMidRoundPushSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunRunnerSpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundTokenIdentitySpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleCrossInstanceE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleLaunchRaceE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleLegacyIdentityE2ESpec.groovy',

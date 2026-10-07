@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
@@ -198,8 +198,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         sha
     }
     private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
-        def ref = new AttemptCommitRef()
-        ref.record(sha)
+        def ref = ClosedRounds.at(sha)
         new RecordedAttemptCommitWorkspace(ref)
     }
 }

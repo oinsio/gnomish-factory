@@ -142,36 +142,23 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         ]
     }
 
-    // FR8, FR21: the ordinary interrupted visit. The environment is reattached for the recorded
-    // stage — a live box is needed both for the salvage and for verifying a pending snapshot — and
-    // the leftovers are salvaged in-box before the run continues.
-    def "reattaches for the recorded stage and salvages the leftovers, then drives the run"() {
+    // FR8, FR21; FR18 of make-checkpoint-gate-durable: the ordinary interrupted visit. The shared
+    // preparation (ContainerResumePreparation, whose own spec covers its branches) reattaches the
+    // box for the recorded stage and salvages the leftovers in it — before the run is driven.
+    def "prepares the box — reattach, then salvage — before it drives the run"() {
         when:
         resume()
 
         then:
         1 * support.reattachFor('build')
-        1 * support.salvageLeftovers('PROJ-1')
         0 * support.disposeExistingEnvironment()
 
-        and:
-        1 * support.completeAndDispose(_ as TaskState)
-        executor.requests.size() == 1
-    }
-
-    // FR21, D15: a snapshot commit unrecorded in state.json is an interrupted VERIFICATION — the
-    // round is already complete on the branch. The box is still reattached (the verification has to
-    // run somewhere) but salvaging would commit over a finished round, so it is skipped.
-    def "reattaches but does not salvage when a pending verification is recorded"() {
-        given:
-        pending = Optional.of(new PendingVerification('sha-1', 'build', 0, Optional.empty()))
-
-        when:
-        resume()
+        then:
+        1 * support.salvageLeftovers('PROJ-1')
 
         then:
-        1 * support.reattachFor('build')
-        0 * support.salvageLeftovers(_)
+        1 * support.completeAndDispose(_ as TaskState)
+        executor.requests.size() == 1
     }
 
     // FR8: --discard-work throws the surviving environment away instead, so the next materialize
@@ -182,20 +169,6 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
 
         then:
         1 * support.disposeExistingEnvironment()
-        0 * support.reattachFor(_)
-        0 * support.salvageLeftovers(_)
-    }
-
-    // FR8: at the pipeline END there is no stage to reattach for, so neither reattach nor salvage
-    // runs — the run goes straight to the terminal drive.
-    def "neither reattaches nor salvages when the recorded position is the pipeline end"() {
-        given:
-        recordedState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
-
-        when:
-        resume()
-
-        then:
         0 * support.reattachFor(_)
         0 * support.salvageLeftovers(_)
     }

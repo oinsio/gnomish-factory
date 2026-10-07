@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.subprocess.Termination;
@@ -17,11 +18,12 @@ import java.util.List;
  * (the fetch names the ref explicitly), and history rewrite is refused by the
  * fast-forward-only harvest ({@link HarvestRefusedException}). What remains is
  * the state-directory rule: {@code .gnomish-task/} untouched by the gnome
- * between the previous tip and the harvested snapshot — with exactly one
+ * between the tip the round opened on and the harvested snapshot — with exactly one
  * carve-out, the current round's decision request {@code
  * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json}, whose one writer <em>is</em>
- * the gnome (FR23). Files named for any other stage or attempt are stale by
- * construction and stay violations.
+ * the gnome (FR23). A request is live only under its round's token (design D10
+ * of make-checkpoint-gate-durable): a decision file named for any other stage,
+ * attempt or token stays a violation.
  *
  * <p>Verification has three outcomes, never two (FR13 of
  * harden-logging-observability): clean, violated, and <b>cannot-verify</b> — a
@@ -55,12 +57,13 @@ public final class HarvestedBoundaryCheck {
     }
 
     /**
-     * Verifies {@code .gnomish-task/} was untouched between {@code previousTip}
+     * Verifies {@code .gnomish-task/} was untouched between {@code openTip}
      * and {@code snapshotCommit}, allowing only the current round's decision
      * file.
      *
      * @param taskId the task being checked, for the violation message
-     * @param previousTip the branch tip right after the previous round closed
+     * @param openTip the branch tip the round opened on — its token's commit (design D10 of
+     *     make-checkpoint-gate-durable), recorded, never re-read
      * @param snapshotCommit the harvested snapshot commit closing this round
      * @param key the current round's key; with {@code token}, fixes the single permitted decision path
      * @param token the current round's token (FR16 of make-checkpoint-gate-durable): a decision
@@ -69,9 +72,9 @@ public final class HarvestedBoundaryCheck {
      * @throws GitPersistFailedException if the diff itself cannot be computed — cannot-verify,
      *     the round's infrastructure-failure path
      */
-    public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key, RoundToken token) {
+    public void verify(String taskId, String openTip, String snapshotCommit, AttemptKey key, RoundToken token) {
         GitCommandResult diff =
-                runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", EnvelopePaths.DIR);
+                runner.run(cloneDir, "diff", "--name-only", openTip, snapshotCommit, "--", EnvelopePaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
         // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
         // round aborts as infrastructure rather than blaming the gnome for what git never said.

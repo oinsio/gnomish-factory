@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.charset.StandardCharsets;
@@ -21,12 +22,15 @@ import java.util.Optional;
  * <p>The {@code $GNOMISH_DECISION_FILE} value is the working-copy-relative
  * path: every adapter runs the agent with the working copy as its working
  * directory, and both adapters' file channels anchor relative paths there, so
- * no adapter-private absolute path leaks into the protocol. Stale files are
- * self-excluding (FR23): each round reads exactly its own
- * {@code <stage>-a<attempt>} name and nothing else. There is no eager removal —
- * the Completed cleanup commit strips {@code .gnomish-task/} from the tip.
+ * no adapter-private absolute path leaks into the protocol. A request is live
+ * only under its round's token (design D10 of make-checkpoint-gate-durable): a
+ * stage and attempt repeat across visits of a stage, so each round reads exactly
+ * the {@code <stage>-a<attempt>-<token>} name its token fixes and nothing else.
+ * The outcome-clearing commits remove {@code .gnomish-task/decisions/} as
+ * hygiene (FR14), but no read relies on that removal — the token match alone
+ * decides liveness.
  *
- * <p>Implements FR23 of add-sandbox-core.
+ * <p>Implements FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable.
  */
 public final class BranchDecisionFile {
 

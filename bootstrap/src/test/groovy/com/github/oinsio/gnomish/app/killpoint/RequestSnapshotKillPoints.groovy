@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
-import com.github.oinsio.gnomish.adapter.git.RoundTokenRef
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -95,8 +94,8 @@ final class RequestSnapshotKillPoints {
 
     /** The round opens through the token's one owner, the gnome asks, the in-box snapshot lands it. */
     private static void snapshotAsking(KillPointWorld world) {
-        def tokens = new RoundTokenRef()
-        def round = roundSource(world, tokens).openRound(request(world, 0))
+        def rounds = new CurrentRound()
+        def round = roundSource(world, rounds).openRound(request(world, 0))
         String ref = 'refs/heads/' + TaskIdSanitizer.branchName(world.taskId)
         def objects = GitObjects.open(world.repoDir, Files.createDirectories(world.repoDir.resolveSibling('snapshot-index')))
         def tip = objects.resolveRef(ref).get()
@@ -106,7 +105,7 @@ final class RequestSnapshotKillPoints {
                 [
                     new TreeEdit.PutFile(round.decisionFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
                 ],
-                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, tokens.required()))))
+                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, rounds.opened()))))
     }
 
     /**
@@ -124,7 +123,7 @@ final class RequestSnapshotKillPoints {
             agentRounds.incrementAndGet()
             throw new AssertionError('no agent round may run for a pending verification')
         } as StageExecutor
-        def result = new ResumeVerificationStageExecutor(agent, new AttemptCommitRef(), pending.get())
+        def result = new ResumeVerificationStageExecutor(agent, new CurrentRound(), pending.get())
                 .execute(request(world, pending.get().round()))
         if (result instanceof ExecutionResult.DecisionNeeded) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(TaskState.atStageStart(STAGE),
@@ -138,13 +137,13 @@ final class RequestSnapshotKillPoints {
      */
     private static void answerThenNextRound(KillPointWorld world) {
         world.store.appendDecision(world.taskId, new Decision(REPLY, null, null, null), TaskState.atStageStart(STAGE))
-        def tokens = new RoundTokenRef()
-        def next = roundSource(world, tokens).openRound(request(world, 0))
+        def rounds = new CurrentRound()
+        def next = roundSource(world, rounds).openRound(request(world, 0))
         assert next.readDecision().isEmpty(): 'the next round read the answered request'
-        assert next.decisionFilePath().toString().endsWith("-${tokens.required().commit()}.json")
+        assert next.decisionFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
     }
 
-    private static SandboxRoundEnvironmentSource roundSource(KillPointWorld world, RoundTokenRef tokens) {
+    private static SandboxRoundEnvironmentSource roundSource(KillPointWorld world, CurrentRound rounds) {
         def lease = new EnvironmentLease({
             -> new TipTreeEnvironment(world.repoDir)
         },
@@ -153,7 +152,7 @@ final class RequestSnapshotKillPoints {
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ])
         new SandboxRoundEnvironmentSource(
-                lease, world.runner, world.repoDir, world.taskId, new AttemptCommitRef(), tokens, new VirtualClock())
+                lease, world.runner, world.repoDir, world.taskId, rounds, new VirtualClock())
     }
 
     private static StageExecutor.Request request(KillPointWorld world, int attempt) {

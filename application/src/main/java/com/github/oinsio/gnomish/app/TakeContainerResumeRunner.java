@@ -32,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * {@link ContainerResumeMechanics} (design D6 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR12,
- * D13 of add-base-ref-resolution.
+ * D13 of add-base-ref-resolution; FR18 of make-checkpoint-gate-durable.
  */
 final class TakeContainerResumeRunner {
 
@@ -72,24 +72,15 @@ final class TakeContainerResumeRunner {
      * add-sandbox-core) — re-verified against exactly that attempt commit, no salvage, no agent
      * re-run; otherwise the environment is reattached and uncommitted leftovers salvaged in-box
      * (or, on {@code --discard-work}, disposed so the next reattach seeds a fresh clone at the
-     * recorded tip) — {@link ContainerResumeOutcomes#resumeFromRecordedPosition}'s exact sequence,
-     * reused here for the salvage/discard decision, then routed through {@link
-     * TakeContainerEngineExecution} instead of {@link ContainerTerminalDrive} (NFR-R4).
+     * recorded tip). That preparation has one owner, {@link ContainerResumePreparation#prepare},
+     * shared with {@code run --resume} (FR18 of make-checkpoint-gate-durable); this runner adds
+     * only its own drive, through {@link TakeContainerEngineExecution} instead of {@link
+     * ContainerTerminalDrive} (NFR-R4).
      */
     TakeResult resumeWithoutDecision(TakeOrder order, ContainerResumeBootstrap bootstrap, TaskState finalState) {
         var support = bootstrap.support();
-        var pending = support.pendingVerification().orElse(null);
-        if (order.run().discardWork()) {
-            support.disposeExistingEnvironment();
-        } else {
-            String stage = ContainerResumeOutcomes.stageToReattach(finalState.position());
-            if (stage != null) {
-                support.reattachFor(stage);
-                if (pending == null) {
-                    support.salvageLeftovers(bootstrap.taskId());
-                }
-            }
-        }
+        var pending = ContainerResumePreparation.prepare(
+                support, order.run().discardWork(), finalState.position(), bootstrap.taskId());
         return ResumeLawBinding.resolve(
                 wiring.git().baseRefs(),
                 order.run().cloneDir(),

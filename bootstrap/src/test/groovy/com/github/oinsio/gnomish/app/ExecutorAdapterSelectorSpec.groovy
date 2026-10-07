@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -27,7 +27,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         new SandboxRunPieces(
                 { req -> null } as RoundEnvironmentSource,
                 null, null, null, null,
-                new AttemptCommitRef(), null)
+                new CurrentRound(), null)
     }
 
     // FR7, D6, D10; FR2 of remove-interactive-console: the manifest-driven host CLI executor when
