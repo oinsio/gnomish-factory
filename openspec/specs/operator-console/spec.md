@@ -42,8 +42,10 @@ corpus the log sink uses.
 The console owner's machine-readable path SHALL write its input byte for byte:
 JSON produced for `--json` flags and other machine-parsed output is never
 altered by the console owner, because its consumer is a parser, not a
-terminal, and JSON encoding already bounds its own metacharacters.
-<!-- implements FR5 of harden-untrusted-text-sinks -->
+terminal, and JSON encoding already bounds its own metacharacters. The
+`--json` subcommand flags are the only machine-readable entry: the console
+owner has no input side, so no in-dialog meta-command exists.
+<!-- implements FR6 of make-run-headless -->
 
 #### Scenario: JSON survives the console untouched
 - **WHEN** a status report is printed with `--json` for a task whose title
@@ -52,10 +54,8 @@ terminal, and JSON encoding already bounds its own metacharacters.
   sequence included as the JSON string encoded it
 
 #### Scenario: The in-dialog status meta-command takes the same path
-- **WHEN** an operator answers a dialog prompt with `status --json` and the
-  render is intercepted below the dialog
-- **THEN** the render is written on the machine-readable path, byte for byte,
-  exactly as the `--json` command would have written it
+- **WHEN** a build scans production code for a console read below the console owner
+- **THEN** the only readers are the console owner's own stream wrapper and the takeover confirmation; no dialog interception exists to take any path
 
 ### Requirement: No direct process-stream writes in production code
 No production class other than the console owner SHALL write to the process
