@@ -21,7 +21,7 @@ import spock.lang.Specification
  * (TaskContext, TaskState) plus the recorded last escalation and outcome; every
  * field is read from persisted task state (design D7 of add-manual-run, D4 of
  * make-run-headless). Implements FR10, FR11, D7 of add-manual-run; FR6 of
- * make-run-headless.
+ * make-run-headless; FR12 of make-checkpoint-gate-durable.
  */
 class StatusReportSpec extends Specification {
 
@@ -61,6 +61,23 @@ class StatusReportSpec extends Specification {
     }
 
     // FR11: attemptsUsed, attempts, decisions, totals pass through faithfully from TaskState/TaskContext
+    // FR12, UX1 of make-checkpoint-gate-durable: at a gate the report names the gate as its position
+    //     and describes the stage that passed, its passing round last
+    def "describes the stage that passed for a task held at a gate"() {
+        given: 'a state at the gate of release, its passing round recorded'
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [passedRound()], ExecutorUsage.none())
+
+        when: 'a report is built'
+        def report = StatusReport.build(context(), state, null, null)
+
+        then: 'the position is the gate and currentStage names the stage that passed'
+        report.position() == new Position.AwaitingApproval('release')
+        report.currentStage() == 'release'
+
+        and: 'the passing round is the last attempt described'
+        report.attempts().last().result() == AttemptRecord.Result.PASSED
+    }
+
     def "passes attemptsUsed, attempts, decisions and totals through from state and context"() {
         given: 'a state with a recorded quality failure and non-empty totals'
         def failedCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
@@ -148,7 +165,7 @@ class StatusReportSpec extends Specification {
     // FR11: attempts is defensively copied and unmodifiable
     def "exposes attempts as unmodifiable"() {
         given: 'a report'
-        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), 'stage', 0, [passedRound()], [], null,
+        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), new Position.AtStage('stage'), 0, [passedRound()], [], null,
         ExecutorUsage.none(), null, null)
 
         when: 'a caller tries to mutate the exposed list'
@@ -162,7 +179,7 @@ class StatusReportSpec extends Specification {
     def "exposes decisions as unmodifiable"() {
         given: 'a report'
         def decision = new Decision('do it', null, null, null)
-        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), 'stage', 0, [], [decision], decision,
+        def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), new Position.AtStage('stage'), 0, [], [decision], decision,
         ExecutorUsage.none(), null, null)
 
         when: 'a caller tries to mutate the exposed list'

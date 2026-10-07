@@ -50,12 +50,15 @@ final class ContainerResumeOutcomes {
         PendingVerification pending = support.pendingVerification().orElse(null);
         if (order.discardWork()) {
             support.disposeExistingEnvironment();
-        } else if (state.position() instanceof Position.AtStage(String stage)) {
-            // Reattach now (start stopped box / recreate over volume / fresh clone) so both the
-            // salvage below and same-box verification of a pending snapshot have a live box.
-            support.reattachFor(stage);
-            if (pending == null) {
-                support.salvageLeftovers(taskJson.context().taskId());
+        } else {
+            String stage = stageToReattach(state.position());
+            if (stage != null) {
+                // Reattach now (start stopped box / recreate over volume / fresh clone) so both the
+                // salvage below and same-box verification of a pending snapshot have a live box.
+                support.reattachFor(stage);
+                if (pending == null) {
+                    support.salvageLeftovers(taskJson.context().taskId());
+                }
             }
         }
         ContainerTerminalDrive.run(
@@ -66,6 +69,24 @@ final class ContainerResumeOutcomes {
                 state,
                 ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 pending);
+    }
+
+    /**
+     * The stage whose box a resume reattaches before salvage or same-box verification: the stage the
+     * position names, and at a gate the {@code manual} stage that passed — the box of the stage whose
+     * round the gate's commit recorded (FR1 of make-checkpoint-gate-durable). Past the pipeline's end
+     * there is no stage and nothing to reattach. Shared by this class and {@link
+     * TakeContainerResumeRunner#resumeWithoutDecision}, the two media of the same decision.
+     *
+     * @param position the recorded position the resume starts from; never null
+     * @return the stage to reattach for, or {@code null} at the pipeline end
+     */
+    static @Nullable String stageToReattach(Position position) {
+        return switch (position) {
+            case Position.AtStage(String stage) -> stage;
+            case Position.AwaitingApproval(String gate) -> gate;
+            case Position.PipelineEnd() -> null;
+        };
     }
 
     /**

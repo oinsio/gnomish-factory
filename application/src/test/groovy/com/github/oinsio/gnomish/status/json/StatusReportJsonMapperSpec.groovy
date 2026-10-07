@@ -93,6 +93,18 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(report).currentStage() == null
     }
 
+    // FR12 of make-checkpoint-gate-durable: a gate is its own position token, and currentStage
+    //     describes the stage that passed rather than being withdrawn as at pipelineEnd
+    def "position renders awaitingApproval with the gate's stage"() {
+        given:
+        def report = idleReport(new Position.AwaitingApproval("release"))
+
+        expect:
+        mapper.toDto(report).position() == new PositionDto.AwaitingApproval("awaitingApproval", "release")
+        mapper.toDto(report).currentStage() != null
+        mapper.serialize(report).contains('"type" : "awaitingApproval"')
+    }
+
     // FR6 of make-run-headless: the live-only fields are withdrawn from contract v1 — no
     //     document carries an activity section, and currentStage carries attemptsUsed and
     //     attempts alone (the "Withdrawn live fields are absent" scenario)

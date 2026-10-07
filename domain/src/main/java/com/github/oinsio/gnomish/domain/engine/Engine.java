@@ -70,7 +70,8 @@ public final class Engine {
     /**
      * Resolves the run against its {@link Position} with an exhaustive switch — no
      * {@code default}, so a new variant fails to compile. {@link Position.PipelineEnd}
-     * completes immediately (FR8); {@link Position.AtStage} looks the stage up by name
+     * completes immediately (FR8); {@link Position.AwaitingApproval} pauses again at the gate
+     * (FR2 of make-checkpoint-gate-durable); {@link Position.AtStage} looks the stage up by name
      * and either escalates as {@link EscalationReport.PipelineMismatch} when absent (FR9),
      * escalates as {@link EscalationReport.AttemptsExhausted} when the resolved limit is
      * already reached (FR5), or hands off to the stage attempt loop.
@@ -89,6 +90,9 @@ public final class Engine {
         return switch (state.position()) {
             case Position.PipelineEnd ignored -> new TaskOutcome.Completed(state);
             case Position.AtStage atStage -> atStage(definition, context, state, workspace, ports, atStage.name());
+            // FR2 of make-checkpoint-gate-durable: the position is the gate — the run pauses
+            // again, invoking no port, until the approval write moves the position past it.
+            case Position.AwaitingApproval gate -> new TaskOutcome.Paused(state, gate.stage());
         };
     }
 
@@ -142,13 +146,13 @@ public final class Engine {
      * its outcome; a {@link StageResult.Passed} applies the stage's {@link AdvancementMode}
      * exhaustively (no {@code default}). {@code AUTO} advances to the next stage — resetting the
      * attempt history (FR14) — or, past the last stage, completes at {@link Position.PipelineEnd}
-     * (design D4). {@code MANUAL} pauses with the position already advanced past the paused stage,
-     * naming the stage that just passed (FR8). The advanced state is the returned outcome — the
-     * passing round was already persisted by the loop — with this very position already recorded
-     * (FR4 of harden-task-branch-contract) — so no extra persist happens here and the advance
-     * below only resets the in-memory attempt history for the stage about to run.
+     * (design D4); the advance below only resets the in-memory attempt history for the stage about
+     * to run, its position already recorded by the round commit (FR4 of harden-task-branch-contract).
+     * {@code MANUAL} pauses, naming the stage that just passed (FR8), with exactly the state the
+     * round persisted — the position at the gate, {@link Position.AwaitingApproval} — and no
+     * further persist or advance (FR1 of make-checkpoint-gate-durable, design D1).
      *
-     * <p>Implements FR8, FR14 of add-stage-engine.
+     * <p>Implements FR8, FR14 of add-stage-engine; FR1 of make-checkpoint-gate-durable.
      */
     private static TaskOutcome runStages(
             PipelineDefinition definition,
@@ -183,8 +187,10 @@ public final class Engine {
                     currentStage = next;
                 }
                 case MANUAL -> {
-                    return new TaskOutcome.Paused(
-                            passed.state().advanceTo(Advancement.nextPosition(next)), currentStage.name());
+                    // FR1 of make-checkpoint-gate-durable: the round commit already recorded the
+                    // gate, AwaitingApproval(stage); the outcome carries exactly that persisted
+                    // state — no in-memory advance past a gate no approval has opened.
+                    return new TaskOutcome.Paused(passed.state(), currentStage.name());
                 }
             }
         }

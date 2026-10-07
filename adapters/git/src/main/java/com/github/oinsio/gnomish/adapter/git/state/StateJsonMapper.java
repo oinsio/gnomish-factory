@@ -115,6 +115,9 @@ public final class StateJsonMapper {
     private static StatePositionDto toPosition(Position position) {
         return switch (position) {
             case Position.AtStage atStage -> new StatePositionDto.AtStage("atStage", atStage.name());
+            // FR10 of make-checkpoint-gate-durable (design D5): the gate is its own token, version 1.
+            case Position.AwaitingApproval gate ->
+                new StatePositionDto.AwaitingApproval("awaitingApproval", gate.stage());
             case Position.PipelineEnd ignored -> new StatePositionDto.PipelineEnd("pipelineEnd");
         };
     }
@@ -122,6 +125,7 @@ public final class StateJsonMapper {
     private static Position fromPosition(StatePositionDto dto) {
         return switch (dto) {
             case StatePositionDto.AtStage atStage -> new Position.AtStage(atStage.stage());
+            case StatePositionDto.AwaitingApproval gate -> new Position.AwaitingApproval(gate.stage());
             case StatePositionDto.PipelineEnd ignored -> new Position.PipelineEnd();
         };
     }

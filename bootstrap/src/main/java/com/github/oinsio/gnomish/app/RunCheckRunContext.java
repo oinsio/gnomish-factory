@@ -57,8 +57,13 @@ final class RunCheckRunContext implements CheckRunContext {
     }
 
     private Optional<String> stageName() {
-        return holder.state().position() instanceof Position.AtStage(String name)
-                ? Optional.of(name)
-                : Optional.empty();
+        return switch (holder.state().position()) {
+            case Position.AtStage(String name) -> Optional.of(name);
+            // FR1 of make-checkpoint-gate-durable: at a gate the stage already passed and nothing is
+            // under verification — as past the pipeline's end, a check interpolating the stage name
+            // fails closed rather than addressing a stage that is not running.
+            case Position.AwaitingApproval ignored -> Optional.empty();
+            case Position.PipelineEnd() -> Optional.empty();
+        };
     }
 }

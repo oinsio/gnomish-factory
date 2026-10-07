@@ -107,6 +107,21 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         rows.every { it.outcome() == null }
     }
 
+    // FR1 of make-checkpoint-gate-durable: a task held at a gate lists under the stage that passed
+    def "FR13: a task held at a gate is listed with the stage that passed"() {
+        given:
+        createTaskAtHead(registeredClone, 'PROJ-1')
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        new GitAttemptPersistence(runner, worktreeFor(registeredClone, 'PROJ-1'), 'PROJ-1', ClaimEpochSource.NONE)
+                .persist('PROJ-1', state, new ToolTrace(new AttemptKey('PROJ-1', 'release', 0), []))
+
+        when:
+        def rows = lister.list(cloneDir)
+
+        then:
+        rows*.stage() == ['release']
+    }
+
     def "FR13: remote-only tasks are listed once, and a task present both locally and on origin reads from its local tip"() {
         // Each createTask below resolves its start commit in the very repository the branch is cut
         //     in. Resolving it in `cloneDir` instead only ever worked by SHA coincidence: that repo

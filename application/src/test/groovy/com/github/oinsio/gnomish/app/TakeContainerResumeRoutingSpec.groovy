@@ -23,6 +23,8 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -199,6 +201,35 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         1 * builtSupport.salvageLeftovers('PROJ-1')
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
+    }
+
+    // FR1 of make-checkpoint-gate-durable: a tip held at a gate reattaches the box of the stage that
+    // passed — the stage whose round the gate's commit recorded — and the engine runs no round there.
+    def "a resume from a gate reattaches for the gate's stage and runs no round"() {
+        given:
+        def branches = Mock(TaskBranchGit) {
+            ensureLocalTaskBranch(_, _) >> true
+            fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
+        }
+        builtSupport = Mock(SandboxRunSupport) {
+            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, BasePin.UNPINNED)
+            readFinalState() >> new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+            persistence() >> new InMemoryAttemptPersistence()
+            workspace() >> new FakeWorkspace()
+            pieces(_) >> pieces()
+            pendingVerification() >> Optional.empty()
+        }
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = disposition(gitWith(branches)).resumeExisting(
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
+
+        then:
+        1 * builtSupport.reattachFor('build')
+        1 * builtSupport.salvageLeftovers('PROJ-1')
+        0 * tracker.finish(_, _)
+        result instanceof TakeResult.AwaitingHuman
     }
 
     // NFR-R4: --discard-work disposes the existing environment instead of reattaching/salvaging.

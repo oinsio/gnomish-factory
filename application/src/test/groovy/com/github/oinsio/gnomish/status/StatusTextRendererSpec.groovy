@@ -114,6 +114,20 @@ class StatusTextRendererSpec extends Specification {
         text.contains('pipeline complete')
     }
 
+    // UX1, FR12 of make-checkpoint-gate-durable: a gate renders as awaiting approval after its stage
+    def "renderFull renders a gate as awaiting approval after the stage that passed"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        def report = StatusReport.build(context(), state, null, null)
+
+        when:
+        def text = renderer.renderFull(report)
+
+        then:
+        text.contains("Stage: awaiting approval after 'release'\n")
+    }
+
     // FR10, UX2: renderFull omits optional sections that are absent
     def "renderFull omits attempts, decisions, escalation and last-decision sections when absent"() {
         given:

@@ -56,6 +56,17 @@ class RunCheckRunContextSpec extends Specification {
         RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
     }
 
+    // FR1 of make-checkpoint-gate-durable: at a gate the stage already passed and nothing is under
+    //     verification, so the lookup is empty — fail closed, as past the pipeline's end.
+    def "supplies no stage name while the task is held at a gate"() {
+        given:
+        def holder = holderAt('implement')
+        holder.updateState(new TaskState(new Position.AwaitingApproval('release'), 0, [], TaskState.atStageStart('x').totals()))
+
+        expect:
+        RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
+    }
+
     // The allowlist is closed: a name outside it is not a lookup this context can answer.
     def "supplies nothing for a name outside the allowlist"() {
         expect:

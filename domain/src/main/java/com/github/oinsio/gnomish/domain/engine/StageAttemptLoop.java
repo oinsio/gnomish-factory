@@ -152,8 +152,8 @@ final class StageAttemptLoop {
         }
         if (verified.verdict() instanceof Verdict.Pass) {
             // FR4 of harden-task-branch-contract: a pass and the advancement it implies are one
-            // transition, so they are one commit. The engine re-applies the same advance to its
-            // in-memory state, which is why this stays a pure widening of what is persisted.
+            // transition, so they are one commit. For a manual stage the position recorded is the
+            // gate, AwaitingApproval(stage), never past it (FR1 of make-checkpoint-gate-durable).
             return state.recordPassAndAdvance(verified.record(), Advancement.positionAfter(definition, stage));
         }
         return state.recordUnburnedRound(verified.record());

@@ -85,7 +85,13 @@ public final class EscalationResume {
      * AtStage}).
      */
     private TaskContext appendDecision(TaskContext context, Position position, String decision) {
-        String stage = position instanceof Position.AtStage(String name) ? name : null;
+        String stage =
+                switch (position) {
+                    case Position.AtStage(String name) -> name;
+                    // FR1 of make-checkpoint-gate-durable: a gate names the stage that passed.
+                    case Position.AwaitingApproval(String gate) -> gate;
+                    case Position.PipelineEnd() -> null;
+                };
         var decisions = new ArrayList<>(context.decisions());
         decisions.add(new Decision(decision, stage, "operator", clock.instant()));
         return new TaskContext(context.taskId(), context.title(), context.body(), decisions);

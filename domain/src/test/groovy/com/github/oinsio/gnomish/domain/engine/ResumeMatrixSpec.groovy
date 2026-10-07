@@ -93,30 +93,44 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         resumed instanceof TaskOutcome.Completed
     }
 
-    // FR9/FR8 (post-pause resume): a two-stage pipeline whose first stage is MANUAL pauses
-    //     with the position already advanced to stage2; a SECOND run from that Paused final
-    //     state starts at stage2 (never re-running stage1) and completes.
+    // FR9/FR8 (post-pause resume); M3, FR2, FR3 of make-checkpoint-gate-durable: a two-stage
+    //     pipeline whose first stage is MANUAL pauses at its gate; a run from the gate pauses
+    //     again and runs nothing; a run from the state approveGate yields starts stage2 at round
+    //     zero (never re-running stage1) and completes.
     def "a post-pause resume starts at the next stage"() {
         given: 'a two-stage pipeline whose first stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.MANUAL, 3, [])
         def stage2 = stage('test', AdvancementMode.AUTO, 3, [])
+        def definition = pipeline(stage1, stage2)
 
-        and: 'a first run pauses on the manual stage with the position advanced to stage2'
-        def paused = new Engine().run(pipeline(stage1, stage2), CONTEXT, TaskState.atStageStart('build'), WORKSPACE,
+        and: 'a first run pauses on the manual stage, held at its gate'
+        def paused = new Engine().run(definition, CONTEXT, TaskState.atStageStart('build'), WORKSPACE,
                 freshPorts(new ScriptedExecutor([completed()]), new ScriptedBuiltinCheckRunner(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
         paused instanceof TaskOutcome.Paused
-        paused.finalState().position() == new Position.AtStage('test')
+        paused.finalState().position() == new Position.AwaitingApproval('build')
 
-        when: 'a SECOND run resumes from the paused final state'
+        when: 'a SECOND run starts from the gate'
+        def gateExecutor = new ScriptedExecutor()
+        def again = new Engine().run(definition, CONTEXT, paused.finalState(), WORKSPACE,
+                freshPorts(gateExecutor, new ScriptedBuiltinCheckRunner(),
+                new InMemoryAttemptPersistence(), new RecordingEventListener()))
+
+        then: 'it pauses again at the same gate and runs nothing'
+        again instanceof TaskOutcome.Paused
+        (again as TaskOutcome.Paused).passedStage() == 'build'
+        gateExecutor.requests.isEmpty()
+
+        when: 'a THIRD run resumes from the approved state'
         def resumeExecutor = new ScriptedExecutor([completed()])
-        def resumed = new Engine().run(pipeline(stage1, stage2), CONTEXT, paused.finalState(), WORKSPACE,
+        def resumed = new Engine().run(definition, CONTEXT, paused.finalState().approveGate(definition), WORKSPACE,
                 freshPorts(resumeExecutor, new ScriptedBuiltinCheckRunner(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
-        then: 'the resume ran only stage2 and completed — stage1 was never re-executed'
+        then: 'the resume ran only stage2, from round zero, and completed — stage1 never re-executed'
         resumed instanceof TaskOutcome.Completed
         resumeExecutor.requests.collect { it.stage().name() } == ['test']
+        resumeExecutor.requests[0].attempt() == 0
     }
 
     // FR4 (feedback carries every non-Pass result of prior attempts, INCLUDING CannotVerify):

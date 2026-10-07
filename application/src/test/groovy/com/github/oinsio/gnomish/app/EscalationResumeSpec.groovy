@@ -90,6 +90,25 @@ class EscalationResumeSpec extends Specification {
         appended = decision == null ? 'absent' : 'appended'
     }
 
+    // FR1 of make-checkpoint-gate-durable: the decision is scoped to the stage the position names —
+    //     at a gate the stage that passed — and to none past the pipeline's end
+    def "the decision is scoped to the stage #position names"() {
+        when:
+        def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(
+                        new TaskState(position, 0, [], ExecutorUsage.none()), ATTEMPTS_EXHAUSTED), 'go on')
+
+        then:
+        resumption.context().decisions() == [
+            new Decision('go on', stage, 'operator', NOW)
+        ]
+
+        where:
+        position | stage
+        new Position.AtStage('build') | 'build'
+        new Position.AwaitingApproval('release') | 'release'
+        new Position.PipelineEnd() | null
+    }
+
     def "FR4: a DecisionNeeded without a decision restates the question with the return path and refuses"() {
         given:
         def escalated = new TaskOutcome.Escalated(BURNED, DECISION_NEEDED)

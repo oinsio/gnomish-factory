@@ -147,4 +147,39 @@ class EngineSpec extends Specification {
         finished.taskId() == 'TASK-1'
         finished.outcome().is(outcome)
     }
+
+    // FR1 of make-checkpoint-gate-durable: the MANUAL arm returns exactly the state the passing
+    //      round persisted — held at the gate, the passing round still recorded — no advance
+    def "a passing manual stage pauses with the persisted state unchanged"() {
+        given: 'a single manual stage with a vacuously-passing verify chain'
+        def manual = new StageDefinition('build', 'purpose', [], [],
+        new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
+        'instructions.md', [], new AutonomyLimits(3), AdvancementMode.MANUAL)
+        executor.scripted << new ExecutionResult.Completed(ExecutorUsage.none(),
+                new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+
+        when: 'the run is driven'
+        def outcome = new Engine().run(pipeline(manual), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+
+        then: 'the outcome is Paused carrying the very state the round persisted'
+        outcome instanceof TaskOutcome.Paused
+        persistence.entries.size() == 1
+        outcome.finalState() == persistence.entries[0].state
+        outcome.finalState().position() == new Position.AwaitingApproval('build')
+        outcome.finalState().attempts()*.result() == [AttemptRecord.Result.PASSED]
+    }
+
+    // FR2 of make-checkpoint-gate-durable: a run from a gate pauses again, reaching no port
+    def "returns Paused from an AwaitingApproval position without touching any port"() {
+        given: 'a state held at the gate of a stage'
+        def state = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+
+        when: 'the run is driven'
+        def outcome = new Engine().run(pipeline(stage('build', 3)), CONTEXT, state, WORKSPACE, ports())
+
+        then: 'the outcome is Paused naming the gate, with the entry state'
+        outcome == new TaskOutcome.Paused(state, 'build')
+        executor.requests.isEmpty()
+        persistence.entries.isEmpty()
+    }
 }

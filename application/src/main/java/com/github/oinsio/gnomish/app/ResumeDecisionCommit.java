@@ -19,9 +19,18 @@ final class ResumeDecisionCommit {
 
     private ResumeDecisionCommit() {}
 
-    /** Builds the {@link Decision} for {@code text}, stamped with the park's stage and "tracker". */
+    /**
+     * Builds the {@link Decision} for {@code text}, stamped with the park's stage and "tracker": the
+     * stage named by the position — at a gate, the stage that passed (FR1 of
+     * make-checkpoint-gate-durable) — and none past the pipeline's end.
+     */
     static Decision decisionFor(TaskState finalState, String text) {
-        String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
+        String stage =
+                switch (finalState.position()) {
+                    case Position.AtStage(String name) -> name;
+                    case Position.AwaitingApproval(String gate) -> gate;
+                    case Position.PipelineEnd() -> null;
+                };
         return new Decision(text, stage, "tracker", Clock.systemUTC().instant());
     }
 

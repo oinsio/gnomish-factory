@@ -200,6 +200,23 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         0 * support.salvageLeftovers(_)
     }
 
+    // FR1 of make-checkpoint-gate-durable: a tip held at a gate reattaches the box of the stage that
+    // passed — the stage whose round the gate's commit recorded — and the engine pauses again there,
+    // running no round.
+    def "reattaches for the gate's stage when the recorded position is a gate"() {
+        given:
+        recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+
+        when:
+        resume()
+
+        then:
+        thrown(RunParkedException)
+        1 * support.reattachFor('build')
+        1 * support.salvageLeftovers('PROJ-1')
+        executor.requests.isEmpty()
+    }
+
     // UX2: outcome `completed` prints the same final status summary as the host path and stops —
     // no environment, no engine round.
     def "reports a completed branch without starting an environment"() {

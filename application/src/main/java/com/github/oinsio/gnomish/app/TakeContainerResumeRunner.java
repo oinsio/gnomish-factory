@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -74,10 +73,13 @@ final class TakeContainerResumeRunner {
         var pending = support.pendingVerification().orElse(null);
         if (order.run().discardWork()) {
             support.disposeExistingEnvironment();
-        } else if (finalState.position() instanceof Position.AtStage(String stage)) {
-            support.reattachFor(stage);
-            if (pending == null) {
-                support.salvageLeftovers(bootstrap.taskId());
+        } else {
+            String stage = ContainerResumeOutcomes.stageToReattach(finalState.position());
+            if (stage != null) {
+                support.reattachFor(stage);
+                if (pending == null) {
+                    support.salvageLeftovers(bootstrap.taskId());
+                }
             }
         }
         return ResumeLawBinding.resolve(
