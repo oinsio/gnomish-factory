@@ -141,7 +141,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         then: 'the snapshot-first protocol is on the branch: snapshot commit, then the state commit on top'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         snapshotSha
         def stateSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
                 '^gnomish: round work#0$')
@@ -192,7 +192,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         then: 'the executor round captured exactly one argv, harvested with the snapshot — never an empty file'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.EXECUTOR_ARGV_CAPTURE}")
                 .readLines()
         captured.count('---') == 1

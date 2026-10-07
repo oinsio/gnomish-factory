@@ -102,6 +102,12 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             ReclaimKillPoints.salvagedTransition('host', {
                 hostWorld(nextRoot())
             }),
+            // Container only (FR15, NFR-R4 of make-checkpoint-gate-durable, design D10): the request
+            // rides the in-box snapshot under the round's token, and host mode has no snapshot commit
+            // — its round is one worktree commit, so this window does not exist there.
+            RequestSnapshotKillPoints.transition('container', {
+                containerWorld(nextRoot())
+            }),
         ]
     }
 }

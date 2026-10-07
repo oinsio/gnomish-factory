@@ -44,7 +44,7 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
         persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
     }
 

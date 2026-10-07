@@ -9,7 +9,7 @@ import java.util.Optional;
 /**
  * The in-branch decision-file protocol for git modes (FR23, design D17): the
  * decision request lives at {@code
- * .gnomish-task/decisions/<stage>-a<attempt>.json} <em>inside the working
+ * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} <em>inside the working
  * copy</em> — the single gnome-writable path under {@code .gnomish-task/}
  * ({@link HarvestedBoundaryCheck}'s carve-out names exactly this path) — instead
  * of the host temp directory of {@code DecisionFileTransport}, which the
@@ -45,11 +45,14 @@ public final class BranchDecisionFile {
      * Opens one round's in-branch decision transport over {@code environment}.
      *
      * @param environment the task's bound environment; the boundary-time read runs through it
-     * @param key the round's key; fixes the file name and excludes stale files
+     * @param key the round's key; with {@code token}, fixes the file name
+     * @param token the round's token (FR13 of make-checkpoint-gate-durable); the one path read is
+     *     named by it, so a file under any other token — carried over on the tip, left by a killed
+     *     round, or written beside the real one — is never read
      * @return the round's handle; never null
      */
-    public static Handle open(TaskExecutionEnvironment environment, AttemptKey key) {
-        return new Handle(environment, HarvestedBoundaryCheck.decisionPath(key));
+    public static Handle open(TaskExecutionEnvironment environment, AttemptKey key, RoundToken token) {
+        return new Handle(environment, HarvestedBoundaryCheck.decisionPath(key, token));
     }
 
     /** One round's in-branch decision transport: the path, its env fragment, and the boundary-time read. */
@@ -63,7 +66,7 @@ public final class BranchDecisionFile {
             this.relativePath = relativePath;
         }
 
-        /** The working-copy-relative decision path, e.g. {@code .gnomish-task/decisions/implement-a1.json}. */
+        /** The working-copy-relative decision path, e.g. {@code .gnomish-task/decisions/implement-a1-<token>.json}. */
         public String relativePath() {
             return relativePath;
         }

@@ -43,7 +43,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
 
     def "FR13: a snapshot whose tip cannot be resolved records no attempt commit"() {
         given:
-        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, attemptRef)
+        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:

@@ -150,7 +150,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.RoundBoundaryCheck':
         'symbolic-ref and name-only diff output into the two boundary verdicts (booleans)',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
-        'a NUL-separated log line into the snapshot\'s stage and round',
+        'a NUL-separated log line into the snapshot\'s stage, round and round token; the decision' +
+        ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',
         'com.github.oinsio.gnomish.adapter.git.TaskBranchLister':
         'for-each-ref output into the list of task-branch refs, each held to the factory\'s own prefix',
         'com.github.oinsio.gnomish.adapter.git.TaskWorktreeManager':

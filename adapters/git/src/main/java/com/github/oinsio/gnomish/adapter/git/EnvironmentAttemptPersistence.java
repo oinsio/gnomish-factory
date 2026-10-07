@@ -123,7 +123,10 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         AttemptKey key = trace.key();
         String snapshot = attemptCommit.required();
 
-        boundaryCheck.verify(taskId, previousTip, snapshot, key);
+        // Interim until task 7.3 of make-checkpoint-gate-durable routes the token here from the
+        // run's RoundTokenRef: previousTip is the tip the round opened on (design D10 — "the same
+        // value under another name"), so the carve-out names the path the round source minted.
+        boundaryCheck.verify(taskId, previousTip, snapshot, key, new RoundToken(previousTip));
 
         byte[] stateBytes = documents.state(taskId, key, state);
         byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);

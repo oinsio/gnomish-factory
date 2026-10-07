@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import java.util.Optional;
+
 /**
  * A round whose attempt was committed but whose verdict never was: the factory died between the
  * snapshot commit and the state commit, i.e. <em>during verification</em> (FR21, design D15 of
@@ -13,8 +15,16 @@ package com.github.oinsio.gnomish.app.port.git;
  * Detecting one is still an adapter's job: it is read off the task branch tip as a bare-object
  * query.
  *
+ * <p>A round that asked for a decision carries its request in the snapshot's tree, at the path its
+ * round token names; the detector reads it from there — a read of the durable medium, never of a
+ * working copy — and hands it on raw, so the resuming executor re-raises exactly that question
+ * through the same tolerant reader a live round uses, without re-running the round (FR15, NFR-R4
+ * of make-checkpoint-gate-durable, design D10).
+ *
  * @param attemptCommit the sha of the snapshot (attempt) commit to verify; never null
  * @param stage the stage the interrupted round belonged to; never null
  * @param round the interrupted round's number within that stage
+ * @param request the decision request's raw content as the snapshot's tree holds it under the
+ *     round's token, or empty when the round asked nothing; never null
  */
-public record PendingVerification(String attemptCommit, String stage, int round) {}
+public record PendingVerification(String attemptCommit, String stage, int round, Optional<String> request) {}

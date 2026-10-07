@@ -23,6 +23,10 @@ import spock.lang.Specification
  * verification found on resume is consumed by the first matching round — the
  * pending attempt commit is recorded and the agent is never re-run; every
  * other request delegates, and the pending state is consumed exactly once.
+ *
+ * <p>FR15, NFR-R4 of make-checkpoint-gate-durable (design D10): a pending verification carrying the
+ * request the snapshot's tree held re-raises it as DecisionNeeded through the shared tolerant
+ * reader, with the same empty telemetry, and still never runs the agent.
  */
 class ResumeVerificationStageExecutorSpec extends Specification {
 
@@ -50,7 +54,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         def delegate = Mock(StageExecutor)
         def ref = new AttemptCommitRef()
         def executor = new ResumeVerificationStageExecutor(
-                delegate, ref, new PendingVerification('abc123', 'work', 2))
+                delegate, ref, new PendingVerification('abc123', 'work', 2, Optional.empty()))
 
         when:
         def result = executor.execute(request('work', 2))
@@ -59,14 +63,16 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         0 * delegate.execute(_)
         result instanceof ExecutionResult.Completed
         ref.required() == 'abc123'
-        (result as ExecutionResult.Completed).trace().calls().isEmpty()
+        (result as ExecutionResult.Completed).trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        (result as ExecutionResult.Completed).usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        (result as ExecutionResult.Completed).denials().isEmpty()
     }
 
     def "the pending verification is consumed exactly once — the next matching request delegates"() {
         given:
         def delegate = Mock(StageExecutor)
         def executor = new ResumeVerificationStageExecutor(
-                delegate, new AttemptCommitRef(), new PendingVerification('abc123', 'work', 2))
+                delegate, new AttemptCommitRef(), new PendingVerification('abc123', 'work', 2, Optional.empty()))
         executor.execute(request('work', 2))
         def delegateResult = completed()
 
@@ -85,7 +91,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         def delegate = Mock(StageExecutor)
         def ref = new AttemptCommitRef()
         def executor = new ResumeVerificationStageExecutor(
-                delegate, ref, new PendingVerification('abc123', 'work', 2))
+                delegate, ref, new PendingVerification('abc123', 'work', 2, Optional.empty()))
         def delegateResult = completed()
 
         when:
@@ -113,5 +119,46 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         then:
         1 * delegate.execute(_) >> delegateResult
         result.is(delegateResult)
+    }
+
+    def "FR15: a pending verification carrying a request re-raises its question with empty telemetry, no agent round"() {
+        given:
+        def delegate = Mock(StageExecutor)
+        def ref = new AttemptCommitRef()
+        def executor = new ResumeVerificationStageExecutor(delegate, ref, new PendingVerification(
+                        'abc123', 'work', 2, Optional.of('{"question":"which db?","options":["pg","sqlite"]}')))
+
+        when:
+        def result = executor.execute(request('work', 2))
+
+        then: "the agent never runs, and the snapshot is still the round's attempt commit"
+        0 * delegate.execute(_)
+        ref.required() == 'abc123'
+
+        and: "the snapshot's question, mapped through the same reader a live round uses"
+        def needed = result as ExecutionResult.DecisionNeeded
+        needed.question() == UntrustedText.agent('which db?')
+        needed.options() == [
+            UntrustedText.agent('pg'),
+            UntrustedText.agent('sqlite')
+        ]
+
+        and: "the same empty telemetry as the Completed resume: the round's own died with its state commit"
+        needed.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        needed.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        needed.denials().isEmpty()
+    }
+
+    def "FR15: an unparseable request still re-raises, its raw content as the question"() {
+        given:
+        def executor = new ResumeVerificationStageExecutor(
+                Mock(StageExecutor), new AttemptCommitRef(), new PendingVerification('abc123', 'work', 2, Optional.of('not json')))
+
+        when:
+        def result = executor.execute(request('work', 2))
+
+        then:
+        (result as ExecutionResult.DecisionNeeded).question() == UntrustedText.agent('not json')
+        (result as ExecutionResult.DecisionNeeded).options().isEmpty()
     }
 }

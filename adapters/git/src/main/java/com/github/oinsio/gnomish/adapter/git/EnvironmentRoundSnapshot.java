@@ -23,7 +23,13 @@ import java.util.List;
  * survives any death. A {@link HarvestRefusedException} (rewritten history)
  * propagates as the existing violation.
  *
- * <p>Implements FR21 of add-sandbox-core; FR13 of harden-logging-observability.
+ * <p>The subject carries the round's token, taken from the run's {@link RoundTokenRef} — the
+ * one minting is {@link SandboxRoundEnvironmentSource#openRound}, never a tip read here — so a
+ * resume after a death between this commit and the state commit reads the request at exactly
+ * this round's path in the snapshot's tree (FR15 of make-checkpoint-gate-durable, design D10).
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR13 of harden-logging-observability; FR15 of
+ * make-checkpoint-gate-durable.
  */
 public final class EnvironmentRoundSnapshot {
 
@@ -37,6 +43,7 @@ public final class EnvironmentRoundSnapshot {
     private final Path cloneDir;
     private final String branch;
     private final AttemptCommitRef attemptCommit;
+    private final RoundTokenRef roundToken;
 
     /**
      * @param environment the task's bound environment; snapshot commits run through its exec
@@ -44,18 +51,21 @@ public final class EnvironmentRoundSnapshot {
      * @param cloneDir the factory clone harvest lands in
      * @param taskId the tracker's original taskId; sanitized into the task branch name
      * @param attemptCommit the run's attempt-commit ref, updated with each harvested snapshot
+     * @param roundToken the run's round-token ref; the subject names the token the round opened with
      */
     public EnvironmentRoundSnapshot(
             TaskExecutionEnvironment environment,
             GitProcessRunner runner,
             Path cloneDir,
             String taskId,
-            AttemptCommitRef attemptCommit) {
+            AttemptCommitRef attemptCommit,
+            RoundTokenRef roundToken) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.attemptCommit = attemptCommit;
+        this.roundToken = roundToken;
     }
 
     /**
@@ -66,6 +76,7 @@ public final class EnvironmentRoundSnapshot {
      * @param stage the current stage id
      * @param round the round's 1-based number
      * @return the harvested attempt commit id
+     * @throws IllegalStateException if no round opened — a snapshot names the round that owns it
      * @throws GitPersistFailedException if the in-box snapshot commit fails
      * @throws HarvestRefusedException if the branch history was rewritten in-box
      * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if the
@@ -73,7 +84,7 @@ public final class EnvironmentRoundSnapshot {
      *     harden-logging-observability)
      */
     public String snapshot(String taskId, String stage, int round) {
-        String message = ServiceCommitMessages.snapshot(stage, round);
+        String message = ServiceCommitMessages.snapshot(stage, round, roundToken.required());
         // Run through the medium's one outcome seam (D14): the wait is drained concurrently
         // (FR2, FR11 of bound-subprocess-commands) and an interrupted wait comes back named
         // rather than as an exception this site would have to classify itself.

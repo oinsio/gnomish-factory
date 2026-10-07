@@ -19,7 +19,7 @@ import java.util.List;
  * the state-directory rule: {@code .gnomish-task/} untouched by the gnome
  * between the previous tip and the harvested snapshot — with exactly one
  * carve-out, the current round's decision request {@code
- * .gnomish-task/decisions/<stage>-a<attempt>.json}, whose one writer <em>is</em>
+ * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json}, whose one writer <em>is</em>
  * the gnome (FR23). Files named for any other stage or attempt are stale by
  * construction and stay violations.
  *
@@ -62,12 +62,14 @@ public final class HarvestedBoundaryCheck {
      * @param taskId the task being checked, for the violation message
      * @param previousTip the branch tip right after the previous round closed
      * @param snapshotCommit the harvested snapshot commit closing this round
-     * @param key the current round's key; fixes the single permitted decision path
+     * @param key the current round's key; with {@code token}, fixes the single permitted decision path
+     * @param token the current round's token (FR16 of make-checkpoint-gate-durable): a decision
+     *     file under any other token — carried over, or written beside the real one — is a violation
      * @throws RoundBoundaryViolationException if any other {@code .gnomish-task/} path changed
      * @throws GitPersistFailedException if the diff itself cannot be computed — cannot-verify,
      *     the round's infrastructure-failure path
      */
-    public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key) {
+    public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key, RoundToken token) {
         GitCommandResult diff =
                 runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", EnvelopePaths.DIR);
         // A diff that failed printed no paths for the same reason a clean one prints none, so its
@@ -77,7 +79,7 @@ public final class HarvestedBoundaryCheck {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "harvested boundary diff", diff.cannotVerifyDetail());
         }
-        String allowed = decisionPath(key);
+        String allowed = decisionPath(key, token);
         // @UntrustedParser warrant (design D11): the captured bytes are converted into a decision —
         //     did the gnome touch anything under .gnomish-task/ besides this round's decision file
         //     — and the paths behind that decision are never handed on as a plain String. They go
@@ -119,10 +121,13 @@ public final class HarvestedBoundaryCheck {
 
     /**
      * The single gnome-writable path under {@code .gnomish-task/} for one round
-     * (FR23): {@code .gnomish-task/decisions/<stage>-a<attempt>.json}. Stage and
-     * attempt in the name make stale files self-excluding.
+     * (FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable):
+     * {@code .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} — the one spelling of the
+     * decision path, used by {@link BranchDecisionFile}'s handle and by {@link #verify}'s
+     * carve-out. There is no token-less form: a stage and attempt repeat across visits of a
+     * stage, so only the round token names the round that owns the file.
      */
-    public static String decisionPath(AttemptKey key) {
-        return EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + ".json";
+    public static String decisionPath(AttemptKey key, RoundToken token) {
+        return EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + "-" + token.commit() + ".json";
     }
 }

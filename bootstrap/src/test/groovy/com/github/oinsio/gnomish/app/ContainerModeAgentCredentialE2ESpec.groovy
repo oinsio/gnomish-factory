@@ -132,7 +132,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         then: 'the agent round held both credentials with their current factory values'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.CREDENTIAL_CAPTURE}")
         captured.readLines().collectEntries { line ->
             line.split('=', 2).with {

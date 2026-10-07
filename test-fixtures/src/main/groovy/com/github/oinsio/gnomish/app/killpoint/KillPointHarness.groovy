@@ -52,5 +52,7 @@ final class KillPointHarness {
         transition.pickup.call(world)
         assert transition.fingerprint.call(world) == afterFirst:
         "${where}: the second recovery pass was not a no-op"
+
+        transition.epilogue?.call(world)
     }
 }

@@ -56,7 +56,7 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
         box.materialize(BRANCH, null)
         def attemptRef = new AttemptCommitRef()
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        def snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
+        def snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
         def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
         snapshotStep.snapshot(TASK, 'implement', 1)

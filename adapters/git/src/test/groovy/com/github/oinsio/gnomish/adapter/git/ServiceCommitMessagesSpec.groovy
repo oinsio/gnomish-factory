@@ -48,6 +48,13 @@ class ServiceCommitMessagesSpec extends Specification {
         }
     }
 
+    // FR15 of make-checkpoint-gate-durable (design D10): the one parsed subject names the round's
+    // token after its stage and round, separated by one space — SnapshotTipCheck reads it back.
+    def "FR15: snapshot(stage, round, token) names the round token after stage#round"() {
+        expect:
+        ServiceCommitMessages.snapshot('work', 0, new RoundToken('0a1b2c')) == 'gnomish: snapshot work#0 0a1b2c'
+    }
+
     def "FR2: salvage() is the fixed constant string"() {
         expect:
         ServiceCommitMessages.salvage() == 'gnomish: salvage'

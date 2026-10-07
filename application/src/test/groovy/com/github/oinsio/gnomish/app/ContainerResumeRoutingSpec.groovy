@@ -164,7 +164,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // run somewhere) but salvaging would commit over a finished round, so it is skipped.
     def "reattaches but does not salvage when a pending verification is recorded"() {
         given:
-        pending = Optional.of(new PendingVerification('sha-1', 'build', 0))
+        pending = Optional.of(new PendingVerification('sha-1', 'build', 0, Optional.empty()))
 
         when:
         resume()

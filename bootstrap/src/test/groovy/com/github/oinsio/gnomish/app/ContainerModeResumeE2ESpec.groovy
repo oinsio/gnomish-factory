@@ -4,7 +4,10 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.EnvironmentRoundSnapshot
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.RoundToken
+import com.github.oinsio.gnomish.adapter.git.RoundTokenRef
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -228,7 +231,12 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         ], [:], null, true))
         handle.output().readAllBytes()
         assert handle.waitForExit() == 0
-        new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, new AttemptCommitRef())
+        // The round opened on the current tip: that tip is the token its snapshot subject names
+        // (design D10 of make-checkpoint-gate-durable), recorded as SandboxRoundEnvironmentSource
+        // would record it.
+        def roundToken = new RoundTokenRef()
+        roundToken.record(new RoundToken(gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()))
+        new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, new AttemptCommitRef(), roundToken)
                 .snapshot(taskId, 'work', 0)
         support.keepStopped()
 

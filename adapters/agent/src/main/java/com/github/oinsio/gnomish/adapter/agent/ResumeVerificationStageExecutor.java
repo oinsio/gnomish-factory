@@ -27,7 +27,14 @@ import org.slf4j.LoggerFactory;
  * harvested attempt commit — no agent re-run, no attempt burned. Every other
  * request delegates unchanged; the engine stays untouched (D15).
  *
- * <p>Implements FR21 of add-sandbox-core.
+ * <p>A round that asked for a decision before the death left its request in the snapshot's tree,
+ * and the pending verification carries it: the matching round then maps it through the same
+ * tolerant {@link DecisionFileReader} a live round uses and returns {@link
+ * ExecutionResult.DecisionNeeded} with the same empty telemetry — the question is re-raised, the
+ * round is not replayed, no attempt is burned (FR15, NFR-R4 of make-checkpoint-gate-durable, design
+ * D10). A pending verification without a request resumes as {@code Completed}, as before.
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR15 of make-checkpoint-gate-durable.
  */
 public final class ResumeVerificationStageExecutor implements StageExecutor {
 
@@ -35,6 +42,7 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
 
     private final StageExecutor delegate;
     private final AttemptCommitRef attemptCommit;
+    private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     private @Nullable PendingVerification pending;
 
@@ -67,8 +75,13 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
                     new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
             // No denials either, for the same reason the telemetry is empty: this round's
             // environment is long gone, and its guard log died with the unrecorded state commit.
-            return new ExecutionResult.Completed(
-                    new ExecutorUsage(Duration.ZERO, List.of(), Map.of()), new ToolTrace(key, List.of()), List.of());
+            var usage = new ExecutorUsage(Duration.ZERO, List.of(), Map.of());
+            var trace = new ToolTrace(key, List.of());
+            return decisionFileReader
+                    .read(p.request())
+                    .map(d -> (ExecutionResult)
+                            new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace, List.of()))
+                    .orElseGet(() -> new ExecutionResult.Completed(usage, trace, List.of()));
         }
         return delegate.execute(request);
     }

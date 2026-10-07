@@ -59,7 +59,7 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
         // the stage in flight, exactly as ContainerRunSupport.persistence() builds them.
         leased = new LeasedEnvironment({ box })
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef, OpenedRound.at(cloneDir, BRANCH))
         persistence = new EnvironmentAttemptPersistence(
                 leased, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
     }

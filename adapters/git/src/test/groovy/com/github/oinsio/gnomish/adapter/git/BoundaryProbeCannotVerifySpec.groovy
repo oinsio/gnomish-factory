@@ -100,7 +100,7 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         def check = new HarvestedBoundaryCheck(new GitProcessRunner(gitFailingOn(tempDir, 'diff').toString()), repo)
 
         when:
-        check.verify('PROJ-1', previousTip, snapshot, KEY)
+        check.verify('PROJ-1', previousTip, snapshot, KEY, new RoundToken(previousTip))
 
         then: 'the tamper below it is never even reached — the probe itself failed'
         def failure = thrown(GitPersistFailedException)
@@ -116,7 +116,7 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         def check = new HarvestedBoundaryCheck(new GitProcessRunner(), repo)
 
         when:
-        check.verify('PROJ-1', previousTip, snapshot, KEY)
+        check.verify('PROJ-1', previousTip, snapshot, KEY, new RoundToken(previousTip))
 
         then:
         def violation = thrown(RoundBoundaryViolationException)

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore;
 import com.github.oinsio.gnomish.adapter.git.RemoteAttemptDelivery;
+import com.github.oinsio.gnomish.adapter.git.RoundTokenRef;
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -66,6 +67,9 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final ContainerEnvironments environments;
     final EnvironmentLease lease;
     final AttemptCommitRef attemptCommit = new AttemptCommitRef();
+    // The run's one round-token ref (design D10 of make-checkpoint-gate-durable): the round source
+    // records each round's token here; task 7.3 hands the same ref to the persistence.
+    final RoundTokenRef roundToken = new RoundTokenRef();
     final GitObjects gitObjects;
     final TaskLifecycleStore taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
@@ -132,7 +136,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public SandboxRunPieces pieces(@Nullable PendingVerification pendingVerification) {
         return new SandboxRunPieces(
-                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, attemptCommit, new SystemClock()),
+                new SandboxRoundEnvironmentSource(
+                        lease, runner, cloneDir, taskId, attemptCommit, roundToken, new SystemClock()),
                 judgeEnvironments,
                 new SandboxCheckEnvironmentSource(lease, environments, branch),
                 gitObjects,
@@ -199,7 +204,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     /** The snapshot-without-state classifier of resume (FR21, D15). */
     @Override
     public Optional<PendingVerification> pendingVerification() {
-        return snapshotTipCheck().inspect(branch);
+        return snapshotTipCheck().inspect(taskId);
     }
 
     /** Runs the startup orphan sweep (FR11, NFR-R2). Delegated to {@link ContainerRunTermination}. */

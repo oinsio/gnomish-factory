@@ -227,7 +227,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
 
 ## 7. Round token (design D10; FR13–FR16, NFR-R4, G4)
 
-- [ ] 7.1 `RoundToken` value type (`adapters/git`; a commit id, blank or non-hex refused) and
+- [x] 7.1 `RoundToken` value type (`adapters/git`; a commit id, blank or non-hex refused) and
       the per-run `RoundTokenRef` (the `AttemptCommitRef` shape; `required()` throws when no
       round opened). `SandboxRoundEnvironmentSource.openRound` reads `refs/heads/<branch>`
       through the runner, records the token, and opens
@@ -241,7 +241,7 @@ token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E
       token is not read), `HarvestedBoundaryCheckSpec` (token path passes; another token's
       path is a violation), `SandboxRoundEnvironmentSourceSpec` (the env fragment names the
       token path; the ref holds the open tip).
-- [ ] 7.2 Resume path (FR15): `ServiceCommitMessages.snapshot(stage, round, token)` →
+- [x] 7.2 Resume path (FR15): `ServiceCommitMessages.snapshot(stage, round, token)` →
       `gnomish: snapshot <stage>#<round> <token>`; `SnapshotTipCheck` parses the token and reads
       the request from the snapshot tree (`git show <snapshot>:<token path>`, factory clone,
       absent → none) into `PendingVerification(attemptCommit, stage, round, Optional<String>

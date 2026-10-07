@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.RoundToken
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -158,7 +159,10 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     protected void commitSnapshotStateAtStage(String taskId, String stage, int round) {
         def bytes = TaskStateJson.mapper()
                 .writeValueAsString(StateJsonMapper.toDto(TaskState.atStageStart(stage))).getBytes('UTF-8')
-        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round))
+        // The round opened on the current tip, so that tip is the token the subject names (design
+        // D10 of make-checkpoint-gate-durable).
+        def token = new RoundToken(gitObjects.resolveRef('refs/heads/' + TaskIdSanitizer.branchName(taskId)).get().hex())
+        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round, token))
     }
 
     /** Hand-commits task.json (the crash-window shapes recordOutcome never leaves behind). */
