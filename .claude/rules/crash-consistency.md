@@ -52,6 +52,25 @@ change's `design.md` or spec:
     durable medium (tip, tracker); a local working copy is a write staging
     area, and a read of a factory-owned file from it is a defect the
     `EnvelopeMediumBoundarySpec` gate rejects.
+12. **No write implies an authorisation a later write grants.** For every
+    durable step, ask what a pickup that sees it and nothing after it is
+    allowed to do; if the answer is "continue past a gate", "deliver", or
+    "run the next stage" while a later step was meant to decide that, the
+    gate belongs in this step's record (the position is the gate; the stop
+    rides the round record), never in the step that follows. Introduced by
+    `make-checkpoint-gate-durable`.
+13. **Liveness is judged by identity, never by presence.** A reader of a
+    medium that keeps the past (a branch tip, a cloned working copy) cannot
+    tell "written for this pickup" from "carried over" by looking for a file,
+    a marker or a record. The writer stamps the message with an identity the
+    orchestrator minted and no later step repeats (the round token: the tip a
+    round opened on; the claim epoch; a source identity on a cursor), the
+    receiver accepts only the current identity, and deletion of consumed
+    messages is hygiene in the consuming commit — never the judge. Two
+    independent liveness judgements for one message are two recovery owners
+    (item 3). A key that is reset by design — the attempt number restarts on
+    an answer, an advancement, a retry — is not an identity. Introduced by
+    `make-checkpoint-gate-durable` (design D10).
 
 ## Referencing
 
