@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -86,7 +87,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
         given: 'contrast fixture — same shape, but recordOutcome was actually called (Paused, not Completed, so FR15 cleanup does not remove .gnomish-task/ before this read)'
         recordInterruptedRound('PROJ-INT-3')
         new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE).recordOutcome('PROJ-INT-3',
-                new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
+                new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-INT-3', '--json')
 
         when:

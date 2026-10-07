@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.TaskWorktreeCleanup
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.take.FinishEffect
 import com.github.oinsio.gnomish.app.take.FinishTransition
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
@@ -123,7 +124,7 @@ final class FinishKillPoints {
     private static void step(KillPointWorld world, String name) {
         if (OUTCOME_COMMIT == name) {
             world.store.recordOutcome(
-                    world.taskId, new TaskOutcome.Completed(TaskState.atStageStart('build')))
+                    world.taskId, new TaskOutcome.Completed(TaskState.atStageStart('build')), TrackerWrite.OWED)
         } else if (TRACKER_FINISH == name) {
             world.tracker.finish(world.ref, SUMMARY)
         } else if (STAGED_REMOVAL == name) {

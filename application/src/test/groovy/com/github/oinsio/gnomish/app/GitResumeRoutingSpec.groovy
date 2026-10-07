@@ -2,17 +2,10 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskRecord
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
-import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -28,18 +21,18 @@ import java.nio.file.Path
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR5, FR8, FR10, UX2 of add-git-workflow: {@code gnomish run --git --resume}. The branch's own
  * recorded outcome decides what resuming MEANS, and the five answers are deliberately different:
  * no outcome continues from the recorded position, {@code completed} only reports, {@code
- * escalated} re-opens the escalation dialog, {@code paused} asks for a checkpoint confirmation,
- * and {@code aborted} refuses outright rather than building on state a broken durability
- * guarantee left behind.
+ * escalated} resolves the operator's {@code --decision} through {@code EscalationResume} (FR3,
+ * FR4, FR9, NFR-R1 of make-run-headless), {@code paused} continues without a prompt (FR5), and
+ * {@code aborted} refuses outright rather than building on state a broken durability guarantee
+ * left behind.
  *
  * <p>Driven through ports only (design D13(c) of split-into-modules), over a real
  * {@code RunnerOutcomeLoop}/{@code Engine} on the domain's scripted engine-port fakes and a
- * scripted console for the dialogs.
+ * console whose reader fails the spec: no resume path reads standard input (FR6).
  *
  * <p>Added by task 8.7 of split-into-modules.
  */
@@ -88,7 +81,17 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         store.readTaskRecord(_) >> { Optional.ofNullable(record) }
     }
 
-    ScriptedConsoleIO console = new ScriptedConsoleIO([''])
+    ScriptedConsoleIO console = unreadableConsole()
+
+    /** FR6 of make-run-headless: a console a resume may print to but never read from. */
+    private static ScriptedConsoleIO unreadableConsole() {
+        new ScriptedConsoleIO() {
+                    @Override
+                    String readLine() {
+                        throw new AssertionError('a headless resume read the console')
+                    }
+                }
+    }
 
     // FR1, FR3 of wire-host-mid-round-push (design D3): the git-mode host resume attaches the
     // TaskGit bundle's mid-round push decoration before assembling the continuation run.
@@ -99,13 +102,13 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
             rounds
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitResumeRunner(
-                assemblyRunningLoop(executor, new ScriptedConsoleIO(['']),
+                assemblyRunningLoop(executor, unreadableConsole(),
                 new Verdict.Pass(), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, 'taskId')
 
         when:
         runner.run(new RunOrder(cloneDir, null, completingPipeline(), false),
-                'PROJ-1')
+                'PROJ-1', null)
 
         then:
         attached.size() == 1
@@ -115,9 +118,10 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     /** Every law binding the resumed chain assembled with, in order (FR12 of add-base-ref-resolution). */
     List lawBindings = []
 
-    private String resume(List<String> consoleScript = [''], boolean discardWork = false) {
-        console = new ScriptedConsoleIO(consoleScript)
-        def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
+    /** Resumes PROJ-1 with the given {@code --decision} ({@code null} for none) over a console that is never read. */
+    private String resume(String decision = null, boolean discardWork = false, Verdict verdict = new Verdict.Pass()) {
+        console = unreadableConsole()
+        def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, verdict, [], lawBindings),
         new TaskGit(store, branches, worktrees, new ClaimEpochBook()), registeredClone, 'taskId')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
@@ -125,7 +129,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         try {
             runner.run(
                     new RunOrder(cloneDir, null, completingPipeline(), discardWork),
-                    'PROJ-1')
+                    'PROJ-1', decision)
         } finally {
             System.out = originalOut
         }
@@ -194,14 +198,14 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         and: 'the engine really continued, and the run reached its terminal boundary'
         executor.requests.size() == 1
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
     }
 
     // FR8: --discard-work resets to HEAD instead, so the loop replays the round clean. The two are
     // mutually exclusive: doing both would commit the leftovers and then throw them away.
     def "discards the leftovers instead under --discard-work"() {
         when:
-        resume([''], true)
+        resume(null, true)
 
         then:
         1 * salvager.discard()
@@ -221,14 +225,14 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         then: 'the summary reached the operator through the run\'s own console owner'
         console.printed.join('').contains('PROJ-1')
         executor.requests.isEmpty()
-        0 * lifecycleStore.recordOutcome(_, _)
+        0 * lifecycleStore.recordOutcome(_, _, _)
         0 * salvager._
     }
 
-    // FR5, FR8, UX2: outcome `escalated` re-opens the escalation dialog. A non-blank answer is
-    // appended as a Decision (which also clears the recorded outcome in the same commit) and the
-    // engine resumes from the dialog's reset state.
-    def "re-opens the escalation dialog and records a non-blank answer as a decision"() {
+    // FR5, FR8, UX2; FR3, NFR-R1 of make-run-headless: outcome `escalated` with --decision appends
+    // the decision through the one call that also resets outcome and attempts in the same commit,
+    // and the engine resumes from the reset state. Nothing is printed before the engine runs.
+    def "records a --decision over an escalated task as the operator's, scoped to the stage, in one write"() {
         given:
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
             UntrustedText.agent('postgres'),
@@ -237,31 +241,63 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         record = recordWith(new RecordedOutcome.Escalated(report), report)
 
         when:
-        resume(['use postgres'])
+        resume('use postgres')
 
-        then:
+        then: 'the answer is recorded as the operator\'s, scoped to the stage it answers, with the reset state'
         1 * lifecycleStore.appendDecision('PROJ-1', {
-            it.body() == 'use postgres'
-        }, _)
+            it.body() == 'use postgres' && it.author() == 'operator' && it.stage() == 'build'
+        }, {
+            it.attemptsUsed() == 0
+        })
+
+        and: 'the question was not restated — the flag answered it'
+        !console.printed.any {
+            it.contains('which database?')
+        }
 
         and: 'and the run continued to its terminal boundary'
         executor.requests.size() == 1
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
     }
 
-    // FR5: a BLANK answer resumes on the return alone — nothing is appended, mirroring the
-    // in-process dialog's own blank-answer case, so the decision history stays truthful.
-    def "appends no decision when the escalation answer is blank"() {
+    // FR4 of make-run-headless: no --decision over an AttemptsExhausted park resumes on the reset
+    // alone — nothing is appended, so the decision history stays truthful.
+    def "appends no decision when an escalated task is resumed without --decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
 
         when:
-        resume([''])
+        resume()
 
         then:
         0 * lifecycleStore.appendDecision(_, _, _)
         executor.requests.size() == 1
+    }
+
+    // FR4 of make-run-headless: a DecisionNeeded resumed without --decision is refused — the
+    // question and the return path are restated, no round runs, nothing is written.
+    def "restates a DecisionNeeded resumed without --decision and writes nothing"() {
+        given:
+        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
+            UntrustedText.agent('postgres')
+        ])
+        record = recordWith(new RecordedOutcome.Escalated(report), report)
+
+        when:
+        resume()
+
+        then:
+        def refused = thrown(DecisionRequiredException)
+        refused.stopRecord().contains("--dir=${cloneDir} --resume=PROJ-1")
+        console.printed.any {
+            it.contains('which database?') && it.contains('--resume=PROJ-1 [--decision="..."]')
+        }
+
+        and:
+        executor.requests.isEmpty()
+        0 * lifecycleStore._
+        0 * salvager._
     }
 
     // FR5: `escalated` with no recorded report is a state the writer never produces (it always
@@ -278,23 +314,69 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         ex.message.contains('no lastEscalation recorded')
     }
 
-    // FR8, UX2: outcome `paused` is a manual checkpoint, not a question — it states which stage
-    // passed and waits for Enter, appending no decision, then resumes from the recorded state.
-    def "confirms a manual checkpoint and resumes without appending a decision"() {
+    // FR8, UX2; FR5 of make-run-headless: outcome `paused` is a manual checkpoint, not a question —
+    // the resume is the confirmation, so nothing is printed, nothing asked, nothing appended, and
+    // the engine continues from the recorded (already advanced) state.
+    def "continues a paused task without a checkpoint line, a prompt or a decision"() {
         given:
         record = recordWith(new RecordedOutcome.Paused('build'))
 
         when:
-        resume([''])
+        resume()
 
-        then: 'the checkpoint is STATED before the prompt — an operator has to know what passed'
-        console.printed.any {
-            it.contains("Stage 'build' passed") && it.contains('Manual checkpoint')
+        then:
+        !console.printed.any {
+            it.contains('Manual checkpoint')
         }
-
-        and:
         0 * lifecycleStore.appendDecision(_, _, _)
         executor.requests.size() == 1
+    }
+
+    // FR1, FR10 of make-run-headless (design D8): a resumed run that stops again records the park
+    // through the same recorder, keeps the worktree, and leaves by its outcome with the return path.
+    def "records the park of a resumed run that escalates again and exits by it"() {
+        when:
+        resume(null, false, new Verdict.Fail([]))
+
+        then:
+        def stop = thrown(RunParkedException)
+        !stop.checkpoint()
+        stop.stopRecord().contains("--dir=${cloneDir} --resume=PROJ-1")
+
+        and:
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Escalated, TrackerWrite.NONE)
+        0 * lifecycleStore.confirmTerminalWrite(_)
+        0 * lifecycleStore.finishCleanup(_)
+        1 * worktrees.cleanUp(cloneDir, worktree, _ as TaskOutcome.Escalated)
+    }
+
+    // FR9 of make-run-headless: a --decision answers an escalation; over any other recorded outcome
+    // it is a usage error naming the conflict, raised after task.json is read and before any branch
+    // write or salvage.
+    def "refuses a --decision over a task whose recorded outcome is #label, writing nothing"() {
+        given:
+        record = recorded == null ? freshRecord() : recordWith(recorded)
+
+        when:
+        resume('nobody asked')
+
+        then:
+        def ex = thrown(UsageException)
+        ex.message.contains('--decision')
+        ex.message.contains('PROJ-1')
+        ex.message.contains(named)
+
+        and:
+        executor.requests.isEmpty()
+        0 * lifecycleStore._
+        0 * salvager._
+
+        where:
+        label | recorded | named
+        'paused' | new RecordedOutcome.Paused('build') | "paused at a manual checkpoint after stage 'build'"
+        'completed' | new RecordedOutcome.Completed() | 'completed'
+        'aborted' | new RecordedOutcome.Aborted('build', UntrustedText.branchDocument('persistence failed')) | 'aborted'
+        'not recorded' | null | 'interrupted run with no recorded outcome'
     }
 
     // FR8: outcome `aborted` means a prior visit's durability guarantee broke. There is nothing to
@@ -313,7 +395,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         and: 'nothing was run or written'
         executor.requests.isEmpty()
-        0 * lifecycleStore.recordOutcome(_, _)
+        0 * lifecycleStore.recordOutcome(_, _, _)
     }
 
     // FR1, design D2 of fix-envelope-medium: on the manual-run paths the envelope was committed by
@@ -365,7 +447,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         resume()
 
         then:
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Aborted, TrackerWrite.OWED)
         1 * worktrees.cleanUp(cloneDir, worktree, _ as TaskOutcome.Aborted)
 
         and:

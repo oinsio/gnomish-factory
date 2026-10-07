@@ -2,16 +2,17 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 
 /**
  * FR6, FR17, UX2 of add-sandbox-core: {@link ContainerResumeRunner}'s outcome dispatch for the
- * non-dialog outcomes, daemon-free over {@link ContainerResumeSpecBase}'s scripted fixture — the
- * completed report, the paused checkpoint confirmation, and {@code --discard-work} disposal of an
- * interrupted task's kept environment. The escalation dialog lives in
- * {@code ContainerResumeEscalationSpec}.
+ * non-escalated outcomes, daemon-free over {@link ContainerResumeSpecBase}'s scripted fixture — the
+ * completed report, the paused continuation, and {@code --discard-work} disposal of an interrupted
+ * task's kept environment. The escalation resolution lives in {@code
+ * ContainerResumeEscalationSpec}.
  */
 class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
 
@@ -26,7 +27,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         System.out = new PrintStream(captured, true, 'UTF-8')
 
         when:
-        resume('T-COMPLETED', lines(''), System.out)
+        resume('T-COMPLETED', null, System.out)
 
         then:
         captured.toString('UTF-8').contains('Task: T-COMPLETED')
@@ -35,22 +36,23 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         System.out = originalOut
     }
 
-    // FR6, UX2: a paused task resumes through the same checkpoint confirmation as the host path,
-    // then drives to Completed.
-    def "resuming a paused task confirms the checkpoint and completes"() {
+    // FR6, UX2; FR5 of make-run-headless: a paused task resumes without a checkpoint line or a
+    // prompt — the resume is the confirmation — and drives to Completed.
+    def "resuming a paused task continues without a checkpoint line and completes"() {
         given:
         repository.createTask(context('T-PAUSED'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        repository.recordOutcome('T-PAUSED', new TaskOutcome.Paused(pipelineEndState(), 'build'))
+        repository.recordOutcome('T-PAUSED', new TaskOutcome.Paused(pipelineEndState(), 'build'), TrackerWrite.OWED)
         commitStateAtPipelineEnd('T-PAUSED')
         def consoleOut = new ByteArrayOutputStream()
 
         when:
-        resume('T-PAUSED', lines(''), new PrintStream(consoleOut, true, 'UTF-8'))
+        resume('T-PAUSED', null, new PrintStream(consoleOut, true, 'UTF-8'))
 
-        then: 'the checkpoint confirmation was printed through the dialog console'
-        consoleOut.toString('UTF-8').contains("Stage 'build' passed. Manual checkpoint reached.")
+        then: 'no checkpoint sentence and no prompt reached the console'
+        !consoleOut.toString('UTF-8').contains('Manual checkpoint reached')
+        !consoleOut.toString('UTF-8').contains('Press Enter')
 
-        and: 'the confirmed continuation drove to the completed outcome'
+        and: 'the continuation drove to the completed outcome'
         taskJsonBelowTip('T-PAUSED').contains('"completed"')
     }
 
@@ -63,7 +65,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         def key = TaskIdSanitizer.sanitize('T-DISC')
 
         when:
-        resume('T-DISC', lines(''), sink(), true)
+        resume('T-DISC', null, sink(), true)
 
         then: 'the round key\'s docker objects were force-removed before the drive'
         docker.runs.contains([
@@ -99,7 +101,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         repository.createTask(context('T-SALV'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
         when:
-        resume('T-SALV', lines(''), sink())
+        resume('T-SALV', null, sink())
 
         then:
         thrown(AbortedException)
@@ -121,7 +123,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         commitSnapshotStateAtStage('T-PEND', 'build', 1)
 
         when:
-        resume('T-PEND', lines(''), sink())
+        resume('T-PEND', null, sink())
 
         then:
         thrown(AbortedException)
@@ -145,7 +147,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         commitStateAtPipelineEnd('T-NOENV')
 
         when:
-        resume('T-NOENV', lines(''), sink())
+        resume('T-NOENV', null, sink())
 
         then: 'no box is materialized (no docker run) and no in-box exec ever ran'
         !docker.runs.any { it.first() == 'run' }

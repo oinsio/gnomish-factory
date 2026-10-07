@@ -41,8 +41,7 @@ gnomish take 42 43 44                # batch: work three named refs, up to N con
 flags (`--mode`, `--task`/`--task-file`/`--task-id`, `--resume`, `--from-stage`,
 `--base`, `--discard-work`, `--takeover`) — it works the whole ready queue, not
 one named task, and it is unconditionally non-interactive: an escalation
-always parks with a tracker report, never a TTY dialog, even with a terminal
-attached (one console cannot host N concurrent dialogs).
+always parks with a tracker report, even with a terminal attached.
 
 Batch `take <ref> <ref> ...` (two or more positional refs) is the existing
 `take <ref>` disposition matrix applied to each ref independently — the

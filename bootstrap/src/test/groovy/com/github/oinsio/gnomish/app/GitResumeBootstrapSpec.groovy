@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -51,7 +52,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        repo.recordOutcome('PROJ-2', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        repo.recordOutcome('PROJ-2', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
 
         when:
         def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-2')

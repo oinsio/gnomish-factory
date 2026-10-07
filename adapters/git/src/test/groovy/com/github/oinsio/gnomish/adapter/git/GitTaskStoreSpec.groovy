@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -129,7 +130,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         given: 'FR1 of fix-envelope-medium: a completed task whose tip carries the Completed envelope'
         def state = seedTask('PROJ-6', 'Fix it')
         def worktree = worktreeFor('PROJ-6')
-        store.taskRepository(registeredClone).recordOutcome('PROJ-6', new TaskOutcome.Completed(state))
+        store.taskRepository(registeredClone).recordOutcome('PROJ-6', new TaskOutcome.Completed(state), TrackerWrite.OWED)
 
         and: 'a cleanup killed between its staged removal and its commit: the worktree lost the envelope, the tip kept it'
         assert runner.run(worktree, 'rm', '-r', EnvelopePaths.DIR_NAME).exitCode() == 0

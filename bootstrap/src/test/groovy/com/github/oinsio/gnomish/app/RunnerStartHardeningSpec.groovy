@@ -134,7 +134,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
 
         when:
         runner.run(new RunOrder(clone, null, pipeline(), false),
-                'absent-task', segments)
+                'absent-task', null, segments)
 
         then:
         thrown(UsageException)

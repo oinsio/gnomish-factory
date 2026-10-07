@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
-import com.github.oinsio.gnomish.status.Activity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
@@ -16,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  * the top-level entry point for status-report JSON rendering (task 6.5). Every
  * sealed domain type is mapped through an exhaustive switch with no {@code
  * default} arm, mirroring the domain's own exhaustive-switch idiom (e.g. {@code
- * CheckRef.of}, {@code Outcome.from}): a new variant fails to compile here until
+ * CheckRef.of}): a new variant fails to compile here until
  * its mapping is added.
  *
  * <p>Annotated {@link UntrustedExit} for the same reason {@code AttemptMapper} and {@code
@@ -64,7 +63,6 @@ public final class StatusReportJsonMapper {
                 1,
                 new TaskDto(report.taskId(), report.title().raw()),
                 toPosition(report),
-                toActivity(report.activity()),
                 toOutcome(report.outcome()),
                 toCurrentStage(report),
                 UsageMapper.toUsage(report.totals()),
@@ -76,32 +74,6 @@ public final class StatusReportJsonMapper {
         return report.currentStage() == null
                 ? new PositionDto.PipelineEnd("pipelineEnd")
                 : new PositionDto.AtStage("atStage", report.currentStage());
-    }
-
-    private static @Nullable ActivityDto toActivity(@Nullable Activity activity) {
-        if (activity == null) {
-            return null;
-        }
-        return switch (activity) {
-            case Activity.Executing executing ->
-                new ActivityDto.Executing(
-                        "executing",
-                        executing.since().toString(),
-                        executing.currentTool() == null
-                                ? null
-                                : executing.currentTool().raw(),
-                        executing.currentTool() == null && executing.toolCalls() == 0 ? null : executing.toolCalls());
-            case Activity.Verifying verifying ->
-                new ActivityDto.Verifying(
-                        "verifying",
-                        verifying.checkRef().label().raw(),
-                        verifying.since().toString());
-            case Activity.AwaitingInput awaitingInput ->
-                new ActivityDto.AwaitingInput(
-                        "awaitingInput",
-                        awaitingInput.prompt().raw(),
-                        awaitingInput.since().toString());
-        };
     }
 
     private static @Nullable OutcomeDto toOutcome(@Nullable Outcome outcome) {
@@ -125,9 +97,7 @@ public final class StatusReportJsonMapper {
         if (report.currentStage() == null) {
             return null;
         }
-        Integer limit = report.attemptLimit();
-        int resolvedLimit = limit == null ? 0 : limit;
-        return new CurrentStageDto(report.attemptsUsed(), resolvedLimit, toAttempts(report.attempts()));
+        return new CurrentStageDto(report.attemptsUsed(), toAttempts(report.attempts()));
     }
 
     private static List<AttemptDto> toAttempts(List<AttemptRecord> attempts) {

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
@@ -128,7 +129,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-1'
         }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
-        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
         1 * tracker.finish(REF, _)
 
         then: 'FR10: the destructive tail — cleanup commit, then worktree disposal — follows the write'

@@ -58,12 +58,14 @@ public final class ManualRunRunner implements ApplicationRunner {
      */
     static final String TASK_ID_KEY = "taskId";
     /**
-     * Printed at the start of an in-place run, before the pipeline loads (FR7, UX4).
-     * Package-private: printed from {@link ManualRunDrive}.
+     * Printed at the start of an in-place run, before the pipeline loads (FR7, UX4). With no
+     * branch to park on and no prompt to answer, an escalation or a checkpoint stops the run
+     * for good in this mode (FR9 of make-run-headless, design D5). Package-private: printed
+     * from {@link ManualRunDrive}.
      */
     static final String IN_PLACE_REMINDER =
-            "in-place mode: no git, no resume — the task's progress lives only in this process;"
-                    + " killing it loses all work.";
+            "in-place mode: no git, no resume — the task's state lives in memory only and dies"
+                    + " with this process; an escalation or a checkpoint ends the task for good.";
 
     /** The git version floor every command passes through before dispatch (FR10 of own-git-transfer-argv). */
     private final GitVersionCheck gitVersionCheck;

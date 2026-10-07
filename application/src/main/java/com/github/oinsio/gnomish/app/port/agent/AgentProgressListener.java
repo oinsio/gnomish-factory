@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app.port.agent;
 
 /**
  * The adapter-internal SPI through which {@code StreamJsonParser} (adapters/agent)
- * reports live progress on a round in flight — an SLF4J renderer, a status enricher — as a
+ * reports live progress on a round in flight — an SLF4J renderer, a mid-round harvest poll — as a
  * sibling of the domain's {@link
  * com.github.oinsio.gnomish.domain.engine.port.EngineEventListener}, not an
  * extension of it: executor-internal progress (per-tool, mid-round) is this

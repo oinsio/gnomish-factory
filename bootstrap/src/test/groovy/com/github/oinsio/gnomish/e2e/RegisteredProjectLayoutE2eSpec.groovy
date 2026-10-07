@@ -69,7 +69,7 @@ tracker:
     api-url: ${tracker.baseUrl()}
     repo: acme/widgets
 """)
-        publish(clone, tmp.resolve('origin.git'))
+        E2eGitTree.publish(clone, tmp.resolve('origin.git'))
         ProjectRegistry.scan(home).add(new ProjectName(PROJECT), clone)
         project = tmp.resolve('home/projects').resolve(PROJECT)
         Path projectFile = project.resolve('project.yaml')
@@ -81,7 +81,7 @@ tracker:
     }
 
     def "FR9, FR11: run in git mode puts the task's worktree and the log under the project folder"() {
-        when: 'a git-mode run starts; the fake agent asks a decision, and stdin closes at that prompt, after the worktree exists'
+        when: 'a git-mode run starts; the fake agent asks a decision, and the run parks after the worktree exists'
         def result = harness.execute('run', clone, [
             '--factory.agent-cli-binary=' + FakeAgentSupport.wrapperFor('decision-needed'),
             "--dir=$clone".toString(),
@@ -139,22 +139,5 @@ tracker:
                 Files.isRegularFile(it) && !it.startsWith(project)
             }.toList()
         }
-    }
-
-    /** Commits the tree on {@code main} and pushes it to a bare {@code origin}. */
-    private static void publish(Path clone, Path origin) {
-        git(origin.parent, 'init', '--quiet', '--bare', '--initial-branch=main', origin.toString())
-        git(clone, 'checkout', '--quiet', '-b', 'main')
-        git(clone, 'add', '--all')
-        git(clone, 'commit', '--quiet', '-m', 'fixture')
-        git(clone, 'remote', 'add', 'origin', origin.toString())
-        git(clone, 'push', '--quiet', 'origin', 'refs/heads/main:refs/heads/main')
-        git(clone, 'fetch', '--quiet', 'origin', 'refs/heads/main:refs/remotes/origin/main')
-    }
-
-    private static void git(Path dir, String... args) {
-        Process process = new ProcessBuilder(['git', '-C', dir.toString()] + args.toList()).redirectErrorStream(true).start()
-        String output = process.inputStream.text
-        assert process.waitFor(60, TimeUnit.SECONDS) && process.exitValue() == 0: "git ${args.join(' ')}: ${output}"
     }
 }

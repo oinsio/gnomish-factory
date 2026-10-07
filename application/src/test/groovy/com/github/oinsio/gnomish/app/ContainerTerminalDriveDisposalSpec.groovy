@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -43,7 +44,7 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         support.readFinalState() >> TaskState.atStageStart('build')
     }
 
-    private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(['']), Verdict verdict = new Verdict.Pass()) {
+    private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(), Verdict verdict = new Verdict.Pass()) {
         ContainerTerminalDrive.run(assemblyRunningLoop(executor, io, verdict), support,
                 new RunOrder(CLONE_DIR, null, completingPipeline(), false),
                 CONTEXT, TaskState.atStageStart('build'), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD), null)
@@ -100,5 +101,45 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
 
         and:
         thrown(AbortedException)
+    }
+
+    // FR2, FR10 of make-run-headless (design D8): a stop is a park — recorded with no tracker write
+    // owed (a manual run has none, so no marker and no receipt commit), and only then the box
+    // stopped and kept; never the completion's disposal or cleanup. The run then leaves by its
+    // outcome with the return path.
+    def "records a park owing no tracker write, then keeps the box stopped — never disposing"() {
+        when:
+        drive(new ScriptedConsoleIO(), new Verdict.Fail([]))
+
+        then:
+        1 * support.recordPark(_ as TaskOutcome.Escalated, TrackerWrite.NONE)
+
+        then:
+        1 * support.keepStopped()
+        0 * support.confirmTerminalWrite()
+        0 * support.completeAndDispose(_)
+        0 * support.finishCleanup()
+
+        and:
+        def stop = thrown(RunParkedException)
+        !stop.checkpoint()
+        stop.stopRecord().contains("--dir=${CLONE_DIR} --resume=PROJ-1")
+    }
+
+    // Constructive before destructive, and the box never left running: a failed park record still
+    // stops the box on the way out.
+    def "keeps the box stopped even when recording the park fails"() {
+        given:
+        support.recordPark(_, _) >> {
+            throw new IllegalStateException('push rejected')
+        }
+
+        when:
+        drive(new ScriptedConsoleIO(), new Verdict.Fail([]))
+
+        then:
+        thrown(IllegalStateException)
+        1 * support.keepStopped()
+        0 * support.confirmTerminalWrite()
     }
 }

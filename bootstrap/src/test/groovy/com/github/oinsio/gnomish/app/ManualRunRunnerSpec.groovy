@@ -323,17 +323,15 @@ advancement: auto
         thrown(UsageException)
     }
 
-    // D10: StatusSnapshotHolder's initial attemptLimit comes from the starting stage's own
-    // autonomy.attemptLimit (7), not the pipeline default (3) — proven by the "status" meta-
-    // command's rendered "(attempt X/Y)" fraction. The holder is seeded once and never updated,
-    // so the escalation prompt the fake agent's decision round leads to still shows the seed;
-    // stdin then ends there, which leaves the run escalated (exit 10).
-    def "run() seeds the status snapshot with the starting stage's own attempt limit, not the pipeline default"() {
+    // FR1, FR7 of make-run-headless: an in-place escalation is a stop like any other — the
+    // question is printed and the process exits by the outcome — but with no branch there is no
+    // return-path line to print, and stdin is never read (it is closed from the start here).
+    def "run() stops an in-place escalation with the question and no return path, without reading stdin"() {
         given:
         writeOneStagePipelineWithStageAttemptLimitOverride()
         def originalIn = System.in
         def originalOut = System.out
-        System.in = new ByteArrayInputStream(('status' + System.lineSeparator()).getBytes('UTF-8'))
+        System.in = new ByteArrayInputStream(new byte[0])
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         def runner = newRunner('decision-needed')
@@ -352,11 +350,16 @@ advancement: auto
         }
 
         then:
-        thrown(EscalationEofException)
-        capturedOut.toString('UTF-8').contains('attempt 0/7')
+        def stop = thrown(RunParkedException)
+        !stop.checkpoint()
+        def printed = capturedOut.toString('UTF-8')
+        printed.contains('The gnome asked:')
+        !printed.contains('To continue:')
     }
 
-    // FR7, UX4: --mode in-place prints the honest in-memory reminder before the pipeline runs
+    // FR7, UX4: --mode in-place prints the honest in-memory reminder before the pipeline runs.
+    // FR9 of make-run-headless (design D5): the reminder is the constant whole — state in memory
+    // only, the task dies with the process, an escalation or checkpoint ends it for good.
     def "run() prints the in-place mode reminder before running the pipeline"() {
         given:
         writeOneStagePipeline(projectRoot)
@@ -381,8 +384,10 @@ advancement: auto
         def reminderLine = output.readLines().find {
             it.contains('in-place mode')
         }
-        reminderLine != null
-        reminderLine.contains('no resume')
+        reminderLine == ManualRunRunner.IN_PLACE_REMINDER
+        reminderLine.contains('in memory only')
+        reminderLine.contains('dies with this process')
+        reminderLine.contains('an escalation or a checkpoint ends the task for good')
         output.indexOf(reminderLine) <output.indexOf('do the thing')
 
         cleanup:

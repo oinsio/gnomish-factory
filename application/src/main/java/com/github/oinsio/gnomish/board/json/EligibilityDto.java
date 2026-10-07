@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
  * is the materialized ISO-8601 UTC backoff deadline, present only for {@code
  * "inBackoff"}; {@code null} for every other case. A single record with nullable
  * fields is used rather than a polymorphic DTO hierarchy (unlike {@code
- * ActivityDto}/{@code OutcomeDto}): there are only three reasons, none carries a
+ * PositionDto}/{@code OutcomeDto}): there are only three reasons, none carries a
  * payload beyond the shared {@code deadline} field, and a flat shape keeps consumers
  * from needing a discriminated-union parser for this one field.
  *

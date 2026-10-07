@@ -67,8 +67,8 @@ public record PipelineDefinition(
      * NULL_RETURNS mutant — deterministic RUN_ERROR with zero tests observed, not a real test gap —
      * the same JDK 17+ JVMTI RedefineClasses restriction on record classes as the annotated methods
      * of Decision/Finding/ExecutorUsage (hcoles/pitest#1285, not fixable via PIT config). The
-     * suppressed loop logic stays behaviorally covered by AttemptLimitResolverSpec and the Engine
-     * stage-resolution specs, which killed this method's sibling NegateConditionals mutant.
+     * suppressed loop logic stays behaviorally covered by the Engine stage-resolution specs, which
+     * killed this method's sibling NegateConditionals mutant.
      */
     @DoNotMutate
     public @Nullable StageDefinition findStage(String stageName) {

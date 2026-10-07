@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.e2e
 
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import java.nio.file.Files
 import java.nio.file.Path
 
 /**
  * The exit-code matrix (task 9.3): scenarios pinning FR12's exit-code table and
  * FR13's EOF semantics against the real {@code gnomish run} process, complementing the
- * reference journey ({@link ReferenceE2ESessionSpec}, exit 0) and the harness smoke test
+ * reference journey ({@link ReferenceE2ESessionSpec}, exits 10, 11, 0) and the harness smoke test
  * ({@link E2eProcessHarnessSmokeSpec}). {@code Aborted} (exit 12) needs a breaking
  * persistence fake and is covered elsewhere (in-process, not here).
  *
@@ -15,12 +14,13 @@ import java.nio.file.Path
  *   <li>stdin closed, pipeline finishes without escalation or checkpoint &rarr; 0
  *   <li>usage error (bad flags) &rarr; 2
  *   <li>broken pipeline ({@code .gnomish/} invalid) &rarr; 3
- *   <li>Ctrl-D at the escalation resume prompt (Case 2) &rarr; 10
- *   <li>Ctrl-D at the manual checkpoint prompt (Case 2) &rarr; 11
  * </ul>
  *
- * <p>The gnome and the judge are the fake agent (FR6 of remove-interactive-console); stdin
- * reaches only the runner's own prompts.
+ * <p>The park exits, 10 and 11, are outcome exits since make-run-headless and live in
+ * {@link ParkExitCodeSpec}; no exit code of {@code run} comes from an end of input.
+ *
+ * <p>The gnome and the judge are the fake agent (FR6 of remove-interactive-console); nothing
+ * reads stdin (FR7 of make-run-headless).
  *
  * <p>Implements M1, FR12, FR13 of add-manual-run.
  */
@@ -155,63 +155,5 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         and: 'no stage ran and no operator prompt was printed'
         !output.contains("Stage '")
         !output.contains('Press Enter')
-    }
-
-    def "Ctrl-D at the escalation resume prompt exits 10"() {
-        given: 'the fake agent asks a decision on its first round, and stdin is already closed'
-        def agent = FakeAgentSupport.wrapperFor('decision-needed')
-        // decision-needed -> DecisionNeeded escalation, no attempt burned; the escalation
-        // renders, then the resume-decision prompt hits EOF (Case 2) ->
-        // EscalationEofException -> exit 10.
-        List<String> script = []
-
-        when:
-        def result = harness.run(
-                E2eFixture.projectRoot(),
-                agent,
-                [
-                    '--dir=' + E2eFixture.projectRoot(),
-                    '--task=ctrl-d at resume',
-                    '--mode=in-place'
-                ],
-                script)
-
-        then: 'FR13: exit code 10'
-        result.exitCode() == 10
-
-        and: 'the escalation was rendered before the process exited'
-        result.stdout().contains('The gnome asked:')
-        result.stdout().contains('Refactor or patch?')
-        result.stdout().contains('refactor')
-        result.stdout().contains('patch')
-    }
-
-    def "Ctrl-D at the manual checkpoint prompt exits 11"() {
-        given: 'the stateful command check pre-passes so the stage completes on the first attempt'
-        Files.writeString(E2eFixture.projectRoot().resolve(MARKER_FILE), '')
-
-        and: 'the fake agent plays a clean round and a passing judge vote, and stdin is already closed'
-        def agent = FakeAgentSupport.wrapperFor('plain-round', 'judge-model', 'judge-verdict-pass')
-        // plain-round -> Completed; files_exist and command pass; judge-verdict-pass (1 vote
-        // configured) -> stage passes -> advancement: manual -> Paused. The checkpoint
-        // confirmation prompt hits EOF (Case 2) -> CheckpointEofException -> exit 11.
-        List<String> script = []
-
-        when:
-        def result = harness.run(
-                E2eFixture.projectRoot(),
-                agent,
-                [
-                    '--dir=' + E2eFixture.projectRoot(),
-                    '--task=ctrl-d at checkpoint',
-                    '--mode=in-place'
-                ],
-                script)
-
-        then: 'FR13: exit code 11'
-        result.exitCode() == 11
-
-        and: 'the checkpoint was reached before the process exited'
-        result.stdout().contains("Stage 'work' passed. Manual checkpoint reached.")
     }
 }

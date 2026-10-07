@@ -8,9 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Fans one {@link AgentProgressEvent} out to every listener in a fixed list, so the run
- * assembly can register several subscribers — {@link LoggingAgentProgressListener}, {@link
- * com.github.oinsio.gnomish.status.AgentActivityEnricher} — behind the single {@link
+ * Fans one {@link AgentProgressEvent} out to every listener in a fixed list, so a round can
+ * register several subscribers — the executor's own listener ({@link
+ * LoggingAgentProgressListener}) and the round environment's per-round listener (the sandboxed
+ * mid-round harvest poll), joined in {@code ExecutorRoundExecution} — behind the single {@link
  * AgentProgressListener} slot {@link StreamJsonParser} accepts (design D10, task 9.4).
  *
  * <p>Unlike {@link com.github.oinsio.gnomish.status.CompositeEngineEventListener}, which

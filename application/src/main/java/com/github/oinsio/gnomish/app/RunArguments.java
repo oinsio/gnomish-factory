@@ -12,7 +12,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR1 of add-manual-run; {@code dir} (renamed from {@code project}) and
  * {@code mode} implement FR7, design D8 of add-git-workflow; {@code base}, {@code resume},
- * {@code discardWork} implement FR7, FR8, FR10, design D7, D9, D10 of add-git-workflow.
+ * {@code discardWork} implement FR7, FR8, FR10, design D7, D9, D10 of add-git-workflow;
+ * {@code decision} implements FR3, FR9, design D2 of make-run-headless.
  *
  * @param dir the target project directory; defaults to the current working directory when
  *     {@code --dir} is absent (design D3); absolute and normalized (FR7 of
@@ -36,6 +37,9 @@ import org.jspecify.annotations.Nullable;
  * @param discardWork whether to reset to the last recorded round instead of salvaging an
  *     interrupted round's uncommitted work (FR10, design D10); git-only, mutually exclusive with
  *     {@code --mode=in-place}, meaningful only together with {@code --resume}
+ * @param decision the operator's answer to a recorded escalation, or {@code null} to resume
+ *     without one (FR3, design D2 of make-run-headless); the only source of an operator decision
+ *     in {@code run} — git-only, accepted only together with {@code --resume}, never blank
  */
 public record RunArguments(
         Path dir,
@@ -45,7 +49,8 @@ public record RunArguments(
         Mode mode,
         @Nullable String base,
         @Nullable String resume,
-        boolean discardWork) {
+        boolean discardWork,
+        @Nullable String decision) {
 
     public RunArguments {
         ArgumentsParsingSupport.requireAbsoluteDir(dir);

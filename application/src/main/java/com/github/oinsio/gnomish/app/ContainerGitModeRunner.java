@@ -29,8 +29,9 @@ import java.util.List;
  * through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through {@code
  * GitFreshTaskSupport#resolveManualBase} and create the task through {@code
  * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
- * the engine under the same binding — and both observe only the {@code Completed} and
- * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
+ * the engine under the same binding — and both settle the {@code Completed}, {@code Aborted} and
+ * park terminals through the mode's own outcome/cleanup ordering: both record a park outcome at the
+ * terminal boundary and keep the workspace for the resume (design D6 of make-run-headless). The
  * media differ (host worktree there, task environment here); the recipe and its order must not.
  *
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.

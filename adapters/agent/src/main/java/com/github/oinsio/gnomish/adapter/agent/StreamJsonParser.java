@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * the matching {@link AgentProgressEvent} is delivered to the injected {@link
  * AgentProgressListener} before the loop reads the next line — not scanned from
  * the returned list afterward, since the whole point of live progress is that a
- * subscriber (a console spinner, a status enricher) sees it while the round is
+ * subscriber (an SLF4J renderer, a mid-round harvest poll) sees it while the round is
  * still running. A caller with several subscribers composes them the same way
  * {@code EnginePorts} composes {@link
  * com.github.oinsio.gnomish.domain.engine.port.EngineEventListener}s — via a

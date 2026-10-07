@@ -4,8 +4,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 
 /**
  * The one place that answers "is this terminal outcome a park?" — an {@code Escalated} or {@code
- * Paused} run, the two outcomes that hand the task to a human and therefore record a {@code
- * pendingTrackerWrite} marker the tracker write later confirms.
+ * Paused} run, the two outcomes that hand the task to a human. A {@code take} park records a
+ * pending tracker-write marker the tracker write later confirms; a {@code run} park has no tracker
+ * and records {@code TrackerWrite.NONE} (design D8 of make-run-headless).
  *
  * <p>Two replication decisions read the same answer and must never drift apart: the pre-park
  * delivery fence runs for exactly these outcomes ({@link TakeEngineExecution}, FR4, NG6 of

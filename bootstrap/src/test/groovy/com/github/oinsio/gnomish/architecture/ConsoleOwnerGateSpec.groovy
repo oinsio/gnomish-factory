@@ -17,7 +17,11 @@ import spock.lang.Specification
  * the offending line is otherwise ordinary Java. The allowlist is the owner alone — an entry added
  * here is a decision to have a second writer, which the design says there is not.
  *
- * <p>FR6, M2 of harden-untrusted-text-sinks.
+ * <p>The input half is gated here too (design D7 of make-run-headless, third single-owner row):
+ * {@code run} takes its operator decision from {@code --decision} alone, so the one production
+ * console read left is the takeover confirmation's {@code [y/N]}.
+ *
+ * <p>FR6, M2 of harden-untrusted-text-sinks; FR3, M1 of make-run-headless.
  */
 class ConsoleOwnerGateSpec extends Specification {
 
@@ -33,13 +37,27 @@ class ConsoleOwnerGateSpec extends Specification {
     private static final String FIXTURE_TREE = 'test-fixtures/src/main/'
 
     /**
-     * The composition root's stream binding is the owner's other half: it is where {@code
-     * System.in}/{@code System.out}/{@code System.err} are chosen and handed to the owner, which
-     * is exactly the decision a composition root exists to make. It writes nothing itself — the
-     * pattern below only matches a print call, so that file needs no allowlist entry; it is named
-     * here so a reader does not go looking for it in the list.
+     * Every production file allowed to spell {@code readLine(}, with its reason. Every {@code
+     * readLine(} is matched whatever its receiver, rather than only calls on a {@code ConsoleIO}:
+     * a text scan cannot know a receiver's type, and a console read through a variable named
+     * {@code in} would pass a receiver-shaped pattern. A new subprocess reader therefore costs one
+     * entry here — the price of a gate that a renamed variable cannot slip past. The name is
+     * matched, not the call, so a method reference ({@code io::readLine}) is no way around it.
      */
-    private static final String WIRING_NOTE = 'ManualRunConfiguration.java'
+    private static final Map<String, String> READ_LINE_SITES = [
+        (OWNER) : 'the console owner: implements the port over stdin',
+        'application/src/main/java/com/github/oinsio/gnomish/app/port/console/ConsoleIO.java' : 'the port: declares readLine, calls nothing',
+        'application/src/main/java/com/github/oinsio/gnomish/app/ConsoleTakeoverConfirmation.java' : 'the one console read: the takeover [y/N] confirmation',
+        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java' : 'a BufferedReader over a command check subprocess, not the console',
+        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamJsonParser.java' : 'a BufferedReader over the agent CLI stdout, not the console',
+    ]
+
+    /** The allowlisted files that read a subprocess, not the operator: none may name the console port. */
+    private static final List<String> SUBPROCESS_READERS = READ_LINE_SITES.keySet().findAll {
+        it.startsWith('adapters/')
+    }.toList()
+
+    private static final Pattern READ_LINE = Pattern.compile(/\breadLine\b/)
 
     /** Any write to a process stream: {@code print}, {@code println}, {@code printf}, {@code write}. */
     private static final Pattern DIRECT_WRITE = Pattern.compile(
@@ -99,7 +117,7 @@ class ConsoleOwnerGateSpec extends Specification {
     }
 
     // Naming the streams without writing to them — handing one to the owner, reading stdin — is
-    // the composition root's job (see WIRING_NOTE) and must not be flagged
+    // the composition root's job (see ManualRunConfiguration.java) and must not be flagged
     def "a non-writing mention of a process stream is not flagged: #shape"() {
         expect:
         !writesDirectly(allowed)
@@ -110,6 +128,48 @@ class ConsoleOwnerGateSpec extends Specification {
         'handing stderr to the owner' | 'return new SystemConsoleIO(System.in, System.err);'
         'a javadoc-free mention' | 'writer = new PrintStream(out, true, StandardCharsets.UTF_8);'
         'the console port' | 'console.print(text + ConsoleIO.LINE_END);'
+    }
+
+    // FR3, M1 of make-run-headless: run reads no stdin — the takeover confirmation is the one
+    //     console read, and every other readLine( in production is a named subprocess reader
+    def "FR3, M1: readLine( appears in production only at the allowlisted sites"() {
+        given: 'every production source but the shared fixtures, comments removed'
+        def sources = RepoSourceTree.productionSources {
+            !it.startsWith(FIXTURE_TREE)
+        }
+
+        expect: 'the scan really reached the tree'
+        sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
+
+        when:
+        def readers = sources.findAll { readsLines(RepoSourceTree.code(it)) }
+        .collect { RepoSourceTree.relative(it) }
+        .sort()
+
+        then: 'exactly the allowlist — an extra file is a new console read, a missing one a stale entry'
+        readers == READ_LINE_SITES.keySet().sort()
+
+        and: 'a subprocess reader holds no console, so its entry cannot hide an operator read'
+        SUBPROCESS_READERS.size() == 2
+        SUBPROCESS_READERS.every {
+            !RepoSourceTree.code(RepoSourceTree.repoRoot().resolve(it).toFile()).contains('ConsoleIO')
+        }
+    }
+
+    def "the readLine detector: #shape"() {
+        expect:
+        readsLines(source) == detected
+
+        where:
+        shape | source || detected
+        'a port call' | 'String answer = console.readLine();' || true
+        'any receiver' | 'var line = in . readLine ( );' || true
+        'a method reference' | 'Supplier<String> next = io::readLine;' || true
+        'a longer name' | 'return parser.readLineage();' || false
+    }
+
+    private static boolean readsLines(String code) {
+        READ_LINE.matcher(code).find()
     }
 
     private static boolean writesDirectly(String code) {

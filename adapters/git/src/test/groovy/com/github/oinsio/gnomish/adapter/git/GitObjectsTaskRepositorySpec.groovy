@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -152,7 +153,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         afterDecision.pin().rule() == BaseRule.CONFIGURED_DEFAULT
 
         when:
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
 
         then:
         def afterOutcome = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
@@ -172,7 +173,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
         when:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
 
         then:
         def anchors = capture.list.findAll {
@@ -247,7 +248,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 ])
 
         when:
-        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
 
         then: 'one commit carries the escalation, its denials, and the position they were read up to'
         def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))
@@ -272,7 +273,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def logs = LogCaptureSupport.attach(LifecycleEgressCursor)
 
         when:
-        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
         def events = List.copyOf(logs.list)
 
         then: 'the escalation and its denials are recorded; only the position is missing'
@@ -301,7 +302,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         })
 
         when: 'a park whose escalation carries nothing the environment drained'
-        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation), TrackerWrite.OWED)
 
         then:
         TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))).egressCursor() == null
@@ -329,7 +330,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
-                ])))
+                ])), TrackerWrite.OWED)
         writeStateCursor('PROJ-1', new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'))
 
         when: 'the human answer is appended, rewriting both envelopes'
@@ -355,7 +356,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 [
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
-                ])))
+                ])), TrackerWrite.OWED)
 
         when:
         repository.confirmTerminalWrite('PROJ-1')
@@ -378,11 +379,11 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         [
             Denial.unidentified(
                     new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
-        ])))
+        ])), TrackerWrite.OWED)
 
         when: 'a later park records an escalation that drained nothing'
         parkingRepository(source).recordOutcome('PROJ-1',
-                new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
+                new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation), TrackerWrite.OWED)
 
         then: 'the committed position stands: this park had none to replace it with'
         TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))).egressCursor() ==
@@ -504,7 +505,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     def "FR25/D9: appendDecision appends to decisions[], resets outcome to null, commits RESUMED"() {
         given: 'a task parked with a non-null outcome'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
         def decision = new Decision('proceed to verify', 'implement', 'operator', null)
 
         when:
@@ -533,7 +534,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
-        repository.recordOutcome('PROJ-1', outcome)
+        repository.recordOutcome('PROJ-1', outcome, TrackerWrite.OWED)
 
         then: 'the outcome-recording commit is the tip and carries the expected message'
         gitOutput(bareDir, 'log', '-1', "--format=%s", refFor('PROJ-1'))
@@ -565,7 +566,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         ])
 
         when:
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
 
         then:
         def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
@@ -581,12 +582,35 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.recordOutcome(
                 'PROJ-1',
                 new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')))
+                new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')), TrackerWrite.OWED)
 
         then:
         def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1'))))
         !content.trackerWritePending()
         content.outcome() instanceof RecordedOutcome.Aborted
+    }
+
+    // FR10 of make-run-headless (design D8): the bare-object twin of the host rule — a park owing
+    // no tracker write records its outcome with the marker key absent from the tip, in one commit.
+    def "FR10 of make-run-headless: a park owing no tracker write (#event) records no pending marker over bare objects"() {
+        given:
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
+
+        when:
+        repository.recordOutcome('PROJ-1', outcome, TrackerWrite.NONE)
+
+        then: 'the tip carries the park and no marker key'
+        def dto = TaskJsonMapper.readDto(UntrustedText.branchDocument(readTaskJson('PROJ-1')))
+        dto.outcome() != null
+        dto.trackerWritePending() == null
+
+        and: 'the outcome commit is the only commit the park added'
+        gitOutput(bareDir, 'log', '-1', '--format=%s', refFor('PROJ-1')) == ServiceCommitMessages.taskEvent(event)
+
+        where:
+        event | outcome
+        TaskLifecycleEvent.ESCALATED | new TaskOutcome.Escalated(TaskState.atStageStart('implement'), new EscalationReport.AttemptsExhausted(3))
+        TaskLifecycleEvent.PAUSED | new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')
     }
 
     // FR10 of harden-task-branch-contract: the cleanup commit is the destructive last step of the
@@ -597,7 +621,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
 
         then:
         gitOutput(bareDir, 'ls-tree', refFor('PROJ-1'), '--', '.gnomish-task') != ''
@@ -613,7 +637,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
 
         when:
         repository.confirmTerminalWrite('PROJ-1')
@@ -631,7 +655,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
         def logs = LogCaptureSupport.attach(GitObjectsTerminalCommits, Level.DEBUG)
@@ -657,7 +681,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     def "FR5: confirmTerminalWrite on a cleaned tip is a no-op that says so"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
         def logs = LogCaptureSupport.attach(GitObjectsTerminalCommits, Level.DEBUG)
@@ -685,7 +709,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def commitsBefore = commitCount()
 
         when:
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
 
         then: 'the tip carries no .gnomish-task/ in its tree'
@@ -709,7 +733,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
-        repository.recordOutcome('PROJ-1', outcome)
+        repository.recordOutcome('PROJ-1', outcome, TrackerWrite.OWED)
 
         then:
         gitOutput(bareDir, 'ls-tree', refFor('PROJ-1'), '--', '.gnomish-task') != ''

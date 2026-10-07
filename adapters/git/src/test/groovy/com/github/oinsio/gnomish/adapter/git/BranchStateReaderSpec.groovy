@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -25,7 +26,7 @@ import spock.lang.TempDir
 /**
  * FR13, NFR-O1 of add-git-workflow: reads {@code .gnomish-task/} files straight from the task
  * branch tip via {@code git show} — no worktree, no checkout, no local branch — and renders them
- * through the shared {@code StatusReport} pure function with live-only fields null.
+ * through the shared {@code StatusReport} pure function, every field read from the tip.
  */
 class BranchStateReaderSpec extends Specification implements BareGitRepoFixture {
 
@@ -61,7 +62,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         persistence.persist(taskId, state, trace)
     }
 
-    def "FR13: a task with only task.json (no rounds yet) reads back into a StatusReport, live fields null"() {
+    def "FR13: a task with only task.json (no rounds yet) reads back into a StatusReport with no outcome"() {
         given:
         def context = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body text'), [])
         taskRepository().createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -77,15 +78,11 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         report.title().forLog() == 'Fix the thing'
         report.currentStage() == 'implement'
 
-        and: 'live-only activity and attemptLimit are null — this is a snapshot, not a live process (NFR-O1)'
-        report.activity() == null
-        report.attemptLimit() == null
-
         and: 'outcome is null — the visit is still in progress'
         report.outcome() == null
     }
 
-    def "FR13: interrupted task (rounds present, task.json outcome null) renders as in-progress, matching nullable live fields of contract v1"() {
+    def "FR13: interrupted task (rounds present, task.json outcome null) renders as in-progress, with the null mid-run outcome of contract v1"() {
         given: 'a task that recorded a round but crashed before any recordOutcome call'
         taskRepository().createTask(new TaskContext('PROJ-2', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-2', TaskState.atStageStart('implement'))
@@ -103,7 +100,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         given:
         taskRepository().createTask(new TaskContext('PROJ-3', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-3', TaskState.atStageStart('implement'))
-        taskRepository().recordOutcome('PROJ-3', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
+        taskRepository().recordOutcome('PROJ-3', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
 
         when:
         def result = reader.read(cloneDir, 'PROJ-3')
@@ -122,7 +119,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        taskRepository().recordOutcome('PROJ-4', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
+        taskRepository().recordOutcome('PROJ-4', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation), TrackerWrite.OWED)
 
         when:
         def result = reader.read(cloneDir, 'PROJ-4')
@@ -263,7 +260,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         taskRepository().createTask(new TaskContext('PROJ-11', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-11', TaskState.atStageStart('implement'))
         def repository = taskRepository()
-        repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-11')
 
         when:

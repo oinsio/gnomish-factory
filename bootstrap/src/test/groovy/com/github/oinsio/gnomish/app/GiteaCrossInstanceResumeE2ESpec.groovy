@@ -103,13 +103,13 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         def cloneA = RegisteredCloneFixture.registered(tempDir.resolve('home-a'), instanceA)
         def taskId = 'CROSS-1'
 
-        when: 'instance A completes only the first stage\'s round, then its operator leaves at the manual checkpoint "build" ends at: stdin is empty, so "verify" never starts'
-        new GitModeRunner(assembly(), TaskGitFixture.real(), cloneA, LiveConsoleIO.onStdout())
+        when: 'instance A completes only the first stage\'s round and is killed at the manual checkpoint "build" ends at, before the park is recorded: "verify" never starts'
+        new GitModeRunner(assembly(), RunKills.killedBeforeParkRecord(TaskGitFixture.real()), cloneA, LiveConsoleIO.onStdout())
                 .run(new RunOrder(instanceA, null, pipeline(), false),
                 context(taskId), TaskState.atStageStart('build'))
 
-        then: 'the checkpoint EOF propagates — the task stopped mid-run, with only the first round durably committed'
-        thrown(CheckpointEofException)
+        then: 'the kill ended the run — the task stopped mid-run, with only the first round durably committed'
+        thrown(RunKills.SimulatedKill)
         def tipAfterA = gitOutput(instanceA, 'rev-parse', "gnomish/${taskId}")
         tipAfterA
 
@@ -126,7 +126,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
 
         when: 'instance B continues the task to completion, driving the second round ("verify") and pushing it'
         new GitResumeRunner(assembly(), TaskGitFixture.real(), cloneB, 'taskId')
-                .run(new RunOrder(instanceB, null, pipeline(), false), taskId)
+                .run(new RunOrder(instanceB, null, pipeline(), false), taskId, null)
 
         then: 'instance B\'s own round commit for "verify" exists, distinct from instance A\'s "build" round'
         def verifyRoundSha = roundCommitSha(instanceB, taskId, 'verify')

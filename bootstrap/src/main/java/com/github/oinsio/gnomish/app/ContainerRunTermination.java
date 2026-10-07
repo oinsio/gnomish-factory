@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.OriginReconciliation;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import org.slf4j.Logger;
@@ -48,19 +49,22 @@ final class ContainerRunTermination {
     static void completeAndDispose(ContainerRunSupport support, TaskState finalState) {
         support.judgeEnvironments.disposeCurrent();
         support.lease.dispose();
-        support.taskRepository.recordOutcome(support.taskId, new TaskOutcome.Completed(finalState));
+        // The completion's marker is owed on both paths: take's finish clears it on receipt, and a
+        // manual run's cleanup commit removes it with the whole envelope at once.
+        support.taskRepository.recordOutcome(support.taskId, new TaskOutcome.Completed(finalState), TrackerWrite.OWED);
         reconcileRemote(support);
     }
 
     /**
      * The park's durable intent (FR10, design D12 of harden-task-branch-contract): the outcome
-     * commit carrying the pending marker, built factory-side over bare objects and pushed by the
-     * repository decorator. The box is stopped by the time this runs, so no in-box channel is
-     * involved — and by that change's FR17 this is the last factory-side commit until the box is
-     * disposed.
+     * commit — carrying the pending marker when a tracker write is {@link TrackerWrite#OWED}, none
+     * when a manual run owes {@link TrackerWrite#NONE} (design D8 of make-run-headless) — built
+     * factory-side over bare objects and pushed by the repository decorator. The box is stopped by
+     * the time this runs, so no in-box channel is involved — and by that change's FR17 this is the
+     * last factory-side commit until the box is disposed.
      */
-    static void recordPark(ContainerRunSupport support, TaskOutcome outcome) {
-        support.taskRepository.recordOutcome(support.taskId, outcome);
+    static void recordPark(ContainerRunSupport support, TaskOutcome outcome, TrackerWrite trackerWrite) {
+        support.taskRepository.recordOutcome(support.taskId, outcome, trackerWrite);
     }
 
     /**
@@ -89,7 +93,9 @@ final class ContainerRunTermination {
      * {@code keepStopped}, so the touchpoint sits there once rather than in each recording arm.
      */
     static void recordAborted(ContainerRunSupport support, TaskOutcome.Aborted outcome) {
-        support.taskRepository.recordOutcome(support.taskId, outcome);
+        // An Aborted record never carries the pending marker whatever is stated here; OWED names
+        // take's best-effort tracker write, the one external effect an abort still has.
+        support.taskRepository.recordOutcome(support.taskId, outcome, TrackerWrite.OWED);
     }
 
     /**
@@ -112,11 +118,13 @@ final class ContainerRunTermination {
      * remain for salvage and resume; fresh judge boxes are disposed — they hold nothing durable.
      *
      * <p>This is the keep half of the terminal-boundary touchpoint (FR3 of fix-lifecycle-push);
-     * {@link #completeAndDispose} covers the dispose half. It matters most for a park ({@code
-     * Escalated}/{@code Paused}), which in container mode records no lifecycle commit of its own
-     * (design D4, NG1) and so has no recording push behind it at all: the branch tip the human is
-     * about to be pointed at is the last round's state commit, and this is the run's only remaining
-     * chance to deliver it when that round's own push was lost.
+     * {@link #completeAndDispose} covers the dispose half. For a park ({@code Escalated}/{@code
+     * Paused}) it is the destructive last step of the sequence: the park's outcome commit ({@link
+     * #recordPark}) and the recording push behind it precede the stop — constructive before
+     * destructive, so a kill between the two leaves a parked branch and a running box, which the next
+     * keep converges (design D8 of make-run-headless, "Crash consistency of the park"). The remote
+     * reconciliation here is the level-based net behind that push: a park whose recording push was
+     * lost, or an abort whose last round's push was, is delivered now.
      */
     static void keepStopped(ContainerRunSupport support) {
         support.judgeEnvironments.disposeCurrent();

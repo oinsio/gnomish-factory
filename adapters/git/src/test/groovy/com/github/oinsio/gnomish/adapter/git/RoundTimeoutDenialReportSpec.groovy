@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -88,7 +89,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
                 new ExecutorFailure(new RuntimeException('round timed out after PT15M'), [denial]), context)
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         repository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        repository.recordOutcome(TASK_ID, outcome)
+        repository.recordOutcome(TASK_ID, outcome, TrackerWrite.OWED)
 
         then: 'the escalation carries the denial, and the killed round burned no attempt (FR1)'
         def report = (outcome as TaskOutcome.Escalated).report() as EscalationReport.CannotExecute

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -114,7 +115,7 @@ final class ReclaimKillPoints {
     private static void parkStep(KillPointWorld world, int index) {
         if (index == 0) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(
-                            TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(3)))
+                            TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(3)), TrackerWrite.OWED)
         } else {
             world.store.confirmTerminalWrite(world.taskId)
         }

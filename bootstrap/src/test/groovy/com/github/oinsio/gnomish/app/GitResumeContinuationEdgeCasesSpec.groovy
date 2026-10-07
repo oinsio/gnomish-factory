@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 
 /**
@@ -16,7 +16,7 @@ import java.nio.file.Files
  * (.claude/rules/process-invariants.md):
  *
  * <ul>
- *   <li>{@link GitResumeContinuation#recordDecisionIfAppended} only appends a
+ *   <li>{@code GitResumeContinuation#recordDecisionIfAppended} only appends a
  *       {@link com.github.oinsio.gnomish.domain.engine.Decision} through
  *       {@link com.github.oinsio.gnomish.adapter.git.GitTaskRepository#appendDecision} when the escalation dialog actually grew
  *       the context's decision list — a blank (bare Enter) answer resumes without one (FR9 of
@@ -33,29 +33,26 @@ import java.nio.file.Files
  */
 class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
 
-    // FR5, FR8, D1, PIT ConditionalsBoundaryMutator: a blank decision answer must NOT append a
-    // Decision — proven by the historical task.json blobs never carrying a second decision entry,
-    // unlike GitResumeOutcomeSpec's "drives the decision dialog" scenario where a non-blank answer
-    // does land one.
-    def "run() with outcome escalated and a blank decision answer resumes without appending a decision"() {
+    // FR5, FR8, D1; FR4 of make-run-headless: a resume without --decision must NOT append a
+    // Decision — proven by the historical task.json blobs never carrying a decision entry, unlike
+    // GitResumeOutcomeSpec's --decision scenario where the flag's text does land one.
+    def "run() with outcome escalated and no --decision resumes without appending a decision"() {
         given: 'a task escalated after one persisted round'
         def taskId = 'PROJ-40'
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
-            UntrustedText.agent('yes'),
-            UntrustedText.agent('no')
-        ])
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(afterRound, report))
+        // An AttemptsExhausted park: the one escalation kind a resume may continue without a
+        // decision (a DecisionNeeded without one is refused — GitResumeDecisionSpec).
+        def report = new EscalationReport.AttemptsExhausted(3)
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(afterRound, report), TrackerWrite.OWED)
 
-        and: 'stdin supplies only a blank answer (bare Enter) for the decision prompt'
-        def script = System.lineSeparator()
+        and: 'stdin is empty: a headless resume reads nothing (FR4, FR6 of make-run-headless)'
         def out = new ByteArrayOutputStream()
 
         when:
-        newResumeRunner(new ByteArrayInputStream(script.getBytes('UTF-8')), new PrintStream(out, true, 'UTF-8'))
-                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId)
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), new PrintStream(out, true, 'UTF-8'))
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
 
         then: 'the task still reaches completion'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
@@ -87,7 +84,7 @@ class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
 
         when: 'resuming with --discard-work drives the task to completion'
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
-                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId)
+                .run(new RunOrder(cloneDir, null, pipeline(), true), taskId, null)
 
         then: 'half-done.txt never appears in any commit on the branch, even though the worktree itself was later removed'
         def allBlobPaths = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--name-only', '--format=')

@@ -20,8 +20,10 @@ import org.springframework.stereotype.Component;
  * table over every {@code gnomish/*} branch (task 5.4). Argument parsing is {@link
  * StatusArgumentsParser}; branch reading is {@code BranchStateReader} (task 5.2) for the
  * single-task case and {@code TaskBranchLister} (task 5.4) for list mode; rendering reuses the
- * status-report v1 text/JSON machinery verbatim for the single-task case (FR13), mirroring {@code
- * ConsoleStatusRenderer#render}'s json-flag dispatch, and {@link TaskListRenderer} for list mode.
+ * status-report v1 text/JSON machinery verbatim for the single-task case (FR13) — {@link
+ * StatusTextRenderer} for text, {@link StatusReportJsonMapper} for {@code --json}, the only status
+ * path since a {@code run} no longer intercepts {@code status} at a prompt (design D4 of
+ * make-run-headless) — and {@link TaskListRenderer} for list mode.
  * The worktree path (FR6, UX1) is printed via {@link TaskWorktreePath}'s pure formula over the
  * registered clone (FR9 of add-project-registry) — never materialized, never touched.
  *

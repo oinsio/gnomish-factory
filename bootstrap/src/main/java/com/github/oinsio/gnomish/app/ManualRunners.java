@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The manual runners: the four git-mode control flows of {@code gnomish run} — fresh and resumed,
@@ -14,7 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
  * never sees the mode.
  *
  * <p>Implements FR5-FR8 of add-git-workflow; FR14, D13 of add-sandbox-core; FR7 of
- * collapse-composition-roots.
+ * collapse-composition-roots; FR3 of make-run-headless.
  */
 final class ManualRunners {
 
@@ -49,12 +50,19 @@ final class ManualRunners {
         }
     }
 
-    /** {@code --resume} (FR8 of add-git-workflow): the resolved bindings decide the resume shape (D13). */
-    void resume(RunOrder order, String resume) {
+    /**
+     * {@code --resume} (FR8 of add-git-workflow): the resolved bindings decide the resume shape (D13).
+     * The operator's {@code --decision} travels here as its own argument rather than a {@link
+     * RunOrder} field, since the order is also built by paths that have no decision (design D2 of
+     * make-run-headless).
+     *
+     * @param decision the {@code --decision} text, or {@code null} when none was given
+     */
+    void resume(RunOrder order, String resume, @Nullable String decision) {
         var plan = containerSupports.plan(order.definition(), registeredClone);
         switch (plan.mode()) {
-            case HOST -> gitResumeRunner.run(order, resume);
-            case CONTAINER -> containerResumeRunner.run(order, resume, plan.segments());
+            case HOST -> gitResumeRunner.run(order, resume, decision);
+            case CONTAINER -> containerResumeRunner.run(order, resume, decision, plan.segments());
         }
     }
 }

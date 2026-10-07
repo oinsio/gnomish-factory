@@ -108,7 +108,7 @@ final class TakeEscalationExit {
         var escalation = escalated.report();
         ParkReason reason = TakeOutcomeMapper.parkReason(escalation);
 
-        String rendered = EscalationResumeDialog.renderEscalation(escalation, ReportPlane.COMMENT);
+        String rendered = TerminalOutcomeRender.renderEscalation(escalation, ReportPlane.COMMENT);
         String returnPath = reason == ParkReason.ESCALATION ? ESCALATION_RETURN_PATH : INFRA_RETURN_PATH;
 
         String report =

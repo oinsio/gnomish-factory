@@ -8,15 +8,9 @@
     "type" : "atStage",
     "stage" : "implement"
   },
-  "activity" : {
-    "type" : "verifying",
-    "checkRef" : "command:./gradlew test",
-    "since" : "2026-07-16T14:41:02Z"
-  },
   "outcome" : null,
   "currentStage" : {
     "attemptsUsed" : 1,
-    "attemptLimit" : 3,
     "attempts" : [ {
       "round" : 1,
       "result" : "qualityFailure",

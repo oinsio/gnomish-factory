@@ -7,35 +7,29 @@ Define `StatusReport`, a single pure model of a task's progress built from `(Tas
 ## Requirements
 
 ### Requirement: Single report model behind every render
-`StatusReport` SHALL be built by a pure function of `(TaskContext, TaskState, live activity)`; the human-readable text and the JSON document SHALL both be renders of that one model. Consumers SHALL never parse logs or console output to obtain status.
-<!-- implements FR11 of add-manual-run -->
+`StatusReport` SHALL be built by a pure function of `(TaskContext, TaskState)` plus the outcome and last escalation recorded beside them; the human-readable text and the JSON document SHALL both be renders of that one model. Every input is read from the persisted task state — no field is live-only. Consumers SHALL never parse logs or console output to obtain status.
+<!-- implements FR11 of add-manual-run; FR6 of make-run-headless -->
 
 #### Scenario: Text and JSON agree
-- **WHEN** `status` and `status --json` are issued at the same prompt
-- **THEN** both outputs derive from the same `StatusReport` instance
+- **WHEN** `gnomish status <task>` and `gnomish status <task> --json` read the same branch tip
+- **THEN** both outputs derive from the same `StatusReport` built from that tip
 
-### Requirement: JSON contract v1
-The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants. Sections: `task` (id, title), `position` (`atStage(stage)` | `pipelineEnd`), `activity` (live-only, nullable: `executing` | `verifying(checkRef)` | `awaitingInput(prompt)`; every variant carries `since`; `executing` additionally carries nullable live executor detail — `currentTool`, `toolCalls`), `outcome` (nullable mid-run: `completed` | `paused(passedStage)` | `escalated(report)` | `aborted(failedAt, cause)`), `currentStage` (nullable: null at `pipelineEnd`, where the attempt history has been reset by advancement; otherwise attemptsUsed, attemptLimit, attempts with `round`, `result` = `passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`, `startedAt`, checks with ref/verdict/findings/duration, `denials` with the finding shape, executor `usage`, and `judgeUsage` with per-vote token maps), `totals` (cumulative executor usage for the whole task; judge tokens stay per-attempt in `judgeUsage`), `lastEscalation` (nullable; the five report kinds, including question and options for `decisionNeeded`, and `denials` for `cannotExecute`), `lastDecision` (nullable; text, author, stage, time). Usage objects SHALL carry `wallMillis`, `byTool`, and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation`, `cacheRead`; an empty map means unreported. Findings SHALL be carried in full — truncation is a text-render concern.
-<!-- implements FR11 of add-manual-run -->
-<!-- implements FR5, FR7, FR9 of add-agent-executor -->
-<!-- implements FR4 of fix-denial-report-attachment -->
-<!-- implements FR2 of fix-denial-attribution-durability -->
+### Requirement: JSON contract v1, state-derived
+The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants. Sections: `task` (id, title), `position` (`atStage(stage)` | `pipelineEnd`), `outcome` (nullable mid-run: `completed` | `paused(passedStage)` | `escalated(report)` | `aborted(failedAt, cause)`), `currentStage` (nullable: null at `pipelineEnd`, where the attempt history has been reset by advancement; otherwise attemptsUsed, attempts with `round`, `result` = `passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`, `startedAt`, checks with ref/verdict/findings/duration, `denials` with the finding shape, executor `usage`, and `judgeUsage` with per-vote token maps), `totals` (cumulative executor usage for the whole task; judge tokens stay per-attempt in `judgeUsage`), `lastEscalation` (nullable; the five report kinds, including question and options for `decisionNeeded`, and `denials` for `cannotExecute`), `lastDecision` (nullable; text, author, stage, time). Usage objects SHALL carry `wallMillis`, `byTool`, and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation`, `cacheRead`; an empty map means unreported. Findings SHALL be carried in full — truncation is a text-render concern. The former live-only fields — the `activity` section (`executing`, `verifying`, `awaitingInput`) and `currentStage.attemptLimit` — are withdrawn as a pre-release amendment (no release has shipped contract v1): no producer ever filled them outside a test fixture, and `attemptLimit` was emitted as `0` by every production render; the version stays 1.
+<!-- implements FR11 of add-manual-run; FR6 of make-run-headless -->
 
-#### Scenario: Canonical mid-run document
-- **WHEN** a run is verifying attempt 2 after an earlier decision escalation
-- **THEN** the JSON matches the shape of the canonical example:
+#### Scenario: Canonical document
+- **WHEN** a task's branch records one failed round of `implement` after an earlier decision escalation
+- **THEN** the JSON matches the shape of the canonical example, pinned byte-exactly by `status-report-v1.reference.json` in test resources (the "Reference anchor and versioning policy" requirement):
 
 ```json
 {
   "version": 1,
   "task":     { "id": "manual-20260716-143502-x7", "title": "Fix flaky OrderServiceSpec" },
   "position": { "type": "atStage", "stage": "implement" },
-  "activity": { "type": "verifying", "checkRef": "command:./gradlew test",
-                "since": "2026-07-16T14:41:02Z" },
   "outcome":  null,
   "currentStage": {
     "attemptsUsed": 1,
-    "attemptLimit": 3,
     "attempts": [
       { "round": 1,
         "result": "qualityFailure",
@@ -67,9 +61,9 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 }
 ```
 
-#### Scenario: Executing activity carries live detail
-- **WHEN** a CLI executor round is mid-flight on its third tool call
-- **THEN** the `activity` section reads `{ "type": "executing", "since": …, "currentTool": "Edit", "toolCalls": 3 }`
+#### Scenario: Withdrawn live fields are absent
+- **WHEN** any status document is rendered
+- **THEN** it carries no `activity` key and its `currentStage` carries no `attemptLimit` key
 
 ### Requirement: Attempt denials in the report
 Each attempt in the JSON document SHALL carry a `denials` array of finding objects (same shape as check findings: `message`, `location`, `details`), holding the egress denials recorded during that attempt's round. The field is additive under contract v1: it is present as an empty array when the attempt had no denials, and consumers of older documents without the field SHALL read it as empty. Denials SHALL NOT influence the attempt's `result` or any other derived field, and SHALL carry only structured metadata — never request bodies. The text render SHALL surface an attempt's denials alongside its findings.
@@ -98,14 +92,6 @@ A `cannotExecute` escalation in the JSON document SHALL carry a `denials` array 
 #### Scenario: State and live renders agree
 - **WHEN** the same task history is rendered from live events and from the persisted files
 - **THEN** both carry the same escalation denials, per the reference equivalence contract
-
-### Requirement: Fields partitioned by derivability
-Every field SHALL be classified as state-derivable (computable from `TaskContext` + `TaskState` alone — required) or live-only (`activity`, pending prompt — nullable). A consumer building the report from a persisted state file SHALL produce a document equal to the live, event-built report at any attempt boundary, where no live activity exists.
-<!-- implements FR11 of add-manual-run -->
-
-#### Scenario: Attempt boundary equivalence
-- **WHEN** a report is built from events and another from the same task's context and state at an attempt boundary
-- **THEN** the two reports are equal
 
 ### Requirement: Optional usage
 Token and tool-aggregate fields SHALL be optional everywhere in the contract: `tokensByModel` maps may be empty (unreported — never fabricated zero entries) and `byTool` may be empty; a run executed entirely by a human reports empty maps and empty aggregates while remaining valid. The `executing` activity's live detail is nullable — an interactive round reports none. Wall-clock fields are always present.

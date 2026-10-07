@@ -29,15 +29,21 @@ import org.springframework.stereotype.Component;
  *       branch found (FR13, UX3) — a normal outcome, not a crash</td></tr>
  *   <tr><td>{@link BranchShapeRefusedException}</td><td>7</td><td>{@code status}: the branch
  *       classifies as a quarantine shape and refuses inspection (FR16)</td></tr>
- *   <tr><td>{@link EscalationEofException}</td><td>10</td><td>Ctrl-D at the escalation resume prompt</td></tr>
- *   <tr><td>{@link CheckpointEofException}</td><td>11</td><td>Ctrl-D at the manual checkpoint prompt</td></tr>
+ *   <tr><td>{@link RunParkedException}, {@code Escalated}</td><td>10</td><td>the run stopped at an
+ *       escalation, parked on its branch (FR1, FR7 of make-run-headless)</td></tr>
+ *   <tr><td>{@link DecisionRequiredException}</td><td>10</td><td>a resume without {@code --decision}
+ *       met a {@code DecisionNeeded} report; the question was restated and the task stays parked
+ *       (FR4 of make-run-headless)</td></tr>
+ *   <tr><td>{@link RunParkedException}, {@code Paused}</td><td>11</td><td>the run stopped at a
+ *       manual checkpoint, parked on its branch (FR2, FR7 of make-run-headless)</td></tr>
  *   <tr><td>{@link AbortedException}</td><td>12</td><td>persistence failed</td></tr>
  *   <tr><td>{@link InternalErrorException}</td><td>1</td><td>unreachable-in-process internal error</td></tr>
  *   <tr><td>anything else</td><td>1</td><td>generic internal-error fallback</td></tr>
  * </table>
  *
  * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
- * harden-task-branch-contract; FR5, FR8 of remove-interactive-console.
+ * harden-task-branch-contract; FR5, FR8 of remove-interactive-console; FR4, FR7 of
+ * make-run-headless.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -55,8 +61,8 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case DivergedBranchException ignored -> 5;
             case TaskNotFoundException ignored -> 6;
             case BranchShapeRefusedException ignored -> 7;
-            case EscalationEofException ignored -> 10;
-            case CheckpointEofException ignored -> 11;
+            case RunParkedException parked -> parked.checkpoint() ? 11 : 10;
+            case DecisionRequiredException ignored -> 10;
             case AbortedException ignored -> 12;
             case InternalErrorException ignored -> 1;
             default -> 1;

@@ -46,7 +46,9 @@ flowchart LR
 1. **One logical transition = one commit.** Mutually-implied fields never
    split across commits: a human decision lands with the attempt-counter
    reset, a passing round lands with the advanced pipeline position, a
-   container park lands as its outcome commit with the pending marker.
+   container park lands as its outcome commit — carrying the pending marker
+   only when a tracker write is owed (`take`); a manual `run` park owes none
+   and carries no marker, so no receipt follows it.
 2. **Intent → effect → receipt for every external effect.** A durable intent
    is recorded before the effect, a receipt after it; recovery of an
    intent-without-receipt probes the target before re-driving. The

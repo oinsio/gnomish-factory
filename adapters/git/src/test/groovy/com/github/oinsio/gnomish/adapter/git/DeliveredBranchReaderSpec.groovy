@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -68,7 +69,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         repository.createTask(context('PROJ-1'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-1', finalState)
-        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(finalState))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         assert runner.run(cloneDir, 'show', 'gnomish/PROJ-1:.gnomish-task/task.json').exitCode() != 0
 
@@ -92,7 +93,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         repository.createTask(context('PROJ-6'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-6', finalState)
-        repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
+        repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-6')
         runner.run(registeredClone.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
 
@@ -141,7 +142,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         repository.createTask(context('PROJ-3'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-3', finalState)
-        repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState))
+        repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-3')
         commit(registeredClone.worktrees().resolve('PROJ-3'), 'later.txt', 'work landed after the cleanup')
 
@@ -164,7 +165,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         // The lifecycle commit stages the whole worktree, so this write lands in the Completed
         // commit itself — the same way the STARTED commit carries StateFileWrite's initial state.
         StateFileWrite.write(runner, registeredClone.worktrees().resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
-        repository.recordOutcome('PROJ-4', new TaskOutcome.Completed(deliveredState))
+        repository.recordOutcome('PROJ-4', new TaskOutcome.Completed(deliveredState), TrackerWrite.OWED)
         assert runner.run(cloneDir, 'show', 'gnomish/PROJ-4:.gnomish-task/task.json').exitCode() == 0
 
         when:

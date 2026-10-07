@@ -22,8 +22,8 @@ import java.util.List;
  * order (FR12 of harden-task-branch-contract) — before running the engine.
  *
  * <p>{@code AttemptsExhausted} never re-parks here: the human returning the task to work is itself
- * the confirmation (design D12), matching {@code EscalationResumeDialog#handleResumable}'s
- * blank-answer retry — a pending reply is still passed through when present, since it is meaningful
+ * the confirmation (design D12), matching {@link EscalationResume#decide}'s
+ * decision-less retry — a pending reply is still passed through when present, since it is meaningful
  * context even though not required.
  *
  * <p>Not for {@code CannotVerify}/{@code CannotExecute}/{@code PipelineMismatch}: those are {@code
@@ -77,7 +77,7 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
 
     private TakeResult reparkRestatingQuestion(
             EscalationReport.DecisionNeeded decisionNeeded, TaskState finalState, Tracker tracker, TaskRef ref) {
-        String report = EscalationResumeDialog.renderEscalation(decisionNeeded, ReportPlane.COMMENT);
+        String report = TerminalOutcomeRender.renderEscalation(decisionNeeded, ReportPlane.COMMENT);
         tracker.park(ref, ParkReason.ESCALATION, report);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.ESCALATION, report);
     }

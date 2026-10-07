@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
@@ -141,7 +142,7 @@ record TakeContainerEngineExecution(
         // remains of it is the cleanup commit, the destructive last step behind the confirmed finish.
         var park = new ParkTransition.Fresh(
                 () -> {
-                    support.recordPark(outcome);
+                    support.recordPark(outcome, TrackerWrite.OWED);
                     return new ParkDeliveryVerdict.Delivered();
                 },
                 support::confirmTerminalWrite);

@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * Renders a {@link StatusReport} as human-readable English text (task 6.4 of
  * add-manual-run): {@link #renderFull(StatusReport)} produces a multi-line block
- * for the {@code status} meta-command and the runner's after-attempt/final
+ * for the {@code status} subcommand and the runner's after-attempt/final
  * summaries; {@link #renderAttemptSummary(AttemptRecord)} produces a single line
  * per finished attempt. Kept as a separate class from {@link StatusReport}
  * (design D7 "one pure model behind every render"): the model stays plain data,
@@ -45,9 +45,9 @@ public final class StatusTextRenderer {
 
     /**
      * Renders {@code report} as a readable multi-line block: task id/title,
-     * current stage (or "pipeline complete"), attempts used/limit, a summary line
-     * per attempt, decisions, cumulative totals, current activity (if any), last
-     * escalation (if any), and last decision (if any).
+     * current stage (or "pipeline complete"), a summary line per attempt,
+     * decisions, cumulative totals, last escalation (if any), and last decision
+     * (if any).
      *
      * <p>Implements FR10, UX2, D7 of add-manual-run.
      *
@@ -65,7 +65,6 @@ public final class StatusTextRenderer {
         appendAttempts(out, report);
         appendDecisions(out, report);
         appendTotals(out, report.totals());
-        appendActivity(out, report.activity());
         appendEscalation(out, report.lastEscalation());
         appendLastDecision(out, report.lastDecision());
         return out.toString();
@@ -90,15 +89,7 @@ public final class StatusTextRenderer {
             out.append("Stage: pipeline complete\n");
             return;
         }
-        out.append("Stage: ").append(report.currentStage());
-        if (report.attemptLimit() != null) {
-            out.append(" (attempt ")
-                    .append(report.attemptsUsed())
-                    .append('/')
-                    .append(report.attemptLimit())
-                    .append(')');
-        }
-        out.append('\n');
+        out.append("Stage: ").append(report.currentStage()).append('\n');
     }
 
     private void appendAttempts(StringBuilder out, StatusReport report) {
@@ -163,15 +154,6 @@ public final class StatusTextRenderer {
                                 : totals.wallTime().toMillis())
                 .append(", tokensByModel=")
                 .append(totals.tokensByModel().isEmpty() ? "unknown" : totals.tokensByModel())
-                .append('\n');
-    }
-
-    private void appendActivity(StringBuilder out, @Nullable Activity activity) {
-        if (activity == null) {
-            return;
-        }
-        out.append("Activity: ")
-                .append(StatusLineFormatter.activityLine(activity, plane))
                 .append('\n');
     }
 

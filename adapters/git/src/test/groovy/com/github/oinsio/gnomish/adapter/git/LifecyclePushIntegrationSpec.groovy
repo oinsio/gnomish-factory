@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -63,7 +64,7 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
         when: 'the whole lifecycle runs — creation, then the terminal outcome and its cleanup commit'
         repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def tipAfterStart = remoteTip()
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup(TASK_ID)
 
         then: 'the creation commit was already on origin before the task ever ended'
@@ -92,7 +93,7 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
             repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []),
             TaskStart.commit(local, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
             TaskState.atStageStart('implement'))
-            repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+            repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
             repository.finishCleanup(TASK_ID)
         }
 

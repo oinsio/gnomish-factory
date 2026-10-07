@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The JSON contract's {@code outcome} section: {@code completed}, {@code
  * paused(passedStage)}, {@code escalated(report)}, or {@code aborted(failedAt,
- * cause)} (spec.md). Live-only, nullable mid-run.
+ * cause)} (spec.md). Read from the task's record; nullable mid-run.
  *
  * <p>Implements FR11, M3 of add-manual-run.
  */

@@ -31,18 +31,16 @@ Provide `gnomish run`, an interactive console CLI that drives the pure stage eng
 - **THEN** the process exits with the usage-error code before loading the pipeline
 
 ### Requirement: Agent-raised decisions reach the operator unchanged
-A `DecisionNeeded` raised by the CLI executor through the decision-file protocol SHALL surface as the standard escalation dialog — question and options rendered like any engine escalation, the operator's answer recorded as a decision and fed back on resume.
-<!-- implements FR3, UX3, D1 of add-agent-executor -->
+A `DecisionNeeded` raised by the CLI executor through the decision-file protocol SHALL surface as the standard escalation stop — question and options rendered like any engine escalation, the process exiting 10 — and the operator's `--decision` on resume SHALL be recorded as a decision and fed back to the executor.
+<!-- implements FR1, FR3 of make-run-headless -->
 
 #### Scenario: Agent question round-trips
-- **WHEN** the agent writes a decision file with a question and two options and the operator answers with one of them
+- **WHEN** the agent writes a decision file with a question and two options, the run exits 10, and the operator resumes with `--decision` naming one of them
 - **THEN** the resumed run's executor prompt contains that decision verbatim
 
 ### Requirement: Single-task dialog invocation
-`gnomish run` SHALL run exactly one ad-hoc task as one interactive console dialog per process: `--dir` (default: current directory) names the target project — the clone in git mode, the workspace in in-place mode; exactly one of `--task` | `--task-file` supplies the description unless `--resume` names an existing task, `--task-id` (optional, filesystem/git-ref-safe charset) overrides the generated `manual-<yyyyMMdd-HHmmss>-<2 chars>` id, `--from-stage` (optional) starts at a named stage. Validation SHALL run in fixed order: arguments, then pipeline load, then the run. Task title = first non-empty description line (markdown heading markers stripped), body = remainder; decisions start empty.
-<!-- implements FR1, FR2 of add-manual-run -->
-<!-- implements FR10 of add-agent-executor -->
-<!-- implements FR7, FR8 of add-git-workflow -->
+`gnomish run` SHALL run exactly one ad-hoc task per process, with no console dialog: `--dir` (default: current directory) names the target project — the clone in git mode, the workspace in in-place mode; exactly one of `--task` | `--task-file` supplies the description unless `--resume` names an existing task, `--task-id` (optional, filesystem/git-ref-safe charset) overrides the generated `manual-<yyyyMMdd-HHmmss>-<2 chars>` id, `--from-stage` (optional) starts at a named stage, `--decision` (optional, `--resume` only) supplies the operator's answer to a recorded escalation. Validation SHALL run in fixed order: arguments, then pipeline load, then the run. Task title = first non-empty description line (markdown heading markers stripped), body = remainder; decisions start empty.
+<!-- implements FR3, FR9 of make-run-headless -->
 
 #### Scenario: Default invocation from the project directory
 - **WHEN** `gnomish run --task="fix the flaky spec"` is invoked in a clone with a valid `.gnomish/`
@@ -54,7 +52,7 @@ A `DecisionNeeded` raised by the CLI executor through the decision-file protocol
 
 #### Scenario: Broken pipeline reported before any dialog
 - **WHEN** `.gnomish/` fails to load
-- **THEN** the loader errors are printed as-is and the process exits with the pipeline-load exit code without prompting
+- **THEN** the loader errors are printed as-is and the process exits with the pipeline-load exit code
 
 ### Requirement: Read-only workspace with a definition snapshot
 In git mode the runner SHALL NOT mutate the `--dir` clone: all work — gnome changes and `.gnomish-task/` state — happens in the task working copy owned by the bound task environment. Findings files SHALL live in the environment's scratch area — outside the working copy in every binding; host mode: a factory-private directory outside the worktree, as today; sandboxed mode: inside the task environment, never in factory-owned filesystem. Decision requests live in-branch under `.gnomish-task/decisions/` in git modes (FR23); only the in-place mode keeps the temp-file transport. In in-place mode the runner process SHALL write nothing inside the workspace: findings temp files and logs live outside it; the workspace changes only through the operator and the manifest's own commands, and the runner SHALL NOT require or inspect git. In both modes the pipeline definition SHALL be loaded once at startup; mid-dialog edits of `.gnomish/` take effect on the next invocation.
@@ -125,28 +123,44 @@ Before starting the command, the runner SHALL allocate a findings-file path in t
 - **THEN** the verdict is Fail (not CannotVerify) with the synthetic tail finding
 
 ### Requirement: Outcome loop with in-process resume
-The runner SHALL handle every `TaskOutcome` exhaustively. `Escalated`: render the report by type, prompt for a decision — non-empty input appends `Decision(author=operator, stage, time)`, empty input appends nothing — reset `attemptsUsed`, and run again. `Paused`: confirmation prompt only, no reset, no decision. `Aborted`: print cause and an unpersisted-state summary to stderr and terminate. `PipelineMismatch` (unreachable in-process) renders and exits as an internal error.
-<!-- implements FR9 of add-manual-run -->
+The runner SHALL handle every `TaskOutcome` exhaustively and SHALL never read the console. `Escalated`: render the report by type and a return-path line naming the resume command in the form the CLI parses, ready to run as printed (`gnomish run --dir=<dir> --resume=<task>` with an optional `--decision="..."`), then terminate with exit code 10. `Paused`: print the checkpoint line naming the passed stage and the resume command, then terminate with exit code 11. `Completed`: print the final status and terminate with exit code 0. `Aborted`: print cause and an unpersisted-state summary to stderr and terminate with exit code 12. `PipelineMismatch` (unreachable in-process) renders and exits as an internal error. In git mode the terminal boundary that receives an `Escalated` or `Paused` outcome — host fresh run, host resume, container fresh run, container resume — SHALL record it on the task branch as a park (`outcome` with `lastEscalation` for an escalation) before the process exits, keeping the worktree or the stopped task environment for the resume and never running the `Completed` cleanup; in-place mode records nothing. The report, the checkpoint line and the return-path line SHALL be rendered by one component whichever path — in-process loop, host resume, container resume, or `take`'s park report for the checkpoint line — reaches the stop.
+<!-- implements FR1, FR2, FR7, FR8, FR10, NFR-R3 of make-run-headless -->
 
 #### Scenario: Decision-carrying resume
-- **WHEN** the operator answers an `AttemptsExhausted` report with a decision text
+- **WHEN** a run ends with an `AttemptsExhausted` report and the operator runs `--resume <task> --decision="use approach A"`
 - **THEN** the next run starts at the same stage with `attemptsUsed` 0 and the decision visible to the executor
 
 #### Scenario: Empty decision retries after an environment fix
-- **WHEN** the operator answers a `CannotVerify` report with an empty line
+- **WHEN** a run ends with a `CannotVerify` report and the operator runs `--resume <task>` with no `--decision`
 - **THEN** the run restarts with `attemptsUsed` reset and no decision appended
 
 #### Scenario: Checkpoint continues without reset
-- **WHEN** the operator presses Enter at a `Paused` checkpoint
-- **THEN** the next run starts at the already-advanced position with counters untouched
+- **WHEN** a run ends at a `Paused` checkpoint with exit 11 and the operator runs `--resume <task>`
+- **THEN** the next run starts at the already-advanced position with counters untouched and no confirmation is asked
+
+#### Scenario: Escalation ends the process with its return path on stdout
+- **WHEN** the engine returns `Escalated` in a git-mode run
+- **THEN** stdout carries the rendered report followed by a line naming `--resume=<task>` and the optional `--decision`, the process exits 10, stdin was never read, and that command, run as printed without the optional part, resumes the task
+
+#### Scenario: Park is on the branch before the process exits
+- **WHEN** a git-mode run — host or container, fresh or resumed — ends with `Escalated` or `Paused`
+- **THEN** the task branch tip's `task.json` records that outcome (with `lastEscalation` for an escalation), the worktree or the stopped task environment is kept, no cleanup commit was made, and a following `--resume` switches on that recorded outcome
+
+#### Scenario: Kill between the round commit and the park record of an exhausted stage
+- **WHEN** the process is killed after the last round commit of a stage whose attempt limit is spent and before the park outcome commit
+- **THEN** the branch is in the interrupted-run shape, `--resume` continues from the recorded position and the engine reproduces the `AttemptsExhausted` stop, recording the park it could not record before (the same window for a checkpoint or a `DecisionNeeded` is owned by `make-checkpoint-gate-durable`)
+
+#### Scenario: A run park carries no pending tracker write
+- **WHEN** a git-mode run records an `Escalated` or `Paused` park
+- **THEN** the branch tip's `task.json` carries the outcome with no `trackerWritePending` marker, in one commit, since no tracker write follows a manual run
 
 ### Requirement: Status command and auto-summaries
-`status` and `status --json` SHALL be accepted at any prompt of the dialog, intercepted below the adapters at the single input choke point, re-prompting afterwards. The runner SHALL print a one-line summary after every finished attempt and a full status at the end; the escalation report render serves as the escalation summary. Text and JSON SHALL be renders of one `StatusReport` built by a pure function of `(TaskContext, TaskState, live activity)`.
-<!-- implements FR10, FR11 of add-manual-run -->
+The runner SHALL print a one-line summary after every finished attempt and a full status at the end; the escalation report render serves as the escalation summary. `gnomish status <task>` and `gnomish status <task> --json` are the only status paths; there is no in-dialog meta-command because there is no dialog. Text and JSON SHALL be renders of one `StatusReport` built by a pure function of `(TaskContext, TaskState, live activity)`, where live activity is `executing` or `verifying`.
+<!-- implements FR6 of make-run-headless -->
 
 #### Scenario: Status mid-prompt
-- **WHEN** the operator types `status` at the executor prompt
-- **THEN** the report is printed and the same executor prompt is asked again
+- **WHEN** a run is mid-flight and the operator runs `gnomish status <task>` in another process
+- **THEN** the report is printed from the branch and the running process is unaffected; no prompt exists to type into
 
 ### Requirement: Exit codes by outcome family
 Exit codes SHALL split into two families at 10: `< 10` — the tool itself could not do its job (0 reserved for success), `≥ 10` — the factory reached a legitimate non-completed outcome, so a scripted consumer can test `$? -ge 10`. All codes stay outside the shell signal zone (128+n); 1 and 2 keep their conventional roles. Code 4 is retired and SHALL NOT be returned; it stays listed as a gap so that no other code shifts.
@@ -175,20 +189,20 @@ Exit codes SHALL split into two families at 10: `< 10` — the tool itself could
 - **THEN** the exit code is one of 0, 1, 2, 3, 5, 6, 7, 10, 11, 12
 
 ### Requirement: EOF semantics without a TTY
-Piped stdin SHALL be a first-class mode: no TTY check. No engine port SHALL read the console, so input can end only at a runner prompt (escalation decision, checkpoint confirmation); EOF there SHALL exit with that outcome's code. Exhausted input SHALL never hang the process or re-enter an input-requiring dialog.
-<!-- implements FR5 of remove-interactive-console -->
+Layered on "EOF semantics without a TTY" as modified by `remove-interactive-console` (sequenced before this change). Stdin SHALL be irrelevant to `gnomish run`: no engine port and no runner path reads it, so a closed, empty or absent stdin changes nothing. Exit codes 10 and 11 SHALL be produced from the terminal outcome, never from an EOF.
+<!-- implements FR7 of make-run-headless -->
 
 #### Scenario: Deliberate exit at an escalation
-- **WHEN** the operator presses Ctrl-D at the resume prompt
-- **THEN** the process exits 10
+- **WHEN** a run escalates with stdin closed from the start
+- **THEN** the process exits 10 with the report and the return-path line, identically to a run with an open terminal
 
 #### Scenario: Deliberate exit at a checkpoint
-- **WHEN** the operator presses Ctrl-D at the checkpoint confirmation
-- **THEN** the process exits 11
+- **WHEN** a run reaches a manual checkpoint with stdin closed from the start
+- **THEN** the process exits 11 with the checkpoint line, identically to a run with an open terminal
 
 #### Scenario: Script too short
-- **WHEN** stdin is closed before the run starts and the pipeline completes without escalation or checkpoint
-- **THEN** the process exits 0 and no prompt was printed; no path returns the retired code 4
+- **WHEN** stdin is closed before the run starts and the pipeline completes
+- **THEN** the process exits 0 and no code in the retired or EOF family is returned
 
 ### Requirement: Port-contract compliance of new adapters
 The CLI adapters SHALL pass the same port-level contract suites the add-stage-engine fakes pass, driven through the fake agent binary where a subprocess is needed. A contract variant an adapter cannot produce SHALL be recorded as a port-shape finding, not worked around.
@@ -225,17 +239,16 @@ operator see where a run stalled without raising verbosity.
 - **THEN** their lines land in `~/.gnomish/projects/widgets/logs/default.log` and `~/.gnomish/projects/gateway/logs/default.log` respectively — each path the operator uses daily fits on one line
 
 ### Requirement: English dialog with forgiving input
-All prompts, renders, and summaries SHALL be English; unrecognized input SHALL re-prompt listing the accepted answers; Ctrl-D SHALL always exit cleanly — farewell line, correct exit code, no stack trace.
-<!-- implements UX1, UX3 of add-manual-run -->
+All renders and summaries SHALL be English. Flags are the only input: an unrecognized flag or combination SHALL exit 2 naming the accepted forms. The process SHALL exit cleanly on every path — farewell line, correct exit code, no stack trace — and SHALL never wait on stdin.
+<!-- implements FR6, FR9 of make-run-headless -->
 
 #### Scenario: Typo re-prompts
-- **WHEN** the operator answers `pss` to a pass/fail/running prompt
-- **THEN** the prompt repeats naming the three accepted answers
+- **WHEN** the operator passes `--decison="x"` (misspelled) with `--resume`
+- **THEN** the process exits 2 naming the accepted flags, and no branch write happens
 
 ### Requirement: Run modes
-`gnomish run` SHALL accept `--mode git|in-place`, default `git`. Git mode: the factory creates the task branch and the task working copy through the bound task environment, closes rounds per the bound adapter's round protocol, and pushes; the branch name is printed upfront — together with the worktree path in host mode, or the task-environment identifier in sandboxed mode, whose working-copy location is a private adapter detail and is never printed as a host path. In-place mode: the preserved legacy behavior — no git, in-memory state, no resume — with an honest reminder at start that exiting kills the task. Git-only flags (`--base`, `--resume`, `--discard-work`) combined with `--mode in-place` SHALL be a usage error (exit code 2).
-<!-- implements FR7, UX1, UX4 of add-git-workflow -->
-<!-- implements FR1, FR21 of add-sandbox-core -->
+`gnomish run` SHALL accept `--mode git|in-place`, default `git`. Git mode: the factory creates the task branch and the task working copy through the bound task environment, closes rounds per the bound adapter's round protocol, and pushes; the branch name is printed upfront — together with the worktree path in host mode, or the task-environment identifier in sandboxed mode, whose working-copy location is a private adapter detail and is never printed as a host path. In-place mode: the preserved legacy behavior — no git, in-memory state, no resume — with an honest reminder at start that exiting kills the task and that an escalation or a manual checkpoint ends the task for good, since there is no branch to resume from. Git-only flags (`--base`, `--resume`, `--discard-work`, `--decision`) combined with `--mode in-place` SHALL be a usage error (exit code 2).
+<!-- implements FR9 of make-run-headless -->
 
 #### Scenario: Git mode is the default
 - **WHEN** `gnomish run --task="t"` runs without `--mode`
@@ -246,12 +259,12 @@ All prompts, renders, and summaries SHALL be English; unrecognized input SHALL r
 - **THEN** the upfront output names the task branch and the task environment, and no host filesystem path of the working copy is printed
 
 #### Scenario: Git flag rejected in in-place mode
-- **WHEN** `gnomish run --mode=in-place --resume T-1` is invoked
+- **WHEN** `gnomish run --mode=in-place --resume T-1` or `gnomish run --mode=in-place --decision="x"` is invoked
 - **THEN** the process exits with code 2 naming the incompatible flags
 
 #### Scenario: In-place reminder
 - **WHEN** an in-place run starts
-- **THEN** the dialog states that state is in memory only and the task dies with the process
+- **THEN** the output states that state is in memory only, the task dies with the process, and an escalation or checkpoint ends it for good
 
 ### Requirement: Manual ownership mode
 Container environments created by `gnomish run` SHALL be labelled with ownership mode `manual`. Manual objects are governed by the age-only policy of `sandbox-lifecycle` — no claim oracle — so a live manual session is never disturbed by a coexisting daemon, and a forgotten manual zombie is still reclaimed after the configured thresholds.
@@ -270,13 +283,21 @@ The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` polic
 - **THEN** those objects are reported skipped-no-verdict and untouched, and the run proceeds normally
 
 ### Requirement: Resume invocation
-`gnomish run --dir <dir> --resume <task>` SHALL resume the named task from its branch; `--resume` is mutually exclusive with `--task`, `--task-file`, `--task-id`, and `--from-stage` (usage error). The resume dialogs SHALL mirror the in-process escalation dialogs: escalated → the report render and decision prompt; paused → the checkpoint confirmation; outcome null → continue silently from the recorded position; completed → report the task is done and exit with the success code.
-<!-- implements FR8, UX2 of add-git-workflow -->
+`gnomish run --dir=<dir> --resume=<task>` SHALL resume the named task from its branch; `--resume` is mutually exclusive with `--task`, `--task-file`, `--task-id`, and `--from-stage` (usage error). `--decision="<text>"` SHALL be accepted only together with `--resume`, never with `--mode=in-place`, and only for a task whose recorded outcome is `escalated`; any other combination is a usage error naming the conflict. Resume SHALL behave by recorded outcome without any prompt: escalated with `--decision` → append the decision (author `operator`, the stage, now) and reset attempts in one commit, then continue; escalated without `--decision` → reset attempts and continue, unless the recorded report is `DecisionNeeded`, in which case the question is restated, no attempt is burned, and the process exits 10; paused → continue from the advanced position; outcome null → continue silently from the recorded position; completed → report the task is done and exit with the success code.
+<!-- implements FR3, FR4, FR5, FR9 of make-run-headless -->
 
 #### Scenario: Resume of an escalated task
-- **WHEN** `--resume` opens a task parked as Escalated
-- **THEN** the recorded report is rendered and the decision prompt behaves exactly as the in-process resume dialog
+- **WHEN** `--resume --decision="patch in place"` opens a task parked as Escalated with an `AttemptsExhausted` report
+- **THEN** the branch gains one commit carrying the decision and the attempts reset, and the engine continues at the same stage
 
 #### Scenario: Completed task resumes to a no-op
 - **WHEN** `--resume` names a task whose outcome is completed
 - **THEN** the process reports the task is done and exits 0
+
+#### Scenario: Unanswered question is restated
+- **WHEN** `--resume` without `--decision` opens a task whose recorded report is `DecisionNeeded`
+- **THEN** the question and options are printed again with the return-path line, no round runs, and the process exits 10
+
+#### Scenario: Decision without a question is a usage error
+- **WHEN** `--resume --decision="x"` opens a task whose recorded outcome is paused or completed, or `--decision` is given without `--resume`
+- **THEN** the process exits 2 naming the conflict and writes nothing to the branch

@@ -64,7 +64,7 @@ class OptionalUsageSpec extends Specification {
         def context = new TaskContext("manual-task-1", UntrustedText.tracker("Human-only task"), UntrustedText.tracker("body"), [])
 
         and: "a realistic StatusReport, mirroring StatusReportJsonMapperSpec's construction pattern"
-        def report = StatusReport.build(context, state, 3, LiveActivity.idle())
+        def report = StatusReport.build(context, state, null, null)
 
         when: "rendered to JSON and parsed back into a generic tree, independent of formatting"
         def json = mapper.serialize(report)

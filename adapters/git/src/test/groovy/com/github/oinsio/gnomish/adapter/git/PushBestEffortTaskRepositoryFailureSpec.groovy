@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -72,10 +73,12 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         def repository = decorated(delegate)
 
         when:
-        def events = capture { repository.recordOutcome(TASK_ID, outcome) }
+        def events = capture {
+            repository.recordOutcome(TASK_ID, outcome, TrackerWrite.OWED)
+        }
 
         then:
-        1 * delegate.recordOutcome(TASK_ID, _) >> {
+        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
             commitOnTaskBranch(event.toLowerCase())
         }
         events.size() == 1
@@ -118,10 +121,10 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         repository.recordOutcome(TASK_ID, new TaskOutcome.Aborted(TaskState.atStageStart('work'),
-                new AttemptKey(TASK_ID, 'work', 0), UntrustedText.subprocess('violation')))
+                new AttemptKey(TASK_ID, 'work', 0), UntrustedText.subprocess('violation')), TrackerWrite.OWED)
 
         then:
-        1 * delegate.recordOutcome(TASK_ID, _) >> {
+        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
             throw new IllegalStateException('boom')
         }
         thrown(IllegalStateException)

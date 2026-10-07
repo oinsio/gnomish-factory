@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.CheckRef
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -36,41 +33,30 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.status.ReportPlane
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
+import java.nio.file.Path
 import spock.lang.Specification
-import spock.lang.Unroll
 
 /**
- * FR9, D8 of add-manual-run: the outcome loop — exhaustive {@link TaskOutcome} dispatch, typed
- * per-kind {@link EscalationReport} renders, the {@code PipelineMismatch} internal-error special
- * case, and (task 7.5) the real resumable-escalation dialog: decision prompt, reset {@code
- * attemptsUsed}, preserved {@code totals}, optional appended {@link Decision}, loop-back into
- * the engine. {@code Paused}/{@code Aborted} stay stubs for later tasks.
+ * FR9, D8 of add-manual-run; FR1, FR2, FR6, FR7 of make-run-headless: the outcome dispatch —
+ * exhaustive {@link TaskOutcome} switch, the {@code PipelineMismatch} internal-error special case,
+ * and the stops: {@code Escalated} and {@code Paused} print their render and are returned to the
+ * terminal boundary; the console is never read.
  */
 class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixture {
 
     private static final TaskState STATE = TaskState.atStageStart('build')
     private static final TaskContext CONTEXT = new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
-    private static final Clock CLOCK = Clock.fixed(Instant.parse('2026-07-17T10:00:00Z'), ZoneOffset.UTC)
+    private static final TerminalOutcomeRender.ReturnPath RETURN_PATH =
+    new TerminalOutcomeRender.ReturnPath(Path.of('/work/clone'), 'task-1')
 
-    private ScriptedConsoleIO io = new ScriptedConsoleIO()
-    private RunnerOutcomeLoop loop = loopOver(consoleOver(io))
-
-    /** A dialog console over {@code consoleIo}; the JSON renderer is never exercised by these specs. */
-    private static DialogConsole consoleOver(ConsoleIO consoleIo) {
-        new DialogConsole(consoleIo, { json -> 'unused' })
+    /** A console whose reader fails the spec: FR6, no path of the loop may read stdin. */
+    private ScriptedConsoleIO io = new ScriptedConsoleIO() {
+        @Override
+        String readLine() {
+            throw new AssertionError('the outcome loop read the console')
+        }
     }
-
-    private static DialogConsole consoleWithScript(List<String> script) {
-        consoleOver(new ScriptedConsoleIO(script))
-    }
-
-    /** The subject, wired with the production error console over {@code System.err} and a fixed clock. */
-    private static RunnerOutcomeLoop loopOver(DialogConsole dialogConsole) {
-        new RunnerOutcomeLoop(new Engine(), dialogConsole, liveErrorConsole(), CLOCK)
-    }
+    private RunnerOutcomeLoop loop = new RunnerOutcomeLoop(new Engine(), new DialogConsole(io), liveErrorConsole())
 
     /** A one-attempt stage with a single builtin check — the shape every {@code run} spec here drives. */
     private static StageDefinition oneCheckStage(String name, AdvancementMode advancement) {
@@ -86,450 +72,182 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('task-1', 'build', 0), []), [])
     }
 
-    def "dispatch routes Completed without throwing and prints a final status summary"() {
+    private static EnginePorts ports(ScriptedExecutor executor, List<Verdict> verdicts, InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
+        def clock = new VirtualClock()
+        new EnginePorts(executor, new ScriptedBuiltinCheckRunner(verdicts), new ScriptedCommandCheckRunner(),
+                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                persistence, clock, new VirtualSleeper(clock))
+    }
+
+    def "dispatch returns Completed and prints a final status summary"() {
         given:
         def outcome = new TaskOutcome.Completed(STATE)
 
-        when:
-        loop.dispatch(CONTEXT, outcome)
-
-        then:
-        noExceptionThrown()
+        expect:
+        loop.dispatch(CONTEXT, outcome, RETURN_PATH).is(outcome)
 
         and: 'a final status summary was printed, naming the task'
         io.printed.any { it.contains(CONTEXT.taskId()) }
     }
 
-    def "dispatch resumes a Paused checkpoint with confirmation only — no reset, no decision"() {
-        given: 'a burned-attempts, cumulative-totals state already advanced past the passed stage'
-        def totals = ExecutorUsage.none()
-        def advancedState = new TaskState(new Position.AtStage('deploy'), 2, [], totals)
-        def outcome = new TaskOutcome.Paused(advancedState, 'build')
-        def scriptedIo = new ScriptedConsoleIO([''])
-        def scriptedLoop = loopOver(consoleOver(scriptedIo))
+    def "FR2: dispatch returns a Paused stop after printing the checkpoint line and the return path"() {
+        given: 'a state already advanced past the passed stage'
+        def outcome = new TaskOutcome.Paused(new TaskState(new Position.AtStage('deploy'), 2, [], ExecutorUsage.none()), 'build')
 
-        when:
-        def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
+        expect:
+        loop.dispatch(CONTEXT, outcome, RETURN_PATH).is(outcome)
 
-        then: 'the checkpoint message names the stage that passed'
-        scriptedIo.printed.any {
-            it.contains('build') && it.contains('checkpoint')
-        }
-
-        and: 'exactly one prompt line was printed'
-        scriptedIo.printed.count { it.contains('Press Enter') } == 1
-
-        and: 'the returned context is the same instance — no decision added'
-        resumption.context().is(CONTEXT)
-
-        and: 'the returned state equals finalState exactly — nothing reset'
-        resumption.state() == advancedState
-        resumption.state().position() == new Position.AtStage('deploy')
-        resumption.state().attemptsUsed() == 2
-        resumption.state().totals() == totals
+        and: 'exactly the stop render, on one print, and no prompt'
+        io.printed == [
+            TerminalOutcomeRender.paused('build', RETURN_PATH) + ConsoleIO.LINE_END
+        ]
     }
 
-    def "dispatch rethrows CheckpointEofException when the checkpoint prompt itself hits EOF (Case 2, deliberate Ctrl-D)"() {
-        given: 'a console whose script runs out exactly at the checkpoint prompt'
-        def totals = ExecutorUsage.none()
-        def advancedState = new TaskState(new Position.AtStage('deploy'), 0, [], totals)
-        def outcome = new TaskOutcome.Paused(advancedState, 'build')
-        def freshLoop = loopOver(consoleWithScript([]))
+    def "FR1: dispatch returns an Escalated stop after printing the report and the return path"() {
+        given:
+        def report = new EscalationReport.AttemptsExhausted(3)
+        def outcome = new TaskOutcome.Escalated(new TaskState(new Position.AtStage('build'), 3, [], ExecutorUsage.none()), report)
+
+        expect:
+        loop.dispatch(CONTEXT, outcome, RETURN_PATH).is(outcome)
+
+        and:
+        io.printed == [
+            TerminalOutcomeRender.escalated(report, RETURN_PATH) + ConsoleIO.LINE_END
+        ]
+    }
+
+    def "an in-place stop prints its render without a return path"() {
+        given:
+        def outcome = new TaskOutcome.Paused(STATE, 'build')
 
         when:
-        freshLoop.dispatch(CONTEXT, outcome)
+        loop.dispatch(CONTEXT, outcome, null)
 
         then:
-        def ex = thrown(CheckpointEofException)
-        ex.cause instanceof ConsoleClosedException
+        io.printed == [
+            "Stage 'build' passed. Manual checkpoint reached." + ConsoleIO.LINE_END
+        ]
     }
 
-    def "dispatch throws AbortedException after reporting Aborted"() {
+    def "dispatch throws InternalErrorException carrying the console render for PipelineMismatch, printing nothing"() {
         given:
-        def outcome = new TaskOutcome.Aborted(STATE, new AttemptKey('task-1', 'build', 1), UntrustedText.subprocess('persist failed'))
-
-        and: 'stderr is captured for the duration of this test only'
-        def capturedErr = new ByteArrayOutputStream()
-        def originalErr = System.err
-        System.err = new PrintStream(capturedErr)
+        def report = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('\u001B[31mstale-stage @team #12'))
 
         when:
-        loop.dispatch(CONTEXT, outcome)
-
-        then:
-        def ex = thrown(AbortedException)
-        ex.message == 'persist failed'
-
-        and: 'FR1, FR6, FR8 of add-git-workflow: the full Aborted outcome is carried, not just the cause string'
-        ex.outcome() == outcome
-
-        cleanup:
-        System.err = originalErr
-    }
-
-    def "dispatch reports Aborted's cause and an unpersisted-state summary to stderr, then throws AbortedException instead of returning a resumption"() {
-        given: 'a burned-attempts state that never reached durable storage'
-        def totals = ExecutorUsage.none()
-        def unpersistedState = new TaskState(new Position.AtStage('build'), 2, [], totals)
-        def failedAt = new AttemptKey('task-1', 'build', 2)
-        def outcome = new TaskOutcome.Aborted(unpersistedState, failedAt, UntrustedText.subprocess('connection reset by peer'))
-
-        and: 'stderr is captured for the duration of this test only'
-        def capturedErr = new ByteArrayOutputStream()
-        def originalErr = System.err
-        System.err = new PrintStream(capturedErr)
-
-        when:
-        loop.dispatch(CONTEXT, outcome)
-
-        then: 'the loop signals termination via a thrown AbortedException — no resumption'
-        def ex = thrown(AbortedException)
-        ex.message == 'connection reset by peer'
-
-        and: 'the cause is printed verbatim to stderr'
-        def output = capturedErr.toString()
-        output.contains('connection reset by peer')
-
-        and: 'the unpersisted-state summary names the task, the failed round, and the last known state'
-        output.contains('task-1')
-        output.contains('build')
-        output.contains('2')
-
-        and: 'nothing was printed to the dialog console'
-        io.printed.isEmpty()
-
-        cleanup:
-        System.err = originalErr
-    }
-
-    def "dispatch routes a non-mismatch Escalated without throwing"() {
-        given:
-        def scriptedLoop = loopOver(consoleWithScript(['']))
-        def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
-
-        when:
-        scriptedLoop.dispatch(CONTEXT, outcome)
-
-        then:
-        noExceptionThrown()
-    }
-
-    def "dispatch throws InternalErrorException carrying the rendered text for PipelineMismatch, without prompting"() {
-        given:
-        def report = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage'))
-        def outcome = new TaskOutcome.Escalated(STATE, report)
-
-        when:
-        loop.dispatch(CONTEXT, outcome)
+        loop.dispatch(CONTEXT, new TaskOutcome.Escalated(STATE, report), RETURN_PATH)
 
         then:
         def ex = thrown(InternalErrorException)
-        ex.message == EscalationResumeDialog.renderEscalation(report, ReportPlane.CONSOLE)
-        ex.message.contains('stale-stage')
+        ex.message == TerminalOutcomeRender.renderEscalation(report, ReportPlane.CONSOLE)
+        ex.message.contains('^[[31m')
+        !ex.message.contains('~~~~')
 
-        and: 'no prompt was issued'
+        and:
         io.printed.isEmpty()
     }
 
-    def "dispatch resumes a decision-carrying escalation with attemptsUsed reset, totals preserved, and the decision appended"() {
-        given: 'a state with burned attempts and cumulative totals, escalated with AttemptsExhausted'
-        def totals = ExecutorUsage.none()
-        def burnedState = new TaskState(new Position.AtStage('build'), 3, [], totals)
-        def outcome = new TaskOutcome.Escalated(burnedState, new EscalationReport.AttemptsExhausted(3))
-        def scriptedIo = new ScriptedConsoleIO(['fixed the environment'])
-        def scriptedLoop = loopOver(consoleOver(scriptedIo))
+    def "dispatch throws AbortedException carrying the full outcome after reporting it to stderr only"() {
+        given: 'a burned-attempts state that never reached durable storage'
+        def unpersistedState = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        def outcome = new TaskOutcome.Aborted(unpersistedState, new AttemptKey('task-1', 'build', 2), UntrustedText.subprocess('connection reset by peer'))
+
+        and: 'stderr is captured for the duration of this test only'
+        def capturedErr = new ByteArrayOutputStream()
+        def originalErr = System.err
+        System.err = new PrintStream(capturedErr)
 
         when:
-        def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
-
-        then: 'the reset state keeps the same position, resets attemptsUsed, and preserves totals'
-        resumption.state() == new TaskState(new Position.AtStage('build'), 0, [], totals)
-
-        and: 'a new Decision is appended, authored by the operator, scoped to the current stage'
-        resumption.context().decisions().size() == 1
-        def decision = resumption.context().decisions()[0]
-        decision.body() == 'fixed the environment'
-        decision.author() == 'operator'
-        decision.stage() == 'build'
-        decision.time() == CLOCK.instant()
-
-        and: 'the rest of the context is unchanged'
-        resumption.context().taskId() == CONTEXT.taskId()
-        resumption.context().title() == CONTEXT.title()
-        resumption.context().body() == CONTEXT.body()
-
-        and: 'the rendered escalation report was printed before the decision prompt'
-        scriptedIo.printed.any {
-            it == EscalationResumeDialog.renderEscalation(outcome.report(), ReportPlane.CONSOLE)
-        }
-    }
-
-    def "dispatch resumes through the decision prompt"() {
-        given:
-        def scriptedLoop = loopOver(consoleWithScript(['']))
-        def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
-
-        when:
-        def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
+        loop.dispatch(CONTEXT, outcome, RETURN_PATH)
 
         then:
-        resumption != null
+        def ex = thrown(AbortedException)
+        ex.message == 'connection reset by peer'
+        ex.outcome() == outcome
+
+        and: 'the cause and the unpersisted-state summary went to stderr'
+        def output = capturedErr.toString()
+        output.contains('connection reset by peer')
+        output.contains("Task 'task-1': the round at stage 'build', attempt 2 was not persisted")
+
+        and:
+        io.printed.isEmpty()
+
+        cleanup:
+        System.err = originalErr
     }
 
-    def "dispatch rethrows EscalationEofException when the resume-prompt itself hits EOF (Case 2, deliberate Ctrl-D)"() {
-        given: 'a console whose script runs out exactly at the resume-decision prompt'
-        def freshLoop = loopOver(consoleWithScript([]))
-        def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
-
-        when:
-        freshLoop.dispatch(CONTEXT, outcome)
-
-        then: 'the exception is EscalationEofException, carrying the EOF as its cause'
-        def ex = thrown(EscalationEofException)
-        ex.cause instanceof ConsoleClosedException
-    }
-
-    def "dispatch resumes an empty-input escalation with attemptsUsed reset but no decision appended"() {
-        given: 'a CannotVerify escalation answered with a bare Enter'
-        def totals = ExecutorUsage.none()
-        def burnedState = new TaskState(new Position.AtStage('build'), 1, [], totals)
-        def report = new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('trace'))
-        def outcome = new TaskOutcome.Escalated(burnedState, report)
-        def scriptedLoop = loopOver(consoleWithScript(['']))
-
-        when:
-        def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
-
-        then: 'attemptsUsed resets and totals are preserved, but no decision is appended'
-        resumption.state() == new TaskState(new Position.AtStage('build'), 0, [], totals)
-        resumption.context().decisions() == CONTEXT.decisions()
-        resumption.context().decisions().isEmpty()
-    }
-
-    def "run loops back into a real engine with the resumed context/state after a decision-carrying escalation"() {
-        given: 'a one-attempt stage whose single builtin check fails once, then passes on resume'
-        def stageDef = oneCheckStage('build', AdvancementMode.AUTO)
-        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [stageDef])
-
-        def executor = new ScriptedExecutor([
-            completed(),
-            completed(),
+    def "FR1, FR7: run returns the escalation a real engine stopped on, without reading the console"() {
+        given: 'a one-attempt stage whose single builtin check fails'
+        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [
+            oneCheckStage('build', AdvancementMode.AUTO)
         ])
-        List<Verdict> verdicts = [
-            new Verdict.Fail([]),
-            new Verdict.Pass(),
-        ]
-        def builtinRunner = new ScriptedBuiltinCheckRunner(verdicts)
-        def clock = new VirtualClock()
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
-
-        def resumingLoop = loopOver(consoleWithScript(['fixed the environment']))
+        def executor = new ScriptedExecutor([completed()])
 
         when:
-        resumingLoop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports)
+        def outcome = loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(executor, [new Verdict.Fail([])]), RETURN_PATH)
 
-        then: 'the executor ran twice — the initial quality-failing attempt and the resumed one'
-        executor.requests.size() == 2
+        then: 'one round, no loop-back'
+        executor.requests.size() == 1
+        outcome instanceof TaskOutcome.Escalated
+        (outcome as TaskOutcome.Escalated).report() == new EscalationReport.AttemptsExhausted(1)
 
-        and: 'the resumed round is attempt 0 again — a fresh attempt-history window after reset'
-        executor.requests[1].attempt() == 0
-
-        and: 'the resumed round saw the appended operator decision'
-        executor.requests[1].context().decisions().any {
-            it.body() == 'fixed the environment' && it.author() == 'operator'
-        }
+        and:
+        io.printed.last().contains('--resume=task-1 [--decision="..."]')
     }
 
-    def "run loops back into a real engine after a manual checkpoint, with position and counters untouched"() {
+    def "FR2, FR7: run returns the checkpoint a real engine paused at, without continuing to the next stage"() {
         given: 'a manual-advancement first stage that passes, followed by an auto second stage'
-        def buildStage = oneCheckStage('build', AdvancementMode.MANUAL)
-        def deployStage = oneCheckStage('deploy', AdvancementMode.AUTO)
-        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [buildStage, deployStage])
-
-        def executor = new ScriptedExecutor([
-            completed(),
-            completed(),
+        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [
+            oneCheckStage('build', AdvancementMode.MANUAL),
+            oneCheckStage('deploy', AdvancementMode.AUTO)
         ])
-        def builtinRunner = new ScriptedBuiltinCheckRunner([
-            new Verdict.Pass(),
-            new Verdict.Pass(),
-        ])
-        def clock = new VirtualClock()
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
-
-        def scriptedIo = new ScriptedConsoleIO([''])
-        def resumingLoop = loopOver(consoleOver(scriptedIo))
+        def executor = new ScriptedExecutor([completed(), completed()])
 
         when:
-        resumingLoop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports)
+        def outcome = loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(executor, [
+            new Verdict.Pass(),
+            new Verdict.Pass()
+        ]), RETURN_PATH)
 
-        then: 'the executor ran twice — the manual-checkpointed build, then the resumed deploy'
-        executor.requests.size() == 2
-        executor.requests[0].stage().name() == 'build'
-        executor.requests[1].stage().name() == 'deploy'
+        then: 'only the checkpointed stage ran'
+        executor.requests*.stage()*.name() == ['build']
+        outcome instanceof TaskOutcome.Paused
+        (outcome as TaskOutcome.Paused).passedStage() == 'build'
+        (outcome as TaskOutcome.Paused).finalState().position() == new Position.AtStage('deploy')
+    }
 
-        and: 'the resumed round starts fresh — attempt 0, since deploy has never been attempted'
-        executor.requests[1].attempt() == 0
+    def "run returns Completed when the pipeline reaches its end"() {
+        given:
+        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [
+            oneCheckStage('build', AdvancementMode.AUTO)
+        ])
 
-        and: 'the checkpoint message named the stage that passed'
-        scriptedIo.printed.any {
-            it.contains('build') && it.contains('checkpoint')
-        }
+        expect:
+        loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(new ScriptedExecutor([completed()]), [new Verdict.Pass()]), RETURN_PATH) instanceof TaskOutcome.Completed
     }
 
     def "run reports to stderr and stops after a breaking persistence fake aborts the engine"() {
         given: 'a persistence port that throws on its first call'
-        def stageDef = oneCheckStage('build', AdvancementMode.AUTO)
-        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [stageDef])
-
+        def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [
+            oneCheckStage('build', AdvancementMode.AUTO)
+        ])
         def executor = new ScriptedExecutor([completed()])
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        def breakingPersistence = new InMemoryAttemptPersistence(failOnCall: 1)
-        def clock = new VirtualClock()
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                breakingPersistence, clock, new VirtualSleeper(clock))
-
         def capturedErr = new ByteArrayOutputStream()
         def originalErr = System.err
         System.err = new PrintStream(capturedErr)
 
         when:
-        loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports)
+        loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(),
+                ports(executor, [new Verdict.Pass()], new InMemoryAttemptPersistence(failOnCall: 1)), RETURN_PATH)
 
-        then: 'run propagates AbortedException — no loop-back after the abort'
+        then:
         thrown(AbortedException)
-
-        and: 'the executor ran exactly once'
         executor.requests.size() == 1
-
-        and: 'the failure and an unpersisted-state summary were printed to stderr'
-        def output = capturedErr.toString()
-        output.contains('task-1')
-        output.contains('build')
-        output.contains('persist failed on call 1')
-
-        and: 'nothing was printed to the dialog console — this is a stderr-only report'
+        capturedErr.toString().contains('persist failed on call 1')
         io.printed.isEmpty()
 
         cleanup:
         System.err = originalErr
-    }
-
-    def "the escalation the operator reads takes the console plane, not the comment plane (UX1)"() {
-        given: 'a CannotExecute whose cause carries an ANSI escape, a mention and an issue reference'
-        def scriptedIo = new ScriptedConsoleIO([''])
-        def scriptedLoop = loopOver(consoleOver(scriptedIo))
-        def report = new EscalationReport.CannotExecute(
-                UntrustedText.subprocess('\u001B[31magent crashed, ask @team about #12'), [])
-
-        when:
-        scriptedLoop.dispatch(CONTEXT, new TaskOutcome.Escalated(STATE, report))
-
-        then: 'the printed block carries no markdown fence, no label and no zero-width spaces'
-        def printed = scriptedIo.printed.find { it.contains('agent crashed') }
-        !printed.contains('​')
-        !printed.contains('Untrusted machine output:')
-        !printed.contains('~~~~')
-
-        and: 'the attack attempt is shown rather than removed — the console plane property'
-        printed.contains('^[[31m')
-    }
-
-    def "the PipelineMismatch internal error the operator reads takes the console plane (UX1)"() {
-        given:
-        def report = new EscalationReport.PipelineMismatch(
-                UntrustedText.branchDocument('\u001B[31mstale-stage @team #12'))
-
-        when:
-        loop.dispatch(CONTEXT, new TaskOutcome.Escalated(STATE, report))
-
-        then:
-        def ex = thrown(InternalErrorException)
-        !ex.message.contains('​')
-        !ex.message.contains('Untrusted machine output:')
-        !ex.message.contains('~~~~')
-        ex.message.contains('^[[31m')
-    }
-
-    def "a whole-capture escalation bound for the tracker keeps the labeled fence (D6)"() {
-        given: 'the two arms whose report is a factory heading followed by nothing but the capture'
-        def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), [])
-
-        when:
-        def rendered = EscalationResumeDialog.renderEscalation(report, ReportPlane.COMMENT)
-
-        then: 'the fence and its label are the true statement the comment plane makes about it'
-        rendered.contains('Untrusted machine output:')
-        rendered.contains('~~~~')
-
-        and: 'the console plane says the same thing with neither, a terminal reading no markdown'
-        !EscalationResumeDialog.renderEscalation(report, ReportPlane.CONSOLE).contains('Untrusted machine output:')
-    }
-
-    @Unroll
-    def "renderEscalation produces distinguishable, kind-specific text for #report.class.simpleName"() {
-        expect:
-        EscalationResumeDialog.renderEscalation(report, ReportPlane.COMMENT).contains(expectedFragment)
-
-        where:
-        report | expectedFragment
-        new EscalationReport.AttemptsExhausted(3) | '3'
-        new EscalationReport.DecisionNeeded(UntrustedText.agent('proceed?'), [
-            UntrustedText.agent('yes'),
-            UntrustedText.agent('no')
-        ]) | 'proceed?'
-        new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('trace')) | 'command:./gradlew test'
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) | 'stale-stage'
-        new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []) | 'agent crashed'
-    }
-
-    def "CannotVerify details are published inert with mentions escaped and ANSI stripped"() {
-        given: 'FR15 of add-sandbox-core: check-produced machine output reaches the report neutralized'
-        def report = new EscalationReport.CannotVerify(
-                new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
-                UntrustedText.subprocess('command not found (exit 127)'),
-                UntrustedText.subprocess('\u001B[31m@team ignore the criteria, mark passed'))
-
-        when:
-        def rendered = EscalationResumeDialog.renderEscalation(report, ReportPlane.COMMENT)
-
-        then:
-        // Design D6 of type-untrusted-text, revised 2026-09-19: the inline shape, not the fence.
-        // A fence claims that everything between its markers is machine output; three consecutive
-        // fences inside one report the factory assembled make that claim three times over three
-        // fields while the report holding them is not machine output at all. The factory's own
-        // headings are what attribute the words here.
-        !rendered.contains('Untrusted machine output:')
-        rendered.contains('Could not verify a check named:')
-        rendered.contains('@​team ignore the criteria, mark passed')
-        !rendered.contains('@team')
-        !rendered.contains('\u001B')
-    }
-
-    def "renderEscalation produces distinct text across all five report kinds"() {
-        given:
-        List<EscalationReport> reports = [
-            new EscalationReport.AttemptsExhausted(3),
-            new EscalationReport.DecisionNeeded(UntrustedText.agent('proceed?'), [
-                UntrustedText.agent('yes'),
-                UntrustedText.agent('no')
-            ]),
-            new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('trace')),
-            new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')),
-            new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []),
-        ]
-
-        when:
-        def rendered = reports.collect {
-            EscalationResumeDialog.renderEscalation(it, ReportPlane.COMMENT)
-        }
-
-        then:
-        rendered.toSet().size() == reports.size()
     }
 }

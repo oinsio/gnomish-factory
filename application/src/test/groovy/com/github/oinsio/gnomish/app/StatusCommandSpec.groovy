@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
@@ -210,7 +211,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         given: 'a completed task whose cleanup commit stripped .gnomish-task/ from the tip'
         persistRound('DELIVERED-1', TaskState.atStageStart('implement'))
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
-        repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'DELIVERED-1')
 
@@ -274,7 +275,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         persistRound('MIXED-OK', TaskState.atStageStart('implement'))
         persistRound('MIXED-DONE', TaskState.atStageStart('implement'))
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
-        repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('MIXED-DONE')
         persistRound('MIXED-BAD', TaskState.atStageStart('implement'))
         def broken = worktreeFor('MIXED-BAD')

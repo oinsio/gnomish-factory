@@ -22,14 +22,14 @@ import java.time.Instant
 /**
  * The deterministic sample behind the status-report reference documents — fixed {@link
  * Instant} values throughout (an injected-clock style sample, FR11 of add-manual-run), in
- * the shape of the spec's canonical example: non-null activity, an attempt with findings,
- * totals, lastEscalation, lastDecision.
+ * the shape of the spec's canonical example: an attempt with findings, totals,
+ * lastEscalation, lastDecision.
  *
  * <p>Lives in {@code :test-fixtures}, beside {@code status-report-v1.reference.json}
  * itself, because two modules anchor against it: {@code :application}'s
  * {@code StatusReportJsonMapperSpec} (byte-identity against the reference document) and
- * {@code :adapters:git}'s {@code StatusReportEquivalenceContractSpec} (state-file render
- * equivalent to the live render). Until FR2 of fix-denial-attribution-durability the
+ * {@code :adapters:git}'s {@code StatusReportEquivalenceContractSpec} (the render of the
+ * persisted files equivalent to the render of the in-memory report). Until FR2 of fix-denial-attribution-durability the
  * second one rebuilt this sample by hand, and the two copies were kept in step by
  * memory — the shape {@code manual-sync-pairs.md} exists to forbid. Same role as
  * {@code BoardReferenceFixture}, one module up.
@@ -39,13 +39,13 @@ import java.time.Instant
  * canonical document's single {@code lastEscalation} slot pins one kind only, so the
  * other four — and any future kind — are pinned there instead.
  *
- * <p>Implements FR11, M3 of add-manual-run; FR2, M3 of fix-denial-attribution-durability.
+ * <p>Implements FR11, M3 of add-manual-run; FR2, M3 of fix-denial-attribution-durability; FR6
+ * of make-run-headless.
  */
 final class StatusReportReferenceFixture {
 
     static final String TASK_ID = 'manual-20260716-143502-x7'
     static final String TITLE = 'Fix flaky OrderServiceSpec'
-    static final int ATTEMPT_LIMIT = 3
 
     private StatusReportReferenceFixture() {}
 
@@ -67,11 +67,6 @@ final class StatusReportReferenceFixture {
         ])
     }
 
-    /** The live-only activity: mid-verification of the sample's failing check. */
-    static Activity referenceActivity() {
-        new Activity.Verifying(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')), Instant.parse('2026-07-16T14:41:02Z'))
-    }
-
     /** One quality-failure attempt (a passing and a failing check) plus the task totals. */
     static TaskState referenceTaskState() {
         def passCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
@@ -86,11 +81,9 @@ final class StatusReportReferenceFixture {
         new TaskState(new Position.AtStage('implement'), 1, [attempt], usage(232000, 1450, 6100, 512000))
     }
 
-    /** The whole canonical report: the state above, live activity, escalation, no outcome. */
+    /** The whole canonical report: the state above, the recorded escalation, no outcome. */
     static StatusReport referenceReport() {
-        StatusReport.build(
-                referenceContext(), referenceTaskState(), ATTEMPT_LIMIT,
-                new LiveActivity(referenceActivity(), referenceEscalation(), null))
+        StatusReport.build(referenceContext(), referenceTaskState(), referenceEscalation(), null)
     }
 
     /**
@@ -101,7 +94,7 @@ final class StatusReportReferenceFixture {
      */
     static List<EscalationReport> referenceEscalations() {
         [
-            new EscalationReport.AttemptsExhausted(ATTEMPT_LIMIT),
+            new EscalationReport.AttemptsExhausted(3),
             referenceEscalation(),
             new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('external:ci')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('poll exceeded 5m')),
             new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('removed-stage')),

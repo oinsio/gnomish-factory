@@ -1,71 +1,31 @@
 package com.github.oinsio.gnomish.app.console;
 
-import com.github.oinsio.gnomish.app.port.console.ActivityTracker;
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
-import com.github.oinsio.gnomish.app.port.console.StatusRenderer;
-import com.github.oinsio.gnomish.status.Activity;
-import java.util.Collection;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
- * The single input choke point (design D1): wraps a dumb {@link ConsoleIO},
- * intercepting the {@code status} / {@code status --json} meta-commands below
- * every runner dialog so none of them has to know
- * about {@code status}. Every prompt in the manual-run dialog SHALL go through
- * this class rather than {@link ConsoleIO} directly.
+ * The runner's output owner: wraps a dumb {@link ConsoleIO} and offers its two write paths —
+ * {@link #print} for a person at a terminal, {@link #printMachine} for a parser (FR5 of
+ * harden-untrusted-text-sinks). It has no read side: a {@code run} never waits on its operator,
+ * so a stop is rendered and the process exits with the command that resumes it (design D4 of
+ * make-run-headless).
  *
- * <p>The engine has no notion of a human being prompted — only this class,
- * the single choke point, knows a prompt is pending — so every blocking read
- * marks {@link Activity.AwaitingInput} on the wrapped {@link ActivityTracker}
- * just before reading and restores the prior activity immediately after,
- * whether the read returns a line or raises {@link ConsoleClosedException} on
- * EOF (design D7).
- *
- * <p>The two meta-commands take the two write paths of {@link ConsoleIO}: the text
- * render is for a person, the {@code --json} render for a parser (FR5 of
- * harden-untrusted-text-sinks).
- *
- * <p>Implements FR10, FR13, UX1, D7 of add-manual-run, FR5 of harden-untrusted-text-sinks.
+ * <p>Implements FR3 of add-manual-run; FR5 of harden-untrusted-text-sinks; D4 of
+ * make-run-headless.
  */
 public final class DialogConsole {
 
-    private static final String STATUS_COMMAND = "status";
-    private static final String STATUS_JSON_COMMAND = "status --json";
-
     private final ConsoleIO io;
-    private final StatusRenderer statusRenderer;
-    private final ActivityTracker activityTracker;
-
-    /**
-     * Convenience constructor for call sites with no live-activity signal to
-     * report, using {@link ActivityTracker#NONE}.
-     *
-     * @param io the console I/O to wrap
-     * @param statusRenderer the {@code status} meta-command renderer
-     */
-    public DialogConsole(ConsoleIO io, StatusRenderer statusRenderer) {
-        this(io, statusRenderer, ActivityTracker.NONE);
-    }
 
     /**
      * @param io the console I/O to wrap
-     * @param statusRenderer the {@code status} meta-command renderer
-     * @param activityTracker marks/restores {@code AWAITING_INPUT} around each
-     *     blocking read (FR10, D7)
      */
-    public DialogConsole(ConsoleIO io, StatusRenderer statusRenderer, ActivityTracker activityTracker) {
+    public DialogConsole(ConsoleIO io) {
         this.io = io;
-        this.statusRenderer = statusRenderer;
-        this.activityTracker = activityTracker;
     }
 
     /**
-     * Writes {@code text} to the operator verbatim, with no prompt and no
-     * response expected — a thin passthrough to the wrapped {@link ConsoleIO}
-     * for blocks of text (such as the stage briefing, task 5.2) that precede a
-     * prompt rather than being one themselves.
+     * Writes {@code text} to the operator on the human path of the wrapped {@link ConsoleIO} —
+     * a thin passthrough for blocks of text such as a stage briefing or a stop render.
      *
      * <p>Implements FR3 of add-manual-run.
      *
@@ -78,82 +38,12 @@ public final class DialogConsole {
     /**
      * Writes {@code text} to the operator byte for byte — the machine-readable path of the
      * wrapped {@link ConsoleIO}, for blocks a parser rather than a terminal consumes
-     * (FR5 of harden-untrusted-text-sinks). Kept beside {@link #print} so a dialog that
-     * holds this wrapper never has to reach past it for one of the two paths.
+     * (FR5 of harden-untrusted-text-sinks). Kept beside {@link #print} so a holder of this
+     * wrapper never has to reach past it for one of the two paths.
      *
      * @param text the text to print
      */
     public void printMachine(String text) {
         io.printMachine(text);
-    }
-
-    /**
-     * Prints {@code prompt} and reads one line, intercepting {@code status} and
-     * {@code status --json} (FR10): a meta-command renders the current status,
-     * prints it, and re-prompts with the same {@code prompt} text — the caller
-     * never sees the meta-command. On EOF, {@link ConsoleClosedException}
-     * propagates to the caller (FR13).
-     *
-     * <p>Implements FR10, FR13 of add-manual-run.
-     *
-     * @param prompt the prompt text to print before reading
-     * @return the first non-meta-command line the operator enters
-     * @throws ConsoleClosedException if input is exhausted before a non-meta
-     *     line is read
-     */
-    public String prompt(String prompt) {
-        while (true) {
-            io.print(prompt);
-            String line = readLine(prompt);
-            if (STATUS_COMMAND.equals(line)) {
-                io.print(statusRenderer.render(false));
-                continue;
-            }
-            if (STATUS_JSON_COMMAND.equals(line)) {
-                // The machine-readable path: the reader of a --json render is a parser, and the
-                // human path would rewrite the characters it renders visibly into escapes JSON
-                // does not define (FR5 of harden-untrusted-text-sinks).
-                io.printMachine(statusRenderer.render(true));
-                continue;
-            }
-            return line;
-        }
-    }
-
-    /**
-     * Prompts for one of a fixed set of {@code acceptedAnswers}, re-prompting
-     * with the accepted answers listed whenever the operator's line matches
-     * none of them (UX1), while every line still passes through meta-command
-     * interception first (FR10). Fixed-answer prompts build on this helper
-     * instead of duplicating the re-prompt loop.
-     *
-     * <p>Implements FR10, UX1 of add-manual-run.
-     *
-     * @param prompt the prompt text to print before each read
-     * @param acceptedAnswers the exact lines that are accepted; order is
-     *     preserved when listing them back to the operator
-     * @return the first line that matches one of {@code acceptedAnswers}
-     * @throws ConsoleClosedException if input is exhausted before an accepted
-     *     line is read
-     */
-    public String ask(String prompt, Collection<String> acceptedAnswers) {
-        Set<String> accepted = new LinkedHashSet<>(acceptedAnswers);
-        String currentPrompt = prompt;
-        while (true) {
-            String answer = prompt(currentPrompt);
-            if (accepted.contains(answer)) {
-                return answer;
-            }
-            currentPrompt = "Unrecognized answer. Accepted answers: " + String.join(", ", accepted) + ". " + prompt;
-        }
-    }
-
-    private String readLine(String prompt) {
-        Activity previousActivity = activityTracker.markAwaitingInput(prompt);
-        try {
-            return io.readLine();
-        } finally {
-            activityTracker.restore(previousActivity);
-        }
     }
 }

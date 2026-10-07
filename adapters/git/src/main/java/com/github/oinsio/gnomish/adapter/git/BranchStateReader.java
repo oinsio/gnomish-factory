@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -35,20 +34,17 @@ import org.jspecify.annotations.Nullable;
  * a tip is classified by its content alone, whichever tenure stamped it (fix-claim-epoch-fence
  * FR1).
  *
- * <p>The resulting {@link StatusReport} is built by the same pure function ({@link
- * StatusReport#build}) manual-run's live status uses, reused verbatim per FR13. Two of its
- * live-only inputs are always absent here because this reader has no live process to observe: the
- * in-flight {@link com.github.oinsio.gnomish.status.Activity} (this is a snapshot of the last
- * recorded round boundary, not "right now", NFR-O1) and {@code attemptLimit} (resolved from the
- * pipeline's stage configuration, which this reader never loads). {@code outcome} and {@code
- * lastEscalation}, by contrast, ARE available — {@code task.json} durably records them (FR5) — so
- * they are threaded through from the branch's own state rather than left null: {@code outcome}
+ * <p>The resulting {@link StatusReport} is built by the one pure function ({@link
+ * StatusReport#build}) every report goes through, reused verbatim per FR13. It is a snapshot of the
+ * last recorded round boundary, not "right now" (NFR-O1): every field is read from the tip. Besides
+ * the context and state, {@code task.json} durably records {@code outcome} and {@code
+ * lastEscalation} (FR5), so they are threaded through from the branch's own record: {@code outcome}
  * reflects {@code task.json}'s {@code outcome} field, null while a visit is in progress (rendering
  * as in-progress/interrupted per the task-inspection spec's "Interrupted task reported honestly"
  * scenario) and the recorded terminal outcome once finished/paused/escalated.
  *
  * <p>Implements FR13, NFR-O1, NFR-R2 of add-git-workflow; FR16 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR6 of make-run-headless.
  */
 public final class BranchStateReader {
 
@@ -107,8 +103,8 @@ public final class BranchStateReader {
         TaskRecord taskContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(taskJson));
         TaskState state = StateJsonMapper.fromDto(StateJsonMapper.readDto(stateJson));
 
-        LiveActivity liveActivity = new LiveActivity(null, taskContent.lastEscalation(), toReportOutcome(taskContent));
-        return StatusReport.build(taskContent.context(), state, null, liveActivity);
+        return StatusReport.build(
+                taskContent.context(), state, taskContent.lastEscalation(), toReportOutcome(taskContent));
     }
 
     /**
@@ -116,7 +112,7 @@ public final class BranchStateReader {
      * without round-tripping through the domain {@link
      * com.github.oinsio.gnomish.domain.engine.TaskOutcome}: that domain type requires a {@code
      * finalState}, which is redundant here (the report already exposes it via {@link
-     * StatusReport}'s own state-derivable fields, same as {@link Outcome}'s own class-level note).
+     * StatusReport}'s own state-derived fields, same as {@link Outcome}'s own class-level note).
      * {@link Outcome.Escalated} reuses {@code taskContent.lastEscalation()} rather than re-mapping
      * {@code outcomeDto}'s nested report DTO: {@link GitTaskRepository#recordOutcome} always writes
      * an {@code Escalated} outcome's report into the top-level {@code lastEscalation} field in the

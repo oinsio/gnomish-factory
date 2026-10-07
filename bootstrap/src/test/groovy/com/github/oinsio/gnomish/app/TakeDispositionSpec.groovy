@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -324,7 +325,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
             UntrustedText.agent('no')
         ])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
-        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
+        repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.collectDecisions(REF) >> []
         def disposition = newDisposition()
@@ -360,7 +361,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
-        repository().recordOutcome(taskId, new TaskOutcome.Completed(state))
+        repository().recordOutcome(taskId, new TaskOutcome.Completed(state), TrackerWrite.OWED)
         def tipBefore = gitOutput(cloneDir, 'rev-parse', 'gnomish/PROJ-4')
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
@@ -393,7 +394,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(
-                taskId, new TaskOutcome.Aborted(state, new AttemptKey(taskId, 'build', 0), UntrustedText.subprocess('disk full')))
+                taskId, new TaskOutcome.Aborted(state, new AttemptKey(taskId, 'build', 0), UntrustedText.subprocess('disk full')), TrackerWrite.OWED)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 

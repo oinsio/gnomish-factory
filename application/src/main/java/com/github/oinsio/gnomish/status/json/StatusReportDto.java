@@ -4,18 +4,16 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The JSON contract's top-level document (v1, spec.md): {@code version} (always
- * {@code 1}), {@code task}, {@code position}, {@code activity}, {@code outcome},
+ * {@code 1}), {@code task}, {@code position}, {@code outcome},
  * {@code currentStage}, {@code totals}, {@code lastEscalation}, {@code
  * lastDecision}. Every {@code null} field renders as JSON {@code null} — see
  * {@link StatusJson}.
  *
- * <p>Implements FR11, M3 of add-manual-run.
+ * <p>Implements FR11, M3 of add-manual-run; FR6 of make-run-headless.
  *
  * @param version the contract version; always {@code 1}
  * @param task the task's id and title
  * @param position where the task sits in its pipeline
- * @param activity what the engine is doing right now, or {@code null} when idle
- *     or built from state alone
  * @param outcome the terminal outcome of the run, or {@code null} mid-run
  * @param currentStage the current stage's attempt data, or {@code null} at {@code
  *     pipelineEnd}
@@ -29,7 +27,6 @@ public record StatusReportDto(
         int version,
         TaskDto task,
         PositionDto position,
-        @Nullable ActivityDto activity,
         @Nullable OutcomeDto outcome,
         @Nullable CurrentStageDto currentStage,
         UsageDto totals,

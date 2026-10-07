@@ -23,7 +23,7 @@ public sealed interface BranchStateResult {
     /**
      * The task branch was found and its state files read successfully.
      *
-     * @param report the rendered status report, live-only fields null (design D13)
+     * @param report the status report built from the branch tip (design D13)
      */
     record Found(StatusReport report) implements BranchStateResult {}
 

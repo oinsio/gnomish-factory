@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
-import com.github.oinsio.gnomish.app.EscalationResumeDialog
+import com.github.oinsio.gnomish.app.TerminalOutcomeRender
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -119,7 +119,7 @@ class TakeOutcomeMapperSpec extends Specification {
         !awaiting.report().startsWith('Escalated: ')
 
         and: 'it is the renderer\'s own text, word for word'
-        awaiting.report() == EscalationResumeDialog.renderEscalation(report, ReportPlane.COMMENT)
+        awaiting.report() == TerminalOutcomeRender.renderEscalation(report, ReportPlane.COMMENT)
 
         where:
         kind | report

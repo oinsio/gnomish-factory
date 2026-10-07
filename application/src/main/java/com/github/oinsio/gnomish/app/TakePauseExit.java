@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
-import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.ReportPlane;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
@@ -33,9 +32,8 @@ import org.slf4j.LoggerFactory;
  * <p>The report is {@link StatusTextRenderer#renderFull(StatusReport)}'s full text block plus a
  * line naming the stage that passed and triggered the checkpoint, and a return-path sentence — a
  * checkpoint resumes on the human returning the task to ready (no reply is expected or consumed,
- * unlike an {@code ESCALATION} park). {@code attemptLimit} is passed as {@code null} to {@link
- * StatusReport#build}, the same choice {@link TakeFinishReport} makes for a terminal outcome where
- * there is no current stage to resolve a limit for.
+ * unlike an {@code ESCALATION} park). The report is built from the paused state alone, the same
+ * choice {@link TakeFinishReport} makes for a terminal outcome.
  *
  * <p>Implements FR13, FR18, D12 of add-tracker-port.
  */
@@ -113,9 +111,9 @@ final class TakePauseExit {
             TakeOrder order,
             TerminalWriteRetry retry,
             ParkTransition transition) {
-        var report = StatusReport.build(context, paused.finalState(), null, LiveActivity.idle());
+        var report = StatusReport.build(context, paused.finalState(), null, null);
         String rendered = new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report);
-        String checkpoint = "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.";
+        String checkpoint = TerminalOutcomeRender.checkpointLine(paused.passedStage());
         String head = rendered + "\nBranch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
 
         String reportText =

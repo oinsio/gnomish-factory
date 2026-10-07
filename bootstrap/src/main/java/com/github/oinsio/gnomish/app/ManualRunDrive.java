@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.util.List;
@@ -78,8 +79,9 @@ final class ManualRunDrive {
         PipelineDefinition definition = loaded.definition();
         String resume = runArguments.resume();
         if (resume != null) {
-            // FR8: the resolved bindings decide the resume shape (D13) — see ManualRunners.
-            runners.getObject().resume(order(runArguments, definition), resume);
+            // FR8: the resolved bindings decide the resume shape (D13) — see ManualRunners. The
+            // --decision is the only source of an operator decision in run (D7 of make-run-headless).
+            runners.getObject().resume(order(runArguments, definition), resume, runArguments.decision());
             return;
         }
 
@@ -105,7 +107,10 @@ final class ManualRunDrive {
         return new RunOrder(runArguments.dir(), runArguments.base(), definition, runArguments.discardWork());
     }
 
-    /** The preserved add-manual-run flow (FR7, UX4, design D8): runs the outcome loop in-process. */
+    /**
+     * The preserved add-manual-run flow (FR7, UX4, design D8): runs the outcome loop in-process and
+     * exits a stop by its outcome, recording nothing (FR1, FR2 of make-run-headless).
+     */
     private void driveInPlace(
             PipelineDefinition definition,
             AdHocTaskSynthesizer.SynthesizedTask synthesized,
@@ -118,6 +123,18 @@ final class ManualRunDrive {
                 inPlacePersistence,
                 List.of(),
                 LawBinding.workingTree(loaded.workspace().root()));
-        run.loop().run(definition, synthesized.context(), synthesized.initialState(), loaded.workspace(), run.ports());
+        // No branch, no return path: an in-place stop ends the task for good (design D5 of
+        // make-run-headless), and the process still exits 10/11 by the outcome.
+        TaskOutcome outcome = run.loop()
+                .run(
+                        definition,
+                        synthesized.context(),
+                        synthesized.initialState(),
+                        loaded.workspace(),
+                        run.ports(),
+                        null);
+        if (!(outcome instanceof TaskOutcome.Completed)) {
+            throw new RunParkedException(outcome, null);
+        }
     }
 }

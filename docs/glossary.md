@@ -68,12 +68,16 @@ terms) live in `.claude/rules/process-invariants.md`.
   can therefore reconcile its replication for free: resume start and a run's
   terminal boundary. Deliberately not a timer or a daemon — the next instance
   to touch the task is the delivery vehicle for a push an earlier one lost.
-- **Park** — set the task to a waiting tracker status (escalation or a manual
-  checkpoint); **release** — give the claim up without moving the task's status; the reaper
+- **Park** — stop a task for a human (escalation or a manual checkpoint) and
+  record the stop durably: `take` and `serve` record the outcome on the task
+  branch and set a waiting tracker status; `run`, which has no tracker, parks
+  on its branch only — the recorded outcome, no tracker status — and exits 10
+  or 11. Either way any instance resumes from the branch. **Release** — give the claim up without moving the task's status; the reaper
   returns it to Ready once the claim is stale, and only then may any instance take
   over.
 - **Escalation** — handing a task to a human via tracker status, with the
-  findings history attached.
+  findings history attached; in `run`, via exit code 10 and the report on
+  stdout, answered by `--resume --decision`.
 - **Abort fuse** — the bound on infrastructure aborts a task may accumulate
   before it is quarantined: the abort protocol (the handler that releases or
   parks an aborted task) together with its threshold *K*, carried as one
@@ -579,7 +583,7 @@ trusted/task tier split, and the law-root rule.
   spec that provokes a WARN/ERROR no capture observed. *Not:* the log format,
   which is the encoder pattern in `logback.xml` and carries no promise at all.
 - **Operator console** — the factory's terminal output that does not go through
-  the logger: command reports, dialogs, and `--json` renderings. It has one
+  the logger: command reports, the takeover confirmation, and `--json` renderings. It has one
   owner, `ConsoleIO` (implemented by `SystemConsoleIO`), with two paths chosen
   by the reader: the *human path* renders untrusted characters **visibly**
   (`^[`, `^X`, `^?`, `\uXXXX`) while preserving line structure and length, so an

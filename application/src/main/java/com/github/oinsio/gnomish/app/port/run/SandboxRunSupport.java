@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.run;
 
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -122,8 +123,10 @@ public interface SandboxRunSupport {
 
     /**
      * Records a park ({@code Escalated} or {@code Paused}) on the task branch, factory-side over bare
-     * objects, carrying the durable "terminal write pending" marker — the park's intent, written
-     * before the tracker write it precedes (FR10, design D12 of harden-task-branch-contract).
+     * objects. From {@code take} ({@link TrackerWrite#OWED}) the record carries the durable
+     * "terminal write pending" marker — the park's intent, written before the tracker write it
+     * precedes (FR10, design D12 of harden-task-branch-contract); from a manual {@code run} ({@link
+     * TrackerWrite#NONE}) no write follows, so it carries none (design D8 of make-run-headless).
      *
      * <p>Before this existed a container park recorded nothing at all, so the human's escalation
      * answer was read against a branch with no park on it and every return re-parked the task. The
@@ -131,8 +134,9 @@ public interface SandboxRunSupport {
      * disposed (FR17 of harden-task-branch-contract).
      *
      * @param outcome the park to record; {@code Escalated} or {@code Paused}
+     * @param trackerWrite whether a tracker write follows the record; never null
      */
-    void recordPark(TaskOutcome outcome);
+    void recordPark(TaskOutcome outcome, TrackerWrite trackerWrite);
 
     /** The last durably committed state on the task branch (FR17). */
     TaskState readFinalState();

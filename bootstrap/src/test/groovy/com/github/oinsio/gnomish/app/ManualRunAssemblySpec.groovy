@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.AppenderBase
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
@@ -15,12 +13,9 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.*
-import com.github.oinsio.gnomish.status.Activity
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -103,11 +98,9 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         run.ports().judgeVoter().class == CliJudgeVoter
     }
 
-    // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach both the
-    // shared SLF4J renderer (an INFO log line) and the AgentActivityEnricher (the holder's
-    // Executing activity gains live tool detail) — proven end to end against the fake agent
-    // binary's plain-round scenario.
-    def "the wired CLI stage executor's round reaches the renderer and enriches the held activity"() {
+    // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach the shared
+    // SLF4J renderer — proven end to end against the fake agent binary's plain-round scenario.
+    def "the wired CLI stage executor's round reaches the renderer"() {
         given:
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
@@ -115,20 +108,6 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
-        run.holder().updateActivity(new Activity.Executing(Instant.now()))
-
-        // Snapshot the held activity right after each of this test's own log lines lands, so
-        // the mid-round enrichment (before RoundFinished resets it) is observable even though
-        // the assembled AgentActivityEnricher itself is private to ManualRunAssembly.
-        def toolCallsSeenDuringRound = []
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(LoggingAgentProgressListener)
-        def probe = new AppenderBase<ILoggingEvent>() {
-                    protected void append(ILoggingEvent event) {
-                        toolCallsSeenDuringRound << (run.holder().activity().activity() as Activity.Executing).toolCalls()
-                    }
-                }
-        probe.start()
-        logbackLogger.addAppender(probe)
 
         def stage = new StageDefinition(
                 'build', 'purpose', [], [],
@@ -143,8 +122,6 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
             def result = run.ports().executor().execute(request)
             assert result instanceof ExecutionResult.Completed
         }
-        logbackLogger.detachAppender(probe)
-        probe.stop()
 
         then: 'the renderer saw the whole round'
         loggedEvents.any { it.formattedMessage.contains('round started') }
@@ -152,20 +129,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
             it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write')
         }
         loggedEvents.any { it.formattedMessage.contains('round finished') }
-
-        and: 'the enricher had already incremented toolCalls by the time the tool-started line logged'
-        toolCallsSeenDuringRound.max() > 0
-
-        and: 'the enricher cleared currentTool/toolCalls back to their round-start defaults on RoundFinished'
-        (run.holder().activity().activity() as Activity.Executing).currentTool() == null
-        (run.holder().activity().activity() as Activity.Executing).toolCalls() == 0
     }
 
     // FR7, D10, task 9.4: the wired CliJudgeVoter's round reaches the shared renderer too
-    // (judge rounds feed the same log renderer as executor rounds, per design D10) — but the
-    // held activity is never touched, since the enricher only mutates an Executing activity
-    // and a judge round runs under Verifying in production, never Executing.
-    def "the wired CLI judge voter's round reaches the renderer without touching the held activity"() {
+    // (judge rounds feed the same log renderer as executor rounds, per design D10).
+    def "the wired CLI judge voter's round reaches the renderer"() {
         given:
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
@@ -173,8 +141,6 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
                 new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
-        run.holder().updateActivity(new Activity.Executing(Instant.now()))
-        def before = run.holder().activity().activity() as Activity.Executing
 
         def check = new VerifyCheck.Judge(
                 'criteria.md', 'claude-fake-judge-1', [:], 1)
@@ -187,6 +153,5 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         then:
         loggedEvents.any { it.formattedMessage.contains('round started') }
         loggedEvents.any { it.formattedMessage.contains('round finished') }
-        (run.holder().activity().activity() as Activity.Executing).toolCalls() == before.toolCalls()
     }
 }

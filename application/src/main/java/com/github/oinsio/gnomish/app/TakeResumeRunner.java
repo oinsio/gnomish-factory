@@ -21,8 +21,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Two resume entry points mirror the two shapes a park can be resumed from (design D3): {@link
  * #resumeWithoutDecision} for a {@code null}/{@code CHECKPOINT}/{@code INFRA} return, no decision
  * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context the caller's
- * {@link #appendDecision} has already committed when there was a reply to commit — mirroring {@code
- * EscalationResumeDialog#handleResumable}'s exact reset formula.
+ * {@link #appendDecision} has already committed when there was a reply to commit — mirroring {@link
+ * EscalationResume#decide}'s exact reset formula.
  *
  * <p>Kept in sync with {@link TakeContainerResumeRunner}: both resolve the resumed law binding
  * through {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution
@@ -113,8 +113,8 @@ final class TakeResumeRunner {
 
     /**
      * Resumes an {@code ESCALATION} park ({@code AttemptsExhausted} or {@code DecisionNeeded}):
-     * resets {@code attemptsUsed} to 0 with an empty attempt history — {@code
-     * EscalationResumeDialog#handleResumable}'s formula — then runs the engine once. The already
+     * resets {@code attemptsUsed} to 0 with an empty attempt history — {@link
+     * EscalationResume#decide}'s formula — then runs the engine once. The already
      * -collected human reply, when non-blank, is appended by the caller before this is invoked
      * (design D12); an {@code AttemptsExhausted} park may resume on the return alone.
      *

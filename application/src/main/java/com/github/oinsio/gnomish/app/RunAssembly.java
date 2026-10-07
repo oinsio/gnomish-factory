@@ -80,16 +80,15 @@ public interface RunAssembly {
             LawBinding lawBinding);
 
     /**
-     * Builds a standalone {@link DialogConsole} for a resume dialog that runs before any {@link
-     * #assemble} call (design D9, task 4.7 of add-git-workflow): the resume dialogs need the exact
-     * console a live run uses ("same questions, same feel", UX2) without yet having an engine to
-     * hang it off of.
+     * The run's output console for the resume paths that print before any {@link #assemble} call
+     * (design D9, task 4.7 of add-git-workflow): a restated question, a stop render, a completed
+     * task's summary. Output only — a resume never reads its operator (design D4 of
+     * make-run-headless).
      *
-     * @param context the resumed task's identity and decisions, for the {@code status} meta-command
-     * @param state the resumed task's current state, seeding the status snapshot
-     * @return a fresh console wired the way {@link #assemble} wires its own; never null
+     * @return a console over the same {@code ConsoleIO} {@link #assemble} wires its own to; never
+     *     null
      */
-    DialogConsole dialogConsole(TaskContext context, TaskState state);
+    DialogConsole dialogConsole();
 
     /**
      * Returns a copy of this assembly that also fans every engine event into {@code listener} (task

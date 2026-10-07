@@ -47,39 +47,30 @@ import java.util.List;
  * GitModeWorkspaceHygieneSpec} for the regression proof: a real round's commit tree contains only
  * the gnome's own change and {@code .gnomish-task/}.
  *
- * <p>Two boundaries are recorded through {@code GitTaskRepository} and cleaned up through {@code
- * TaskWorktreeCleanup} here, both via the shared {@link GitOutcomeRecorder} (task 4.7): {@code
- * Completed} — a normal return from {@link RunnerOutcomeLoop#run} means the pipeline reached its
- * end, and the worktree's last-persisted {@code state.json} — already durably committed by {@code
- * GitAttemptPersistence} — is read back as the final {@link TaskState} rather than threaded
- * through a return value; and {@code Aborted} — {@link RunnerOutcomeLoop#run} throws {@link
- * AbortedException} carrying the full {@link TaskOutcome.Aborted}, which is recorded and then
- * {@code TaskWorktreeCleanup} unconditionally keeps the worktree for forensics (design D6) — the
- * write itself is safe even though durability just broke, since it targets {@code task.json}
- * (the {@code TaskRepository} seam, design D1), a file the broken {@code AttemptPersistence}
- * round never touches.
- *
- * <p>{@code Escalated}/{@code Paused} are never observed here in a fresh run: {@link
- * RunnerOutcomeLoop} loops every one of them back into the engine in-process via its own resume
- * dialogs (see {@link RunnerOutcomeLoop#dispatch}) until a {@code Completed} or {@code Aborted}
- * terminal is reached, so this class's exhaustive-looking "only these two boundaries" is not an
- * oversight — those two are the only outcomes {@link RunnerOutcomeLoop#run} can ever hand back
- * control for. The EOF exceptions ({@link CheckpointEofException}, {@link EscalationEofException})
- * are deliberately left without a {@code TaskRepository} write:
- * the operator or input stream cut the process off mid-dialog, so the task is left exactly as
- * FR5/NFR-R2 describe a crash — rounds present, no outcome, honestly reported by {@code status}
- * as interrupted.
+ * <p>Every terminal boundary is recorded through {@code GitTaskRepository} and cleaned up through
+ * {@code TaskWorktreeCleanup}, via the shared {@link GitOutcomeRecorder} (task 4.7): {@code
+ * Completed} — the worktree's last-persisted {@code state.json}, already durably committed by
+ * {@code GitAttemptPersistence}, is read back as the final {@link TaskState}; {@code Aborted} —
+ * {@link RunnerOutcomeLoop#run} throws {@link AbortedException} carrying the full {@link
+ * TaskOutcome.Aborted}, which is recorded and the worktree unconditionally kept for forensics
+ * (design D6) — the write is safe even though durability just broke, since it targets {@code
+ * task.json} (the {@code TaskRepository} seam, design D1), a file the broken {@code
+ * AttemptPersistence} round never touches; and a stop — {@code Escalated} or {@code Paused},
+ * returned by the loop — is recorded as a park with the worktree kept for the resume, then the run
+ * exits through {@link RunParkedException} (design D8 of make-run-headless).
  *
  * <p>Kept in sync with {@link ContainerGitModeRunner}: both run the SAME manual fresh-run recipe
  * — harden the clone's branches, print the banner naming where the work lives (UX1), bind and peel
  * the law through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through
  * {@code GitFreshTaskSupport#resolveManualBase} and create the task through {@code
  * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
- * the engine under the same binding — and both observe only the {@code Completed} and
- * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
+ * the engine under the same binding — and both settle the {@code Completed}, {@code Aborted} and park
+ * terminals through the mode's own outcome/cleanup ordering: both record a park outcome at the
+ * terminal boundary and keep the workspace for the resume (design D6 of make-run-headless). The
  * media differ (host worktree here, task environment there); the recipe and its order must not.
  *
- * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow; FR9 of add-project-registry.
+ * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow; FR9 of add-project-registry; FR1, FR2, FR10
+ * of make-run-headless.
  *
  * @param assembly the shared engine/ports assembly, reused from the in-place path with a
  *     git-backed {@code AttemptPersistence}
@@ -137,26 +128,35 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
         var assembled = assembly.withHostGitPush(git.midRoundPush())
                 .assemble(order, context, initialState, persistence, List.of(), law.binding());
 
+        var returnPath = new TerminalOutcomeRender.ReturnPath(cloneDir, taskId);
+        TaskOutcome outcome;
         try {
-            assembled.loop().run(definition, context, initialState, workspace, assembled.ports());
+            outcome = assembled.loop().run(definition, context, initialState, workspace, assembled.ports(), returnPath);
         } catch (AbortedException aborted) {
             // aborted.outcome() is never null here: RunnerOutcomeLoop#run always throws the
             // TaskOutcome.Aborted-carrying constructor. The write itself is safe even though
             // durability just broke: it targets task.json (the TaskRepository seam, design D1),
             // a file the broken AttemptPersistence round never touches.
-            TaskOutcome.Aborted outcome = aborted.outcome();
-            if (outcome != null) {
-                GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
+            TaskOutcome.Aborted abortedOutcome = aborted.outcome();
+            if (abortedOutcome != null) {
+                GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, abortedOutcome);
             }
             throw aborted;
         }
 
-        // A normal return means the pipeline reached Position.PipelineEnd (Completed): the
-        // engine's last persist() call already committed that terminal state.json durably, so
-        // it is read back here rather than threaded through RunnerOutcomeLoop's void return.
-        TaskOutcome.Completed completed = new TaskOutcome.Completed(
-                git.store().readRecordedState(worktree).orElseThrow(() -> AbsentEnvelope.state(taskId, worktree)));
-        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, completed);
+        if (outcome instanceof TaskOutcome.Completed) {
+            // The pipeline reached Position.PipelineEnd: the engine's last persist() call already
+            // committed that terminal state.json durably, so it is read back from the medium the
+            // recovery paths read rather than taken from the in-memory outcome.
+            TaskOutcome.Completed completed = new TaskOutcome.Completed(
+                    git.store().readRecordedState(worktree).orElseThrow(() -> AbsentEnvelope.state(taskId, worktree)));
+            GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, completed);
+            return;
+        }
+        // A stop (Escalated/Paused, design D8 of make-run-headless): the park is recorded on the
+        // branch — the worktree kept by the outcome-driven disposal — before the process exits 10/11.
+        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
+        throw new RunParkedException(outcome, returnPath);
     }
 
     /** The deterministic task branch name (FR2): {@code gnomish/<sanitized taskId>}. */

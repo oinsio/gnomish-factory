@@ -11,13 +11,10 @@ import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.status.CompositeEngineEventListener;
-import com.github.oinsio.gnomish.status.ConsoleStatusRenderer;
 import com.github.oinsio.gnomish.status.LoggingEventListener;
 import com.github.oinsio.gnomish.status.MdcEventListener;
-import com.github.oinsio.gnomish.status.SnapshotActivityTracker;
 import com.github.oinsio.gnomish.status.StatusEventListener;
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder;
-import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -75,16 +72,11 @@ final class RunAssembler {
         PipelineDefinition definition = order.definition();
         var runLaw = RunLaw.open(lawBinding);
         var law = runLaw.freeze(definition);
-        var holder = new StatusSnapshotHolder(
-                initialState, AttemptLimitResolver.resolve(definition, initialState.position()));
-        var statusRenderer = new ConsoleStatusRenderer(holder, context, new StatusTextRenderer());
-        var activityTracker = new SnapshotActivityTracker(holder, assembly.systemClock);
-        var console = new DialogConsole(assembly.systemConsoleIO, statusRenderer, activityTracker);
+        var holder = new StatusSnapshotHolder(initialState);
+        var console = new DialogConsole(assembly.systemConsoleIO);
 
-        List<EngineEventListener> listeners = new ArrayList<>(List.of(
-                new StatusEventListener(holder, assembly.systemClock),
-                new MdcEventListener(),
-                new LoggingEventListener()));
+        List<EngineEventListener> listeners = new ArrayList<>(
+                List.of(new StatusEventListener(holder), new MdcEventListener(), new LoggingEventListener()));
         if (assembly.extraListener != null) {
             // Task 6.1 of add-claim-heartbeat: the take run's HeartbeatProgress observes the same
             // event stream so each beat carries a live stage/attempt line. Null on every other path.
@@ -100,7 +92,7 @@ final class RunAssembler {
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
         var ports = new EnginePorts(
-                ExecutorAdapterSelector.stageExecutor(holder, assembly, childEnv, law),
+                ExecutorAdapterSelector.stageExecutor(assembly, childEnv, law),
                 assembly.checks.builtinRunner(sandbox),
                 assembly.checks.commandRunner(childEnv, sandbox),
                 assembly.checks.externalCheckClient(runLaw, RunCheckRunContext.of(context, holder)),
@@ -112,7 +104,7 @@ final class RunAssembler {
                 assembly.threadSleeper,
                 sandbox == null ? AttemptDelivery.assumedDelivered() : sandbox.attemptDelivery());
 
-        var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole, java.time.Clock.systemUTC());
-        return new Run(loop, ports, holder);
+        var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole);
+        return new Run(loop, ports);
     }
 }

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
@@ -34,11 +32,11 @@ final class RequiredTaskJson {
      * @param worktree the task worktree whose {@code HEAD} carries the envelope
      * @param taskId the task whose envelope is read; for error reporting
      * @param event the lifecycle write this read serves; for error reporting
-     * @return the branch's current {@code task.json} as its raw wire DTO
+     * @return the branch's current {@code task.json}: the committed text and its raw wire DTO
      * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's own
      *     diagnosis of why
      */
-    static TaskJsonDto atTipOf(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+    static CommittedTaskJson atTipOf(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
         GitCommandResult result =
                 new GitShowTip(runner, worktree, GitObjects.HEAD).showAtTip(EnvelopePaths.TASK_JSON_PATH);
         if (result.exitCode() != 0) {
@@ -49,6 +47,6 @@ final class RequiredTaskJson {
                             + result.exitCode(),
                     result.stderr());
         }
-        return TaskJsonMapper.readDto(result.stdout());
+        return CommittedTaskJson.parse(result.stdout());
     }
 }

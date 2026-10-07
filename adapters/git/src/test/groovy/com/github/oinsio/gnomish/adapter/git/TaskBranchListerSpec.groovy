@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
+import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.TaskListRow
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -258,13 +259,13 @@ exec git "\$@"
         given: 'a delivered branch, a freshly created one, an in-flight one and a parked one'
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
         createLocalTask('DELIVERED-1')
-        repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')
         createTaskAtHead(registeredClone, 'FRESH-1')
         createLocalTask('FLIGHT-1')
         recordRound('FLIGHT-1')
         createLocalTask('PARKED-1')
-        repository.recordOutcome('PARKED-1', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
+        repository.recordOutcome('PARKED-1', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
 
         when:
         def rows = lister.list(cloneDir)
