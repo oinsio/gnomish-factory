@@ -48,8 +48,8 @@ A `TaskRepository` application-layer port SHALL own task-scoped lifecycle writes
 - **THEN** the lifecycle write fails without force and no existing commit is lost
 
 ### Requirement: Outcome protocol in task.json
-`outcome` SHALL be null while a visit is in progress and SHALL be reset to null by the commit that begins each resumed visit — the decision commit, the approval commit, or the resumed commit — never by a later round's commit and never left to the next terminal write. These three SHALL be the only writers of `outcome: null`. `lastEscalation` SHALL be kept separately from `outcome` so the last question/answer stays visible after resume; it is display data and SHALL drive no recovery decision.
-<!-- implements FR7, FR8 of make-checkpoint-gate-durable -->
+`outcome` SHALL be null while a visit is in progress and SHALL be reset to null by the commit that begins each resumed visit — the decision commit, the approval commit, or the resumed commit — never by a later round's commit and never left to the next terminal write. These three SHALL be the only writers of `outcome: null`. Each of the three SHALL also remove `.gnomish-task/decisions/` in that same commit (a no-op where the directory is absent), so a consumed decision request leaves the tip with the transition that consumed it; the removal is hygiene — no reader SHALL depend on it, since a request is live only under its round's token (see the decision-file protocol). `lastEscalation` SHALL be kept separately from `outcome` so the last question/answer stays visible after resume; it is display data and SHALL drive no recovery decision.
+<!-- implements FR7, FR8, FR14 of make-checkpoint-gate-durable -->
 <!-- implements FR5 of add-git-workflow -->
 
 #### Scenario: Parked and interrupted are distinguishable
@@ -63,6 +63,46 @@ A `TaskRepository` application-layer port SHALL own task-scoped lifecycle writes
 #### Scenario: A reply-less return clears the park
 - **WHEN** a task parked as `escalated(AttemptsExhausted)` is returned without a reply, picked up, and the process dies before the next round commits
 - **THEN** the tip's `task.json` outcome is null and `state.json` carries the reset attempt counter, so the next pickup resets nothing a second time
+
+#### Scenario: The consumed request leaves with the answer
+- **WHEN** a container-mode task parked on a decision request is answered
+- **THEN** the decision commit carries the answer, the reset state and no `.gnomish-task/decisions/` entry, and the tip before it still carries the request
+
+### Requirement: State directory with one writer per file
+`.gnomish-task/` at the working-copy root SHALL hold exactly: `task.json` (written only by `TaskRepository`: version, taskId, title, body, createdAt, baseCommit, decisions[] {text, author?, stage?, at?}, outcome — null | completed | paused{passedStage} | escalated{report} | aborted{failedAt, cause} — and lastEscalation, whose `cannotExecute` kind additionally carries the denials of the round that could not execute), `state.json` (its initial version written once by `TaskRepository` as part of the STARTED commit; every later write only by the git `AttemptPersistence`: version, position, attemptsUsed, attempts[] {round, result, startedAt, stop, checks[], denials[], executorUsage, judgeUsage}, totals — inner forms as in status-report v1), `attempts/<stage>/<round>/trace.jsonl` (one JSON line per tool call; the path names the round within one visit of the stage — a repeated visit overwrites it at the tip and git history keeps every version), and — in git modes — `decisions/<stage>-a<attempt>-<token>.json` (written only by the gnome; the single gnome-writable path under `.gnomish-task/`, named by the round token per the decision-file protocol).
+<!-- implements FR13 of make-checkpoint-gate-durable -->
+<!-- implements FR3 of add-git-workflow -->
+<!-- implements FR23 of add-sandbox-core -->
+<!-- implements FR4 of fix-denial-report-attachment -->
+<!-- implements FR3 of harden-task-branch-contract -->
+<!-- implements FR2 of fix-denial-attribution-durability -->
+
+#### Scenario: History of past stages lives in git
+- **WHEN** the task advances to the next stage
+- **THEN** `state.json` contains only the current stage's attempts; earlier rounds remain in the file's git history
+
+#### Scenario: Decision file keeps the one-writer rule
+- **WHEN** a round leaves a decision request in `.gnomish-task/decisions/`
+- **THEN** the gnome is that file's only writer and every other `.gnomish-task/` path keeps its single factory-side writer
+
+#### Scenario: The request is named by its round
+- **WHEN** two rounds of the same stage and attempt number run in one task — an answered question restarts the stage, or a killed round is retried
+- **THEN** their decision paths differ by the round token, and the later round's path is not present on the tip it opens on
+
+### Requirement: Gnome commits within a round
+Gnome commits inside a round SHALL be allowed (encouraged via stage instructions, using plain git); the adapter's commit closes the round. Boundary verification SHALL run factory-side against harvested refs in sandboxed mode: history rewrite is refused by the fast-forward-only harvest itself; `.gnomish-task/` SHALL be untouched by the gnome between tips — with exactly one carve-out, the current round's token path `decisions/<stage>-a<attempt>-<token>.json` (FR23 of add-sandbox-core); a decision file under any other name is a violation like any other `.gnomish-task/` write; the in-box HEAD check before the snapshot commit is advisory only. In host mode the existing worktree checks (HEAD on the task branch, previous tip an ancestor, `.gnomish-task/` untouched) remain. A violation breaks durability: persist SHALL throw, aborting the task, with the evidence kept on the branch and in the kept environment.
+<!-- implements FR16 of make-checkpoint-gate-durable -->
+<!-- implements FR12 of add-git-workflow -->
+<!-- implements FR21, FR23 of add-sandbox-core -->
+<!-- implements FR13 of harden-logging-observability -->
+
+#### Scenario: Decision request is the one permitted state-directory write
+- **WHEN** a gnome commit adds the current round's token path under `.gnomish-task/decisions/` and touches nothing else under `.gnomish-task/`
+- **THEN** boundary verification passes; any other `.gnomish-task/` change still aborts
+
+#### Scenario: A request under another round's name is a violation
+- **WHEN** a gnome commit adds a file under `.gnomish-task/decisions/` whose name is not the current round's token path
+- **THEN** boundary verification fails as a `.gnomish-task/` modification
 
 ### Requirement: State-file JSON contract v1
 `task.json` and `state.json` SHALL carry `"version": 1` and follow status-report v1 conventions (camelCase, ISO-8601 UTC, millisecond durations, sealed types via `"type"`). `state.json`'s position SHALL be `atStage(stage)` | `awaitingApproval(stage)` | `pipelineEnd`; each recorded attempt SHALL carry a `stop` object — `none` | `decisionNeeded(question, options)` | `cannotVerify(check, reason, details)` — with the field absent read as `none`. Both additions are pre-release amendments under version 1: no released branch carries either token, and a build older than this amendment reading a newer tip fails closed as an unreadable envelope rather than resuming past the gate. Readers SHALL ignore unknown fields; an unknown version SHALL refuse resume and the inspection commands (`status`/`usage`) alike, with a clear error naming the file and the unsupported version. Status-report DTOs SHALL NOT be reused; a contract test SHALL hold the StatusReport rendered from state files equivalent to one rendered from live events, anchored by `status-report-v1.reference.json`.

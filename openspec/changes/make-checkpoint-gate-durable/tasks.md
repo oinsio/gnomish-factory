@@ -2,8 +2,10 @@
 
 Sequenced after `make-run-headless` is applied and archived (its `EscalationResume.decide`
 and the headless `resumePaused` arms are callers here); before `add-stage-iteration` is
-applied. Root `./gradlew check` green after §2, §4 and §6. Every task names its consumers and
-its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
+applied. Root `./gradlew check` green after §2, §4, §7 and §6. Every task names its consumers and
+its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`). §7 (the round
+token, design D10) is implemented before task 4.3 is ticked: 4.3's container E2E features
+(`ContainerModeResumeE2ESpec`, `SandboxLifecycleZombieE2ESpec`) stay red until it lands.
 
 ## 1. Domain: the gate and the stop on the record
 
@@ -193,10 +195,17 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
       "A recorded position never implies an authorisation not yet recorded; gates are positions;
       the verdict rides the round record" — with the canon and the comparable systems in two
       sentences each, the disposition table row for `AwaitingApproval`, and the "See also".
+      Plus the D10 corollary under "Consumed streams": "a reader of a medium that keeps the
+      past judges liveness by identity, never by presence — the request carries the round
+      token, the receiver matches it, deletion is hygiene" (task token, Correlation
+      Identifier, fencing token; SQS delete-after-process as the hygiene precedent).
 - [ ] 6.2 `.claude/rules/crash-consistency.md`: checklist item 12 "No write implies an
       authorisation a later write grants" with the question to ask of every earlier step.
 - [ ] 6.3 `docs/glossary.md` (Crash consistency): *gate*, *awaiting approval*, *approval* (the
-      pivot write), *resumed write*. The *Branch shape* entry carries no shape list (it defers
+      pivot write), *resumed write*, *round token* (the identity of a container-mode round —
+      the branch tip it opened on — that names its decision request and its snapshot; *Never:*
+      "attempt" for it, which is the counted try and repeats). The *Attempt* entry notes that
+      its number repeats across visits. The *Branch shape* entry carries no shape list (it defers
       to the `task-branch-contract` table and ADR 0003), so its *Never:* clause gains only:
       `Paused` for the `AwaitingApproval` shape (that name belongs to a `TaskOutcome` variant).
 - [ ] 6.4 `openspec/changes/add-stage-iteration/design.md`: a review note (design D9) naming the
@@ -206,4 +215,74 @@ its old-way sweep so an `apply` sub-agent checks a list (`implementation.md`).
 - [ ] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, and the `take` section of
       `docs/guides/operator-guide.md`): a checkpoint reads
       "awaiting approval"; `--resume` approves; a return-to-ready approves.
-- [ ] 6.6 Gate: root `./gradlew check` green; record M1–M4 in this task.
+- [ ] 6.6 Gate: root `./gradlew check` green; record M1–M6 in this task.
+- [ ] 6.7 Layering of the overlapping delta (`delta-specs.md`): `openspec/changes/
+      add-pipeline-entry-precondition/specs/git-task-persistence/spec.md` MODIFIES "State
+      directory with one writer per file" too and is sequenced after this change — open its
+      requirement with the `Layered on … as modified by make-checkpoint-gate-durable (sequenced
+      before this change)` preamble, rewrite its text over this change's delta (token path,
+      `stop` field), and add the sequencing line to its proposal. `add-decision-arbiter`'s
+      delta changes the request's content schema, not its path — add a one-line note to its
+      design that the path carries the round token.
+
+## 7. Round token (design D10; FR13–FR16, NFR-R4, G4)
+
+- [ ] 7.1 `RoundToken` value type (`adapters/git`; a commit id, blank or non-hex refused) and
+      the per-run `RoundTokenRef` (the `AttemptCommitRef` shape; `required()` throws when no
+      round opened). `SandboxRoundEnvironmentSource.openRound` reads `refs/heads/<branch>`
+      through the runner, records the token, and opens
+      `BranchDecisionFile.open(environment, key, token)`; `HarvestedBoundaryCheck.decisionPath(key,
+      token)` becomes the one spelling `decisions/<stage>-a<attempt>-<token>.json`. Delete the
+      token-less `decisionPath(AttemptKey)` and `open(environment, key)` — no caller may build the
+      old name. Consumers (design D7 row): the handle, `verify`'s carve-out, the snapshot
+      subject (7.2), persistence (7.3). Old-way sweep: `grep -rn "decisionPath(\|DECISIONS_DIR\|
+      -a\" + " */src/main adapters/*/src/main` — every hit listed and routed. Verify
+      `BranchDecisionFileSpec` (reads exactly the token path; a same-key file under another
+      token is not read), `HarvestedBoundaryCheckSpec` (token path passes; another token's
+      path is a violation), `SandboxRoundEnvironmentSourceSpec` (the env fragment names the
+      token path; the ref holds the open tip).
+- [ ] 7.2 Resume path (FR15): `ServiceCommitMessages.snapshot(stage, round, token)` →
+      `gnomish: snapshot <stage>#<round> <token>`; `SnapshotTipCheck` parses the token and reads
+      the request from the snapshot tree (`git show <snapshot>:<token path>`, factory clone,
+      absent → none) into `PendingVerification(attemptCommit, stage, round, Optional<String>
+      request)`; `ResumeVerificationStageExecutor` maps a present request through the shared
+      `DecisionFileReader` to `DecisionNeeded` (same empty telemetry), none → `Completed` as
+      today. Verify `SnapshotTipCheckSpec` (token parsed; malformed subject refused; request
+      read; none), `ResumeVerificationStageExecutorSpec` (DecisionNeeded with the snapshot's
+      question; Completed without), and the kill-point row `RequestSnapshotKillPoints` in
+      `TransitionKillPointSpec` (container: kill after the snapshot carrying a request, before
+      the state commit → the pickup escalates with that question, no agent round; second pickup
+      no-op; then an answer, and the next round's read is empty).
+- [ ] 7.3 `EnvironmentAttemptPersistence` takes the token from `RoundTokenRef` for the
+      carve-out (`verify(taskId, openTip, snapshot, key, token)`) and as the diff base; remove
+      the `previousTip` field and the `currentTip()` read at construction (one owner; confirm
+      the constructor at `ContainerRunSupport.java:126-135` builds persistence and the round
+      source over the same ref). The `GitAttemptPersistence ↔ EnvironmentAttemptPersistence`
+      javadoc states why the host end is unchanged (design D6). Verify
+      `EnvironmentAttemptPersistenceSpec`: carve-out by token; the diff base is the open tip.
+- [ ] 7.4 The three outcome-clearing writes remove `.gnomish-task/decisions/` in their commit
+      (FR14): `GitTaskRepository` (worktree: `git rm -r --ignore-unmatch`, staged into the same
+      commit) and `GitObjectsTaskRepository` (tree edit dropping the entry) for
+      `appendDecision`, `approveCheckpoint`, `resumeFrom`; extend the 2.5 pair invariant with
+      the removal. Verify both repository specs: the tip after each write holds no `decisions/`
+      entry, the tip before it still does; a tip without the directory writes unchanged.
+- [ ] 7.5 Fixtures and E2E (M5): confirm the fake agent writes only to `$GNOMISH_DECISION_FILE`
+      (`fake-agent.sh:147-149`; never a spelled name); `ContainerModeResumeE2ESpec:153-156`
+      asserts the request under `decisions/work-a0-<token>.json` (match by prefix and the
+      snapshot subject's token, not a literal), and both `ContainerModeResumeE2ESpec` and
+      `SandboxLifecycleZombieE2ESpec` pass through the `--decision` answer; tick 4.3 after.
+- [ ] 7.6 Gates (design D7): `DecisionPathOwnerSpec` (`:bootstrap`): `DECISIONS_DIR` and
+      `decisionPath(` in `*/src/main` only in `EnvelopePaths`, `HarvestedBoundaryCheck`,
+      `BranchDecisionFile`, `FactoryOwnedPaths`, `SnapshotTipCheck`, allowlisted by file,
+      asserted reached. `RoundTokenIdentitySpec` (`:bootstrap`, bare origin, real adapters,
+      fake agent asking): the request's file name token, the snapshot subject's token and the
+      commit the round opened on are one value; after `appendDecision` the next round's handle
+      names a path the tip does not hold. `ConsumedOutcomeIdentitySpec` (5.3) gains "no
+      `decisions/` entry after each continuation". PIT 100% on the touched classes
+      (`verification-scope.md`: `-PpitScope` over 7.1–7.4's classes).
+- [ ] 7.7 Javadoc truth: `BranchDecisionFile` and `HarvestedBoundaryCheck` ("stale files are
+      self-excluding" → "a request is live only under its round's token"), `AttemptKey`
+      ("monotonic" → "unique within one visit of a stage; the round token is the identity
+      across visits"), `TraceLineWriter` ("every stage attempt gets its own directory" → "the
+      path names the round within one visit; a repeated visit overwrites at the tip, history
+      keeps every version" — proposal NG6). Record the four diffs in this task.

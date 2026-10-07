@@ -37,6 +37,22 @@ GitHub Actions) keeps the wait inside the same write as the completion, or makes
 of the next step. None of them has a post-mortem of a gate skipped after a restart; systems
 that write it this way do not produce the bug class.
 
+A third defect, found on 2026-10-07 by the implementation of this change, shares the same
+cause and is made reachable by it. In container mode the gnome's question has a second copy
+beside the round record: the decision file `.gnomish-task/decisions/<stage>-a<attempt>.json`,
+which the round's snapshot commit carries onto the branch and nothing removes until the
+`Completed` cleanup. The human's answer resets the stage to attempt 0, so the next round has
+the same name; the next box clones a tip that still carries the old file, reads it as a new
+question, and the task parks again — after every answer, forever. The name was meant to make
+stale files "self-excluding", but the pair (stage, attempt) is reset by design: by an answer,
+by advancement, by a start of stage, by a killed round's retry; a stage re-entered through
+pipeline routing will repeat it routinely. The reader asks "is the file there?" of a medium
+that keeps everything — the discriminator that a per-round temp directory supplied by being
+deleted was lost when the transport moved onto the branch. The canon's answer is one
+mechanism: the request carries an identity minted by the orchestrator that no later round
+repeats (Step Functions' task token, EIP's Correlation Identifier, Kleppmann's fencing token),
+the receiver accepts only the current identity, and deletion is hygiene, never the judge.
+
 ## What Changes
 
 - **ADDED**: a third pipeline position, *awaiting approval* — the passing round of a `manual`
@@ -64,8 +80,21 @@ that write it this way do not produce the bug class.
   outcome being recorded, never from the `lastEscalation` carried over.
 - **MODIFIED**: `status` renders the gate ("awaiting approval after `<stage>`") and never a
   stale park.
-- **ADDED**: ADR 0003 gains the principle; `crash-consistency.md` gains a checklist item; the
-  glossary gains *gate*, *awaiting approval*, *approval*, *resumed write*.
+- **ADDED**: the *round token* — a round's identity, minted by the factory when the round
+  opens and repeated by no later round of the task; in container mode the decision request is
+  named by it and read only under it.
+- **MODIFIED**: the decision-file protocol in git modes — the path the gnome is given carries
+  the round token; the adapter reads exactly that path and nothing else, so a request carried
+  over on the branch from any earlier round is not a request.
+- **MODIFIED**: the three outcome-clearing writes (decision, approval, resumed) remove the
+  `decisions/` directory in the same commit — the consumed request leaves the tip with the
+  transition that consumed it.
+- **MODIFIED**: an interrupted verification resumed from a snapshot that carries the round's
+  decision request re-raises that request instead of reporting the round `Completed`.
+- **ADDED**: ADR 0003 gains the principle and its corollary for readers of a medium that keeps
+  the past (liveness by identity, never by presence); `crash-consistency.md` gains a checklist
+  item; the glossary gains *gate*, *awaiting approval*, *approval*, *resumed write*, *round
+  token*.
 
 ## Capabilities
 
@@ -82,9 +111,13 @@ None.
   `AwaitingApproval`), "One recovery owner per shape" (its owner), new requirement "A recorded
   position never implies an authorisation not yet recorded".
 - `git-task-persistence`: "Task lifecycle port" (approval and resumed writes), "Outcome
-  protocol in task.json" (three writers of `outcome: null`), "State-file JSON contract v1"
-  (new tokens, version stays 1), "One logical transition, one commit" (the gate and the
-  approval as transitions), "Denial cursor rides the escalation write" (own report only).
+  protocol in task.json" (three writers of `outcome: null`; each removes `decisions/`),
+  "State-file JSON contract v1" (new tokens, version stays 1), "One logical transition, one
+  commit" (the gate and the approval as transitions), "Denial cursor rides the escalation
+  write" (own report only), "State directory with one writer per file" (the decision path
+  carries the round token), "Gnome commits within a round" (the carve-out names that path).
+- `agent-executor`: "Decision-file protocol" (the path carries the round token; only that
+  path is read; a resumed interrupted verification re-raises the snapshot's request).
 - `tracker-take`: "Escalation parks and exits" (a returned checkpoint is approved before the
   run continues; a return without a reply writes the reset), "Any instance can pick up a
   returned task" (the approval is on the branch, not in the picker's memory).
@@ -101,6 +134,9 @@ None.
 - G2: a consumed outcome never survives the transition that consumed it; the attempt budget a
   resume grants is granted once, durably.
 - G3: the compiler, not a convention, keeps every reader of a position aware of the gate.
+- G4: a decision request written by an earlier round is never read as the current round's,
+  on any medium and however the attempt counter moves (answer, advancement, retry,
+  re-entry).
 
 ## Non-Goals
 
@@ -111,6 +147,13 @@ None.
   position names its stage, which is all this change needs.
 - NG3: a human-facing approval UI beyond the existing return-to-ready and `--resume`.
 - NG4: changing how `AttemptsExhausted` or `CannotExecute` recover — both are correct today.
+- NG5: a monotonic round sequence number persisted in `state.json` — it would need a commit
+  at round open, a new durable step with its own kill windows; the branch tip at round open
+  is already an identity no later round repeats.
+- NG6: giving the trace path `attempts/<stage>/<round>/trace.jsonl` the round's identity — a
+  repeated round overwrites the previous trace at the tip, but git history keeps every
+  version and no reader at the tip exists; the javadoc claim is corrected here, the path is
+  left for `add-round-identity` if a tip reader ever appears.
 
 ## Users & Scenarios
 
@@ -121,6 +164,8 @@ None.
 - U3: **A maintainer** reads `status` of a task that crashed twice mid-stage: the attempt
   counter shows the attempts actually spent, and the outcome field is null, not a park from
   two visits ago.
+- U4: **An operator** answers a container-mode task's question. The next round runs with the
+  answer; it does not park again on the question just answered.
 
 ## Requirements
 
@@ -162,6 +207,21 @@ None.
   and "re-deliver the park" as its recovery; the classifier's facts SHALL carry the position.
 - FR12: `status` (text and JSON) SHALL render a gate as "awaiting approval after `<stage>`"
   and SHALL show `outcome: null` for a task whose park was consumed.
+- FR13: every container-mode round SHALL be identified by a *round token* minted by the
+  factory when the round opens — the task branch's tip commit at that moment — that no later
+  round of the task repeats; the decision path handed to the gnome SHALL be
+  `.gnomish-task/decisions/<stage>-a<attempt>-<token>.json`, and the adapter SHALL read
+  exactly that path after the round: a file under any other name, however it came to be on
+  the tip, SHALL change nothing.
+- FR14: the three outcome-clearing writes (`appendDecision`, the approval, the resumed write)
+  SHALL remove `.gnomish-task/decisions/` in the same commit, on both media (a no-op where the
+  directory is absent).
+- FR15: an interrupted verification resumed from a snapshot commit SHALL re-raise the
+  decision request that snapshot carries under the round's token as `DecisionNeeded`, read
+  from the snapshot's tree, never from a working copy; a snapshot carrying none SHALL resume
+  as `Completed`, as today.
+- FR16: the harvested boundary carve-out SHALL name the token path and nothing else under
+  `.gnomish-task/`.
 
 ### Non-Functional Reliability
 
@@ -173,6 +233,10 @@ None.
 - NFR-R2: the approval and the resumed write SHALL be idempotent: repeated on a tip that no
   longer matches, they refuse and change nothing.
 - NFR-R3: PIT stays at 100% in every touched module.
+- NFR-R4: a decision file of any name left on the tip by an earlier round SHALL change
+  nothing on any pickup — answered, returned without a reply, retried after a kill, or
+  re-entered — and the kill window "after the snapshot carrying a request, before the state
+  commit" SHALL re-raise that request without re-running the round.
 
 ### Non-Functional Observability
 
@@ -202,6 +266,11 @@ None.
 - M3: `ResumeMatrixSpec`'s "a post-pause resume starts at the next stage" is rewritten to pass
   through the approval; `TakeResumeRunnerWithoutDecisionSpec` asserts the resumed commit.
 - M4: a `status --json` document for a resumed-then-killed task shows `outcome: null`.
+- M5: `ContainerModeResumeE2ESpec` and `SandboxLifecycleZombieE2ESpec` green through the
+  `--decision` answer path, with the stale-file scenario the fake agent plays today.
+- M6: `grep -rn "decisionPath(\|DECISIONS_DIR" */src/main adapters/*/src/main` returns the
+  allowlisted owner files only; the identity spec shows the request's name, the snapshot
+  subject and the round's open tip to be one value.
 
 ## Impact
 
@@ -210,7 +279,14 @@ None.
   `BranchShape`/`BranchTipFacts`.
 - `adapters/git`: `GitTaskRepository`, `GitObjectsTaskRepository`,
   `PushBestEffortTaskLifecycleStore`, `StateJsonMapper`/`StatePositionDto`/`StateAttemptDto`,
-  `BranchTipFactsReader`, `TaskBranchLister`, `TaskJsonMapper` (outcome clearing).
+  `BranchTipFactsReader`, `TaskBranchLister`, `TaskJsonMapper` (outcome clearing); for the
+  round token: `BranchDecisionFile`, `HarvestedBoundaryCheck`, `SandboxRoundEnvironmentSource`,
+  `EnvironmentRoundSnapshot`, `EnvironmentAttemptPersistence`, `ServiceCommitMessages`,
+  `SnapshotTipCheck`, `PendingVerification` (`:application`, port), both repositories
+  (`decisions/` removal).
+- `adapters/agent`: `ResumeVerificationStageExecutor` (re-raises the snapshot's request).
+- `:test-fixtures`: the fake agent's `decision-then-plain` scenario (reads the path from
+  `$GNOMISH_DECISION_FILE`, never a spelled name).
 - `:application`: `TaskRepository` port, `ResumeMechanics` and both mechanics,
   `GitResumeContinuation`, `ContainerResumeOutcomes`, `TakeResumeRunner`,
   `TakeContainerResumeRunner`, `TakeDecisionResume`, `TakeLoadedBranchRoutes`,
@@ -223,7 +299,13 @@ None.
 - Docs: `docs/adr/0003-crash-consistency.md`, `.claude/rules/crash-consistency.md`,
   `docs/glossary.md`, `openspec/changes/add-stage-iteration/design.md` (review note).
 - Declared sync pairs touched: `GitResumeContinuation ↔ ContainerResumeOutcomes`,
-  `TakeResumeRunner ↔ TakeContainerResumeRunner`, the host/container lifecycle repositories.
+  `TakeResumeRunner ↔ TakeContainerResumeRunner`, the host/container lifecycle repositories,
+  `DecisionFileTransport ↔ BranchDecisionFile` (read semantics diverge by design: a per-round
+  temp file on the host, a token-named branch path in the container).
+- Active changes whose deltas this change layers under: `add-pipeline-entry-precondition`
+  (also MODIFIES "State directory with one writer per file" — sequenced after this change,
+  its delta gains the layered preamble), `add-decision-arbiter` (changes the request's
+  content schema, not its path — informational note).
 
 ## Open Questions
 
@@ -231,3 +313,6 @@ None.
   stage, so an approval meant for one visit cannot open the gate after a later retry of the
   same stage? Deferred: a `manual` stage that passed does not retry, so the stage name is the
   key today; revisit with `add-stage-iteration`.
+- Q2: should the host transport adopt the round token too, so both media share one
+  decision-file contract? Deferred: the host's per-round temp file is deleted after the read
+  and has no defect; unifying is a transport change of its own.
