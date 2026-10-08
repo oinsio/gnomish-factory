@@ -328,8 +328,9 @@ accepted.
 ## See also
 
 - `.claude/rules/crash-consistency.md` — the checklist every new multi-step
-  transition passes; items 12 and 13 carry the gate rule and the
-  liveness-by-identity corollary.
+  transition passes; items 12–14 carry the gate rule, the
+  liveness-by-identity corollary and the recovery-through-the-live-parse
+  corollary.
 - `docs/glossary.md` — branch shape, tracker shape, sweep universe, recovery
   owner, claim epoch, intent/receipt, quarantine, gate, awaiting approval,
   approval, resumed write, round token.
