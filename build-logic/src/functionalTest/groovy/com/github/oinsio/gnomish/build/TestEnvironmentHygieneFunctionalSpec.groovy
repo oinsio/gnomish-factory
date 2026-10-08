@@ -12,7 +12,9 @@ import spock.lang.TempDir
  * Behavioral verification of {@code TestEnvironmentHygiene} (FR22, M10, design D14 of
  * make-checkpoint-gate-durable): a build launched with {@code GNOMISH_DECISION_FILE} in its
  * environment — as a build run from inside a gnome's round is — forks test JVMs and PIT minions
- * that do not see it, while a {@code GNOMISH_*} variable the build sets itself still arrives.
+ * that do not see it, while a {@code GNOMISH_*} variable the build sets itself still arrives, and
+ * so do the machine's tooling variables of the launching process (scenario "The machine's tooling
+ * variables survive").
  *
  * <p>The miniature module applies the real {@code library-conventions} (hence the real {@code
  * test-conventions}) over the repository's own catalog and {@code build-checks}, as {@code
@@ -25,6 +27,8 @@ class TestEnvironmentHygieneFunctionalSpec extends Specification {
 
     static final String DECISION_FILE = 'GNOMISH_DECISION_FILE'
     static final String BUILD_OWNED = 'GNOMISH_BUILD_OWNED'
+    static final String RYUK_DISABLED = 'TESTCONTAINERS_RYUK_DISABLED'
+    static final String DOCKER_CONFIG = 'DOCKER_CONFIG'
 
     @TempDir
     Path projectDir
@@ -73,10 +77,12 @@ package com.github.oinsio.gnomish.mini
 import spock.lang.Specification
 
 class FooSpec extends Specification {
-    def "runs in a JVM that inherited no GNOMISH_ variable"() {
+    def "runs in a JVM that inherited no GNOMISH_ variable and kept the machine's tooling variables"() {
         expect:
         System.getenv('${DECISION_FILE}') == null
         System.getenv('${BUILD_OWNED}') == 'kept'
+        System.getenv('${RYUK_DISABLED}') == 'true'
+        System.getenv('${DOCKER_CONFIG}') == '${GradleRunnerSupport.quotedPath(dockerConfig().absolutePath)}'
         Foo.twice(3) == 6
     }
 }
@@ -121,13 +127,26 @@ class FooSpec extends Specification {
     }
 
     /** A build launched outside any round — this suite may itself run inside one, so the inherited keys go. */
-    private static GradleRunner withoutOperatorVariables(GradleRunner runner) {
-        runner.withEnvironment(runner.environment.findAll { !it.key.startsWith('GNOMISH_') })
+    private GradleRunner withoutOperatorVariables(GradleRunner runner) {
+        runner.withEnvironment(runner.environment.findAll { !it.key.startsWith('GNOMISH_') } + toolingVariables())
     }
 
     /** The environment of a build launched from inside a gnome's round, plus an inherited copy of the build-owned key. */
     private GradleRunner withOperatorVariables(GradleRunner runner) {
         File decisionFile = home.resolve('decision.json').toFile()
-        runner.withEnvironment(runner.environment + [(DECISION_FILE): decisionFile.absolutePath, (BUILD_OWNED): 'inherited'])
+        runner.withEnvironment(runner.environment + toolingVariables()
+                + [(DECISION_FILE): decisionFile.absolutePath, (BUILD_OWNED): 'inherited'])
+    }
+
+    /**
+     * The machine's tooling variables the strip must leave alone. {@code DOCKER_CONFIG} stands in
+     * for {@code DOCKER_HOST}: nothing in the inner build reads it, so the inner build stays Docker-free.
+     */
+    private Map<String, String> toolingVariables() {
+        [(RYUK_DISABLED): 'true', (DOCKER_CONFIG): dockerConfig().absolutePath]
+    }
+
+    private File dockerConfig() {
+        home.resolve('docker-config').toFile()
     }
 }
