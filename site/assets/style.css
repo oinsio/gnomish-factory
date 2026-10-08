@@ -358,6 +358,10 @@ main {
     margin: 0;
 }
 
+.diagram picture {
+    display: block;
+}
+
 .diagram img {
     width: 100%;
     max-width: 100%;

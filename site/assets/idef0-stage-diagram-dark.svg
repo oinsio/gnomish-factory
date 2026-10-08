@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="IDEF0 / ICOM diagram: Input transformed into Output by Stage, with Control from top, Mechanism from bottom, and a Quality Control loop.">
   <style>
-    /* Light palette. The dark twin is idef0-stage-diagram-dark.svg; the page picks one with a picture element,
+    /* Dark palette. The light twin is idef0-stage-diagram.svg; the page picks one with a picture element,
        because Safari never applies prefers-color-scheme inside an SVG loaded as an image. */
     :root {
-      --box: #fbf8f3;
-      --stage-box: #f3eee6;
-      --line: #241f1a;
-      --title: #241f1a;
-      --sub: #6b6257;
+      --box: #161b22;
+      --stage-box: #1c2330;
+      --line: #e6edf3;
+      --title: #f0f6fc;
+      --sub: #9da7b3;
     }
     .box    { fill: var(--box); stroke: var(--line); stroke-width: 2.5; }
     .stage  { fill: var(--stage-box); stroke: var(--line); stroke-width: 3.5; }
