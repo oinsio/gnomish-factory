@@ -19,8 +19,9 @@ and worktree of this repository is registered under one project,
 
 ```bash
 # 1. A factory jar, copied out of the build tree (see the wrapper for why).
+# `bootstrap-*-plain.jar` beside it (left by `jar`/`build`) has no dependencies: never copy it.
 ./gradlew :bootstrap:bootJar
-cp bootstrap/build/libs/bootstrap-*.jar .gnomish/factory/gnomish.jar
+cp "$(ls bootstrap/build/libs/bootstrap-*.jar | grep -v -- '-plain\.jar$')" .gnomish/factory/gnomish.jar
 
 # 2. Register this clone; repeat `project add` for every further clone or worktree.
 .gnomish/factory/gnomish project add gnomish-factory --dir="$PWD"
