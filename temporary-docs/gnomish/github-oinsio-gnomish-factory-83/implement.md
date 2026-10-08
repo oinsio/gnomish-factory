@@ -284,3 +284,8 @@
 
 ### 6.8 (human edit) `.claude/rules/testing.md` section
 - Not done: `.claude/` is outside what an implementation may edit; `grep -n "never inherit the operator" .claude/rules/testing.md` → nothing. Escalated to a human, like 6.2.
+- Done (by the human, merged from origin main): `.claude/rules/testing.md:144` "## Test processes never inherit the operator's environment" — build-side subtractive strip by `TestEnvironmentHygiene`, spawners clear then compose (`ChildEnvAllowlist` / `TestChildEnvironment.cleared`), gates `TestEnvironmentHygieneSpec` + `ProcessEnvironmentOwnerSpec`, the decision-file failure (D14). `manual-sync-pairs.md` has no `EnvironmentLease ↔ FreshJudgeEnvironments` row, as the task requires.
+- Verified: the section read in place; ticked per the tracker decision. Root `./gradlew check` rerun after the merge (see below).
+
+### Final gate after the merge
+- Verified: root `./gradlew check` green after ticking 6.8 (BUILD SUCCESSFUL, 1010 tasks, 61 executed, rest up to date — the merge from main changed only `.claude/rules/testing.md` and task metadata).

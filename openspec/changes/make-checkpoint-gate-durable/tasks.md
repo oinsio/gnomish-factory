@@ -263,7 +263,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       `stop` field), and add the sequencing line to its proposal. `add-decision-arbiter`'s
       delta changes the request's content schema, not its path — add a one-line note to its
       design that the path carries the round token.
-- [ ] 6.8 (human edit, as 6.2; design D14) `.claude/rules/testing.md`: a section "Test
+- [x] 6.8 (human edit, as 6.2; design D14) `.claude/rules/testing.md`: a section "Test
       processes never inherit the operator's environment" — the forked test JVM is stripped of
       `GNOMISH_*` by `test-conventions` (subtractive, beside `GIT_CONFIG_GLOBAL`), every test
       spawner clears and composes from an explicit list through the production allowlist where
