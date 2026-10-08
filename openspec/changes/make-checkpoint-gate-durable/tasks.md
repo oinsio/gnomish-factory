@@ -161,7 +161,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       (the reference document changes — a pre-release amendment, noted in the spec). Verify
       `StatusReportJsonMapperSpec` round-trips every variant; `StatusReportEquivalenceContractSpec`
       green on the new reference.
-- [ ] 4.6 Gate: `./gradlew check` green; `grep -rn "resetAttempts()" */src/main` lists only
+- [x] 4.6 Gate: `./gradlew check` green; `grep -rn "resetAttempts()" */src/main` lists only
       `TaskState` and the call sites that hand the result to `appendDecision` / `resumeFrom`
       (record the list).
 - [x] 4.7 One resume preparation (design D6, dissolved copy; FR18): `ContainerResumePreparation`
@@ -204,7 +204,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       `ResumedKillPoints` (one step; second pickup resets nothing). `KillPointWorld` gains a
       round-commit step with an advanced/gated position (reuse `ReclaimKillPoints.salvageStep`'s
       `GitAttemptPersistence.persist` pattern). Verify green on the fixtures.
-- [ ] 5.5 PIT 100% on `:domain`, `adapters/git`, `:application`, `:bootstrap` (NFR-R3); record
+- [x] 5.5 PIT 100% on `:domain`, `adapters/git`, `:application`, `:bootstrap` (NFR-R3); record
       any `@DoNotMutate` added with its reason.
 
 ## 6. Durable record
@@ -254,7 +254,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 - [x] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, and the `take` section of
       `docs/guides/operator-guide.md`): a checkpoint reads
       "awaiting approval"; `--resume` approves; a return-to-ready approves.
-- [ ] 6.6 Gate: root `./gradlew check` green; record M1–M10 in this task.
+- [x] 6.6 Gate: root `./gradlew check` green; record M1–M10 in this task.
 - [x] 6.7 Layering of the overlapping delta (`delta-specs.md`): `openspec/changes/
       add-pipeline-entry-precondition/specs/git-task-persistence/spec.md` MODIFIES "State
       directory with one writer per file" too and is sequenced after this change — open its
