@@ -84,6 +84,16 @@ Reports land per module: `<module>/build/reports/jacoco/test/html/index.html` an
 
 Formatting is applied automatically: a Claude Code hook formats files as the agent edits them, and a git pre-commit hook (installed into `.git/hooks/` by any `./gradlew check` run) formats staged files as a safety net. Manual fallback: `./gradlew spotlessApply`.
 
+## CRAP report (advisory)
+
+`./gradlew crapReport` scores every production method by CRAP (Change Risk Anti-Patterns) — `CC² × (1 − coverage)³ + CC`, where `CC` is cyclomatic complexity — and prints the methods that exceed the threshold. It is a developer tool, not a gate: it is outside `check` and never fails the build.
+
+- **What it reads.** One JaCoCo XML report aggregated across the build (`jacoco-report-aggregation` in the root project, `build/reports/jacoco/testCodeCoverageReport/`), so a class covered only by `:bootstrap`'s suites is not scored as uncovered. Producing it runs every module's `test`, Docker suites included; a build whose tests are cached costs seconds.
+- **The tool.** [open-crap4j](https://github.com/ChrisEdwards/open-crap4j) (`com.architester.crap4j`, wired in `build-logic/.../crap-conventions.gradle`). It takes both numbers from JaCoCo's bytecode counters — complexity from `COMPLEXITY`, coverage from branches where a method has any — so complexity runs higher than source-level counts: a string `switch` or `try`-with-resources adds branches. Lambda bodies are folded into the method that declares them.
+- **Defaults.** CRAP threshold 15 and a complexity cap of 15: a method above either is listed. With the mutation gate holding coverage near 100%, CRAP here is mostly CC, so the cap and the PIT-exempt classes (`excludedClasses`, `@DoNotMutate`) are where the report has something to say.
+- **Run it on its own.** The report reads whatever execution data each module's last `test` left. A filtered run (`--tests …`) in the same invocation, or just before, replaces a module's coverage with that of one spec and inflates the violations. Run `crapReport` by itself.
+- **Output.** The console summary, and every scored method in `build/reports/crap4j/crapReport/report.json`.
+
 ## Dependency locking and verification
 
 <!-- implements FR1-FR5, NFR-R1, NFR-O1, NFR-S1, UX1, UX2 of add-dependency-verification -->

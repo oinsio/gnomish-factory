@@ -32,6 +32,7 @@ dependencies {
     implementation marker(libs.plugins.japicmp)
     implementation marker(libs.plugins.license.report)
     implementation marker(libs.plugins.cyclonedx)
+    implementation marker(libs.plugins.crap4j)
 }
 
 // --- Functional (TestKit) verification of the convention plugins ---

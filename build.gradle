@@ -50,17 +50,17 @@ plugins {
     // `base` + the Spotless build-file format (FR6, design D9); the root
     // project applies no java/test convention because it has no sources.
     id 'build-metadata-conventions'
-    // The build-wide verdict of the runtime log-expectation gate (FR17 of
-    // harden-logging-observability). A convention plugin, not a block here: this
-    // file is under a 200-line cap that `ModuleBuildFileSpec` enforces, and the
-    // bulk of build logic belongs in `build-logic` by FR6 of split-into-modules.
+    // The build-wide verdict of the runtime log-expectation gate (FR17 of harden-logging-observability).
+    // A convention plugin, not a block here: this file is under the 200-line cap `ModuleBuildFileSpec`
+    // enforces, and build logic belongs in `build-logic` (FR6 of split-into-modules).
     id 'log-expectation-conventions'
     // The dependency-license gate: CI-only, outside `check` (D2 of add-project-license).
     id 'license-gate-conventions'
     // The release SBOM: applied here, never in `:bootstrap` (FR7, D7 of add-release-pipeline).
     id 'sbom-conventions'
-    // dependency-analysis is applied build-wide from settings.gradle (FR10,
-    // design D8); only its configuration and `check` wiring live here.
+    // The manual CRAP report over the aggregated coverage: a developer tool, outside `check`.
+    id 'crap-conventions'
+    // dependency-analysis: applied from settings.gradle (FR10, D8); its config lives here.
 }
 
 // Dependency-analysis gate (FR10 of add-project-skeleton, design D8, dead-code

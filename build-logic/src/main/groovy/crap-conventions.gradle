@@ -1,0 +1,64 @@
+// The CRAP report (Change Risk Anti-Patterns: CC² × (1 − cov)³ + CC per method) over the
+// whole build's coverage. Applied to the ROOT project only. A developer tool, not a gate: it is
+// NOT part of `check`, and `crapReport` never fails the build.
+//
+//   ./gradlew crapReport   → build/reports/crap4j/crapReport/report.json + console summary
+//
+// The plugin is open-crap4j (`com.architester.crap4j`, Apache-2.0). It reads complexity and
+// coverage from JaCoCo XML only — the `COMPLEXITY` counter, so no source parsing and no
+// method-to-bytecode matching; lambda bodies are folded into their enclosing method.
+//
+// One aggregated report, never one per module: classes listed under `excludedClasses` as
+// integration-covered are exercised by `:bootstrap`'s suites, so their own module's report
+// would show them uncovered and score them as false hits. `jacoco-report-aggregation` merges
+// the execution data of every module's `test` task at the exec level (merging XML cannot
+// recover the union of branch coverage). `:bootstrap` is the composition root, so its runtime
+// graph reaches every production module; `:test-fixtures` and `:gnomish-plugin-api:sample`
+// stay outside on purpose — test support and an example, not factory code.
+//
+// Because the PIT gate holds mutation coverage at 100%, CRAP here mostly reduces to CC: the
+// report's real signal is the complexity cap and the classes PIT exempts.
+plugins {
+    id 'jacoco-report-aggregation'
+    id 'com.architester.crap4j'
+}
+
+def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+// The aggregation resolves `:bootstrap`'s runtime graph from here, external modules included.
+repositories {
+    mavenCentral()
+}
+
+jacoco {
+    toolVersion = libs.findVersion('jacoco').get().requiredVersion
+}
+
+dependencies {
+    jacocoAggregation project(':bootstrap')
+}
+
+// The root applies no `jvm-test-suite`, so the aggregated report is declared, not derived.
+def aggregatedCoverage = reporting.reports.register('testCodeCoverageReport', JacocoCoverageReport) {
+    testSuiteName = 'test'
+}
+
+def aggregatedReportTask = aggregatedCoverage.flatMap { it.reportTask }
+
+crap4j {
+    // `map`, not `flatMap`: Gradle refuses a report's output property reached through the task
+    // provider ("does not have a task associated with it"), so the file goes in as a plain value.
+    jacocoXml = aggregatedReportTask.map { it.reports.xml.outputLocation.get() }
+    formats {
+        json = true
+        junitXml = false // a sidecar for CI test-report UIs; nothing here reads it
+    }
+}
+
+// The value above carries the file, not the producing task; the edge is stated here so
+// `crapReport` alone regenerates the coverage it reads.
+['crapReport', 'crapCheck', 'crapBaseline', 'crapBaselineTighten'].each { name ->
+    tasks.named(name) {
+        dependsOn aggregatedReportTask
+    }
+}

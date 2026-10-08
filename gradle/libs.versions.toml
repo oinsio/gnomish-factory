@@ -39,6 +39,9 @@ license-report-plugin = "3.1.4"
 # CycloneDX SBOM of the boot jar (FR7, design D7 of add-release-pipeline). 3.x, not 2.x: 2.x reads
 # Task.project at execution time and fails under Gradle 9 with the configuration cache on.
 cyclonedx-plugin = "3.4.1"
+# CRAP report over the aggregated JaCoCo XML (open-crap4j, Apache-2.0): a manual,
+# advisory developer tool outside `check`. 1.0.0 verified on Maven Central 2026-10-08.
+crap4j-plugin = "1.0.0"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
 # design D7). 1.5.0 verified on Maven Central 2026-08-13; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
@@ -213,3 +216,4 @@ dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.r
 japicmp = { id = "me.champeau.gradle.japicmp", version.ref = "japicmp-plugin" }
 license-report = { id = "com.github.jk1.dependency-license-report", version.ref = "license-report-plugin" }
 cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx-plugin" }
+crap4j = { id = "com.architester.crap4j", version.ref = "crap4j-plugin" }

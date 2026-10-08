@@ -3,6 +3,9 @@
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew dependencies --write-locks
 aopalliance:aopalliance:1.0=classpath
+com.architester.crap4j:com.architester.crap4j.gradle.plugin:1.0.0=classpath
+com.architester:crap4j-core:1.0.0=classpath
+com.architester:crap4j-gradle-plugin:1.0.0=classpath
 com.diffplug.durian:durian-collect:1.2.0=classpath
 com.diffplug.durian:durian-core:1.2.0=classpath
 com.diffplug.durian:durian-io:1.2.0=classpath
