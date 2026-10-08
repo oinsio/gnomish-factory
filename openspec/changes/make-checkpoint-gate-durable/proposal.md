@@ -100,10 +100,35 @@ the receiver accepts only the current identity, and deletion is hygiene, never t
 - **MODIFIED** (added 2026-10-07): the container resume preparation — pending-snapshot check,
   discard or reattach, salvage — has one implementation shared by `run` and `take`, in place
   of two copies.
+- **MODIFIED** (added 2026-10-08, from the #83 escalation of task 8.1: the eighth parameter
+  the compile-time gate refused): the container-environment seam is split by lifetime. The
+  installation's box equipment — sandbox settings, box timing, the guard config root, the
+  ownership mode — is held once by a *container environment factory*; what varies per task —
+  the key, the box git link, the child-env allowlist, the project identity and the denial
+  restoration read — is the argument list of its one method. The static `forTask` with seven
+  parameters is deleted.
+- **MODIFIED** (added 2026-10-08, the same mixing one level up): the container support chain
+  carries no per-call property sets. `ContainerSupportFactory.create` takes only what a run
+  decides; the sandbox and factory settings, the sandbox lifecycle pass and the environment
+  factory are fixed in the support factory when `ContainerSupports` builds it, and the two
+  container runners and `ContainerTakeSupport` stop relaying them.
+- **MODIFIED** (added 2026-10-08, found by the lock-scope review of the same escalation): the
+  round-box lease and the fresh judge box are two copies of one rule — one live box per role,
+  rebuilt when its key changes — and both hold their monitor across Docker work. One *live
+  box* mechanism replaces both, in the three-phase shape of `lock-scope.md`: a reader of the
+  current box never waits on a materialize or dispose in flight, and two requests for the same
+  key share one build.
+- **ADDED** (added 2026-10-08, from the stray decision file the same round observed): test
+  processes never inherit the operator's environment. The forked test JVM, the fixture box
+  that spawns the fake agent, the fake-agent invocation and the end-to-end harness compose
+  their child environment from an explicit list, as the production host adapter already does
+  — so a test run inside a gnome round can no longer write into that round's own decision
+  file.
 - **ADDED**: ADR 0003 gains the principle and its corollary for readers of a medium that keeps
   the past (liveness by identity, never by presence); `crash-consistency.md` gains a checklist
   item; the glossary gains *gate*, *awaiting approval*, *approval*, *resumed write*, *round
-  token*.
+  token*, and (2026-10-08) *container environment factory*, *live box*; `testing.md` gains the
+  rule that test processes never inherit the operator's environment.
 
 ## Capabilities
 
@@ -136,7 +161,14 @@ None.
   `awaitingApproval(stage)` position and the attempt `stop` object; a consumed outcome reads
   null.
 - `execution-environment`: "Denial read position survives the process" (the offer is made as
-  the environment is built, on every path that builds one; no later offer exists).
+  the environment is built, on every path that builds one; no later offer exists);
+  (2026-10-08) "Environment lifecycle bound to stage segments" (one live-box mechanism for the
+  round box and the judge box; a reader never waits on Docker work in flight), "Layered
+  positive environment allowlist" (every spawner of a host process, production or test double,
+  composes over a cleared environment), new requirement "Container environment factory".
+- `quality-gates` (2026-10-08): new requirement "Forked test JVMs carry no operator-process variables" — the test build strips the
+  operator's `GNOMISH_*` variables from every forked test JVM, beside the pinned
+  `GIT_CONFIG_GLOBAL`.
 
 ## Goals
 
@@ -165,6 +197,11 @@ None.
   repeated round overwrites the previous trace at the tip, but git history keeps every
   version and no reader at the tip exists; the javadoc claim is corrected here, the path is
   left for `add-round-identity` if a tip reader ever appears.
+
+- NG7 (added 2026-10-08): the static recipes over the run bundle (`ContainerRunTermination`,
+  `ContainerTipReader`, `RunAssembler`), which take their holder as a parameter — the same
+  fields-into-parameters shape without the eighth argument. They stay as they are; turning
+  them into instances is its own initiative.
 
 ## Users & Scenarios
 
@@ -242,6 +279,25 @@ None.
   support port SHALL expose no way to offer a position after an environment is built.
 - FR18: the container resume preparation — pending-snapshot check, discard or reattach,
   salvage of leftovers — SHALL have one implementation, used by both `run` and `take`.
+- FR19 (added 2026-10-08): container round environments SHALL be built by a factory
+  constructed once per ownership mode with the installation's box equipment (sandbox settings,
+  box timing, guard config root, ownership mode); its one method SHALL take only what varies
+  per task — key, box git link, child-env allowlist, project identity and the denial
+  restoration read — and no static constructor mixing the two lifetimes SHALL remain.
+- FR20 (added 2026-10-08): the container support factory SHALL hold the sandbox and factory
+  settings, the sandbox lifecycle pass and the environment factory as fixed state; `create`
+  SHALL take only per-run values, and no runner or take-support bundle SHALL carry a property
+  set only to relay it.
+- FR21 (added 2026-10-08): the round-box lease and the fresh judge box SHALL share one live-box
+  mechanism in the three-phase lock shape: decide and claim under the lock, materialize and
+  dispose with nothing held, record under the lock. A reader of the current box SHALL never
+  wait on Docker work in flight; concurrent requests for the same key SHALL share one build;
+  a failed build SHALL release its claim to every waiter.
+- FR22 (added 2026-10-08): no test-spawned process SHALL inherit the operator's environment
+  implicitly: the fixture box SHALL compose its child environment through the production
+  allowlist over a cleared environment, the fake-agent invocation and the end-to-end harness
+  SHALL start from a cleared environment plus an explicit list, and the test build SHALL strip
+  every `GNOMISH_*` variable it did not set from every forked test JVM and PIT minion.
 
 ### Non-Functional Reliability
 
@@ -296,6 +352,17 @@ None.
   no drive, no engine execution; a resumed container task whose guard survived with a
   recorded cursor reports no denial twice.
 
+- M8 (2026-10-08): `grep -rn "ContainerEnvironments.forTask(" */src/main sandbox/*/src/main`
+  returns nothing; `ContainerSupportFactory.create` declares five parameters; neither
+  container runner nor `ContainerTakeSupport` holds a `SandboxProperties` or
+  `FactoryProperties` field.
+- M9 (2026-10-08): `LiveBoxConcurrencySpec` green — a reader returns while a materialize
+  blocks; `grep -n "synchronized" ` over `EnvironmentLease` and `FreshJudgeEnvironments`
+  returns nothing, both delegate to the one live box.
+- M10 (2026-10-08): with `GNOMISH_DECISION_FILE` set in the parent environment of the test
+  build, a fake-agent round run through the fixture box leaves that file untouched;
+  `TestEnvironmentHygieneSpec` green.
+
 ## Impact
 
 - `:domain`: `Position`, `Advancement`, `Engine` (preflight), `StageAttemptLoop`,
@@ -333,8 +400,24 @@ None.
   `TakeFinishReport`, `status/json/PositionDto`.
 - `:bootstrap`: `RunCheckRunContext`, `ContainerRunTermination`, kill-point worlds and rows,
   the two new grep gates, `UntrustedTextGateSpec` allowlist.
+- `sandbox/docker` and `sandbox/core` (2026-10-08): new `ContainerEnvironmentFactory`
+  (installation half), `ContainerEnvironments.forTask` deleted, `BoxTiming` built once; new
+  `LiveBox` in `sandbox/core` under `EnvironmentLease` and `FreshJudgeEnvironments`
+  (`adapters/agent`).
+- `:bootstrap` and `:application` (2026-10-08): `ContainerSupports.supportFactory` builds the
+  fixed half; `ContainerRunSupportFactory` gains it as record components; the
+  `ContainerSupportFactory` port's `create` drops the two property sets;
+  `ContainerGitModeRunner`, `ContainerResumeRunner`, `ContainerTakeSupport`,
+  `TakeContainerResumeBootstrap`, `TakeWorkRouter`, `TakeContainerFreshClaim` stop relaying
+  them; `SandboxLifecyclePassFactory.create` is called once per mode.
+- Test build and fixtures (2026-10-08): `test-conventions` and `pitest` strip `GNOMISH_*`;
+  `test-fixtures` `LocalBoxEnvironment` composes through `ChildEnvAllowlist`;
+  `FakeAgentInvocation` and `E2eProcessHarness` start from a cleared environment; new
+  `TestEnvironmentHygieneSpec` and `LiveBoxConcurrencySpec`.
 - Docs: `docs/adr/0003-crash-consistency.md`, `.claude/rules/crash-consistency.md`,
   `docs/glossary.md`, `openspec/changes/add-stage-iteration/design.md` (review note).
+- Undeclared pair dissolved (2026-10-08): `EnvironmentLease ↔ FreshJudgeEnvironments` into
+  `LiveBox`.
 - Declared sync pairs touched: `GitResumeContinuation ↔ ContainerResumeOutcomes`,
   `TakeResumeRunner ↔ TakeContainerResumeRunner`, the host/container lifecycle repositories,
   `DecisionFileTransport ↔ BranchDecisionFile` (read semantics diverge by design: a per-round

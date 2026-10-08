@@ -203,8 +203,20 @@ spec iterates `Position`'s and `Stop`'s permitted subclasses — no hand-listed 
 version 2 — every existing branch becomes `UnsupportedVersion` for one additive token, and the
 gate demands equality, so no mixed-version grace is possible anyway.
 
-**D6 — Sync surfaces.** Three declared pairs are touched; no new pair is added; one
-**undeclared** copy is dissolved (added 2026-10-07).
+**D6 — Sync surfaces.** Three declared pairs are touched; no new pair is added; two
+**undeclared** copies are dissolved (added 2026-10-07 and 2026-10-08).
+
+- `EnvironmentLease` (`sandbox/docker`) and `FreshJudgeEnvironments` (`adapters/agent`) hold
+  the same rule — one live box per role, built from a supplier on demand, kept while its key
+  (the stage segment; the attempt commit) is unchanged, disposed when it changes — with the
+  same fields and the same `synchronized` pair of methods, and no marker at either end
+  (`manual-sync-pairs.md`, preference 3). One end documents its lock as the resource-serializing
+  exception, the other documents nothing: the two ends already disagree. *Decision:* **one
+  owner** (preference 1): `LiveBox<K>` in `sandbox/core` carries the rule and the three-phase
+  lock shape (D13); both classes become thin owners of their key — the segment index over the
+  plan, the attempt commit — and delegate. *Alternative rejected:* declare the pair and fix the
+  lock twice — the lock shape is the hard part, and two copies of a concurrency protocol are
+  two places for the next review to miss.
 
 - `ContainerResumeOutcomes.resumeFromRecordedPosition` (`:54-67`) and
   `TakeContainerResumeRunner.resumeWithoutDecision` (`:81-92`) hold the same resume
@@ -266,8 +278,10 @@ gate demands equality, so no mixed-version grace is possible anyway.
 | `AttemptRecord.stop` — the one durable copy of a round's stop | `Stop` (sealed) | writer: `StageAttemptLoop` (DECISION_NEEDED / CANNOT_VERIFY arms); readers: `Engine.preflight`, `StatusReport`/`AttemptMapper` (render) | the in-memory-only `EscalationReport` as the sole carrier of the question — the report is now rebuilt from the record | the type: `AttemptRecord`'s constructor requires a `Stop`; `StageAttemptLoopSpec` asserts the stop on the recorded round for both results |
 | `BranchShapeClassifier` with the position among its facts — the one classification of a gate | `BranchShape.AwaitingApproval` | every shape reader (`TakeDispositionResume`, `BranchRepairLog`, `status`, `GitResumeRunner`/`ContainerResumeRunner` routing) | `InProgress` for a tip at a gate — the classifier now reads `BranchTipFacts.position` | the sealed `BranchShape` switch; `BranchShapeClassifierPropertySpec` generates positions |
 | `RoundToken.of(commitId)` (`app/port/git`) — the one parse of a commit id into a round's identity (D10); called by exactly two producers: `SandboxRoundEnvironmentSource.openRound` over the open tip (a fresh round mints) and `SnapshotTipCheck` over the snapshot subject (a resumed round reuses — never mints) | `RoundToken` (value type; blank or non-hex refused) and `ClosedRound(token, attemptCommit)` (a round that has its snapshot; neither half nullable) | the per-run cell `CurrentRound` (`app/port/git`, replaces `RoundTokenRef` and `AttemptCommitRef`): written by `openRound` (`open(token)`), `EnvironmentRoundSnapshot` (`snapshotted(commit)`), `ResumeVerificationStageExecutor` (`restore(PendingVerification)` — the same two transitions, run together); read as `opened()` by `BranchDecisionFile.open(environment, key, token)` (the path the gnome is given and the one path read), `HarvestedBoundaryCheck.decisionPath(key, token)` (the one spelling), `EnvironmentRoundSnapshot` (subject); read as `closed()` by `EnvironmentAttemptPersistence` (carve-out, diff base, parent check), `RecordedAttemptCommitWorkspace` (the check runners' attempt commit); `PendingVerification` carries the typed token from `SnapshotTipCheck` to the executor | `decisionPath(AttemptKey)` without a token — deleted; `BranchDecisionFile.open(environment, key)` — deleted; `RoundTokenRef` and `AttemptCommitRef` — deleted (two cells that could hold half a round); `EnvironmentAttemptPersistence.previousTip` and its `currentTip()` read at construction — removed (the diff base is the recorded token; the post-harvest `currentTip()` stays, it compares the record to a fresh observation); `SnapshotTipCheck`'s parse-and-drop of the token — the token travels; the presence read "file at the key exists" as the liveness rule — replaced by the exact-path read | the parameter types (`RoundToken`, `ClosedRound`, not `String`); `opened()`/`closed()` return distinct types, so a consumer of the closed round cannot compile against an open one; `:bootstrap` grep gate `DecisionPathOwnerSpec`: `DECISIONS_DIR` and `decisionPath(` appear in `*/src/main` only in `EnvelopePaths`, `HarvestedBoundaryCheck`, `BranchDecisionFile`, `FactoryOwnedPaths`, `SnapshotTipCheck`, allowlisted by file, asserted reached; `:bootstrap` grep gate `CurrentRoundWriterSpec`: `RoundToken.of(` appears in `*/src/main` only in `SandboxRoundEnvironmentSource` and `SnapshotTipCheck`, and the cell's three writers appear only in the three files above, allowlisted, asserted reached; identity spec `RoundTokenIdentitySpec` (`:bootstrap`, bare origin, real adapters): (live) after a round that asked, the request's file name, the snapshot subject's token and the commit the round opened on are one value, and after `appendDecision` the next round's handle names a path the tip does not hold; (resumed) after a kill between the snapshot and the state commit, the pickup's state commit lands with a boundary check whose carve-out and diff base are the snapshot's recorded token — no re-read tip — and the same three values are still one |
-| `ContainerEnvironments.roundEnvironment()` — the one place a round environment is built, and therefore the one place the tip's recorded denial position is offered to it (D11) | `DenialRestoration`, produced by a `Supplier<DenialRestoration>` the seam is constructed with (`ContainerTipReader.restorable(...)` over the branch tip, evaluated at build time) | `EnvironmentLease.environmentFor` (first open, segment boundary, `reattachFor` on resume) — the only caller of `roundEnvironment()`; every box it hands out already carries the offer | `ContainerEnvironments.restoreDenials(…)` setter and its field — deleted; `SandboxRunSupport.restoreDenials()` and `ContainerRunSupport.restoreDenials()` — deleted; the calls in `ContainerTerminalDrive.run` and `TakeContainerEngineExecution.run` — deleted; `ContainerTipReader.restoreDenials(support)` — becomes the supplier | the constructor parameter (no setter exists to call late); the port has no method to call out of order; `:bootstrap` grep gate `DenialRestorationOwnerSpec`: `restoreDenials(` in `*/src/main` only in the environment port and its adapters (`TaskExecutionEnvironment`, `SelfCheckedEnvironment`, `LeasedEnvironment`, `EgressGuard`) and `ContainerEnvironments`, allowlisted by file, asserted reached; `ContainerRunSupportSpec`: a box obtained through `reattachFor` on a tip with a recorded cursor received the offer (red with the supplier wired to `DenialRestoration.none()`); E2E `ContainerModeResumeE2ESpec`: resume onto a surviving guard with a recorded cursor reports no denial twice |
+| `ContainerEnvironments.roundEnvironment()` — the one place a round environment is built, and therefore the one place the tip's recorded denial position is offered to it (D11) | `DenialRestoration`, produced by the `Supplier<DenialRestoration>` the seam receives as a per-task argument of `ContainerEnvironmentFactory.forTask(...)` (D12; `ContainerTipReader.restorable(...)` over the branch tip, evaluated at build time, in the unlocked phase of the live box — D13) | `EnvironmentLease.environmentFor` (first open, segment boundary, `reattachFor` on resume) — the only caller of `roundEnvironment()`; every box it hands out already carries the offer | `ContainerEnvironments.restoreDenials(…)` setter and its field — deleted; `SandboxRunSupport.restoreDenials()` and `ContainerRunSupport.restoreDenials()` — deleted; the calls in `ContainerTerminalDrive.run` and `TakeContainerEngineExecution.run` — deleted; `ContainerTipReader.restoreDenials(support)` — becomes the supplier | the constructor parameter (no setter exists to call late); the port has no method to call out of order; `:bootstrap` grep gate `DenialRestorationOwnerSpec`: `restoreDenials(` in `*/src/main` only in the environment port and its adapters (`TaskExecutionEnvironment`, `SelfCheckedEnvironment`, `LeasedEnvironment`, `EgressGuard`) and `ContainerEnvironments`, allowlisted by file, asserted reached; `ContainerRunSupportSpec`: a box obtained through `reattachFor` on a tip with a recorded cursor received the offer (red with the supplier wired to `DenialRestoration.none()`); E2E `ContainerModeResumeE2ESpec`: resume onto a surviving guard with a recorded cursor reports no denial twice |
 | The three outcome-clearing writes — the one place a consumed request leaves the tip (D10 hygiene) | the commit removing `.gnomish-task/decisions/` | `GitTaskRepository` / `GitObjectsTaskRepository` `appendDecision`, `approveCheckpoint`, `resumeFrom` | `CleanupCommit` as the only remover — stays (the terminal sweep), no longer the only one | `ConsumedOutcomeIdentitySpec` (5.3) gains the assertion: after each continuation the tip holds no `decisions/` entry; the pair invariant of 2.5 names the removal |
+| `ContainerEnvironmentFactory` (`sandbox/docker`, D12) — the one place the installation's box equipment meets a task's inputs; a facade with one return type (ADR 0010) | `ContainerEnvironments`, from `forTask(baseKey, link, allowlist, projectId, restoration)` | `ContainerRunSupportFactory.create` — the only caller; the factory is a component of that record, built once per ownership mode by `ContainerSupports.supportFactory(mode)` | `ContainerEnvironments.forTask(...)` static with seven parameters — deleted; `new BoxTiming(new SystemClock(), new ThreadSleeper(), …)` and the guard-root `Path.of(tmpdir, "gnomish-guard")` per call in `ContainerRunSupportFactory.create` — moved into the factory's construction; `SandboxProperties`/`FactoryProperties` as parameters of `ContainerSupportFactory.create` and as fields of `ContainerGitModeRunner`, `ContainerResumeRunner`, `ContainerTakeSupport` (relayed by `TakeContainerResumeBootstrap`, `TakeWorkRouter`, `TakeContainerFreshClaim`) — deleted; `SandboxLifecyclePassFactory.create(sandbox, factory, clock)` per run — called once per mode | the compile-time parameter gate (an eighth per-task input has a home in the method, an installation input in the constructor — neither pressures the other); the `ContainerSupportFactory` port's five-parameter `create`, so a runner cannot pass a property set; `ContainerEnvironmentsSeamSpec` asserts the credential scrub through the factory-built seam; `ContainerRunSupportSpec` builds through the factory |
+| `LiveBox<K>` (`sandbox/core`, D13) — the one implementation of "one live box per role, rebuilt when its key changes" and of the lock that guards it | `TaskExecutionEnvironment`, materialized, for a key; `Optional<TaskExecutionEnvironment> current()` as the last recorded box | `EnvironmentLease.environmentFor` / `current` / `currentIfLeased` / `dispose` (over the segment index); `FreshJudgeEnvironments.environmentFor` / `disposeCurrent` (over the attempt commit) | the two `synchronized` method sets in `EnvironmentLease` and `FreshJudgeEnvironments` — deleted; `FreshJudgeEnvironments`' javadoc claim of the resource-serializing exception — retired (waiting now happens on the build's future, not on the monitor) | `LiveBoxConcurrencySpec` (real threads, a materializer blocked on a latch: a reader returns promptly; a same-key request joins the one build; a failed build releases every waiter; dispose after a build waits for the build, then disposes with nothing held); `:bootstrap` architecture spec `LockScopeOwnerSpec`: `synchronized` appears in `sandbox/*/src/main` and `adapters/agent/src/main` only in `LiveBox` and `GuardDenialReads`, allowlisted by file, asserted reached |
 
 **D8 — Shapes and crash consistency** (`crash-consistency.md`, items 1–11).
 
@@ -475,6 +489,153 @@ does here. *Alternatives rejected:*
   first and may carry a newer escalation-side cursor); a value read early is the stale baseline
   D10's `previousTip` was.
 
+*Amendment 2026-10-08 (the #83 escalation of task 8.1).* "Constructed with a supplier" left
+two things unsaid, and the implementer stopped on both. How the seam receives an eighth input
+when `forTask` already has seven: D12 — the supplier is a per-task argument of the factory's
+one method; the seven never existed as one lifetime. Where the tip read runs: inside
+`EnvironmentLease.environmentFor`, which was `synchronized` across Docker work already — D13
+moves the build, and this read with it, into the unlocked phase of the live box. Neither is
+recorded as debt: both are in this change.
+
+**D12 — The container-environment seam is split by lifetime, not bundled** (added
+2026-10-08; FR19, FR20, M8). `ContainerEnvironments.forTask(baseKey, link, sandbox, timing,
+allowlist, guardConfigRoot, ownership)` mixes two lifetimes: `sandbox`, `timing`,
+`guardConfigRoot` and the ownership *mode* are fixed for the process; `baseKey`, `link`,
+`allowlist`, the project identity and now the denial restoration read vary per task. The same
+mixing sits one level up — `ContainerSupportFactory.create` takes `SandboxProperties` and
+`FactoryProperties` on every call although `ContainerSupports`, which builds that factory,
+holds both as fields; the two container runners and `ContainerTakeSupport` carry them for no
+other reason than to relay them; `SandboxLifecyclePassFactory.create` is re-evaluated per run
+over the same two sets. The parameter gate fired on the eighth argument; it was right about the
+pressure and said nothing about the cause.
+
+*Canon.* Hevery (Google testability guide, "To new or not to new"): never mix injectables and
+newables in one constructor — a factory's constructor takes the injectables, its method the
+newables. Van Deursen and Seemann (*DI Principles, Practices, and Patterns*): configuration
+known at startup is a dependency, per-request values are runtime data and travel through method
+calls; constructor over-injection is a smell that points at a missing facade, and a parameter
+object that "only moves the parameters to a common root" is not that facade. The project's own
+fields-not-parameters clause (`process-invariants.md`) and ADR 0010 ("a factory with one return
+type is a facade shape, and is named as one") say the same.
+
+*Decision.* A public `ContainerEnvironmentFactory` in `sandbox/docker`, constructed once per
+ownership mode with the installation half — `SandboxProperties`, `BoxTiming` (system clock,
+thread sleeper, the docker command bound), the guard config root, `OwnershipMode` — whose one
+method `forTask(baseKey, link, allowlist, projectId, Supplier<DenialRestoration>)` builds a
+`ContainerEnvironments` (five parameters). The `DockerCli` stays per task, created by the
+factory from its timing, as today. `ContainerEnvironmentBuilder` stays the per-task relay
+beneath, built by the factory. The static `forTask` is deleted; the package-private
+`ContainerEnvironments` constructor stays for daemon-free specs. `ContainerSupports.
+supportFactory(mode)` builds the factory and the sandbox lifecycle pass once and hands both,
+with the two property sets, to `ContainerRunSupportFactory` as record components; `create`
+shrinks to `(cloneDir, taskId, segments, definition, credentialEnvVarsToScrub)` and the
+runners and `ContainerTakeSupport` drop the fields they only relayed. ADR 0010's three
+questions for the facade: the four members are used together in exactly one construction;
+the construction is the behavior (the builder it assembles, the docker seam it bounds); the
+result already has a name. Membership sentence: *what the installation decides about every
+box before any task exists.*
+
+*Alternatives rejected* — each steelmanned, each with where it breaks here:
+- **A parameter object over the five box-build inputs** (the implementer's recommendation).
+  For: the five do travel together, and one record closes the gate in one step. Against: they
+  recur in exactly two signatures, `forTask` and the `ContainerEnvironmentBuilder`
+  constructor — and the builder *is* that object, in field form; the record would exist only to
+  be unpacked into it. Fails test 1 of the record criterion (`process-invariants.md`) and is
+  the "moves the parameters to a common root" shape. Borrowed: the group's membership, which is
+  the factory's field set.
+- **An immutable wither `forTask(...).offering(supplier)`.** For: no new type, the restoration
+  stays a construction input. Against: the seven-parameter static survives, and the next
+  per-task input pressures it again; the design said "at construction" because the offer must
+  have no later step, which the wither honours but the lifetime does not.
+- **The first production `@ParameterLimitExemption`.** For: honest and greppable. Against: the
+  reason it would carry — "two lifetimes in one signature" — is the defect, not a justification.
+- **The supplier on `BoxGitLink`.** Against: three box roles share the link and two never
+  restore denials; a value two of three holders ignore is a bag component.
+- **Compose the offer in `ContainerRunSupport`**, in the lambda the lease already receives as
+  its box factory. For: zero new parameters, `sandbox/docker` stays ignorant of the branch.
+  Against: the single owner moves into a lambda in `:bootstrap`, enforceable only by a grep for
+  `roundEnvironment()`; and the mixed-lifetime static is untouched until the next eighth input.
+
+**D13 — One live box per role, in the three-phase lock shape** (added 2026-10-08; FR21, M9).
+`EnvironmentLease.environmentFor` is `synchronized` and runs harvest, dispose and materialize —
+Docker work bounded by minutes — under the monitor that `current()` and `currentIfLeased()` take
+to read a field. After D11 the branch-tip read joins it. By `lock-scope.md` this is a
+state-guarding lock held across blocking work, not the exception: a waiter that only wants the
+field disqualifies the exception, and `currentIfLeased` is exactly that waiter (the park's
+denial-position read). Today every caller runs on the slot's own thread — the revocation salvage
+and the park's cursor read both run after the engine returns — so no thread waits in production;
+the shape is wrong before the harm is observable, which is the moment the rule asks to fix it.
+`FreshJudgeEnvironments` has the same shape and claims the exception in its javadoc; its claim
+holds only because its one other waiter, `disposeCurrent`, wants the same box.
+
+*Canon.* CERT LCK09-J and *JCIP* §11.4.1 (no blocking I/O under a lock). The borrowed shape is
+*JCIP*'s `Memoizer` (§5.6) — the claim is a `Future` placed under the lock, the computation runs
+unlocked, later callers for the same key wait on the future rather than on the lock — and the
+kubelet pod workers' read side, where a reader gets the last recorded status, never the sync in
+flight.
+
+*Decision.* `LiveBox<K>` in `sandbox/core`, over the `TaskExecutionEnvironment` port, with a
+`Materializer<K>` strategy (the lease's `materialize(branch, null)`; the judge's
+`materialize(branch, sha)`): phase 1 under the lock — if the recorded key equals the requested
+one, return the box; if a build is in flight for that key, take its future; otherwise record a
+new future as the in-flight claim and take the previous box out of the record; phase 2 with
+nothing held — dispose the previous box if any (after its harvest, which the lease's caller
+performs), build and materialize the new one, complete the future; on any failure complete it
+exceptionally and clear the claim, so every waiter fails and the next request may try again;
+phase 3 under the lock — record the box and the key, clear the claim. `current()` returns the
+last *recorded* box and never waits; it is empty (or throws, as today) while the first build is
+in flight. `dispose()` takes the in-flight future under the lock, waits for it unlocked, then
+swaps the record out under the lock and disposes with nothing held — constructive before
+destructive. Re-entry needs no revalidation beyond the claim: only the claim's owner records,
+and `dispose` waits for the claim before it clears, so the record cannot have moved under a
+builder. The two classes keep their public surface and lose their monitors; the
+`FreshJudgeEnvironments` javadoc's exception claim is retired — waiting for the same box is now
+waiting on its future, which is what the exception was for. *Alternative rejected:* leave the
+lease's lock as debt for a follow-up change — the D11 read would land under it, a change that
+widens a lock classifies it in its own artifacts (`lock-scope.md`, "How this is checked"), and
+the pair in D6 means the fix is written once either way.
+
+**D14 — Test processes never inherit the operator's environment** (added 2026-10-08; FR22,
+M10). The implementer found a stray `{"question": "Refactor or patch?"}` in its round's decision
+file. The chain: the gnome's agent process holds `GNOMISH_DECISION_FILE` for the round; the
+Gradle build it ran inherited it; Gradle's `Test` task hands the forked JVM the daemon's
+environment by default; `LocalBoxEnvironment` in `:test-fixtures` builds the fake agent's
+`ProcessBuilder` on that inherited environment and only layers the command's fragment on top;
+`fake-agent.sh` copies a scenario's `decision.json` to whatever `$GNOMISH_DECISION_FILE` names.
+The production host adapter clears the environment and composes it through `ChildEnvAllowlist`
+(FR9 of `add-sandbox-core`) — the fixture box is laxer than the owner it stands in for, the
+shape `testing.md` ("Fixtures assemble through production owners") exists to forbid. The same
+inheritance sits in `FakeAgentInvocation` (sets the variable only when a spec passes a path) and
+`E2eProcessHarness` (inherits, adds `GNOMISH_HOME`).
+
+*Canon.* Bazel's test encyclopedia: a test gets a fixed baseline environment and "should not
+depend on the presence, absence, or value of any environment variable not listed"; Gradle's
+`Test.environment` "defaults to the environment of this process"; hermetic tests. The build
+already pins `GIT_CONFIG_GLOBAL` for every test JVM and PIT minion for the same reason (design
+D11 of `own-git-transfer-argv`).
+
+*Decision.* Two layers, each at its owner. At the spawn sites, an allowlist over a cleared
+environment: `LocalBoxEnvironment.exec` composes through the production
+`ChildEnvAllowlist.compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES, command.env())` over
+`environment().clear()`; `FakeAgentInvocation` and `E2eProcessHarness` clear and put the host
+base set, the git test configuration (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_COUNT/KEY_0/VALUE_0`),
+`JAVA_HOME`, the Docker client variables, and the test-owned `GNOMISH_FAKE_*` / `GNOMISH_HOME`
+they set themselves. At the build, subtractive: `TestEnvironmentHygiene.applyTo(project, task)`
+in `build-logic`, applied by `test-conventions` beside `AdversarialGitConfig.applyTo` to every
+`Test` task and to `pitest`, removes every `GNOMISH_*` variable the build did not set from the
+forked JVM — subtractive because the test JVM legitimately needs the Docker, Gradle and
+Testcontainers variables of the machine, and an allowlist there would be a maintenance list of
+the operator's tooling (the posture `fix-docker-exec-secret-argv` chose for the same reason).
+Enforcement: `TestEnvironmentHygieneSpec` (`:bootstrap`) asserts `System.getenv()` of the test
+JVM holds no `GNOMISH_*` key, and that a fake-agent round run through the fixture box with
+`GNOMISH_DECISION_FILE` planted in the fixture's own parent environment leaves that file
+untouched; `:bootstrap` architecture spec `ProcessEnvironmentOwnerSpec`: `environment().putAll(`
+and `environment().put(` in `*/src/test` and `test-fixtures/src/main` appear only in files that
+call `environment().clear()` first, allowlisted by file, asserted reached. Landing: `testing.md`
+gains the rule (a human edit, task 6.8, as 6.2 was). *Alternative rejected:* fix
+`FakeAgentInvocation` alone — the fixture box is the path the stray write took, and the forked
+JVM is where the variable entered; a fix at one of three doors is the patch, not the mechanism.
+
 ## Risks / Trade-offs
 
 - [22 `Position` readers must change at once] → the compiler lists them; most are render or
@@ -508,6 +669,20 @@ does here. *Alternatives rejected:*
   files this change edits anyway (`ContainerResumeOutcomes`, `TakeContainerResumeRunner`,
   `ContainerRunSupport`, the two drives); §8 is three tasks; the cut line stays D4 — if the
   estimate overruns, D4 leaves first, never §8, whose defect is live in production today.
+- [D12–D14 (2026-10-08) add three more sections to a change past its scope line] → the human
+  chose to take all four findings here rather than open three changes against the same files
+  (`ContainerRunSupport`, `ContainerRunSupportFactory`, `EnvironmentLease`, the fake agent).
+  Cut order if the estimate overruns, after D4: §11 (D13, the live box) leaves first — the
+  lock has no waiter today and the D11 read can land under it with the classification recorded
+  as debt; §10 (D12's upper half, the support chain) second — `forTask`'s own split is what
+  8.1 needs and stays; §9 (D14) never leaves — it protects the gnome implementing this very
+  change from its own test runs.
+- [`LiveBox` changes when a judge box is disposed relative to its build] → `dispose` waits for
+  the in-flight build and then disposes, the same order the monitor imposed; the concurrency
+  spec pins it.
+- [A subtractive `GNOMISH_*` strip at the build hides a test that needed one] → the only
+  `GNOMISH_*` variables a test legitimately sees are the ones its own spawner sets on the child,
+  never on the test JVM; `TestEnvironmentHygieneSpec` turns the assumption into an assertion.
 - [The resume path is a second producer the first design missed; a third could appear
   (salvage, `add-stage-iteration`'s per-item passes)] → `CurrentRoundWriterSpec` allowlists
   the cell's writers and `RoundToken.of`'s callers by file, so a new producer fails the build
@@ -532,3 +707,10 @@ does here. *Alternatives rejected:*
 6. Denial restoration at build time (§8, D11) and the one resume preparation (4.7, D6): after
    §7, since both edit the same resume files; before the final gate.
 7. Gates and kill-point rows, identity specs (§5); ADR, rule, glossary, review note (§6).
+8. (2026-10-08) Test environment hygiene (§9, D14) — right after §8, before any further
+   round runs the build inside a gnome: fixture box, fake-agent invocation, E2E harness,
+   build-side strip, the two specs.
+9. The container support chain's lifetimes (§10, D12 upper half): the factory and the lifecycle
+   pass fixed in `ContainerRunSupportFactory`, `create` to five parameters, the relays removed.
+10. The live box (§11, D13): `LiveBox<K>`, both leases over it, the concurrency spec, the
+    lock-scope owner spec; then 4.4–4.6, §5, §6.
