@@ -43,14 +43,11 @@ one recovery line on the first clean run after a failure.
 - **WHEN** the work succeeds after failing runs
 - **THEN** one INFO line reports the recovery
 
-### Requirement: A dead loop thread is handled by the loop's restart policy
-If a loop's thread dies despite the failure guard, the loop's restart policy
-SHALL decide what happens. Under the Unbounded policy the loop SHALL be
-respawned after an exponential backoff, logging ERROR with a lifetime restart
-count, and SHALL never give up. Under the Bounded policy the same SHALL apply
-until the restarts within a configured window exceed a configured maximum.
-After that, one ERROR SHALL say the loop is disabled, and no respawn
-follows. Under either policy the process SHALL keep running.
+### Requirement: The Unbounded restart policy respawns a dead loop thread
+If a loop's thread dies despite the failure guard and the loop's restart
+policy is Unbounded, the loop SHALL be respawned after an exponential backoff,
+logging ERROR with a lifetime restart count, and SHALL never give up. The
+process SHALL keep running.
 <!-- implements FR3 of supervise-daemon-loops-and-embed-dashboard -->
 
 #### Scenario: Unbounded policy respawns with growing backoff
@@ -64,6 +61,13 @@ follows. Under either policy the process SHALL keep running.
 - **THEN** the next backoff starts from the base interval while the restart
   count keeps increasing
 
+### Requirement: The Bounded restart policy gives up on a loop that keeps dying
+Under the Bounded restart policy a dead loop thread SHALL be respawned as under
+the Unbounded policy until the restarts within a configured window exceed a
+configured maximum. After that, one ERROR SHALL say the loop is disabled, no
+respawn SHALL follow, and the process SHALL keep running.
+<!-- implements FR3 of supervise-daemon-loops-and-embed-dashboard -->
+
 #### Scenario: Bounded policy gives up
 - **WHEN** a Bounded loop with a maximum of 5 restarts in 10 minutes dies a
   sixth time within 10 minutes
@@ -71,7 +75,8 @@ follows. Under either policy the process SHALL keep running.
   daemon's other loops and slots keep running
 
 ### Requirement: A stop ends a loop without racing a respawn
-A stop SHALL end the loop at its next check without a WARN or ERROR line and
+A stop SHALL end the loop at its next check without a WARN or ERROR line,
+SHALL interrupt the loop only while it waits, never while its work runs, and
 SHALL prevent any respawn afterward, including one already waiting out a backoff.
 A joining stop SHALL return only after the loop's current thread, including a
 respawned one, has exited. Stopping an already stopped loop SHALL change nothing.
@@ -86,6 +91,11 @@ respawned one, has exited. Stopping an already stopped loop SHALL change nothing
 - **WHEN** a joining stop is requested while a respawn is starting a new thread
 - **THEN** the call returns only after that new thread has exited, and no work
   runs after the call returns
+
+#### Scenario: Stop during a run lets the run finish without a warning
+- **WHEN** a stop is requested while the loop's work is writing a file
+- **THEN** the work is not interrupted, the write completes, no WARN or ERROR
+  line is logged, and the loop ends before its next wait
 
 #### Scenario: Waiters are not blocked by a backoff
 - **WHEN** a loop is waiting out a respawn backoff and another thread requests
@@ -129,15 +139,21 @@ unsupervised: its abnormal death keeps degrading to the lease path.
 - **THEN** it is not respawned, and the held claims go stale and are reaped as before
 
 ### Requirement: Long-lived loops are written only through the supervised loop
-Production code SHALL start a long-lived, repeating daemon thread only through
-the supervised daemon loop. Finite threads (a slot, a batch, a stream or
-subprocess pump), the feed thread, shutdown hooks and the claim heartbeat are
-the declared exemptions, and a build gate SHALL fail on any other thread start.
+Production code of the application layer, which holds the daemon's loops,
+SHALL start a long-lived, repeating daemon thread only through the supervised
+daemon loop. Finite threads (a slot, a batch), the feed thread, shutdown hooks
+and the claim heartbeat are the declared exemptions. A build gate SHALL fail on
+any other thread start in that layer, and on any scheduled executor or timer
+there.
 <!-- implements FR16 of supervise-daemon-loops-and-embed-dashboard -->
 
 #### Scenario: A hand-written daemon loop fails the build
-- **WHEN** a production class outside the exemptions starts its own virtual
-  thread
+- **WHEN** an application-layer production class outside the exemptions starts
+  its own virtual thread
+- **THEN** the architecture gate fails, naming the file
+
+#### Scenario: A scheduled executor fails the build
+- **WHEN** an application-layer production class creates a scheduled executor
 - **THEN** the architecture gate fails, naming the file
 
 #### Scenario: Guidance exists before the code

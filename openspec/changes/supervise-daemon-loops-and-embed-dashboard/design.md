@@ -98,12 +98,24 @@ restores the flag. `IntervalOrSignal` catches `InterruptedException` and restore
 same check handles both. Implements FR5. *Rationale:* both latent busy loops (`SnapshotWriter`, and
 `ThreadSleeper` returning early under a set flag) are fixed in one place, and the "interrupt is a
 stop" classification of `factory-serve` holds because a real stop always sets `stopping` before it
-interrupts. *Alternative rejected:* treating any interrupt as a stop. A stray interrupt would then
+interrupts, and interrupts only a wait (D4). *Alternative rejected:* treating any interrupt as a stop. A stray interrupt would then
 end the loop silently, which is the failure this change exists to remove.
 
 **D4 — Stop, join and respawn under one small lock.** `SupervisedLoop` keeps `volatile boolean
-stopping` and a `worker` field guarded by a private lock. `stop()` sets `stopping` and interrupts the
-current worker. `stopAndJoin()` repeats "read the current worker under the lock, join it outside the
+stopping` and, guarded by a private lock, the `worker` field and a `waiting` flag that the worker
+sets under the lock as it enters its wait and clears as it leaves it. `stop()` sets `stopping`, then
+under the lock interrupts the worker only if `waiting` is set; `IntervalOrSignal` is also released
+with `signal()`. A tick in progress is never interrupted: it runs to completion and the loop ends at
+the `stopping` check that follows it. This keeps the stop quiet (FR4): ticks perform interruptible
+I/O (`AtomicFileWriter` writes through `Files.writeString`, an interruptible channel; the janitor
+scans the file system; the sweep waits on docker subprocesses), and an interrupt there would surface
+as the tick's own WARN (`SNAPSHOT_WRITE_FAILED`, `DASHBOARD_RENDER_WRITE_FAILED`, the janitor's and
+the sweep's codes), which the "interrupt is a stop" classification of `factory-serve` does not cover.
+Today's `SnapshotWriter.stop()` already lets a write finish. For the reaper this is a change: a
+sweep listing in flight is no longer interrupted but completes within the tracker client's own
+deadline. `ServeShutdown` does not join the reaper, so shutdown is not delayed, and the interrupt
+classification at the reaper's tracker sites stays in place for any interrupt from elsewhere.
+`stopAndJoin()` repeats "read the current worker under the lock, join it outside the
 lock" until no worker remains, so a respawn that happened in between is joined too. The death handler
 follows the three-phase shape of `lock-scope.md`: decide (`stopping`? give up?) and count under
 the lock, then wait the backoff with nothing held, then re-check `stopping` under the lock and
@@ -111,6 +123,10 @@ spawn only if it is still clear. Nothing blocking is ever held under the lock. I
 NFR-R2, NFR-R3. *Rationale:* this is the reaper's existing race-free shape, extended with the join a
 single-writer final write needs (D8). *Alternative rejected:* joining only the thread captured at
 `start()` (today's `stopAfterFinalWrite`). It returns while a respawned writer can still write.
+*Alternative rejected:* interrupting the worker in any phase. It shortens a stop by at most one
+tick, and pays for it with WARN lines and half-done disposals on every `Ctrl-C` that lands
+mid-tick. The cost of the chosen shape is that `stopAndJoin` waits out the current tick: one file
+write for the writer and the dashboard, the only two callers of the join (D8, D9).
 
 **D5 — Restart policies: `Unbounded` and `Bounded`.** `RestartPolicy` is a sealed interface over
 the existing `RestartBackoff`, which moves from `app.lease` to `app.daemon`. `RemoteOutageProbeSchedule`
@@ -141,7 +157,9 @@ per-loop codes the component replaces are retired and never reused: GF067
 (janitor scan, sweep actions, `DASHBOARD_RENDER_WRITE_FAILED`, the writer's own write/sweep
 failures) stay with their sites. Every line carries the `component` MDC key (`reaper`,
 `janitor`, `sweep`, `snapshot`, `dashboard`), so `grep component=janitor` still isolates one
-loop (NFR-O1). The operator guide lists the retired codes and their replacements. *Rationale:* the
+loop (NFR-O1). The observability operator guide gains a "Retired codes" subsection (none exists
+today; the guide names the enum as the full list) mapping each retired code to its replacement and
+`component` filter. *Rationale:* the
 catalog rule is "one code, one call site", and the call site is now genuinely one. The question of
 which loop degraded is answered by the key every line already carries.
 *Alternatives rejected:* per-loop codes passed in as parameters. The static gate requires a literal
@@ -204,10 +222,17 @@ undeclared pair `manual-sync-pairs.md` forbids. *Alternative rejected:* `serve` 
 fetch.
 
 **D11 — The board client inside `serve` is a separate read-only instance built from the bound
-configuration.** `ServeRuntimeAssembly` (the composition site, ADR 0010) builds the embedded
-`BoardSource` from the `BoundTracker` it already receives. It calls
-`bound.factory().create(secrets, bound.trackerConfig(), bound.instanceId().value())`, a new adapter
-instance that is not wrapped in `TrackerHealthTracker` and not epoch-stamped. It never calls
+configuration.** The adapter instance is built by `TrackerWiring`, the one holder of the
+credential seam (NFR-S1 of `collapse-composition-roots`, pinned by `TrackerWiringOwnerBoundarySpec`):
+a new method `Tracker boardReader(BoundTracker bound, InstanceId readerId)` calls
+`bound.factory().create(secrets, bound.trackerConfig(), readerId.value())`. It takes no `Path dir`,
+so it can only read the configuration `serve` bound. `ServeRuntimeAssembly` (the composition site,
+ADR 0010) receives it through a narrow role interface `BoardReaders` that `TrackerWiring`
+implements, the way dispatch code takes `RefResolution`, and builds the embedded `BoardSource` from
+the `BoundTracker` it already receives. The reader id is minted per invocation, exactly as
+`resolveReadOnly` mints one for the standalone commands (`scope.mintInstanceId()`), so the board
+client never acts under the daemon's claiming identity. The adapter instance is not wrapped in
+`TrackerHealthTracker` and not epoch-stamped, and the serve path never calls
 `TrackerWiring.resolveReadOnly`. Implements FR10, NFR-S1, NFR-P1. *Rationale:* this is the bulkhead
 pattern. The adapter code is one: the same factory and the same configuration. The instance is
 separate, so the dashboard's failures and latency stay out of the daemon's tracker health. The
@@ -215,7 +240,9 @@ configuration has one source per process: the law `serve` bound from origin. *Al
 sharing the daemon's tracker. Board failures would then count in `consecutiveFailures` and in alarm
 rule 4. `resolveReadOnly(dir, …)`: it reloads `.gnomish/` from the checkout, which gives a second
 configuration source in one process, and the WIP limit shown could differ from the one the feed
-enforces. *Note:* `create` provisions labels idempotently, as the standalone dashboard already does
+enforces. Handing a `SecretsProvider` to the serve assembly so it can call `create` itself: the
+credential seam would gain a second holder, which `TrackerWiringOwnerBoundarySpec` forbids.
+*Note:* `create` provisions labels idempotently, as the standalone dashboard already does
 on every start, which costs a few reads at startup.
 
 **D12 — `serve` options.** `ServeArguments` gains `boolean dashboard` and `@Nullable Path
@@ -231,7 +258,10 @@ per-machine default, and `--slots` over `factory.serve.slots` is the precedent.
 **D13 — `BoardModel` carries the WIP limit it was judged by.** `BoardModel` gains `int wipLimit`
 (taken from `EligibilityInputs.wipLimit()` inside `build`, the very value `EligibilityPolicy`
 judged WIP-held rows against) and a derived `openFrontCount()` = working rows + awaiting rows.
-`BoardJsonMapper.serialize/toDto` drop their `wipLimit` parameter and read the model. The emitted
+`BoardJsonMapper.serialize/toDto` drop their `wipLimit` parameter and read the model. The
+four-argument `build` overload, which today fills the limit with `Integer.MAX_VALUE` and is called
+only from tests, is deleted: once the model carries the limit, it would be a second path that puts a
+made-up limit on the page. The emitted
 JSON is unchanged (FR14). `DashboardStatusCardRenderer` takes the `BoardSectionView` too. It
 renders the snapshot stats only when a snapshot exists, and the WIP stat whenever a board model
 exists (FR12, FR13, UX3), with no `bad` styling. *Rationale:* the counter must show the limit the
@@ -289,11 +319,11 @@ is read only by someone who already found the class, which is exactly who does n
 
 | Owner                                                 | Value (type)                                                                                          | Consumers                                                                                                                                                                                  | Old way removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Enforced by                                                                                                                                                                                                                                                                                                           |
 |-------------------------------------------------------|-------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `app.daemon.SupervisedLoop` (D1–D5)                   | the long-lived daemon thread, its guard, stop and restart (`SupervisedLoop`, built from `LoopShape`)  | `app/lease/StandingReaper.java`, `app/serve/WorktreeJanitor.java`, `app/serve/SandboxLifecycleTick.java`, `serveobservability/writer/SnapshotWriter.java`, `app/DashboardWatch.java` (new) | each class's own `Thread.ofVirtual().name("gnomish-…").start(…)`, its `while` loop, its catch, `StandingReaper.onWorkerDeath`/`spawnWorker`, `SnapshotWriter.awaitNextWake`, `DashboardWatchLoop.run`. **Exemptions** (not daemon loops): `app/lease/HeldClaims.java` (heartbeat, not resurrected by D3 of `add-claim-heartbeat`); `app/serve/FeedCycle.java` (one finite thread per claim); `app/TakeBatch.java` (finite batch); `app/ServeShutdownWiring.java` (the feed thread owns the daemon's lifetime; shutdown hooks) | `DaemonLoopOwnerBoundarySpec` in `:bootstrap`: a scan of `application/src/main` for `Thread.ofVirtual(`, `Thread.ofPlatform(` and `new Thread(` that fails outside the allowlist (`SupervisedLoop.java` plus the four exempt files) and asserts that it reached every allowlisted file                                |
+| `app.daemon.SupervisedLoop` (D1–D5)                   | the long-lived daemon thread, its guard, stop and restart (`SupervisedLoop`, built from `LoopShape`)  | `app/lease/StandingReaper.java`, `app/serve/WorktreeJanitor.java`, `app/serve/SandboxLifecycleTick.java`, `serveobservability/writer/SnapshotWriter.java`, `app/DashboardWatch.java` (new) | each class's own `Thread.ofVirtual().name("gnomish-…").start(…)`, its `while` loop, its catch, `StandingReaper.onWorkerDeath`/`spawnWorker`, `SnapshotWriter.awaitNextWake`, `DashboardWatchLoop.run`. **Exemptions** (not daemon loops): `app/lease/HeldClaims.java` (heartbeat, not resurrected by D3 of `add-claim-heartbeat`); `app/serve/FeedCycle.java` (one finite thread per claim); `app/TakeBatch.java` (finite batch); `app/ServeShutdownWiring.java` (the feed thread owns the daemon's lifetime; shutdown hooks) | `DaemonLoopOwnerBoundarySpec` in `:bootstrap`: a scan of `application/src/main` (the layer holding every daemon loop; subprocess and stream pumps in other modules are finite threads and out of its scope) for `Thread.ofVirtual(`, `Thread.ofPlatform(` and `new Thread(` that fails outside the allowlist (`SupervisedLoop.java` plus the four exempt files) and asserts that it reached every allowlisted file; it also fails on `Executors.newScheduled`, `Executors.newSingleThreadScheduled`, `ScheduledExecutorService` and `new Timer(` anywhere in that tree |
 | `app.daemon.RestartPolicy` over `RestartBackoff` (D5) | backoff and restart count (`RestartPolicy`)                                                           | `SupervisedLoop`; `StandingReaper.restartCount()` (reads it); `app/serve/RemoteOutageProbeSchedule.java` (keeps `nextJitteredBackoff`)                                                     | `new RestartBackoff()` inside `StandingReaper`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the same boundary spec: `new RestartBackoff(` allowed only in `RestartPolicy.java` and `RemoteOutageProbeSchedule.java`                                                                                                                                                                                               |
-| `app.DashboardWatch` (D10)                            | the page's output path, ready window, board fetch and render loop (`DashboardWatch`)                  | `app/DashboardCommand.java` (one-shot and `--watch`), the serve runtime assembly (`app/ServeRuntimeAssembly.java` / `ServeAssembly.java`)                                                  | `DashboardCommand`'s inline `serveDir.resolve(DEFAULT_FILE_NAME)`, `BOARD_READY_LIMIT`, `BoardComposition.compose` lambda, `new DashboardWatchLoop(…).run`                                                                                                                                                                                                                                                                                                                                                                    | the boundary spec: the literal `"dashboard.html"` and calls to `BoardComposition.compose(` allowed only in `DashboardWatch.java` and `BoardCommand.java`                                                                                                                                                              |
-| `BoundTracker` (D11)                                  | the tracker configuration and adapter factory bound from origin's default branch (`BoundTracker`)     | the embedded `BoardSource`, built in the serve runtime assembly                                                                                                                            | inside `serve`, `TrackerWiring.resolveReadOnly(dir, …)`. **Exemptions:** `app/DashboardCommand.java` and `app/BoardCommand.java` (standalone commands with no bound law)                                                                                                                                                                                                                                                                                                                                                      | the type: `DashboardWatch`'s serve-side source is built only from a `BoundTracker`, and no `Path dir` reaches it. Boundary spec: `resolveReadOnly(` called only from the two exempt files. Identity spec: a `serve --dashboard` run whose checkout `wip-limit` differs from origin's renders origin's limit           |
-| `BoardModel` (D13)                                    | the WIP limit eligibility was judged by and the open-front count (`int wipLimit`, `openFrontCount()`) | `board/json/BoardJsonMapper.java`, `dashboard/DashboardStatusCardRenderer.java`, `app/BoardCommand.java`                                                                                   | `BoardJsonMapper.serialize(model, wipLimit)` / `toDto(model, wipLimit)` and its inline `workingRows().size() + awaitingHumanRows().size()`                                                                                                                                                                                                                                                                                                                                                                                    | the signature: no `wipLimit` parameter remains on any renderer. Identity spec: one model built with a limit and a WIP-held row; the JSON `wipLimit`, the status card's WIP denominator and the limit eligibility used are the same value. Byte-stability spec: the existing board JSON reference fixture is unchanged |
+| `app.DashboardWatch` (D10)                            | the page's output path, ready window, board fetch and render loop (`DashboardWatch`)                  | `app/DashboardCommand.java` (one-shot and `--watch`), the serve runtime assembly (`app/ServeRuntimeAssembly.java` / `ServeAssembly.java`)                                                  | `DashboardCommand`'s inline `serveDir.resolve(DEFAULT_FILE_NAME)`, `BOARD_READY_LIMIT`, `BoardComposition.compose` lambda, `new DashboardWatchLoop(…).run`                                                                                                                                                                                                                                                                                                                                                                    | the boundary spec, one allowlist per marker, each asserted reached: the literal `"dashboard.html"` only in `DashboardWatch.java`; calls to `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java` |
+| `TrackerWiring.boardReader` over `BoundTracker` (D11) | the read-only board client built from the configuration and adapter factory bound from origin's default branch (`Tracker`, from a `BoundTracker` and a minted `InstanceId`) | the embedded `BoardSource`, built in the serve runtime assembly (`app/ServeRuntimeAssembly.java`) through the `BoardReaders` role interface                                                | inside `serve`, `TrackerWiring.resolveReadOnly(dir, …)`; a `SecretsProvider` reaching the serve assembly. **Exemptions:** `app/DashboardCommand.java` and `app/BoardCommand.java` (standalone commands with no bound law)                                                                                                                                                                                                                                                                                                  | the type: `boardReader` takes a `BoundTracker`, and no `Path dir` reaches it. `TrackerWiringOwnerBoundarySpec` (unchanged): `SecretsProvider` stays declared only by `TrackerWiring`. Boundary spec: `resolveReadOnly(` declared only in `TrackerWiring.java` and called only from the two exempt files. Identity spec: a `serve --dashboard` run whose checkout `wip-limit` differs from origin's renders origin's limit |
+| `BoardModel` (D13)                                    | the WIP limit eligibility was judged by and the open-front count (`int wipLimit`, `openFrontCount()`) | `board/json/BoardJsonMapper.java`, `dashboard/DashboardStatusCardRenderer.java`, `app/BoardCommand.java`                                                                                   | `BoardJsonMapper.serialize(model, wipLimit)` / `toDto(model, wipLimit)` and its inline `workingRows().size() + awaitingHumanRows().size()`; the four-argument `BoardModel.build` overload that defaults the limit to `Integer.MAX_VALUE` (deleted, test callers moved to the five-argument form)                                                                                                                                                                                                        | the signature: no `wipLimit` parameter remains on any renderer. Identity spec: one model built with a limit and a WIP-held row; the JSON `wipLimit`, the status card's WIP denominator and the limit eligibility used are the same value. Byte-stability spec: the existing board JSON reference fixture is unchanged |
 
 ## Risks / Trade-offs
 

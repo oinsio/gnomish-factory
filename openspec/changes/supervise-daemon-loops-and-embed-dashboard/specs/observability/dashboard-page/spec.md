@@ -1,5 +1,34 @@
 # Spec Delta
 
+## MODIFIED Requirements
+
+### Requirement: Three sections degrade independently
+The page SHALL compose three independently degrading data sources — the
+snapshot (status card), the ledger (outcomes-by-day and tokens blocks),
+and the tracker board (waiting-for-a-human and in-progress blocks, and the
+status card's WIP stat). A missing snapshot SHALL render as "daemon has not
+run here"; an absent or unreadable ledger SHALL render the blocks'
+empty-state sentences; on tracker failure the board-fed blocks SHALL keep
+the last cached board model, marked with its fetch time and a
+refresh-failure notice, or render as unavailable with the failure
+summarized when no fetch has succeeded. A degraded source SHALL NOT fail
+the rendering of the others.
+<!-- implements FR1, FR2 of redesign-dashboard -->
+<!-- implements FR13 of supervise-daemon-loops-and-embed-dashboard -->
+
+#### Scenario: Tracker outage degrades only the board
+- **WHEN** the tracker is unreachable at render time and no board fetch
+  has succeeded
+- **THEN** the waiting-for-a-human and in-progress blocks show
+  "unavailable" with the failure summarized, while the status card and
+  the ledger blocks render normally
+
+#### Scenario: Fresh install renders a page
+- **WHEN** no snapshot and no ledger files exist and the tracker is
+  reachable
+- **THEN** the page renders with "daemon has not run here", the ledger
+  blocks' empty-state sentences, and populated board-fed blocks
+
 ## ADDED Requirements
 
 ### Requirement: Status card shows the WIP stat from the board

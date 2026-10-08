@@ -13,8 +13,11 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `RemoteOutageProbeSchedule*Spec` pass, and `grep -rn "app.lease.RestartBackoff" --include='*.java'
       --include='*.groovy' .` is empty.
 - [ ] 1.2 Add the operator-event codes `DAEMON_LOOP_TICK_FAILED`, `DAEMON_LOOP_STRAY_INTERRUPT`,
-      `DAEMON_LOOP_WORKER_DIED`, `DAEMON_LOOP_GAVE_UP` and `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` at the
-      next free `GFnnn` numbers in `operatorevent/.../OperatorEvent.java` (D6). Add `DASHBOARD("dashboard")`
+      `DAEMON_LOOP_WORKER_DIED`, `DAEMON_LOOP_GAVE_UP` and `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` in
+      `operatorevent/.../OperatorEvent.java` (D6), numbered after the highest code on `main` and in
+      the active implementation of `make-checkpoint-gate-durable` (on 2026-10-08 that change holds
+      `GF151`, so this change starts at `GF152` or later). Check both before numbering:
+      `grep -o 'GF[0-9]*' OperatorEvent.java | sort | tail -1` on `main` and on that change's branch. Add `DASHBOARD("dashboard")`
       to `status/DaemonComponent.java` and to the spec that enumerates its keys. Verify: `:operatorevent`
       compiles, and the DaemonComponent spec passes with the new constant.
 - [ ] 1.3 Implement `app.daemon.SupervisedLoop` with `LoopShape(DaemonComponent, LoopOrder, LoopWait,
@@ -23,7 +26,9 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       (`Unbounded(base, cap)`, `Bounded(base, cap, maxRestarts, window, Clock)`), all over
       `RestartBackoff`. Provide `start()`, `stop()`, `stopAndJoin()` and `restartCount()`. The level-1
       guard is `catch (Throwable)` around the tick and the wait, reporting through `RepeatSuppressor`
-      keyed by the component (D2). The interrupt check follows D3. The death handler follows the
+      keyed by the component (D2). The interrupt check follows D3. `stop()` interrupts the worker only
+      while the lock-guarded `waiting` flag is set, and releases `IntervalOrSignal` with `signal()`
+      (D4). The death handler follows the
       three-phase shape of D4: nothing blocking under the lock, and `stopping` re-checked before
       spawning. The javadoc cites ADR 0013 and `.claude/rules/daemon-loops.md`, and states that the
       lock is a state-guarding lock (`lock-scope.md`). Verify: `SupervisedLoopSpec` (virtual time)
@@ -36,7 +41,11 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 - [ ] 1.4 Write `SupervisedLoopStopConcurrencySpec` with real threads, per `lock-scope.md`
       "Specs". (a) A stop during a respawn backoff spawns no thread. (b) `stopAndJoin` racing a
       respawn returns only after the respawned thread exits, and no tick runs afterward. (c) A
-      `stop()` caller returns promptly while the death handler sits in a latched backoff. Verify:
+      `stop()` caller returns promptly while the death handler sits in a latched backoff. (d) A
+      `stop()` during a tick blocked on a latch does not interrupt it (the tick observes no interrupt
+      flag), the tick completes, no WARN/ERROR is logged, and no further tick runs; a `stop()` during
+      the wait ends it promptly (daemon-supervision "Stop during a run lets the run finish without a
+      warning", D4). Verify:
       the spec passes 20 consecutive runs (`--rerun-tasks` loop in the task report).
 - [ ] 1.5 Add the glossary entry "supervised daemon loop" to `docs/glossary.md`, covering its
       two restart policies and *Never:* "background worker", "scheduler thread" (D15). Verify: the
@@ -55,9 +64,12 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       spec still shows a grown `restartCount` after a respawn (daemon-supervision "Reaper restarts stay
       visible"). Old-way sweep: `grep -n "Thread.ofVirtual\|uncaughtExceptionHandler\|RestartBackoff"
       application/src/main/java/com/github/oinsio/gnomish/app/lease/StandingReaper.java` is empty.
-- [ ] 2.2 Update the code table in `docs/guides/operator-guide-observability.md` (or wherever GF067–069
-      are listed; find them with `grep -rn "GF06[789]" docs`): the retired codes, their replacement,
-      and the `component` filter (D6). Verify: grep finds the codes only in the retired-codes table.
+- [ ] 2.2 Create a "Retired codes" subsection in `docs/guides/operator-guide-observability.md`,
+      right after the paragraph on `[GFnnn]` codes (the one ending "the practical way to find the
+      ones a given incident produced"). No such table exists today: the guide names the
+      `OperatorEvent` enum as the full list. Columns: retired code, replacement code, `component`
+      filter (D6). Add the GF067, GF068 and GF069 rows. Verify: `grep -rn "GF06[789]" docs` finds them
+      only in that subsection.
 
 ## 3. Worktree janitor and sandbox sweep tick on the supervised loop (D7, D9, D14; FR6)
 
@@ -78,7 +90,7 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `ServeShutdown` spec asserts all three stop before `awaitDrained` and that a second `shutdown`
       is a no-op. The factory-serve scenario "No cleaner run during drain" passes in
       `ServeShutdownWiringSpec` (or its successor).
-- [ ] 3.4 Update the GF073/GF077 rows in the operator guide's retired-codes table (as in 2.2), and
+- [ ] 3.4 Add the GF073 and GF077 rows to the "Retired codes" subsection created in 2.2, and
       in `docs/guides/operator-guide-serve.md` state that `serve` shutdown stops the janitor and the
       sweep tick. Verify: grep as in 2.2.
 
@@ -98,7 +110,7 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       record and that the counting writer saw no write after it. Also: a single death is followed
       by a write within two intervals on virtual time (serve-observability "Writer death is not a dead
       daemon"). Verify: 20 consecutive green runs.
-- [ ] 4.3 Update the GF105 row of the retired-codes table. Verify: grep as in 2.2.
+- [ ] 4.3 Add the GF105 row to the "Retired codes" subsection created in 2.2. Verify: grep as in 2.2.
 
 ## 5. Enforcement and durable guidance (D14, D15, single-owner rows 1–2; FR16, M1, M2)
 
@@ -106,11 +118,13 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       scans `application/src/main` for `Thread.ofVirtual(`, `Thread.ofPlatform(` and `new Thread(`
       and allows only `app/daemon/SupervisedLoop.java`, `app/lease/HeldClaims.java`,
       `app/serve/FeedCycle.java`, `app/TakeBatch.java` and `app/ServeShutdownWiring.java`, each with
-      its reason in the allowlist. It allows `new RestartBackoff(` only in `app/daemon/RestartPolicy.java`
+      its reason in the allowlist. It also fails on `Executors.newScheduled`,
+      `Executors.newSingleThreadScheduled`, `ScheduledExecutorService` and `new Timer(` anywhere in
+      `application/src/main` (none exist today), the silent-death shape D1 rejects. It allows `new RestartBackoff(` only in `app/daemon/RestartPolicy.java`
       (or the file holding the policies) and `app/serve/RemoteOutageProbeSchedule.java`, and asserts
       that the scan reached every allowlisted file. Verify: the spec is green, and a scratch
-      `Thread.ofVirtual()` added to `WorktreeJanitor` makes it fail naming the file (record the red
-      run, then revert).
+      `Thread.ofVirtual()` added to `WorktreeJanitor` makes it fail naming the file, and so does a
+      scratch `Executors.newSingleThreadScheduledExecutor()` (record both red runs, then revert).
 - [ ] 5.2 Write `docs/adr/0013-supervised-daemon-loop.md`: context (four loops, the silent-death
       history, `fix-reaper-idle-liveness` D4/D5), the decision (D1–D3, D5, D6), alternatives
       (`ScheduledExecutorService`, base class, per-loop codes), and the restart-policy choice (Unbounded
@@ -120,7 +134,8 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 - [ ] 5.3 Write `.claude/rules/daemon-loops.md` in the shape of `lock-scope.md`. It covers what
       counts as a daemon loop, when to use `SupervisedLoop` and when not to (the five exemptions with
       reasons), how to pick the order, the wait and the restart policy, adding a `DaemonComponent`
-      constant, the gate (`DaemonLoopOwnerBoundarySpec`) and the review/audit obligation. Add its
+      constant, the gate (`DaemonLoopOwnerBoundarySpec`, its scope `application/src/main` and its
+      banned patterns, the scheduled executors and `Timer` included) and the review/audit obligation. Add its
       row to the "Process Rules" table in `CLAUDE.md`. Verify: the row exists, and the rule names
       the spec, the ADR and the glossary term.
 - [ ] 5.4 Measure M1: `grep -rln "Thread.ofVirtual().name(\"gnomish-" application/src/main` lists only
@@ -133,8 +148,14 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `EligibilityInputs.wipLimit()`) and an `openFrontCount()` method. Drop the `wipLimit` parameter
       from `board/json/BoardJsonMapper.serialize/toDto` and have it read the model. Rewrite that
       class's javadoc paragraph on `wipLimit` to state the reversed decision and why (D13). Update
-      `app/BoardCommand.java:76`. Verify: the board JSON reference-fixture spec is byte-identical
-      (FR14), and `grep -rn "workingRows().size() + \|serialize(model, " application/src/main`
+      `app/BoardCommand.java:76`. Delete the four-argument `BoardModel.build(ready, open, truncated,
+      generatedAt)` overload, which fills `wipLimit` with `Integer.MAX_VALUE` and has no caller in
+      `src/main` (`BoardComposition` uses the five-argument form). Move its test callers
+      (`grep -rn 'BoardModel.build(' application/src/test`: `BoardModelSpec`, `BoardJsonMapperSpec`,
+      `DashboardBoardFixtures` and others) and every direct `new BoardModel(` in the tests to the
+      five-argument form or to a fixture that states its limit. Verify: the board JSON
+      reference-fixture spec is byte-identical (FR14), and `grep -rn "workingRows().size() +
+      \|serialize(model, \|Integer.MAX_VALUE" application/src/main/java/com/github/oinsio/gnomish/board`
       is empty.
 - [ ] 6.2 Pass the `BoardSectionView` to `dashboard/DashboardStatusCardRenderer.java` (from
       `DashboardHtmlRenderer.java:92`). Split `appendStats` so the slots and failures stats need a
@@ -146,8 +167,8 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       with limit 3, three open fronts and a WIP-held ready row. Assert that the JSON `wipLimit`, the
       rendered WIP denominator and the limit the held row was judged against are all 3 (dashboard-page
       "Limit matches the held rows"). Verify: the spec passes.
-- [ ] 6.4 Document the WIP stat in `docs/guides/operator-guide-observability.md` (dashboard
-      section): what counts as an open front, that the limit is the project's `wip-limit`, and that it
+- [ ] 6.4 Document the WIP stat in `docs/guides/operator-guide-dashboard.md` (the reference for
+      `gnomish dashboard`, in its status-card description): what counts as an open front, that the limit is the project's `wip-limit`, and that it
       is a reference number and not an alarm. Verify: the section exists.
 
 ## 7. One dashboard assembly (D10, single-owner row 3; FR9, FR14)
@@ -165,10 +186,11 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `--watch` = `start()` then `awaitEnd()`, exiting 1 if the loop gave up (dashboard-page
       "Standalone renderer gives up"). It still builds its source from `TrackerWiring.resolveReadOnly`.
       Verify: `DashboardCommand` specs green. Old-way sweep: `grep -rn "\"dashboard.html\"\|BoardComposition.compose("
-      application/src/main` hits only `DashboardWatch.java` and `BoardCommand.java`.
-- [ ] 7.3 Extend `DaemonLoopOwnerBoundarySpec` (5.1) with the row-3 checks: the `"dashboard.html"`
-      literal and `BoardComposition.compose(` are allowed only in `DashboardWatch.java` and
-      `BoardCommand.java`. Verify: the spec is green, and a scratch violation is red (record the run).
+      application/src/main` hits `"dashboard.html"` only in `DashboardWatch.java` and
+      `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`.
+- [ ] 7.3 Extend `DaemonLoopOwnerBoundarySpec` (5.1) with the row-3 checks, one allowlist per
+      marker, each file asserted reached: the `"dashboard.html"` literal only in `DashboardWatch.java`;
+      `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`. Verify: the spec is green, and a scratch violation is red (record the run).
 
 ## 8. `serve --dashboard` (D9, D11, D12, single-owner row 4; FR8–FR11, FR15, NFR-R1, NFR-S1, NFR-P1, NFR-O2, UX1, UX2, UX5)
 
@@ -178,22 +200,26 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `UsageException`. Verify: the parser spec covers both flags, `--dashboard-out` resolved like
       `dashboard --out`, and the factory-serve scenario "Output path without the dashboard". The
       `ConfigLevelCoverageSpec` and the unknown-option spec stay green.
-- [ ] 8.2 Check before wiring: read `TrackerAdapterFactory.create` in the GitHub and in-memory
-      adapters and record which reads and writes `create` performs with the instance id it is given.
-      Confirm that a read-only board client created under the serve's own instance id writes nothing
-      claim-related. If it would, mint a separate reader id through the existing mint site and record
-      the exception in design D11. Verify: the finding is written in the task report.
+- [ ] 8.2 Add `Tracker boardReader(BoundTracker bound, InstanceId readerId)` to
+      `app/TrackerWiring.java` (D11): `bound.factory().create(secrets, bound.trackerConfig(),
+      readerId.value())`, no `Path dir`, not health-wrapped, not epoch-stamped. Expose it through a new
+      role interface `BoardReaders` that `TrackerWiring` implements, as it implements `RefResolution`.
+      Verify: a `TrackerWiring` spec asserts the reader is built from the bound configuration (a
+      checkout config is never read) under the given reader id, and `TrackerWiringOwnerBoundarySpec`
+      stays green unchanged (no new `SecretsProvider` holder).
 - [ ] 8.3 In the serve runtime assembly (`app/ServeRuntimeAssembly.java` / `ServeAssembly.java`),
-      when the switch is on, build `BoardSource` from the `BoundTracker` (`factory().create(...)`
-      with `trackerConfig()`, not wrapped in `TrackerHealthTracker`) and a `DashboardWatch` for the
-      serve's layout and instance name. In `ServeCommand`, start it after `observability().start()`,
+      when the switch is on, build `BoardSource` from `BoardReaders.boardReader(bound,
+      scope.mintInstanceId())` (a minted reader id, as `resolveReadOnly` mints one) with
+      `bound.trackerConfig()`, and a `DashboardWatch` for the serve's layout and instance name. The
+      assembly receives `BoardReaders`, never a `SecretsProvider`. In `ServeCommand`, start it after `observability().start()`,
       print `gnomish serve: dashboard -> <path>` on the human console, and add `dashboard` and
       `dashboardOut` to `AnchorLog.ServeConfig`. Verify: a serve-level spec asserts the printed line
       and the anchor fields (UX1, NFR-O2). Old-way sweep: `grep -rn "resolveReadOnly(" application/src/main`
       hits only `TrackerWiring.java`, `DashboardCommand.java` and `BoardCommand.java`.
-- [ ] 8.4 Extend `DaemonLoopOwnerBoundarySpec` with row 4: `resolveReadOnly(` is called only from
-      `DashboardCommand.java` and `BoardCommand.java`. Verify: green, and a scratch call from
-      `ServeRuntimeAssembly` is red (record the run).
+- [ ] 8.4 Extend `DaemonLoopOwnerBoundarySpec` with row 4, as its own marker allowlist:
+      `resolveReadOnly(` appears only in `TrackerWiring.java` (the declaration),
+      `DashboardCommand.java` and `BoardCommand.java`, each asserted reached. Verify: green, and a
+      scratch call from `ServeRuntimeAssembly` is red (record the run).
 - [ ] 8.5 In `app/ServeShutdownWiring.java`, call `dashboard.stopAndRenderFinal()` after
       `observability.finalizeStopped(...)` on both `runDrain` and `runForever` paths when enabled
       (D9). Verify: a spec drives `serve --dashboard --drain` with the in-memory tracker and fake
@@ -220,8 +246,10 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 - [ ] 8.9 Document in `docs/guides/operator-guide-serve.md`: `--dashboard`, `--dashboard-out` and
       `factory.serve.dashboard`, the printed line, the final render, the bounded give-up, and that a
       `serve --dashboard` and a standalone `dashboard --watch` writing one file overwrite each other
-      (UX5). In `operator-guide-observability.md`, note that the standalone `--watch` exits 1 when its
-      loop is disabled. Verify: both sections exist.
+      (UX5), with a pointer to `operator-guide-dashboard.md` for the page itself. In
+      `operator-guide-dashboard.md` (its `--watch` wall-display recipe), note that the standalone
+      `--watch` exits 1 when its loop is disabled, and mention `serve --dashboard` as the
+      one-process alternative. Verify: both sections exist.
 
 ## 9. Traceability check
 

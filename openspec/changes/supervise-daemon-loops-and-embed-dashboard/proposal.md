@@ -114,7 +114,8 @@ the WIP limit that decides whether fresh work starts.
   same, but after more than N restarts within window T, log one ERROR saying
   the loop is disabled and stop respawning. The process keeps running in
   both cases.
-- **FR4** — A stop SHALL end the loop without a WARN or ERROR, SHALL prevent
+- **FR4** — A stop SHALL end the loop without a WARN or ERROR, SHALL let a
+  tick in progress finish rather than interrupt it, SHALL prevent
   any later respawn, even one already backing off, and SHALL offer a variant
   that returns only after the current thread, including a respawned one, has
   exited.
@@ -257,6 +258,10 @@ the WIP limit that decides whether fresh work starts.
 - Docs — new `docs/adr/0013-supervised-daemon-loop.md`, new
   `.claude/rules/daemon-loops.md` (and its row in `CLAUDE.md`);
   `docs/guides/operator-guide-serve.md`, `operator-guide-observability.md`,
+  `operator-guide-dashboard.md`,
   `docs/glossary.md`;
   `.gnomish/factory/gnomish-up`, `.gnomish/README.md`.
 - No new dependencies. No wire-format change (snapshot, ledger, board JSON).
+- Sequencing: lands after `make-checkpoint-gate-durable`, which appends an
+  operator-event code to the same catalog; this change's codes are numbered
+  after it.

@@ -7,7 +7,7 @@ The snapshot writer SHALL be respawned when its thread dies, so that the
 snapshot keeps being written while the daemon runs. A single death SHALL be
 followed by a write within two snapshot intervals, inside the dashboard's
 staleness window, so the dashboard does not report the daemon as dead. Every respawn SHALL be logged at ERROR.
-<!-- implements FR6, UX4 of supervise-daemon-loops-and-embed-dashboard -->
+<!-- implements FR6, NFR-O1 of supervise-daemon-loops-and-embed-dashboard -->
 
 #### Scenario: Writer death is not a dead daemon
 - **WHEN** the snapshot writer's thread dies once while the daemon serves
