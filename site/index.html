@@ -101,8 +101,11 @@
                  alt="A gnome inspects task cubes travelling along a conveyor under glass bells." loading="lazy">
             </div>
             <figure class="diagram">
-                <img src="assets/idef0-stage-diagram.svg" width="980" height="560"
-                     alt="IDEF0 diagram: Input transformed into Output by a Stage, with Control from above, Mechanism from below, and a Quality Control loop.">
+                <picture>
+                    <source srcset="assets/idef0-stage-diagram-dark.svg" media="(prefers-color-scheme: dark)">
+                    <img src="assets/idef0-stage-diagram.svg" width="980" height="560"
+                         alt="IDEF0 diagram: Input transformed into Output by a Stage, with Control from above, Mechanism from below, and a Quality Control loop.">
+                </picture>
                 <figcaption>Every stage is an IDEF0/ICOM box with a Quality Control loop. Input, Output, Control,
                     Mechanism and Verification are all machine-verifiable.</figcaption>
             </figure>
