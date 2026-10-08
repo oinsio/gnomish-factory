@@ -1,11 +1,11 @@
-package com.github.oinsio.gnomish.app.lease
+package com.github.oinsio.gnomish.app.daemon
 
 import java.time.Duration
 import spock.lang.Specification
 
 /**
  * FR4 of fix-reaper-idle-liveness (design D5): {@link RestartBackoff}, the supervised-restart
- * bookkeeping for {@link StandingReaper}. These specs pin the pure state machine directly — the
+ * bookkeeping for {@link com.github.oinsio.gnomish.app.lease.StandingReaper}. These specs pin the pure state machine directly — the
  * exponential backoff (base, doubling, cap, clean-tick reset) and the lifetime restart counter that
  * never resets — independent of the reaper that drives it in {@code StandingReaperSupervisionSpec}.
  *

@@ -192,7 +192,7 @@ grep 'taskId=42' ~/.gnomish/projects/widgets/logs/default.log
 
 `stage` and `attempt` narrow it to one pipeline step. `component` names the
 long-lived daemon worker that wrote the line — one of `janitor`, `reaper`,
-`snapshot`, `sweep`, `heartbeat` — and is what separates estate-wide work
+`snapshot`, `sweep`, `heartbeat`, `dashboard` — and is what separates estate-wide work
 from task work in a busy file (`grep 'component=reaper'`). Task lines leave it
 empty; daemon lines leave the task triple empty unless the work is on behalf
 of one task.

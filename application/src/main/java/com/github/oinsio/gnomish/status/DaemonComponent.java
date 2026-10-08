@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.logtext.MdcAwareThread;
  * The daemon workers a serve run starts, and the names their log lines carry in the
  * {@code component} MDC key (FR8, design D10 of harden-logging-observability).
  *
- * <p>A serve run's file interleaves five long-lived voices with the task work itself. The task
+ * <p>A serve run's file interleaves six long-lived voices with the task work itself. The task
  * lines are correlated by {@code taskId}; the daemons' are not — a janitor removing an orphaned
  * worktree, a reaper converging someone else's stale claim, a sweep tick grading containers all
  * speak about the estate rather than about one task. Without a key naming the speaker, a
@@ -34,7 +34,10 @@ public enum DaemonComponent {
     SWEEP("sweep"),
 
     /** Renews the leases of the claims this instance holds. */
-    HEARTBEAT("heartbeat");
+    HEARTBEAT("heartbeat"),
+
+    /** Renders the dashboard page while serve runs. */
+    DASHBOARD("dashboard");
 
     private final String key;
 

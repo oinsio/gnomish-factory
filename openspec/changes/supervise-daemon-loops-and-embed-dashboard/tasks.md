@@ -7,12 +7,12 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 
 ## 1. Supervised daemon loop component (D1–D6; FR1–FR5, NFR-R2, NFR-R3, NFR-O1)
 
-- [ ] 1.1 Move `app/lease/RestartBackoff.java` to the new package `app.daemon` without changing
+- [x] 1.1 Move `app/lease/RestartBackoff.java` to the new package `app.daemon` without changing
       behavior. Update its two users, `StandingReaper` and `app/serve/RemoteOutageProbeSchedule.java`,
       and move `RestartBackoffSpec` with it. Verify: `RestartBackoffSpec` and
       `RemoteOutageProbeSchedule*Spec` pass, and `grep -rn "app.lease.RestartBackoff" --include='*.java'
       --include='*.groovy' .` is empty.
-- [ ] 1.2 Add the operator-event codes `DAEMON_LOOP_TICK_FAILED`, `DAEMON_LOOP_STRAY_INTERRUPT`,
+- [x] 1.2 Add the operator-event codes `DAEMON_LOOP_TICK_FAILED`, `DAEMON_LOOP_STRAY_INTERRUPT`,
       `DAEMON_LOOP_WORKER_DIED`, `DAEMON_LOOP_GAVE_UP` and `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` in
       `operatorevent/.../OperatorEvent.java` (D6), numbered after the highest code on `main` and in
       the active implementation of `make-checkpoint-gate-durable` (on 2026-10-08 that change holds
@@ -20,7 +20,7 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       `grep -o 'GF[0-9]*' OperatorEvent.java | sort | tail -1` on `main` and on that change's branch. Add `DASHBOARD("dashboard")`
       to `status/DaemonComponent.java` and to the spec that enumerates its keys. Verify: `:operatorevent`
       compiles, and the DaemonComponent spec passes with the new constant.
-- [ ] 1.3 Implement `app.daemon.SupervisedLoop` with `LoopShape(DaemonComponent, LoopOrder, LoopWait,
+- [x] 1.3 Implement `app.daemon.SupervisedLoop` with `LoopShape(DaemonComponent, LoopOrder, LoopWait,
       RestartPolicy)`, the sealed `LoopWait` (`FixedInterval(Sleeper, Duration)`,
       `IntervalOrSignal(Duration)` with `signal()` and permit coalescing) and the sealed `RestartPolicy`
       (`Unbounded(base, cap)`, `Bounded(base, cap, maxRestarts, window, Clock)`), all over
@@ -38,7 +38,7 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       Unbounded backoff doubling and reset on a clean tick with an increasing count, and Bounded
       giving up on the sixth death within the window with no respawn. Every new code is asserted by
       the log capture.
-- [ ] 1.4 Write `SupervisedLoopStopConcurrencySpec` with real threads, per `lock-scope.md`
+- [x] 1.4 Write `SupervisedLoopStopConcurrencySpec` with real threads, per `lock-scope.md`
       "Specs". (a) A stop during a respawn backoff spawns no thread. (b) `stopAndJoin` racing a
       respawn returns only after the respawned thread exits, and no tick runs afterward. (c) A
       `stop()` caller returns promptly while the death handler sits in a latched backoff. (d) A
@@ -47,10 +47,10 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       the wait ends it promptly (daemon-supervision "Stop during a run lets the run finish without a
       warning", D4). Verify:
       the spec passes 20 consecutive runs (`--rerun-tasks` loop in the task report).
-- [ ] 1.5 Add the glossary entry "supervised daemon loop" to `docs/glossary.md`, covering its
+- [x] 1.5 Add the glossary entry "supervised daemon loop" to `docs/glossary.md`, covering its
       two restart policies and *Never:* "background worker", "scheduler thread" (D15). Verify: the
       entry exists and no banned synonym appears in `application/src/main` (grep).
-- [ ] 1.6 Verify group 1 against the per-task rule: `pitestVerifyAllKilled
+- [x] 1.6 Verify group 1 against the per-task rule: `pitestVerifyAllKilled
       -PpitScope=com.github.oinsio.gnomish.app.daemon.*` is green.
 
 ## 2. Standing reaper on the supervised loop (D5, D6, D7; FR6)

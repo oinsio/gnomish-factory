@@ -113,13 +113,13 @@ carrier, and which rendering it gets is chosen by the plane it is leaving for.
 
 The carrier has five ways out, each with its own allowlist:
 
-| Way out                                      | Who may call it                       | What it yields                                      |
-|----------------------------------------------|---------------------------------------|-----------------------------------------------------|
-| `isBlank()`, `contains(String)`, `length()`  | anyone                                | a boolean or an int — no text leaves                 |
-| `forLog()` / `forConsole()` / `forComment()` | anyone                                | neutralized text for a human plane                   |
-| `forCommentInline()`                         | anyone                                | the comment plane without the label and the fence    |
-| `forParsing()`                               | classes annotated `@UntrustedParser`  | the bytes as captured, to be turned into a value     |
-| `raw()`                                      | classes annotated `@UntrustedExit`    | the bytes as captured, to be written to a machine medium |
+| Way out                                      | Who may call it                      | What it yields                                           |
+|----------------------------------------------|--------------------------------------|----------------------------------------------------------|
+| `isBlank()`, `contains(String)`, `length()`  | anyone                               | a boolean or an int — no text leaves                     |
+| `forLog()` / `forConsole()` / `forComment()` | anyone                               | neutralized text for a human plane                       |
+| `forCommentInline()`                         | anyone                               | the comment plane without the label and the fence        |
+| `forParsing()`                               | classes annotated `@UntrustedParser` | the bytes as captured, to be turned into a value         |
+| `raw()`                                      | classes annotated `@UntrustedExit`   | the bytes as captured, to be written to a machine medium |
 
 ```java
 log.warn("stage command failed: {}", failure.forLog());        // failure is an UntrustedText
@@ -272,7 +272,7 @@ deletion) counts locally and emits **one** aggregate line per operation instead
 - `stage` / `attempt` are cleared at the same boundaries that clear `taskId`.
 - A daemon worker sets `component` once at start by framing its loop with
   `DaemonComponent.<NAME>.framing(...)` — that enum owns the vocabulary
-  (janitor, reaper, snapshot, sweep, heartbeat); a new daemon adds a constant
+  (janitor, reaper, snapshot, sweep, heartbeat, dashboard); a new daemon adds a constant
   there rather than a string literal at the call site.
 - Per-task work done by a daemon runs inside `MdcAwareThread.taskScope(id)`
   (try-with-resources), so `grep taskId=<id>` finds it. That helper owns the

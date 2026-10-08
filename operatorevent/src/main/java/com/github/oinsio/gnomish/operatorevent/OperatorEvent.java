@@ -218,7 +218,22 @@ public enum OperatorEvent {
     // product version (add-release-pipeline, design D2): the jar's build info is present but
     // unreadable, malformed or without a version, so the factory reports itself as the
     // development version; the release workflow's identity check is where such a jar is stopped.
-    FACTORY_VERSION_UNREADABLE("GF150");
+    FACTORY_VERSION_UNREADABLE("GF150"),
+    // GF151 is reserved by make-checkpoint-gate-durable (CHECKPOINT_APPROVAL_REFUSED).
+    // supervised daemon loop (supervise-daemon-loops-and-embed-dashboard, design D6): the five
+    // events of the one component that runs every long-lived daemon loop. The loop is named by the
+    // `component` MDC key every line carries, not by the code, so each code has exactly one site.
+    // They replace the per-loop GF067, GF068, GF069, GF073, GF077 and GF105 (retired, never reused).
+    // A tick or its wait threw: logged as an edge (repeats suppressed), and the loop goes on.
+    DAEMON_LOOP_TICK_FAILED("GF152"),
+    // An interrupt reached the loop while no stop was requested: absorbed, the loop goes on.
+    DAEMON_LOOP_STRAY_INTERRUPT("GF153"),
+    // The loop's thread ended abnormally: respawned after the policy's backoff (restart count).
+    DAEMON_LOOP_WORKER_DIED("GF154"),
+    // A bounded policy exceeded its restarts within its window: the loop is disabled, no respawn.
+    DAEMON_LOOP_GAVE_UP("GF155"),
+    // The backoff sleep before a respawn failed: the respawn proceeds without further delay.
+    DAEMON_LOOP_BACKOFF_SLEEP_FAILED("GF156");
 
     private final String code;
     private final String head;

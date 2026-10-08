@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.app.lease.RestartBackoff;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.time.Duration;
 import java.time.Instant;

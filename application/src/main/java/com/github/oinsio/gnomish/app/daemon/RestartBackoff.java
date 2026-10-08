@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.app.lease;
+package com.github.oinsio.gnomish.app.daemon;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import java.time.Duration;
@@ -6,7 +6,8 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Supervised-restart bookkeeping for {@link StandingReaper} (design D5): the exponential backoff
+ * Supervised-restart bookkeeping for {@link com.github.oinsio.gnomish.app.lease.StandingReaper}
+ * (design D5): the exponential backoff
  * to wait before a respawn, and the monotonically increasing restart counter carried by the
  * respawn ERROR log line (NFR-O1, UX2).
  *
@@ -21,8 +22,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * add-base-ref-resolution, FR14) can reuse the same doubling-and-cap policy for its probe interval
  * instead of forking it (design D9: "extend RestartBackoff, do not fork it"), via {@link
  * #nextJitteredBackoff} with its own, independently configured cap ({@link
- * #RestartBackoff(Duration)}) — {@link StandingReaper} keeps using the no-arg constructor and the
+ * #RestartBackoff(Duration)}) — {@code StandingReaper} keeps using the no-arg constructor and the
  * unjittered {@link #nextBackoff}, so its behavior is unchanged by this reuse.
+ *
+ * <p>Lives in {@code app.daemon} (design D5 of supervise-daemon-loops-and-embed-dashboard), the
+ * package of the daemon-loop supervision it serves; {@link #nextBackoff}, {@link
+ * #nextRestartCount} and {@link #restartCount} are public only because {@code StandingReaper}
+ * still drives them from {@code app.lease}.
  *
  * <p>Implements FR4 of fix-reaper-idle-liveness (design D5). Implements FR14 of
  * add-base-ref-resolution (task 7.3).
@@ -36,7 +42,7 @@ public final class RestartBackoff {
     private final AtomicInteger consecutiveFailures = new AtomicInteger();
     private final AtomicInteger restartCount = new AtomicInteger();
 
-    /** {@link StandingReaper}'s policy: the {@link #MAX_BACKOFF} ceiling (design D5). */
+    /** {@code StandingReaper}'s policy: the {@link #MAX_BACKOFF} ceiling (design D5). */
     public RestartBackoff() {
         this(MAX_BACKOFF);
     }
@@ -60,7 +66,7 @@ public final class RestartBackoff {
      * @param baseInterval the beat interval, i.e. the first backoff; never null
      * @return the backoff duration to sleep before respawning; never null
      */
-    Duration nextBackoff(Duration baseInterval) {
+    public Duration nextBackoff(Duration baseInterval) {
         int failures = consecutiveFailures.getAndIncrement();
         Duration backoff = baseInterval;
         for (int i = 0; i < failures; i++) {
@@ -108,12 +114,12 @@ public final class RestartBackoff {
     }
 
     /** Increments and returns the lifetime restart count (never resets), for the ERROR log. */
-    int nextRestartCount() {
+    public int nextRestartCount() {
         return restartCount.incrementAndGet();
     }
 
     /** The lifetime restart count so far, without incrementing (task 2.5's vitals reader). */
-    int restartCount() {
+    public int restartCount() {
         return restartCount.get();
     }
 

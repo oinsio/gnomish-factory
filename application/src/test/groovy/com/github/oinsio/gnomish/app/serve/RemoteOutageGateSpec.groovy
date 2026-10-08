@@ -11,7 +11,7 @@ import spock.lang.Specification
  * FR14, NFR-R3, D9 of add-base-ref-resolution (task 7.3): the remote outage gate's own mechanics,
  * on virtual time — a fresh gate starts closed; it opens on {@link RemoteOutageGate#openOnFailure},
  * probes on a jittered interval that grows from the idle interval to a configured cap ({@link
- * com.github.oinsio.gnomish.app.lease.RestartBackoff}'s policy, reused rather than forked), closes
+ * com.github.oinsio.gnomish.app.daemon.RestartBackoff}'s policy, reused rather than forked), closes
  * on the first successful probe, and resets its interval to the idle floor ONLY on the first
  * successful base refresh observed after that close — never on the probe itself, so a flapping
  * remote (probe passes, refresh fails) reopens at a longer interval, never at the idle one.

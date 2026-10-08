@@ -547,6 +547,27 @@ trusted/task tier split, and the law-root rule.
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
   returns early.
 
+## Daemon loops
+
+Introduced by `supervise-daemon-loops-and-embed-dashboard`; the reasoning is
+ADR 0013.
+
+- **Supervised daemon loop** — the factory's one shape for a long-lived thread
+  that repeats work for the life of the process: a tick run on a fixed interval
+  or on an interval cut short by a signal, guarded so a failure of the tick or
+  of the wait never ends the loop, and stoppable without racing a respawn — a
+  stop ends the wait in progress, never the tick. If something still escapes
+  the guard, the loop's **restart policy** decides: *Unbounded* respawns
+  forever after a doubling backoff (the reaper, the worktree janitor, the
+  sandbox sweep, the snapshot writer — loops the factory's correctness or the
+  operator's view depends on); *Bounded* gives up, with one ERROR line, after
+  more than N restarts within a window (an optional loop such as the
+  dashboard, whose repeated death means a bug). Owned by
+  `app.daemon.SupervisedLoop`, built from a `LoopShape`. *Not:* a finite thread
+  (one per claim, a batch, a stream drain), nor the claim heartbeat, whose
+  death is the designed degradation and is never restarted. *Never:*
+  background worker, scheduler thread.
+
 ## Observability
 
 - **Anchor line** — an INFO log line marking a lifecycle transition the
