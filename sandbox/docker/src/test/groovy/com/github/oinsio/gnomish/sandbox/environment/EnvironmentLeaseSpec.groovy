@@ -50,6 +50,7 @@ class EnvironmentLeaseSpec extends Specification {
         def second = lease.environmentFor('b')
 
         then: 'one materialization, same instance both times (NFR-P1)'
+        first.is(env)
         first.is(second)
         events == ['materialize-1:gnomish/t']
     }

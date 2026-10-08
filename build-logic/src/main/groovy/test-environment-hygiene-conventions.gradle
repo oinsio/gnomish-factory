@@ -1,0 +1,23 @@
+import com.github.oinsio.gnomish.build.TestEnvironmentHygiene
+
+// --- The operator's GNOMISH_* variables never reach a test JVM (make-checkpoint-gate-durable, D14) ---
+//
+// A build launched from inside a gnome's round inherits the round's `GNOMISH_DECISION_FILE`, and
+// Gradle hands a forked test JVM the build's whole environment by default; a fixture that
+// inherited it once wrote a scenario's decision into the real round. `TestEnvironmentHygiene`
+// strips every inherited `GNOMISH_*` key — at configuration time, before a module's build script
+// can set one of its own (see the class for why not in a `doFirst`). Applied by
+// `test-conventions`, beside `adversarial-gitconfig-conventions`, and for the same tasks.
+
+tasks.withType(Test).configureEach {
+    TestEnvironmentHygiene.applyTo(project, it)
+}
+
+// `PitestTask` extends `JavaExec`, and the minions PIT forks inherit that JVM's environment, so
+// the strip on the task reaches every mutation run. Named rather than typed, as for the git
+// configuration: an application launch someone adds later is not a test.
+pluginManager.withPlugin('info.solidsoft.pitest') {
+    tasks.named('pitest') {
+        TestEnvironmentHygiene.applyTo(project, it)
+    }
+}

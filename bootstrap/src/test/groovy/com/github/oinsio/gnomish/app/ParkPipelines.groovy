@@ -36,6 +36,26 @@ final class ParkPipelines {
         ])
     }
 
+    /**
+     * One manual checkpoint as the last stage: its approval, not its pass, writes {@code PipelineEnd}
+     * (design D1 of make-checkpoint-gate-durable).
+     */
+    static PipelineDefinition lastGate(String stageName = 'build') {
+        new PipelineDefinition('1', new AutonomyLimits(1), [
+            stage(stageName, AdvancementMode.MANUAL, [])
+        ])
+    }
+
+    /**
+     * One automatic stage with no checks, for a gnome that asks (the fake agent's {@code
+     * decision-needed}): every round parks on a {@code DecisionNeeded} escalation.
+     */
+    static PipelineDefinition asking(String stageName = 'build') {
+        new PipelineDefinition('1', new AutonomyLimits(1), [
+            stage(stageName, AdvancementMode.AUTO, [])
+        ])
+    }
+
     private static StageDefinition stage(String name, AdvancementMode advancement, List<VerifyCheck> checks) {
         new StageDefinition(name, 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),

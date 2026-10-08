@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import spock.lang.Specification
 
@@ -18,13 +17,5 @@ class ContainerTakeSupportSpec extends Specification {
         expect:
         support.bindingProperties().defaultBinding() == BindingNames.HOST
         !support.dockerProbe().getAsBoolean()
-    }
-
-    def "hostOnly(factoryProperties) carries the given factory properties through"() {
-        given:
-        def properties = new FactoryProperties(null, null, null, null, null)
-
-        expect:
-        ContainerTakeSupport.hostOnly(properties).factoryProperties().is(properties)
     }
 }

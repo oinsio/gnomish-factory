@@ -34,11 +34,21 @@ reconstructs.
 
 ## MODIFIED Requirements
 
+Layered on `State directory with one writer per file` as modified by
+`make-checkpoint-gate-durable` (sequenced before this change): that delta adds the
+attempt's `stop` field, the trace path's per-visit wording, the round-token decision
+path `decisions/<stage>-a<attempt>-<token>.json` and the scenario "The request is
+named by its round"; this text adds the base pin wording, the entryPrecondition
+verdict and the writer-window sentence, and all of these must survive the later sync.
+
 ### Requirement: State directory with one writer per file
-`.gnomish-task/` at the working-copy root SHALL hold exactly: `task.json` (written only by `TaskRepository`: version, taskId, title, body, createdAt, the base pin (the `baseCommit` slot, structured per base-ref-resolution), decisions[] {text, author?, stage?, at?}, outcome — null | completed | paused{passedStage} | escalated{report} | aborted{failedAt, cause} — and lastEscalation), `state.json` (version, position, attemptsUsed, attempts[] {round, result, startedAt, checks[], denials[], executorUsage, judgeUsage}, totals — inner forms as in status-report v1 — and the optional entryPrecondition verdict), `attempts/<stage>/<round>/trace.jsonl` (one JSON line per tool call; the round is identified by the file path), and — in git modes — `decisions/<stage>-a<attempt>.json` (written only by the gnome; the single gnome-writable path under `.gnomish-task/`, per the decision-file protocol). `state.json` SHALL have exactly two factory-side writers with disjoint windows: the entry-precondition step, which writes only the entryPrecondition field in its own commit before any round exists, and the git `AttemptPersistence`, which owns every round write and preserves the entryPrecondition field; the gnome writes neither.
+`.gnomish-task/` at the working-copy root SHALL hold exactly: `task.json` (written only by `TaskRepository`: version, taskId, title, body, createdAt, the base pin (the `baseCommit` slot, structured per base-ref-resolution), decisions[] {text, author?, stage?, at?}, outcome — null | completed | paused{passedStage} | escalated{report} | aborted{failedAt, cause} — and lastEscalation, whose `cannotExecute` kind additionally carries the denials of the round that could not execute), `state.json` (its initial version written once by `TaskRepository` as part of the STARTED commit; every later write only by the git `AttemptPersistence`, except the entry-precondition step's verdict write below: version, position, attemptsUsed, attempts[] {round, result, startedAt, stop, checks[], denials[], executorUsage, judgeUsage}, totals — inner forms as in status-report v1 — and the optional entryPrecondition verdict), `attempts/<stage>/<round>/trace.jsonl` (one JSON line per tool call; the path names the round within one visit of the stage — a repeated visit overwrites it at the tip and git history keeps every version), and — in git modes — `decisions/<stage>-a<attempt>-<token>.json` (written only by the gnome; the single gnome-writable path under `.gnomish-task/`, named by the round token per the decision-file protocol). After its initial version, `state.json` SHALL have exactly two factory-side writers with disjoint windows: the entry-precondition step, which writes only the entryPrecondition field in its own commit before any round exists, and the git `AttemptPersistence`, which owns every round write and preserves the entryPrecondition field; the gnome writes neither.
+<!-- implements FR13 of make-checkpoint-gate-durable -->
 <!-- implements FR3 of add-git-workflow -->
 <!-- implements FR23 of add-sandbox-core -->
 <!-- implements FR4 of fix-denial-report-attachment -->
+<!-- implements FR3 of harden-task-branch-contract -->
+<!-- implements FR2 of fix-denial-attribution-durability -->
 <!-- implements FR6 of add-pipeline-entry-precondition -->
 
 #### Scenario: History of past stages lives in git
@@ -48,6 +58,10 @@ reconstructs.
 #### Scenario: Decision file keeps the one-writer rule
 - **WHEN** a round leaves a decision request in `.gnomish-task/decisions/`
 - **THEN** the gnome is that file's only writer and every other `.gnomish-task/` path keeps its single factory-side writer
+
+#### Scenario: The request is named by its round
+- **WHEN** two rounds of the same stage and attempt number run in one task — an answered question restarts the stage, or a killed round is retried
+- **THEN** their decision paths differ by the round token, and the later round's path is not present on the tip it opens on
 
 #### Scenario: Writer windows are disjoint
 - **WHEN** the entry-precondition step records a verdict

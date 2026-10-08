@@ -108,8 +108,6 @@ record TakeContainerEngineExecution(
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, lawBinding);
 
-        support.restoreDenials();
-
         TaskOutcome outcome = new Engine().run(definition, context, state, support.workspace(), assembled.ports());
 
         var revocation = persistence.revocation();

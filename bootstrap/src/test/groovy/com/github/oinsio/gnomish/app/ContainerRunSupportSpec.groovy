@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.git.RoundToken
@@ -40,6 +41,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
@@ -87,10 +89,18 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
+    /**
+     * The bundle over the scripted docker, its round environments built with the production
+     * restoration supplier — the read of this task's branch tip that {@code
+     * ContainerRunSupportFactory.create} wires (FR17, design D11 of make-checkpoint-gate-durable).
+     */
     private ContainerRunSupport support(String taskId = 'T-1', String key = KEY) {
-        def environments = docker.environments(key, cloneDir, sandbox, tempDir.resolve('guard'))
+        def runner = new GitProcessRunner()
+        def environments = docker.environments(
+                key, cloneDir, sandbox, tempDir.resolve('guard'), OwnershipMode.MANUAL, 'test-project',
+                ContainerTipReader.restorations(runner, cloneDir, TaskIdSanitizer.branchName(taskId)))
         new ContainerRunSupport(
-                new GitProcessRunner(), cloneDir, taskId,
+                runner, cloneDir, taskId,
                 environments, [
                     new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
                 ], SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
@@ -372,10 +382,10 @@ exit 0
         (state.position() as Position.AtStage).name() == 'build'
     }
 
-    // FR5 of fix-denial-report-attachment: the guard container outlives the process that made it,
-    // so a resume reads the cursor its last attempt committed and hands it to the environments —
-    // without it the first read after resume replays the container's whole surviving log
-    def "FR5: restoreDenials hands the branch tip's committed cursor to the environments"() {
+    // FR5 of fix-denial-report-attachment; FR17 of make-checkpoint-gate-durable: the guard
+    // container outlives the process that made it, so the box the lease hands out is born with the
+    // cursor the tip records — without it the first read replays the container's whole surviving log
+    def "FR5: the box the lease builds on this tip carries the branch tip's committed cursor"() {
         given: 'a task branch whose state.json records a cursor naming the live guard container'
         def support = support()
         createTask(support)
@@ -384,11 +394,31 @@ exit 0
                         new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then: 'the round box reads its guard log from the committed position, not from the start'
-        docker.runs.last() == guardLogsArgv('2026-08-19T10:00:00.000000001Z')
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:00:00.000000001Z')
+    }
+
+    // FR17, design D11 of make-checkpoint-gate-durable — the #83 sibling-audit defect: a resume
+    //     reattaches BEFORE anything else runs, and the box it builds then is the one the next
+    //     round reads denials through. With the offer made by a later step, that box never got it;
+    //     with the offer an input of the build, the reattached box already carries it. Red with
+    //     the supplier wired to DenialRestoration.none().
+    def "FR17: a box obtained through reattachFor on a tip with a recorded cursor received the offer"() {
+        given: 'a parked task whose tip records the position its last attempt read the guard up to'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+
+        when: 'the resume reattaches the box, the first thing it does'
+        support.reattachFor('build')
+        support.lease().current().readDenials()
+
+        then: 'the reattached box continues from the committed position'
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:00:00.000000001Z')
     }
 
     // FR3, M4 of fix-denial-attribution-durability: the write half of the same wiring — the park
@@ -403,7 +433,6 @@ exit 0
         commitState(StateJsonMapper.toDto(
                         TaskState.atStageStart('build'),
                         new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
-        support.restoreDenials()
         support.lease().environmentFor('build').readDenials()
 
         when: 'the round dies before its close and the park records the escalation it earned'
@@ -447,18 +476,17 @@ exit 0
         gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json')
     }
 
-    def "FR5: a branch with no committed cursor leaves the environments reading from the start"() {
+    def "FR5: a branch with no committed cursor leaves the leased box reading from the start"() {
         given: 'a task branch whose state.json predates the cursor field'
         def support = support()
         createTask(support)
         commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then:
-        docker.runs.last() == guardLogsArgv(null)
+        lastGuardLogRead() == guardLogsArgv(null)
     }
 
     /** The guard log read argv, spelled out here: {@code GuardCommands} is package-private to its adapter. */
@@ -475,16 +503,59 @@ exit 0
         argv + ['gnomish-guard-' + KEY]
     }
 
-    def "FR5: a branch with no state.json at all is a no-op, never a failure"() {
+    def "FR5: a branch with no state.json at all offers nothing, never a failure"() {
         given: 'a task branch that never persisted a round'
         def support = support()
         createTask(support)
 
         when:
-        support.restoreDenials()
+        support.lease().environmentFor('build').readDenials()
 
         then:
         noExceptionThrown()
+        lastGuardLogRead() == guardLogsArgv(null)
+    }
+
+    // FR17 of make-checkpoint-gate-durable: the read is best-effort — a tip whose recorded state
+    //     cannot be read offers nothing rather than failing the box build it is an input of
+    def "FR17: an unreadable tip yields an empty restoration, never a failure"() {
+        given: 'a task branch whose committed state.json is truncated'
+        def support = support()
+        createTask(support)
+        commitStateJson('{ "position": ')
+
+        expect: 'the read degrades to nothing recorded'
+        ContainerTipReader.restorable(new GitProcessRunner(), cloneDir, 'gnomish/T-1') == DenialRestoration.none()
+
+        when: 'the lease builds a box on that tip'
+        support.lease().environmentFor('build').readDenials()
+
+        then: 'the box is built and reads its guard log from the start'
+        lastGuardLogRead() == guardLogsArgv(null)
+    }
+
+    // FR17 of make-checkpoint-gate-durable: a tip read that cannot be answered at all — the git
+    //     process cannot even start — is the same best-effort nothing, and leaves a DEBUG trace
+    //     (logging.md, "Best effort must still leave a trace")
+    def "FR17: a tip read that fails outright yields an empty restoration and leaves a trace"() {
+        given: 'a recorded cursor behind a git binary that does not exist'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+        DenialRestoration restoration = null
+
+        when:
+        def logged = LogCaptureSupport.capture(ContainerTipReader, Level.DEBUG) {
+            restoration = ContainerTipReader.restorable(new GitProcessRunner(tempDir.resolve('no-such-git').toString()), cloneDir, 'gnomish/T-1')
+        }
+
+        then:
+        restoration == DenialRestoration.none()
+        logged.any {
+            it.level == Level.DEBUG && it.formattedMessage.contains('no recorded denial cursor')
+        }
     }
 
     // FR4 of fix-denial-attribution-durability: the escalation park's position stands past denials
@@ -500,8 +571,7 @@ exit 0
         commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z'))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then:
         lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
@@ -517,8 +587,7 @@ exit 0
         commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z'))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then:
         lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
@@ -532,8 +601,7 @@ exit 0
         commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z'))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then:
         lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
@@ -553,8 +621,7 @@ exit 0
         when:
         def logged = LogCaptureSupport.capture(
                 Class.forName('com.github.oinsio.gnomish.sandbox.environment.RestoredDenials'), Level.INFO) {
-                    support.restoreDenials()
-                    support.environments.roundEnvironment().readDenials().denials()*.finding()
+                    support.lease().environmentFor('build').readDenials()
                 }
 
         then: 'the guard reads its own log from the start'
@@ -587,8 +654,7 @@ exit 0
                         ], Stop.none()))))
 
         when:
-        support.restoreDenials()
-        def denials = support.environments.roundEnvironment().readDenials().denials()
+        def denials = support.lease().environmentFor('build').readDenials().denials()
 
         then: 'the guard log is re-read whole, since no position was committed'
         lastGuardLogRead() == guardLogsArgv(null)
@@ -607,8 +673,7 @@ exit 0
         commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
 
         when:
-        support.restoreDenials()
-        def denials = support.environments.roundEnvironment().readDenials().denials()
+        def denials = support.lease().environmentFor('build').readDenials().denials()
 
         then:
         denials*.finding()*.message() == [
@@ -637,8 +702,7 @@ exit 0
                 'T-1', new Decision('proceed', 'build', 'operator', null), TaskState.atStageStart('build'))
 
         when:
-        support.restoreDenials()
-        support.environments.roundEnvironment().readDenials().denials()*.finding()
+        support.lease().environmentFor('build').readDenials()
 
         then: 'the resumed run still continues from the newest committed position'
         lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')

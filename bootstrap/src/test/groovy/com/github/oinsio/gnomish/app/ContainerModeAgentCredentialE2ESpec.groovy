@@ -117,7 +117,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.CREDENTIAL_CAPTURING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])

@@ -87,7 +87,6 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         // so a third, verdict-less pass here would only ever touch another session's manual
         // objects, outside the daemon's ledger, while a slot waits on it.
         0 * support.sweepOrphans()
-        1 * support.restoreDenials()
         1 * support.completeAndDispose(_)
         0 * support.keepStopped()
         0 * support.recordAborted(_)

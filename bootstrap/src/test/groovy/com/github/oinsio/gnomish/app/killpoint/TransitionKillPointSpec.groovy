@@ -27,7 +27,7 @@ import spock.lang.Specification
  * is atomic, so a frozen half-written tracker sequence cannot exist against it; those windows are
  * covered by fault injection in the GitHub adapter's own suite (FR19, task 9.1b).
  */
-class TransitionKillPointSpec extends Specification implements KillPointWorlds {
+class TransitionKillPointSpec extends Specification implements KillPointWorlds, TakeKillPointWorlds {
 
     // Static, not @TempDir: the where-block closures are evaluated on Spock's data-provider
     // instance and run on the per-iteration one, so a per-instance temp directory would be unset
@@ -107,6 +107,36 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             // — its round is one worktree commit, so this window does not exist there.
             RequestSnapshotKillPoints.transition('container', {
                 containerWorld(nextRoot())
+            }),
+            // The gate and its two continuations (NFR-R1 of make-checkpoint-gate-durable, design D8),
+            // picked up by a real `take`: a stop's round commit, then its park, in both media.
+            GateKillPoints.paused('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            GateKillPoints.paused('container', { d ->
+                takeContainerWorld(nextRoot(), d)
+            }),
+            GateKillPoints.lastStage('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            GateKillPoints.lastStage('container', { d ->
+                takeContainerWorld(nextRoot(), d)
+            }),
+            GateKillPoints.decisionNeeded('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            GateKillPoints.decisionNeeded('container', { d ->
+                takeContainerWorld(nextRoot(), d)
+            }),
+            ApprovalKillPoints.transition('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            ApprovalKillPoints.transition('container', { d ->
+                takeContainerWorld(nextRoot(), d)
+            }),
+            // Host only: its recovery runs a real round (see ResumedKillPoints).
+            ResumedKillPoints.transition('host', { d ->
+                takeHostWorld(nextRoot(), d)
             }),
         ]
     }

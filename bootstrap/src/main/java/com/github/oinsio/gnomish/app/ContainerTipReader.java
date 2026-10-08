@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.RefTipSource;
 import com.github.oinsio.gnomish.adapter.git.TipRecordedDenials;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
@@ -13,6 +14,8 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,29 +81,37 @@ final class ContainerTipReader {
     }
 
     /**
-     * Hands the run's environments what the branch tip records about denials already reported —
-     * the newest committed position across {@code state.json}'s attempt-side cursor and {@code
-     * task.json}'s escalation-side cursor, and the identities of the denials recorded with them
-     * (FR4, FR5, FR7 of fix-denial-attribution-durability). The choice, and the shape
-     * classification that gates it, belong to {@link TipRecordedDenials}; this method owns only
-     * the medium the tip is read through.
+     * The supplier a task's round environments are built with (FR17, design D11 of
+     * make-checkpoint-gate-durable): each evaluation is a fresh {@link #restorable} read of the
+     * branch tip, so every box — first open, segment boundary, resume reattach — is born with
+     * the position the tip records at the moment it is built, never a value read earlier.
+     */
+    static Supplier<DenialRestoration> restorations(GitProcessRunner runner, Path cloneDir, String branch) {
+        return () -> restorable(runner, cloneDir, branch);
+    }
+
+    /**
+     * What the branch tip records about denials already reported — the newest committed position
+     * across {@code state.json}'s attempt-side cursor and {@code task.json}'s escalation-side
+     * cursor, and the identities of the denials recorded with them (FR4, FR5, FR7 of
+     * fix-denial-attribution-durability). The choice, and the shape classification that gates it,
+     * belong to {@link TipRecordedDenials}; this method owns only the medium the tip is read
+     * through.
      *
      * <p>Best-effort by design: a branch with no envelopes, no cursor in them, or an unreadable tip
-     * leaves the environments reading their denial source from its start — the behavior of every
-     * run before the cursor existed, and correct whenever the source is new. A cursor naming a
-     * different source is dropped by the environment itself, which then merges its full re-read
-     * against the identities offered here rather than duplicating what the branch already holds.
+     * yields {@link DenialRestoration#none()}, so the environment reads its denial source from its
+     * start — the behavior of every run before the cursor existed, and correct whenever the source
+     * is new. A cursor naming a different source is dropped by the environment itself, which then
+     * merges its full re-read against the identities offered here rather than duplicating what
+     * the branch already holds.
      */
-    static void restoreDenials(ContainerRunSupport support) {
-        DenialRestoration offer;
+    static DenialRestoration restorable(GitProcessRunner runner, Path cloneDir, String branch) {
         try {
-            offer = new TipRecordedDenials()
-                    .restorable(new RefTipSource(support.runner, support.cloneDir, "refs/heads/" + support.branch));
+            return new TipRecordedDenials().restorable(new RefTipSource(runner, cloneDir, "refs/heads/" + branch));
         } catch (RuntimeException e) {
             log.debug("no recorded denial cursor to restore", e);
-            return;
+            return DenialRestoration.none();
         }
-        support.environments.restoreDenials(offer);
     }
 
     private static ObjectId tip(ContainerRunSupport support) {

@@ -45,7 +45,7 @@ class TerminalOutcomeRenderSpec extends Specification {
     def "FR2: a checkpoint stop is the checkpoint sentence followed by the return path without a decision"() {
         expect:
         TerminalOutcomeRender.paused('build', RETURN_PATH) ==
-                "Stage 'build' passed. Manual checkpoint reached.\n" +
+                "Stage 'build' passed. Awaiting approval.\n" +
                 'To continue: gnomish run --dir=/work/clone --resume=manual-1'
     }
 
@@ -55,12 +55,12 @@ class TerminalOutcomeRenderSpec extends Specification {
 
         expect:
         TerminalOutcomeRender.escalated(report, null) == TerminalOutcomeRender.renderEscalation(report, ReportPlane.CONSOLE)
-        TerminalOutcomeRender.paused('build', null) == "Stage 'build' passed. Manual checkpoint reached."
+        TerminalOutcomeRender.paused('build', null) == "Stage 'build' passed. Awaiting approval."
     }
 
     def "FR8: the checkpoint sentence names the passed stage"() {
         expect:
-        TerminalOutcomeRender.checkpointLine('deploy') == "Stage 'deploy' passed. Manual checkpoint reached."
+        TerminalOutcomeRender.checkpointLine('deploy') == "Stage 'deploy' passed. Awaiting approval."
     }
 
     def "the return path quotes a --dir a shell would split or expand: #dir"() {

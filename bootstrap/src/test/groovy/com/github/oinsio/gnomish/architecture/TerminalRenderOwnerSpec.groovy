@@ -30,7 +30,7 @@ class TerminalRenderOwnerSpec extends Specification {
 
     /** The literals only the owner may spell, each with what it renders. */
     private static final Map<String, String> OWNED_LITERALS = [
-        'Manual checkpoint reached': 'the checkpoint sentence (run stop render and take park reports)',
+        'passed. Awaiting approval.': 'the checkpoint sentence (run stop render and take park reports)',
         'To continue: gnomish run' : 'the return-path line naming the resume command',
     ]
 
@@ -69,9 +69,9 @@ class TerminalRenderOwnerSpec extends Specification {
 
         where:
         shape | line || detected
-        'a hand-spelled checkpoint' | 'return "Stage \'" + s + "\' passed. Manual checkpoint reached.";' || true
+        'a hand-spelled checkpoint' | 'return "Stage \'" + s + "\' passed. Awaiting approval.";' || true
         'a hand-spelled return path' | 'console.print("To continue: gnomish run --resume " + id);' || true
-        'a javadoc mention' | ' * @return {@code Stage \'<s>\' passed. Manual checkpoint reached.}' || false
-        'a trailing comment' | 'var line = TerminalOutcomeRender.checkpointLine(s); // Manual checkpoint reached' || false
+        'a javadoc mention' | ' * @return {@code Stage \'<s>\' passed. Awaiting approval.}' || false
+        'a trailing comment' | 'var line = TerminalOutcomeRender.checkpointLine(s); // Awaiting approval' || false
     }
 }

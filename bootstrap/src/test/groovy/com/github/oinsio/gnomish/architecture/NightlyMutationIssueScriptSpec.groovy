@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
@@ -156,7 +157,9 @@ exit 0
 
     private Map execute(List<String> command, Map<String, String> env) {
         def builder = new ProcessBuilder(command).directory(work.toFile()).redirectErrorStream(true)
-        builder.environment().putAll(env)
+        // Nothing of the test run's environment beyond the test child baseline (design D14 of
+        // make-checkpoint-gate-durable); the stubs' own variables and PATH go on top.
+        TestChildEnvironment.cleared(builder).putAll(env)
         def process = builder.start()
         def output = process.inputStream.text
         [exit: process.waitFor(), output: output]

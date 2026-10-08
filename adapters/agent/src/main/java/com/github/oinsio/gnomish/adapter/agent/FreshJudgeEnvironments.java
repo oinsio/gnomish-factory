@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.sandbox.LiveBox;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.function.Supplier;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The sandboxed {@link JudgeEnvironmentSource} (FR15, D9 of add-sandbox-core): every attempt's
@@ -17,28 +17,21 @@ import org.jspecify.annotations.Nullable;
  * a new one pinned at the new commit; {@link #disposeCurrent()} tears the last one down when
  * the stage's verification ends.
  *
- * <p><b>Lock scope</b> (`lock-scope.md`, the resource-serializing exception): the monitor is held
- * across {@code materialize}/{@code dispose} — real Docker work — deliberately, because the box
- * itself is the guarded resource. Every waiter wants that same box, so waiting for it is the
- * intended outcome rather than collateral; the alternative is a second box for one attempt
- * commit, which is the defect this class exists to prevent. The hold is bounded by the sandbox
- * adapter's own container deadlines, and the only cross-purpose waiter is {@link
- * #disposeCurrent()} at the stage's end — which must not tear a box down mid-materialization
- * anyway.
+ * <p><b>Lock scope:</b> this class holds no lock. The one live judge box, its lock and its build
+ * are {@link LiveBox}'s (D13 of make-checkpoint-gate-durable), keyed by the attempt commit: votes
+ * of the same attempt wait on that build's future, not on a monitor, so a second box for one
+ * attempt commit is never built, and {@link #disposeCurrent()} waits for a build in flight before
+ * it tears the box down.
  *
  * <p>Landed additively (integration-pass precedent of task 4.8): the app wiring that binds this
  * source into the container-mode assembly follows with the sandbox integration pass; the
  * component and its contract are complete here.
  *
- * <p>Implements FR15, NFR-S2, D9 of add-sandbox-core.
+ * <p>Implements FR15, NFR-S2, D9 of add-sandbox-core; FR21 of make-checkpoint-gate-durable.
  */
 public final class FreshJudgeEnvironments implements JudgeEnvironmentSource {
 
-    private final Supplier<TaskExecutionEnvironment> environmentFactory;
-    private final String branch;
-
-    private @Nullable TaskExecutionEnvironment current;
-    private @Nullable String currentSha;
+    private final LiveBox<String> box;
 
     /**
      * @param environmentFactory creates a fresh, unmaterialized environment per attempt (the
@@ -46,30 +39,16 @@ public final class FreshJudgeEnvironments implements JudgeEnvironmentSource {
      * @param branch the task branch the attempt commits live on; never null
      */
     public FreshJudgeEnvironments(Supplier<TaskExecutionEnvironment> environmentFactory, String branch) {
-        this.environmentFactory = environmentFactory;
-        this.branch = branch;
+        this.box = new LiveBox<>(environmentFactory, (fresh, sha) -> fresh.materialize(branch, sha));
     }
 
     @Override
-    public synchronized TaskExecutionEnvironment environmentFor(Workspace workspace) {
-        String sha = ((RecordedAttemptCommitWorkspace) workspace).attemptCommitSha();
-        if (current != null && sha.equals(currentSha)) {
-            return current;
-        }
-        disposeCurrent();
-        TaskExecutionEnvironment fresh = environmentFactory.get();
-        fresh.materialize(branch, sha);
-        current = fresh;
-        currentSha = sha;
-        return fresh;
+    public TaskExecutionEnvironment environmentFor(Workspace workspace) {
+        return box.environmentFor(((RecordedAttemptCommitWorkspace) workspace).attemptCommitSha());
     }
 
     /** Disposes the current judge box, if any; idempotent. */
-    public synchronized void disposeCurrent() {
-        if (current != null) {
-            current.dispose();
-            current = null;
-            currentSha = null;
-        }
+    public void disposeCurrent() {
+        box.dispose();
     }
 }

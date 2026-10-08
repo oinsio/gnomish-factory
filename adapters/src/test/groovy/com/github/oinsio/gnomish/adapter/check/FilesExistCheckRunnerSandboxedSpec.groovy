@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.CommitRequest

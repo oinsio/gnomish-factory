@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.sandbox.LiveBox;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.sandbox.SegmentPlanner;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -9,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,18 +24,22 @@ import org.slf4j.LoggerFactory;
  * work that must precede the box — the resume decision commit (D19), law
  * binding — naturally lands first.
  *
- * <p>Implements FR12, FR13, NFR-P1 of add-sandbox-core.
+ * <p>The live box itself — one box per segment index, its lock and its build — is {@link
+ * LiveBox}'s (D13 of make-checkpoint-gate-durable); this class owns the key (stage → segment
+ * index over the plan) and the harvest, and holds no lock of its own. The harvest of the previous
+ * box at a boundary is this class's step, taken with nothing held before the live box is asked
+ * for the new segment, so the live box's phase 2 then disposes it. The lease is driven by one
+ * slot thread; other threads only read ({@link #currentIfLeased()}), and a read never waits for
+ * a build in flight.
+ *
+ * <p>Implements FR12, FR13, NFR-P1 of add-sandbox-core; FR21 of make-checkpoint-gate-durable.
  */
 public final class EnvironmentLease {
 
     private static final Logger log = LoggerFactory.getLogger(EnvironmentLease.class);
 
-    private final Supplier<? extends TaskExecutionEnvironment> factory;
-    private final String branch;
     private final Map<String, Integer> stageToSegment;
-
-    private @Nullable TaskExecutionEnvironment current;
-    private int currentSegment = -1;
+    private final LiveBox<Integer> box;
 
     /**
      * @param factory creates a fresh, unmaterialized round environment per segment; never null
@@ -44,9 +48,8 @@ public final class EnvironmentLease {
      */
     public EnvironmentLease(
             Supplier<? extends TaskExecutionEnvironment> factory, String branch, List<Segment> segments) {
-        this.factory = factory;
-        this.branch = branch;
         this.stageToSegment = index(segments);
+        this.box = new LiveBox<>(factory, (fresh, segment) -> fresh.materialize(branch, null));
     }
 
     /**
@@ -57,25 +60,17 @@ public final class EnvironmentLease {
      * @param stageName the stage about to run; must belong to the planned pipeline
      * @return the materialized, self-checked environment; never null
      */
-    public synchronized TaskExecutionEnvironment environmentFor(String stageName) {
+    public TaskExecutionEnvironment environmentFor(String stageName) {
         Integer segment = stageToSegment.get(stageName);
         if (segment == null) {
             throw new IllegalArgumentException("stage \"" + stageName + "\" is not part of the planned pipeline");
         }
-        TaskExecutionEnvironment env = current;
-        if (env != null && segment == currentSegment) {
-            return env;
-        }
-        if (env != null) {
+        Optional<TaskExecutionEnvironment> previous = box.retiredBy(segment);
+        if (previous.isPresent()) {
             log.info("segment boundary before stage {}: harvest, dispose, materialize (FR12)", stageName);
-            env.harvest();
-            env.dispose();
+            previous.get().harvest();
         }
-        TaskExecutionEnvironment fresh = factory.get();
-        fresh.materialize(branch, null);
-        current = fresh;
-        currentSegment = segment;
-        return fresh;
+        return box.environmentFor(segment);
     }
 
     /**
@@ -84,27 +79,22 @@ public final class EnvironmentLease {
      *
      * @throws IllegalStateException if no stage has leased an environment yet
      */
-    public synchronized TaskExecutionEnvironment current() {
-        TaskExecutionEnvironment env = current;
-        if (env == null) {
-            throw new IllegalStateException("no environment leased yet: no stage has run");
-        }
-        return env;
+    public TaskExecutionEnvironment current() {
+        return box.current()
+                .orElseThrow(() -> new IllegalStateException("no environment leased yet: no stage has run"));
     }
 
-    /** The currently leased environment, if any — for end-of-run bookkeeping that must not force one. */
-    public synchronized Optional<TaskExecutionEnvironment> currentIfLeased() {
-        return Optional.ofNullable(current);
+    /**
+     * The currently leased environment, if any — for end-of-run bookkeeping that must not force
+     * one. Never waits: empty while a build is in flight.
+     */
+    public Optional<TaskExecutionEnvironment> currentIfLeased() {
+        return box.current();
     }
 
     /** Disposes the leased environment, if any; idempotent (Completed cleanup). */
-    public synchronized void dispose() {
-        TaskExecutionEnvironment env = current;
-        if (env != null) {
-            env.dispose();
-            current = null;
-            currentSegment = -1;
-        }
+    public void dispose() {
+        box.dispose();
     }
 
     private static Map<String, Integer> index(List<Segment> segments) {

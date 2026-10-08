@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import java.nio.file.Path;
 import java.util.List;
@@ -37,12 +35,7 @@ import java.util.List;
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.
  */
 record ContainerGitModeRunner(
-        RunAssembly assembly,
-        TaskGit git,
-        SandboxProperties sandboxProperties,
-        FactoryProperties factoryProperties,
-        ContainerSupportFactory supportFactory,
-        ConsoleIO console) {
+        RunAssembly assembly, TaskGit git, ContainerSupportFactory supportFactory, ConsoleIO console) {
 
     /**
      * The support factory is injected ({@link ContainerSupportFactory}, mirroring {@link
@@ -73,8 +66,7 @@ record ContainerGitModeRunner(
         console.print("container mode: branch " + TaskIdSanitizer.branchName(taskId) + ConsoleIO.LINE_END);
         console.print("container mode: environment " + TaskIdSanitizer.sanitize(taskId) + ConsoleIO.LINE_END);
 
-        var support = supportFactory.create(
-                cloneDir, taskId, segments, sandboxProperties, factoryProperties, order.definition(), List.of());
+        var support = supportFactory.create(cloneDir, taskId, segments, order.definition(), List.of());
         // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
         // first, and the branch starts at that very commit — the manual tier's own way of keeping a
         // base name out of the repository port.

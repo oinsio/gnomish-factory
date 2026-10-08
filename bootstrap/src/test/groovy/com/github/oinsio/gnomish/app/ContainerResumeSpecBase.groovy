@@ -103,15 +103,14 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
      * operator's decision arrives as the {@code --decision} argument of {@link #resume}.
      */
     protected ContainerResumeRunner runner(PrintStream output) {
-        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
+        def factory = { Path c, String t, List<Segment> s, definition, List<String> creds ->
             def environments = docker.environments(
             TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         new ContainerResumeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), output, FakeAgentSupport.propertiesFor('plain-round')),
-                TaskGitFixture.real(), sandbox,
-                FakeAgentSupport.propertiesFor('plain-round'), 'taskId', factory)
+                TaskGitFixture.real(), 'taskId', factory)
     }
 
     /** Resumes {@code taskId} with the given {@code --decision} ({@code null} for none). */

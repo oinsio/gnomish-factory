@@ -126,7 +126,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
         then:
         io.printed == [
-            "Stage 'build' passed. Manual checkpoint reached." + ConsoleIO.LINE_END
+            "Stage 'build' passed. Awaiting approval." + ConsoleIO.LINE_END
         ]
     }
 

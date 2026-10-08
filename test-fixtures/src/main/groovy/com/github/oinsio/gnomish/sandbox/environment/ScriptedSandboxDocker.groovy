@@ -3,9 +3,11 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Instant
+import java.util.function.Supplier
 
 /**
  * A scripted {@link RecordingDockerCli} whose answers make a full materialize +
@@ -81,8 +83,11 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
 
     /**
      * Builds a per-task {@link ContainerEnvironments} over this scripted docker —
-     * the daemon-free stand-in for {@code ContainerEnvironments.forTask}, exposed
+     * the daemon-free stand-in for {@code ContainerEnvironmentFactory.forTask}, exposed
      * here because the seam constructor and {@code DockerCli} are package-private.
+     * {@code restoration} is what every round environment built here is offered (FR17 of
+     * make-checkpoint-gate-durable); a spec whose flow reads the branch tip passes the
+     * production supplier, the rest keep the default of nothing recorded.
      */
     ContainerEnvironments environments(
             String key,
@@ -90,7 +95,10 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             SandboxProperties sandbox,
             Path guardRoot,
             OwnershipMode mode = OwnershipMode.MANUAL,
-            String projectId = 'test-project') {
+            String projectId = 'test-project',
+            Supplier<DenialRestoration> restoration = {
+                -> DenialRestoration.none()
+            }) {
         new ContainerEnvironments(this, key, new ContainerEnvironmentBuilder(
                         this,
                         new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
@@ -100,7 +108,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         } as Clock, { d -> } as Sleeper, DEFAULT_COMMAND_TIMEOUT),
                         ChildEnvAllowlist.none(),
                         guardRoot,
-                        new ObjectOwnership(mode, projectId)))
+                        new ObjectOwnership(mode, projectId)), restoration)
     }
 
     /** Reads a fake-agent scenario's scripted stream from the {@code fake-agent} resources beside this fixture. */

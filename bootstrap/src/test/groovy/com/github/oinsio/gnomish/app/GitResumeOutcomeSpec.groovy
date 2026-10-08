@@ -121,7 +121,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         then: 'nothing about the checkpoint was printed and nothing was asked'
         def printed = out.toString('UTF-8')
-        !printed.contains('Manual checkpoint reached')
+        !printed.contains('Awaiting approval')
         !printed.contains('Press Enter to continue')
 
         and: 'the branch records a fresh Completed outcome (the approved state is PipelineEnd)'

@@ -260,8 +260,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new InMemoryAttemptPersistence(),
                 console,
                 lazyRunners {
-                    manualRun.manualRunners(assembly, git, resolvedClone.getObject(), sandboxProperties, factoryProperties,
-                    containerSupports, console)
+                    manualRun.manualRunners(assembly, git, resolvedClone.getObject(), containerSupports, console)
                 })
         def projectCommand = new ProjectCommand(projectHome, ProjectRegistry.scan(projectHome), factoryProperties,
                 new StandardEnvironment(), new DefaultListableBeanFactory().getBeanProvider(RegisteredClone), console)

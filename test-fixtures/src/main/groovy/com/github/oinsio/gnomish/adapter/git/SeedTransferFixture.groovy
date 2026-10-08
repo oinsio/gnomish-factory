@@ -78,7 +78,10 @@ trait SeedTransferFixture {
     private GitCommandResult seedGit(Path cwd, List<String> args) {
         def builder = new ProcessBuilder(['git'] + args).directory(cwd.toFile())
         // Pinned as the runner pins it, so a spec classifying stderr (a non-fast-forward refusal)
-        // reads git's English wording under any locale.
+        // reads git's English wording under any locale. Inherits the test JVM's environment by
+        // design (exempt from design D14 of make-checkpoint-gate-durable): this child is git
+        // seeding a fixture repository, not a gnome product, and it needs the build's git test
+        // configuration exactly as the test JVM has it.
         builder.environment().put('LC_ALL', 'C')
         def process = builder.start()
         def stderr = new StringBuilder()

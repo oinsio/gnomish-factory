@@ -83,6 +83,9 @@ the selector grammar (D4) is only as strong as the option list; and
 without the gate, gnomes learn to launder hard work into vague decision
 requests (forced-deferral pattern). *Alternative rejected:* letting the
 arbiter answer optionless questions free-form — reopens D4's hole.
+*Path note:* D6 changes the request's content schema, never its path — after
+`make-checkpoint-gate-durable` the request lives at the round-token path
+`decisions/<stage>-a<attempt>-<token>.json`, and that naming is untouched here.
 
 **D7 — One decision-append owner in the application layer.** A single
 `DecisionRecorder` (name illustrative) owns append + author + scope +

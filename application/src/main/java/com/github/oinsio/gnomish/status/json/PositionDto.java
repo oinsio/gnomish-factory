@@ -10,7 +10,11 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  *
  * <p>Implements FR11, M3 of add-manual-run; FR12 of make-checkpoint-gate-durable.
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type")
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.EXISTING_PROPERTY,
+        property = "type",
+        visible = true)
 @JsonSubTypes({
     @JsonSubTypes.Type(value = PositionDto.AtStage.class, name = "atStage"),
     @JsonSubTypes.Type(value = PositionDto.AwaitingApproval.class, name = "awaitingApproval"),

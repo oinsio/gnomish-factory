@@ -94,7 +94,6 @@ public final class ContainerSupports {
      */
     ContainerTakeSupport takeSupport() {
         return new ContainerTakeSupport(
-                factoryProperties,
                 bindingProperties,
                 sandboxProperties,
                 bindingRegistry,
@@ -117,13 +116,16 @@ public final class ContainerSupports {
      * declarations (FR17, design D11 of add-plugin-architecture): a profile-resolved credential
      * name reaches the container's scrub set exactly as an inline one does (FR16, FR17, design
      * D8/D11), since the subsections are resolved against {@code factory.connections} before the
-     * providers are asked what they name.
+     * providers are asked what they name. The installation's box equipment and the sandbox
+     * lifecycle pass are built here once for the mode, by the record's installation constructor,
+     * and shared by every run of it (design D12 of make-checkpoint-gate-durable).
      */
     private ContainerSupportFactory supportFactory(OwnershipMode mode) {
         List<String> checkCredentials = CheckProviderSeam.credentialEnvVars(
                 CheckProviderSeam.resolve(
                         factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
                 checkClientRegistry);
-        return new ContainerRunSupportFactory(checkCredentials, checkClientRegistry, mode, epochs);
+        return new ContainerRunSupportFactory(
+                checkCredentials, checkClientRegistry, mode, epochs, sandboxProperties, factoryProperties);
     }
 }

@@ -145,7 +145,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       Rewrite the `Kept in sync with` text of `GitResumeContinuation ↔ ContainerResumeOutcomes`
       (design D6). Verify `GitResumeRoutingSpec`, `ContainerResumeRoutingSpec`,
       `GitResumeOutcomeSpec`, `ContainerModeResumeE2ESpec`: one commit per continuation.
-- [ ] 4.4 Terminal boundaries re-deliver a lost park (FR2, FR11): `GitModeRunner.run`,
+- [x] 4.4 Terminal boundaries re-deliver a lost park (FR2, FR11): `GitModeRunner.run`,
       `GitResumeContinuation.runToTerminalBoundary`, `ContainerTerminalDrive.run`,
       `TakeEngineExecution`, `TakeContainerEngineExecution` already receive `Paused` from the
       Engine for a gate — confirm each records the park only when `task.json` lacks it (the
@@ -153,7 +153,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       assert no second commit) and renders through `TerminalOutcomeRender`. Old-way sweep:
       `grep -rn "nextPosition(\|positionAfter(" */src/main` returns `Advancement` and
       `StageAttemptLoop` only; record the result.
-- [ ] 4.5 `status` (FR12, UX1): `StatusReport.build` for a gate — position
+- [x] 4.5 `status` (FR12, UX1): `StatusReport.build` for a gate — position
       `awaitingApproval(stage)`, `currentStage` = the passed stage with its passing round last;
       `StatusReportJsonMapper`/`PositionDto` tokens for the position and the attempt `stop` (the
       mapper only serializes; the read-back is `StatusReportEquivalenceContractSpec` on the
@@ -181,22 +181,22 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 
 ## 5. Enforcement and crash consistency
 
-- [ ] 5.1 `PositionConstructionGateSpec` (`:bootstrap`; design D7): `new Position.AwaitingApproval(`
+- [x] 5.1 `PositionConstructionGateSpec` (`:bootstrap`; design D7): `new Position.AwaitingApproval(`
       in `*/src/main` appears only in `Advancement.java` and `StateJsonMapper.java` (the wire
       reader) — the repositories' refusal checks pattern-match the variant, and
       `TaskState.approveGate` constructs `AtStage`/`PipelineEnd` through `Advancement.afterGate`,
       never the gate; allowlist by file, asserted reached. Red when a copy is planted in a scratch file.
-- [ ] 5.2 `OutcomeConsumptionGateSpec` (`:bootstrap`; design D7): `resetAttempts()` in `*/src/main`
+- [x] 5.2 `OutcomeConsumptionGateSpec` (`:bootstrap`; design D7): `resetAttempts()` in `*/src/main`
       appears only in `TaskState.java`, `EscalationResume.java`, `TakeDecisionResume.java`, and
       the two mechanics; allowlist by file, asserted reached.
-- [ ] 5.3 Identity specs (`:bootstrap`, bare origin, both media; `testing.md` "Invariant specs
+- [x] 5.3 Identity specs (`:bootstrap`, bare origin, both media; `testing.md` "Invariant specs
       across a flow"): `GateApprovalIdentitySpec` — after a `manual` pass and an approval, every
       tip in the branch history either carries `AwaitingApproval(s)` or carries the approval
       commit as itself/ancestor; the approved tip's position is past the gate iff `outcome` is
       null, and equals the position following the gate in the pinned definition (the
       repositories no longer check it, so this spec does). `ConsumedOutcomeIdentitySpec` — after each of the three continuations, `outcome ==
       null` iff `state.json` carries the continuation's state, in one commit.
-- [ ] 5.4 Kill-point rows in `TransitionKillPointSpec` (design D8, NFR-R1): `GateKillPoints`
+- [x] 5.4 Kill-point rows in `TransitionKillPointSpec` (design D8, NFR-R1): `GateKillPoints`
       (host + container; `Paused` and `DecisionNeeded`; steps round commit → park commit →
       tracker park → receipt; a barrier before the park commit; pickup through the real routes;
       the recording executor asserts the next stage never ran; the `manual`-last-stage variant
@@ -209,7 +209,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 
 ## 6. Durable record
 
-- [ ] 6.1 `docs/adr/0003-crash-consistency.md`: new subsection under "The three mechanisms" —
+- [x] 6.1 `docs/adr/0003-crash-consistency.md`: new subsection under "The three mechanisms" —
       "A recorded position never implies an authorisation not yet recorded; gates are positions;
       the verdict rides the round record" — with the canon and the comparable systems in two
       sentences each, the disposition table row for `AwaitingApproval`, and the "See also".
@@ -230,7 +230,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       justified by the port that forces it and holds whole identities only, and a guard that
       compares a recorded value with its own re-read is a defect, not a check (introduced by
       `make-checkpoint-gate-durable`, D10 as amended).
-- [ ] 6.3 `docs/glossary.md` (Crash consistency): *gate*, *awaiting approval*, *approval* (the
+- [x] 6.3 `docs/glossary.md` (Crash consistency): *gate*, *awaiting approval*, *approval* (the
       pivot write), *resumed write*, *round token* (the identity of a container-mode round —
       the branch tip it opened on — that names its decision request and its snapshot; minted by
       a fresh round, reused by a resumed one; *Never:* "attempt" for it, which is the counted
@@ -247,15 +247,15 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       while its key is unchanged and rebuilt when it changes; a reader sees the last recorded box
       and never waits on a build; type `LiveBox`; *Never:* "lease" for it — **lease** is the
       claim's liveness contract; the class name `EnvironmentLease` predates the rule and is kept).
-- [ ] 6.4 `openspec/changes/add-stage-iteration/design.md`: a review note (design D9) naming the
+- [x] 6.4 `openspec/changes/add-stage-iteration/design.md`: a review note (design D9) naming the
       three instances (D6 overflow decision, "cursor exhausted, no stage verdict", D8 repair
       adoption) and the rule they must follow; `openspec/changes/add-stage-finished-event/
       design.md`: `StagePassed.advancedTo` reads `Advancement.positionAfter`.
-- [ ] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, and the `take` section of
+- [x] 6.5 Operator guide (`docs/guides/operator-guide-run.md`, and the `take` section of
       `docs/guides/operator-guide.md`): a checkpoint reads
       "awaiting approval"; `--resume` approves; a return-to-ready approves.
 - [ ] 6.6 Gate: root `./gradlew check` green; record M1–M10 in this task.
-- [ ] 6.7 Layering of the overlapping delta (`delta-specs.md`): `openspec/changes/
+- [x] 6.7 Layering of the overlapping delta (`delta-specs.md`): `openspec/changes/
       add-pipeline-entry-precondition/specs/git-task-persistence/spec.md` MODIFIES "State
       directory with one writer per file" too and is sequenced after this change — open its
       requirement with the `Layered on … as modified by make-checkpoint-gate-durable (sequenced
@@ -377,7 +377,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 
 ## 8. Denial restoration at build time (design D11; FR17, M7) — after §7
 
-- [ ] 8.1 (rewritten 2026-10-08, design D12 + D11) New public `ContainerEnvironmentFactory` in
+- [x] 8.1 (rewritten 2026-10-08, design D12 + D11) New public `ContainerEnvironmentFactory` in
       `sandbox/docker`, constructed with `SandboxProperties`, `BoxTiming`, the guard config root
       and `OwnershipMode`; one method `forTask(String baseKey, BoxGitLink link, ChildEnvAllowlist
       allowlist, String projectId, Supplier<DenialRestoration> restoration)` returning
@@ -402,7 +402,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       feature: reattach on a tip with a recorded cursor → the box received it — red with the
       supplier returning `none()`). Done together with 8.2: 8.1 does not compile while the
       port's `restoreDenials()` is abstract.
-- [ ] 8.2 Delete `SandboxRunSupport.restoreDenials()` and its two calls
+- [x] 8.2 Delete `SandboxRunSupport.restoreDenials()` and its two calls
       (`ContainerTerminalDrive.run`, `TakeContainerEngineExecution.run`); update the nine test
       doubles of `SandboxRunSupport` and the two `1 * support.restoreDenials()` expectations
       (`TakeContainerEngineExecutionSpec:90`, `ContainerTerminalDriveDisposalSpec:81`). Old-way
@@ -412,7 +412,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       committed") moves to `ContainerEnvironments.roundEnvironment`.
       Lock note for the report (design D13): the tip read runs inside the lease's monitor until
       §11 lands; the task's report says so, and §11 removes it.
-- [ ] 8.3 Gates and E2E (design D7 row): `DenialRestorationOwnerSpec` (`:bootstrap`):
+- [x] 8.3 Gates and E2E (design D7 row): `DenialRestorationOwnerSpec` (`:bootstrap`):
       `restoreDenials(` in `*/src/main` only in `TaskExecutionEnvironment`,
       `SelfCheckedEnvironment`, `LeasedEnvironment`, `EgressGuard`, `ContainerEnvironments`,
       allowlisted by file, asserted reached. `ContainerModeResumeE2ESpec` gains "resume onto a
@@ -423,7 +423,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 
 ## 9. Test processes never inherit the operator's environment (design D14; FR22, M10) — after §8
 
-- [ ] 9.1 `test-fixtures` `LocalBoxEnvironment.exec`: `builder.environment().clear()` then
+- [x] 9.1 `test-fixtures` `LocalBoxEnvironment.exec`: `builder.environment().clear()` then
       `putAll(ChildEnvAllowlist.none().compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES,
       command.env()))` — the production owner's composition, not a copy of it (`testing.md`,
       "Fixtures assemble through production owners"). `FakeAgentInvocation` and
@@ -440,13 +440,13 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       clears first, or is `LauncherScriptSpec` (already clears), or is listed as an exemption
       with its reason (`SeedTransferFixture`'s `LC_ALL` on a git fixture process: git, not a
       gnome product).
-- [ ] 9.2 `build-logic`: `TestEnvironmentHygiene.applyTo(project, task)` beside
+- [x] 9.2 `build-logic`: `TestEnvironmentHygiene.applyTo(project, task)` beside
       `AdversarialGitConfig.applyTo` — removes every `GNOMISH_*` key from the task's
       `environment` that the build did not set itself; applied by `test-conventions` to every
       `Test` task and to `pitest` (the minions inherit that JVM's environment). Functional spec
       in `build-logic` (`TestEnvironmentHygieneFunctionalSpec`): a build run with
       `GNOMISH_DECISION_FILE` in its environment forks a test JVM that does not see it.
-- [ ] 9.3 Gates (design D7 enforcement): `TestEnvironmentHygieneSpec` (`:bootstrap`):
+- [x] 9.3 Gates (design D7 enforcement): `TestEnvironmentHygieneSpec` (`:bootstrap`):
       `System.getenv()` holds no `GNOMISH_*` key; a fake-agent round run through
       `LocalBoxEnvironment` with `GNOMISH_DECISION_FILE` planted in the fixture's own
       `ProcessBuilder` parent leaves that file untouched (red before 9.1).
@@ -456,7 +456,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
 
 ## 10. The container support chain carries no per-call property sets (design D12; FR20, M8) — after §9
 
-- [ ] 10.1 `ContainerSupports.supportFactory(mode)` builds the `ContainerEnvironmentFactory`
+- [x] 10.1 `ContainerSupports.supportFactory(mode)` builds the `ContainerEnvironmentFactory`
       (D12) and `SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties,
       Clock.systemUTC())` once and hands them, with both property sets, to
       `ContainerRunSupportFactory` as record components (`checkCredentialEnvVars`,
@@ -478,11 +478,11 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       environment factory built once per mode; two runs of one mode share it; the two modes
       stamp their own label), the runners' specs over the five-parameter port, and the take
       router specs over the slimmer `ContainerTakeSupport`.
-- [ ] 10.2 PIT 100% on 10.1's classes (`-PpitScope`); record M8.
+- [x] 10.2 PIT 100% on 10.1's classes (`-PpitScope`); record M8.
 
 ## 11. One live box per role, three-phase lock (design D13; FR21, M9) — after §10
 
-- [ ] 11.1 `LiveBox<K>` in `sandbox/core` with `Materializer<K>` (`materialize(environment,
+- [x] 11.1 `LiveBox<K>` in `sandbox/core` with `Materializer<K>` (`materialize(environment,
       key)`): `environmentFor(K key)` in the three phases of D13 (decide and claim under the
       lock with a per-build future; dispose-previous, build and materialize unlocked; record
       under the lock; a failing build completes the future exceptionally and clears the claim);
@@ -498,7 +498,7 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       `SandboxRoundEnvironmentSource`, `SandboxCheckEnvironmentSource`, `LeasedEnvironment`,
       `CliJudgeVoter`. Old-way sweep: `grep -rn "synchronized" sandbox/*/src/main
       adapters/agent/src/main` — hits only in `LiveBox` and `GuardDenialReads`.
-- [ ] 11.2 Specs: `LiveBoxSpec` (same key → same box, no second materialize; new key → previous
+- [x] 11.2 Specs: `LiveBoxSpec` (same key → same box, no second materialize; new key → previous
       disposed, new materialized; failed materialize → exception, next call retries; dispose
       idempotent); `LiveBoxConcurrencySpec` (real threads, a materializer blocked on a latch:
       `current()` returns within a bound while the build blocks; a second `environmentFor` for

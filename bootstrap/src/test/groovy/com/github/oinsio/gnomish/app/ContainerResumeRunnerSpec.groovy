@@ -50,7 +50,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         resume('T-PAUSED', null, new PrintStream(consoleOut, true, 'UTF-8'))
 
         then: 'no checkpoint sentence and no prompt reached the console'
-        !consoleOut.toString('UTF-8').contains('Manual checkpoint reached')
+        !consoleOut.toString('UTF-8').contains('Awaiting approval')
         !consoleOut.toString('UTF-8').contains('Press Enter')
 
         and: 'the continuation drove to the completed outcome'

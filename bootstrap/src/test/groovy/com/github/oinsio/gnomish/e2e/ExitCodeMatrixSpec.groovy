@@ -56,7 +56,7 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         output.contains('Stage: pipeline complete')
         !output.contains('Press Enter')
         !output.contains('The gnome asked:')
-        !output.contains('Manual checkpoint reached')
+        !output.contains('Awaiting approval')
     }
 
     def "usage error exits 2 without any dialog"() {

@@ -127,7 +127,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -177,7 +177,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.ARGV_CHECKING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [judgedStage()])

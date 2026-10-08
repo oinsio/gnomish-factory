@@ -45,8 +45,8 @@ durably persisted (the loop commits before routing) and its `AttemptFinished` al
 emitted by `AttemptJournal.commit`, so the required order persist → `AttemptFinished` →
 `StagePassed` (FR1) holds with zero changes to `AttemptJournal`'s invariant (FR11 of
 add-stage-engine). One emission site covers all three exits — AUTO advance, MANUAL pause,
-final-stage completion (FR2) — by computing the advanced-to position from
-`Advancement.nextStage`/`nextPosition`, which `runStages` already resolves. Payload:
+final-stage completion (FR2) — by taking the advanced-to position from
+`Advancement.positionAfter`, the one owner of what a pass leaves as position. Payload:
 `record StagePassed(String taskId, String stage, Position advancedTo)` — no `AttemptKey`
 (the boundary is per stage, not per round; precedent: the two bookends carry `taskId`), no
 `TaskState` (consumers wanting state already got it on `AttemptFinished`).
@@ -54,6 +54,15 @@ final-stage completion (FR2) — by computing the advanced-to position from
 pass commit — it would need the advancement outcome (next stage vs pause vs end) threaded
 into the loop, widening the loop's contract for what is purely run-level orchestration
 knowledge, and would tempt reordering against the journal's invariant.
+
+*Review note (make-checkpoint-gate-durable, D1):* `advancedTo` is the position the passing
+round's own commit records, read from `Advancement.positionAfter` — never recomputed from the
+next stage. `Advancement.nextPosition` no longer exists; `positionAfter` is mode-aware, so a
+`manual` pass emits `advancedTo = AwaitingApproval(stage)` (the stage that passed, waiting at
+its gate), not the next stage or `PipelineEnd`; only an `auto` pass emits `AtStage(next)` or
+`PipelineEnd`. The approval that later moves the task past the gate is not a stage pass and
+emits no `StagePassed`. The gate rule is owned by the `stage-engine` capability (advancement
+modes) and `crash-consistency.md` item 12.
 
 **D3 — Notifier = one `EngineEventListener` implementation in `application`, wired
 conditionally in `RunAssembler`; no new port.** *Rationale:* reuse-check per the proposal:

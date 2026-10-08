@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import spock.lang.Specification
@@ -9,8 +10,9 @@ import spock.lang.Specification
 /**
  * FR3, FR8, D5, D9 of add-sandbox-core: the per-task construction seam for
  * guarded container environments, verified without a daemon — the per-role
- * environment wiring, the restored denial cursor reaching each role's guard
- * (FR5 of fix-denial-report-attachment), the round key exposed for bookkeeping,
+ * environment wiring, the recorded denial cursor offered to every round box as it
+ * is built and to no other role (FR5 of fix-denial-report-attachment; FR17 of
+ * make-checkpoint-gate-durable), the round key exposed for bookkeeping,
  * and disposeExisting's full teardown of the round key's objects. The docker
  * availability probe moved out with its class ({@code DockerRuntimeProbeSpec}).
  */
@@ -61,23 +63,60 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
         docker.runs.last() == GuardCommands.guardLogs(KEY + '-v', 1000, null)
     }
 
-    // FR5 of fix-denial-report-attachment: a resume hands the run the cursor its last attempt
-    // committed, and the round environment offers it to its own guard — so a round box
-    // reattaching to the surviving guard container continues the delta instead of replaying it
-    def "FR5: a restored cursor reaches the guard of the round environment"() {
+    // FR17 of make-checkpoint-gate-durable (design D11); FR5 of fix-denial-report-attachment: the
+    // round environment is born carrying what the tip records, so a round box reattaching to the
+    // surviving guard container continues the delta instead of replaying it — with no step after
+    // the build that a caller could run out of order, every round box of the run gets the offer
+    def "FR17: the recorded cursor reaches the guard of every round environment built, the second included"() {
         given: 'the guard container named by the committed cursor is the live one'
         docker.onRun = { List<String> args ->
             args == GuardCommands.inspectGuardId(KEY) ? DockerResult.of(0, 'sha256:container-1\n', '')
             : DockerResult.of(0, '', '')
         }
-        def seam = environments(KEY)
+        def seam = environments(KEY, ChildEnvAllowlist.none(), {
+            ->
+            DenialRestoration.at(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
+        })
+
+        when: 'the first round box reads its denials'
+        seam.roundEnvironment().readDenials()
+
+        then: 'it reads its guard log from the committed position, not from the start'
+        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')
+
+        when: 'a second round box is built — a segment boundary, a resume reattach'
+        seam.roundEnvironment().readDenials()
+
+        then: 'it was offered the position too'
+        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')
+    }
+
+    // FR17, design D11 of make-checkpoint-gate-durable: the tip moves between boxes (a round
+    // commits a newer cursor), so the supplier is read at each build — a value read once would be
+    // the stale baseline the design rejects
+    def "FR17: the restoration is read afresh for each round environment built"() {
+        given: 'a tip whose recorded position moves between two builds'
+        docker.onRun = { List<String> args ->
+            args == GuardCommands.inspectGuardId(KEY) ? DockerResult.of(0, 'sha256:container-1\n', '')
+            : DockerResult.of(0, '', '')
+        }
+        def positions = [
+            '2026-08-19T10:00:00Z',
+            '2026-08-19T11:00:00Z'
+        ].iterator()
+        def seam = environments(KEY, ChildEnvAllowlist.none(), {
+            ->
+            DenialRestoration.at(new DenialCursor('sha256:container-1', positions.next()))
+        })
 
         when:
-        seam.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z')))
-        seam.roundEnvironment().readDenials().denials()*.finding()
+        seam.roundEnvironment().readDenials()
+        def first = docker.runs.last()
+        seam.roundEnvironment().readDenials()
 
-        then: 'the round box reads its guard log from the committed position, not from the start'
-        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')
+        then: 'each box starts from the position the tip recorded when it was built'
+        first == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00Z')
+        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T11:00:00Z')
     }
 
     // FR5 of fix-denial-report-attachment: the offer names the ROUND box's guard container, so
@@ -90,19 +129,26 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
             args == GuardCommands.inspectGuardId(KEY + suffix) ? DockerResult.of(0, 'sha256:role-box\n', '')
             : DockerResult.of(0, '', '')
         }
-        def seam = environments(KEY)
+        int reads = 0
+        def seam = environments(KEY, ChildEnvAllowlist.none(), {
+            ->
+            reads++
+            new DenialRestoration(
+                            Optional.of(new DenialCursor('sha256:round-box', '2026-08-19T10:00:00Z')),
+                            [
+                                new DenialIdentity('sha256:round-box', '2026-08-19T09:00:00Z')
+                            ] as Set)
+        })
 
         when:
-        seam.restoreDenials(new DenialRestoration(
-                        Optional.of(new DenialCursor('sha256:round-box', '2026-08-19T10:00:00Z')),
-                        [
-                            new DenialIdentity('sha256:round-box', '2026-08-19T09:00:00Z')
-                        ] as Set))
         def read = freshBox(seam, role).readDenials()
 
         then: 'no loss marker is minted, and the log is read from the start like any fresh box'
         read.denials() == []
         docker.runs.last() == GuardCommands.guardLogs(KEY + suffix, 1000, null)
+
+        and: 'building a role box never reads the tip at all'
+        reads == 0
 
         where:
         role | suffix

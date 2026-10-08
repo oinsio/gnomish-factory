@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
@@ -20,7 +19,6 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -76,8 +74,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         def runner = new ContainerResumeRunner(
                 assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
-                new FactoryProperties(null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
+                'taskId', { _c, _t, _s, _def, _cred ->
                     support
                 } as ContainerSupportFactory)
         def originalOut = System.out
@@ -340,7 +337,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
 
         and:
         !console.printed.any {
-            it.contains('Manual checkpoint')
+            it.contains(TerminalOutcomeRender.checkpointLine('build'))
         }
         executor.requests.size() == 1
     }

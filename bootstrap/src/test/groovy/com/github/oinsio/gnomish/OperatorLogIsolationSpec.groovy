@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.core.FileAppender
 import com.github.oinsio.gnomish.app.OperatorHomeFixture
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
@@ -80,11 +81,18 @@ class OperatorLogIsolationSpec extends Specification {
         !carriesLine(operatorLog(), marker)
     }
 
-    // M4: no appender of the booted context points anywhere inside the operator's home factory dir
+    // M4: no appender of the booted context points anywhere inside the operator's home factory dir.
+    // The repository under test is exempt: a factory that builds itself checks this repository out
+    // into a worktree under its own home, so the suite's build directory lives there too — and it
+    // is the suite's own output, not a file of the operator's.
     def "no appender attached to the booted root logger writes under the operator's .gnomish directory"() {
+        given:
+        Path repository = RepoSourceTree.repoRoot().toAbsolutePath().normalize()
+
         expect:
         fileAppenders().every { FileAppender<?> appender ->
-            !Path.of(appender.file).toAbsolutePath().normalize().startsWith(OPERATOR_HOME)
+            Path file = Path.of(appender.file).toAbsolutePath().normalize()
+            !file.startsWith(OPERATOR_HOME) || file.startsWith(repository)
         }
     }
 

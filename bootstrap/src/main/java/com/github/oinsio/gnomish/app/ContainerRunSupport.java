@@ -266,15 +266,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
         return ContainerTipReader.readTaskJson(this);
     }
 
-    /**
-     * Restores what the branch tip records about denials — position and identities (FR5, FR7).
-     * Delegated to {@link ContainerTipReader}.
-     */
-    @Override
-    public void restoreDenials() {
-        ContainerTipReader.restoreDenials(this);
-    }
-
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
     @Override
     public void disposeExistingEnvironment() {

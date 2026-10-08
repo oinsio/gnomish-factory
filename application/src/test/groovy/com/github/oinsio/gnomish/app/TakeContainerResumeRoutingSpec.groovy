@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.TrackerWrite
@@ -67,11 +66,10 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     }
 
     private TakeDispositionResume disposition(TaskGit git) {
-        def containerSupportFactory = { cloneDir, taskId, segments, sandboxProps, factoryProps, definition, creds ->
+        def containerSupportFactory = { cloneDir, taskId, segments, definition, creds ->
             builtSupport
         } as ContainerSupportFactory
         def containerTakeSupport = new ContainerTakeSupport(
-                new FactoryProperties(null, null, null, null, null),
                 new BindingProperties(null, [:]),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),

@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
@@ -58,8 +56,6 @@ final class ContainerResumeRunner {
 
     final RunAssembly assembly;
     private final TaskGit git;
-    private final SandboxProperties sandboxProperties;
-    private final FactoryProperties factoryProperties;
     private final String taskIdMdcKey;
     private final ContainerSupportFactory supportFactory;
     final StatusTextRenderer statusRenderer = new StatusTextRenderer();
@@ -70,16 +66,9 @@ final class ContainerResumeRunner {
      * fake docker CLI; behavior is otherwise identical.
      */
     ContainerResumeRunner(
-            RunAssembly assembly,
-            TaskGit git,
-            SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
-            String taskIdMdcKey,
-            ContainerSupportFactory supportFactory) {
+            RunAssembly assembly, TaskGit git, String taskIdMdcKey, ContainerSupportFactory supportFactory) {
         this.assembly = assembly;
         this.git = git;
-        this.sandboxProperties = sandboxProperties;
-        this.factoryProperties = factoryProperties;
         this.taskIdMdcKey = taskIdMdcKey;
         this.supportFactory = supportFactory;
     }
@@ -110,8 +99,7 @@ final class ContainerResumeRunner {
         // earlier instance recorded but never got pushed. Best-effort, never blocking.
         git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
-        var support = supportFactory.create(
-                cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
+        var support = supportFactory.create(cloneDir, taskId, segments, definition, List.of());
         TaskRecord taskJson = support.readTaskJson();
         String recordedTaskId = taskJson.context().taskId();
         MDC.put(taskIdMdcKey, recordedTaskId);

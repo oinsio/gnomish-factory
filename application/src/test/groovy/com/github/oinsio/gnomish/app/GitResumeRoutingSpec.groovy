@@ -337,7 +337,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         then:
         !console.printed.any {
-            it.contains('Manual checkpoint')
+            it.contains(TerminalOutcomeRender.checkpointLine('build'))
         }
         1 * lifecycleStore.resumeFrom('PROJ-1', TaskState.atStageStart('build'))
         0 * lifecycleStore.approveCheckpoint(_, _, _)

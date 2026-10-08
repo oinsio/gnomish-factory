@@ -3,10 +3,12 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.util.function.Supplier
 
 /**
  * Shared daemon-free construction seam for {@link ContainerEnvironments} specs
@@ -26,10 +28,15 @@ trait ContainerEnvironmentsFixture {
     // The docker-command bound is the production default: no scripted command here ever waits on it.
     BoxTiming timing = new BoxTiming(clock, sleeper, DockerCli.DEFAULT_COMMAND_TIMEOUT)
 
-    ContainerEnvironments environments(String key, ChildEnvAllowlist allowlist = ChildEnvAllowlist.none()) {
+    ContainerEnvironments environments(
+            String key,
+            ChildEnvAllowlist allowlist = ChildEnvAllowlist.none(),
+            Supplier<DenialRestoration> restoration = {
+                -> DenialRestoration.none()
+            }) {
         new ContainerEnvironments(docker, key, new ContainerEnvironmentBuilder(
                         docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
                         timing, allowlist, Path.of('/factory/guard-config'),
-                        new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')))
+                        new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')), restoration)
     }
 }
