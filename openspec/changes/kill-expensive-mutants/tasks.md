@@ -9,13 +9,13 @@ records timings where the task says so.
 
 ## 1. The stalling stand-in owner (D4; FR2, UX2; M3, M5)
 
-- [ ] 1.1 Measure first: run `./gradlew :adapters:git:test --tests '*ContainerHarvestFetchSpec*'`
+- [x] 1.1 Measure first: run `./gradlew :adapters:git:test --tests '*ContainerHarvestFetchSpec*'`
       and record the "FR7: a fetch cut off on its deadline" feature time from the XML report
       (baseline 62.5 s). Then, in a scratch copy of the spec's `stallingGit()`, add
       `case "$1" in rev-parse|version|status) exit 0 ;; esac` before the sleep and re-measure. Verify:
       the feature drops to ≤ 5 s — confirming the clone-key resolution diagnosis (design Context).
       If it does not, STOP and report: the production path is then suspect and NG2 applies.
-- [ ] 1.2 Add the `StallingGit` builder to
+- [x] 1.2 Add the `StallingGit` builder to
       `test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/`: `stallOn(String...)`,
       `stallOnEverything()`, `stall(Duration)`, `beforeStall(String shellLine)`,
       `markOnStall(Path)` (= `beforeStall` of a `touch`), `answer(List<String> argvPrefix, stdout,

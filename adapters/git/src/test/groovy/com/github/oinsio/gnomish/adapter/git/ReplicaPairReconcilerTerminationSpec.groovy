@@ -24,9 +24,6 @@ import spock.lang.TempDir
  */
 class ReplicaPairReconcilerTerminationSpec extends Specification {
 
-    /** Long enough that the stalled command can only end on an interrupt, never on itself. */
-    private static final String STALL_SECONDS = '600'
-
     @TempDir
     Path tempDir
 
@@ -84,21 +81,20 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
      * to produce on demand.
      */
     private Path stallingOn(String stalled) {
-        def script = tempDir.resolve("git-stalling-on-${stalled}.sh")
-        script.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-for a in "\$@"; do
-  case "\$a" in
-    ${stalled}) touch '${stallStarted()}'; sleep ${STALL_SECONDS};;
-    fetch|update-ref) exit 0;;
-    merge-base) exit 1;;
-    rev-parse) case "\$*" in *remotes*) echo ${'b' * 40};; *) echo ${'a' * 40};; esac; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().executable = true
-        script
+        new StallingGit()
+                .stallOn(stalled)
+                .markOnStall(stallStarted())
+                .answer('fetch', '', 0)
+                .answer('update-ref', '', 0)
+                .answer('merge-base', '', 1)
+                .answer([
+                    'rev-parse',
+                    '--verify',
+                    '--quiet',
+                    'refs/remotes/origin/gnomish/PROJ-1'
+                ], 'b' * 40, 0)
+                .answer('rev-parse', 'a' * 40, 0)
+                .write(tempDir)
     }
 
     private Path stallStarted() {

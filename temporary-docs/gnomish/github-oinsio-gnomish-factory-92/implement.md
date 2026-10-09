@@ -1,0 +1,9 @@
+## Implementation: kill-expensive-mutants
+
+### 1.1 Measure first
+- Done: measurement only, no source change kept. Baseline `ContainerHarvestFetchSpec` "FR7: a fetch cut off on its deadline…" = 62.405 s. Scratch edit of `stallingGit()` (strip `-c` pairs; `case "$1" in rev-parse|version|status) exit 0 ;; esac` before `sleep 60`) → 2.592 s. An argv log showed exactly two invocations: `rev-parse --git-common-dir` (clone-key resolution, no `-c` pairs — the 60 s sleep) and the `-c …` prefixed `fetch`, which still stalls to the 2 s deadline.
+- Verified: ≤ 5 s — diagnosis confirmed; NG2 does not apply. Spec reverted (`git diff` empty).
+
+### 1.2 Add the `StallingGit` builder
+- Done: `test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/StallingGit.groovy` (151 lines, one responsibility: compose and write the script). Script order: strip leading `-c` pairs → stall check (a stall wins over any answer) → answer rows in declaration order, argv-prefix match, first wins → default exit 0, no output. `localDelay` applies to every non-stalled invocation, answered ones included, except the clone-key `rev-parse --git-common-dir` (otherwise the bounded-network spec's push would pay the delay on key resolution); recorded in javadoc. Default stall 600 s. `answer` prints via quoted `printf '%s\n'`; `answerWith` inserts the fragment then `exit $?`. `write(dir)` creates a uniquely named executable `stalling-git-*.sh`. Javadoc carries the local-command sentence and the nine-copies history (UX2, FR2).
+- Verified: `bootstrap/src/test/groovy/com/github/oinsio/gnomish/adapter/git/StallingGitSpec.groovy` — 8/8 green (version < 100 ms after one unmeasured warm-up run for the macOS first-exec scan; ls-remote ≥ 200 ms stall; localDelay ≥ 300 ms; answer row; two rev-parse rows by prefix; answerWith reads a rewritten file; beforeStall order; markOnStall). No production Java → no PIT.
