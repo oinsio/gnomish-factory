@@ -579,7 +579,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       default branch sets `wip-limit: 10` while the clone's checkout sets `wip-limit: 3`. The rendered
       WIP denominator is 10 ("Checkout differs from origin"). Verify: the spec passes on the real
       git medium (`BareGitRepoFixture`).
-- [ ] 9.8 Switch `.gnomish/factory/gnomish-up` to `serve --dashboard --dashboard-out="$dashboard_out"`.
+- [x] 9.8 Switch `.gnomish/factory/gnomish-up` to `serve --dashboard --dashboard-out="$dashboard_out"`.
       Drop the background renderer, its PID, its log and its cleanup, and keep `--no-open`, `--no-logs`,
       the first-render wait (now polling the file while `serve` runs in the background until the page
       exists, then foregrounding it, or an equivalent that keeps one daemon process) and the log
@@ -596,7 +596,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 
 ## 10. Traceability check
 
-- [ ] 10.1 For every FR, NFR and UX in proposal.md, grep the specs and code comments for `FRn of
+- [x] 10.1 For every FR, NFR and UX in proposal.md, grep the specs and code comments for `FRn of
       supervise-daemon-loops-and-embed-dashboard` (`traceability.md`). Verify: each ID has at least
       one implementing spec or class, and the list is in the task report.
 

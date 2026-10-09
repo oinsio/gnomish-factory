@@ -16,7 +16,7 @@ import java.time.InstantSource
  * PIT hang. A spec that scripts its own sleeper (a recording one, a rendezvous one) passes it to
  * {@code #on(InstantSource, Sleeper)}, keeping the one spelling.
  *
- * <p>Test fixture; never shipped. Implements FR21, FR22 of
+ * <p>Test fixture; never shipped. Implements FR21, FR22, NFR-R4 of
  * supervise-daemon-loops-and-embed-dashboard.
  */
 final class VirtualTimeEquipment {

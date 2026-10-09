@@ -136,8 +136,8 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         !health.get('lastSuccessAt').isNull()
     }
 
-    // FR10, NFR-R1 (factory-serve "Disabled dashboard, working daemon"), D7: Bounded 5 in 10 min.
-    def "NFR-R1: a dashboard disabled by tick Errors leaves the daemon claiming and completing tasks"() {
+    // FR10, NFR-R1, UX4 (factory-serve "Disabled dashboard, working daemon"), D7: Bounded 5 in 10 min.
+    def "NFR-R1, UX4: a dashboard disabled by tick Errors leaves the daemon claiming and completing tasks"() {
         given: 'a board reader whose reads throw an Error the guard cannot render, so each kills the worker'
         def boardReads = new AtomicInteger()
         def boardReader = new InMemoryTracker() {
