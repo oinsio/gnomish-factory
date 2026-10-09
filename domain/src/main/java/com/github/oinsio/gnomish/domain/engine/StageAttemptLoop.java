@@ -67,7 +67,7 @@ final class StageAttemptLoop {
     StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PipelineDefinition definition) {
         this.roundExecution = new RoundExecution(ports.executor(), verifyOrchestrator, ports.listener());
         this.journal = new AttemptJournal(ports.listener(), ports.persistence());
-        this.clock = ports.clock();
+        this.clock = ports.time().clock();
         this.definition = definition;
     }
 

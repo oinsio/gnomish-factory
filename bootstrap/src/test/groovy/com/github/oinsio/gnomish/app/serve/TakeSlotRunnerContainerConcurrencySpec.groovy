@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.*
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -15,7 +16,6 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.sandbox.*
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
@@ -23,7 +23,6 @@ import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import spock.lang.*
@@ -145,14 +144,16 @@ autonomy:
         // `tracked` ownership, since these are dispatched as already-claimed tracker tasks.
         def git = TaskGitFixture.real()
         def containerTakeSupport = new ContainerTakeSupport(
-                bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                new SandboxModeSelector(bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable as ContainerRuntimeProbe),
                 ContainerSupportFixture.tracked(git.epochs(), sandbox, properties))
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        // The graph's one time is real: the container support's boxes run on real time
+        // (ContainerSupportFixture), so the slot's stamps and wall times must read the same clock.
+        def assembly = newAssembly(properties)
+        def abortHandler = new AbortHandler(tracker, assembly.timeEquipment().clock())
         def wiring = new SlotWiring(
-                newAssembly(properties), git, registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
+                assembly, git, registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 containerTakeSupport, new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
-                VirtualTimeRetries.terminalWrite())
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)

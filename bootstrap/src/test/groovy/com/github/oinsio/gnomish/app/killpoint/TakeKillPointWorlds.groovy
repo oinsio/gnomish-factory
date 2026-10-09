@@ -29,6 +29,8 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.*
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
@@ -71,7 +73,7 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         agentRounds: {
             -> Files.exists(argv) ? FakeAgentSupport.capturedInvocations(argv).size() : 0
         })
-        world.store = new GitTaskRepository(new GitProcessRunner(), registered, git.epochs())
+        world.store = new GitTaskRepository(new GitProcessRunner(), registered, git.epochs(), new VirtualClock())
         world.roundWriter = { TaskState expected ->
             new GitAttemptPersistence(new GitProcessRunner(), world.worktree, TAKE_TASK_ID, git.epochs())
             .persist(TAKE_TASK_ID, expected, trace(expected))
@@ -94,7 +96,7 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
                 it.contains('stream-json')
             } as Integer
         })
-        world.store = new GitObjectsTaskRepository(objects, git.epochs(), DenialCursorSource.NONE)
+        world.store = new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), git.epochs(), DenialCursorSource.NONE)
         world.roundWriter = { TaskState expected ->
             containerRound(world, root, objects, expected)
         }
@@ -157,13 +159,13 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         def source = new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), world.repoDir, TAKE_TASK_ID, rounds,
                 new VirtualClock())
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(asks ? 'decision-needed' : 'plain-round'),
-                new VirtualClock(Instant.now().plusSeconds(3600)), { e -> } as AgentProgressListener, TAKE_LAW, source)
+                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, TAKE_LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, new GitProcessRunner(), world.repoDir, objects,
                 TAKE_TASK_ID, rounds, world.epochs)
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
-                clock, new VirtualSleeper(clock))
+                VirtualTimeEquipment.on(clock))
         new Engine().run(world.definition, context(),
                 TaskState.atStageStart(world.definition.stages().first().name()),
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)

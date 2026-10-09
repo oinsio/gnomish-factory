@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check;
 
+import com.github.oinsio.gnomish.app.CheckClientContext;
 import com.github.oinsio.gnomish.app.CheckClientFactory;
 import com.github.oinsio.gnomish.app.CheckRunContext;
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
@@ -7,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,7 +34,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * wraps this seam unions the *selected* provider's contributed paths with the law-declared ones —
  * exactly what a single-provider wiring did before, now per check (FR15).
  *
- * <p>Implements FR3, FR5, FR6, FR15 of add-plugin-architecture.
+ * <p>Each provider is built through the one {@link CheckClientContext} this composite assembles —
+ * the secrets, the provider's subsection, the run context and the host's {@link TimeEquipment} — so
+ * a plugin stamps on the host's time (design D21 of supervise-daemon-loops-and-embed-dashboard).
+ *
+ * <p>Implements FR3, FR5, FR6, FR15 of add-plugin-architecture; FR18, FR23 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class ProviderDispatchingExternalCheckClient implements ExternalCheckClient {
 
@@ -40,6 +47,7 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
     private final Map<String, Map<String, Object>> configured;
     private final SecretsProvider secrets;
     private final CheckRunContext runContext;
+    private final TimeEquipment timeEquipment;
     private final Map<String, ExternalCheckClient> clients = new ConcurrentHashMap<>();
 
     /**
@@ -49,12 +57,15 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
      * @param registry the discovered check providers keyed by discriminator; never null
      * @param configured the {@code factory.check} subsections keyed by provider; never null
      * @param secrets the seam each provider resolves its own credentials through; never null
+     * @param timeEquipment the host's time equipment, handed to each provider on its context; never
+     *     null
      */
     public ProviderDispatchingExternalCheckClient(
             Map<String, CheckClientFactory> registry,
             Map<String, Map<String, Object>> configured,
-            SecretsProvider secrets) {
-        this(registry, configured, secrets, CheckRunContext.none());
+            SecretsProvider secrets,
+            TimeEquipment timeEquipment) {
+        this(registry, configured, secrets, CheckRunContext.none(), timeEquipment);
     }
 
     /**
@@ -63,16 +74,21 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
      * @param secrets the seam each provider resolves its own credentials through; never null
      * @param runContext the run's allowlisted interpolation values, handed to each provider at
      *     construction (NFR-S2, design D5); never null
+     * @param timeEquipment the host's time equipment, handed to each provider on its context so a
+     *     plugin stamps on the host's time (FR18, FR23, design D21 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
     public ProviderDispatchingExternalCheckClient(
             Map<String, CheckClientFactory> registry,
             Map<String, Map<String, Object>> configured,
             SecretsProvider secrets,
-            CheckRunContext runContext) {
+            CheckRunContext runContext,
+            TimeEquipment timeEquipment) {
         this.registry = Map.copyOf(registry);
         this.configured = Map.copyOf(configured);
         this.secrets = secrets;
         this.runContext = runContext;
+        this.timeEquipment = timeEquipment;
     }
 
     /** The pin contribution of whichever provider each check selects (FR15). */
@@ -89,7 +105,10 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
     private ExternalCheckClient clientFor(VerifyCheck.External check) {
         String provider = check.provider();
         return clients.computeIfAbsent(
-                provider, p -> factoryFor(check).create(secrets, configured.getOrDefault(p, Map.of()), runContext));
+                provider,
+                p -> factoryFor(check)
+                        .create(new HostContext(
+                                secrets, configured.getOrDefault(p, Map.of()), runContext, timeEquipment)));
     }
 
     /**
@@ -106,4 +125,16 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
         }
         return factory;
     }
+
+    /**
+     * The host's {@link CheckClientContext} (design D21 of
+     * supervise-daemon-loops-and-embed-dashboard): built here, once per provider, and nowhere else, so
+     * the credential seam it carries reaches the provider without leaving this owner (NFR-S1).
+     */
+    private record HostContext(
+            SecretsProvider secrets,
+            Map<String, Object> subsection,
+            CheckRunContext runContext,
+            TimeEquipment timeEquipment)
+            implements CheckClientContext {}
 }

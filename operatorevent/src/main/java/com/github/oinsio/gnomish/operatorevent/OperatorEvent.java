@@ -106,11 +106,15 @@ public enum OperatorEvent {
     DIRTY_NOTIFIER_FAILED("GF070"),
     FEED_CANDIDATE_OCCUPIES_SLOT("GF071"),
     FEED_TRACKER_OUTAGE_SUSPECTED("GF072"),
-    SANDBOX_LIFECYCLE_TICK_FAILED("GF073"),
+    // GF073 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the sandbox
+    // lifecycle tick's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED
+    // with component=sweep. A retired code stays retired — the gap is not filled.
     SLOT_SKIPPED("GF074"),
     SLOT_STOPPED_BY_SHUTDOWN("GF075"),
     SLOT_CRASHED_UNCAUGHT("GF076"),
-    WORKTREE_JANITOR_TICK_FAILED("GF077"),
+    // GF077 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the worktree
+    // janitor's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED with
+    // component=janitor. A retired code stays retired — the gap is not filled.
     WORKTREE_JANITOR_SCAN_FAILED("GF078"),
     WORKTREE_JANITOR_REF_UNSANITARY("GF079"),
     INFRASTRUCTURE_ABORT("GF080"),
@@ -140,7 +144,9 @@ public enum OperatorEvent {
     RUN_SUMMARY_LEDGER_APPEND_FAILED("GF102"),
     SNAPSHOT_WRITE_FAILED("GF103"),
     SNAPSHOT_RETENTION_SWEEP_FAILED("GF104"),
-    SNAPSHOT_TICK_FAILED("GF105"),
+    // GF105 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the snapshot
+    // writer's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED with
+    // component=snapshot. A retired code stays retired — the gap is not filled.
     SWEEP_LEDGER_APPEND_FAILED("GF106"),
     TASK_OUTCOME_SLOT_MISSING("GF107"),
     TASK_OUTCOME_LEDGER_APPEND_FAILED("GF108"),

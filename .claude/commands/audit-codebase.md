@@ -71,8 +71,12 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
   subprocess, network call, file I/O, sleep or caller-supplied callback inside one is a
   finding unless the class's javadoc claims the resource-serializing exception and answers
   its three bar items (the harm is waiter starvation, not carrier pinning, which JEP 491
-  removed). Attach/set-after-construction across threads is a finding even without a proven
-  race.
+  removed). Daemon loops: every long-lived repeating thread against `daemon-loops.md` — a
+  thread, a `while` around a sleep or wait, or a scheduler not built on `SupervisedLoop` is a
+  finding unless it is one of that rule's exemptions, including the cases
+  `DaemonLoopOwnerBoundarySpec` cannot see (a loop on a caller's thread, a loop outside
+  `application/src/main`). Attach/set-after-construction across threads is a finding even
+  without a proven race.
 - **crash-consistency** — take every multi-step durable transition (commit+push,
   push+tracker write, effect+receipt, create+delete) in `adapters/git` and the take/serve
   paths; check it against the `crash-consistency.md` checklist: kill windows named, each

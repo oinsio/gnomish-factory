@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -16,7 +17,6 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.BooleanSupplier
 import org.springframework.boot.context.properties.bind.Binder
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -89,8 +89,7 @@ class DefaultBindingProjectFileSpec extends Specification {
     /** Plans a two-stage pipeline over the bindings and sandbox settings the loaded environment binds. */
     private static SandboxModeSelector.Plan plan(OperatorConfigLoaderHarness.Loaded loaded) {
         def binder = Binder.get(loaded.environment)
-        SandboxModeSelector.plan(
-                new PipelineDefinition('1', new AutonomyLimits(3), [stage('plan'), stage('build')]),
+        new SandboxModeSelector(
                 binder.bindOrCreate('factory.bindings', BindingProperties),
                 binder.bindOrCreate('factory.sandbox', SandboxProperties),
                 AdapterBindingRegistry.ratified(
@@ -98,7 +97,9 @@ class DefaultBindingProjectFileSpec extends Specification {
                             new HostBindingProvider(),
                             new ContainerBindingProvider()
                         ], BindingTrustTable.firstParty()),
-                { true } as BooleanSupplier,
+                { -> true } as ContainerRuntimeProbe)
+                .plan(
+                new PipelineDefinition('1', new AutonomyLimits(3), [stage('plan'), stage('build')]),
                 loaded.context.getBean(RegisteredClone))
     }
 

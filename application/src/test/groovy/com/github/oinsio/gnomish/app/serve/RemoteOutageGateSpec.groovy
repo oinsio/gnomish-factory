@@ -51,7 +51,7 @@ class RemoteOutageGateSpec extends Specification {
         given:
         def source = new VirtualClock(Instant.parse('2026-10-09T10:00:00Z'))
         def g = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'),
-                new ServeProperties(0, null, null, null, null, null, null, null, null), source, {}, { ignored -> })
+                new ServeProperties(0, null, null, null, null, null, null, null, null, null), source, {}, { ignored -> })
 
         when:
         g.openOnFailure('boom')

@@ -239,7 +239,7 @@ tracker:
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 
@@ -361,7 +361,7 @@ tracker:
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 

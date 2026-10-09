@@ -17,7 +17,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -31,7 +31,6 @@ import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -194,13 +193,14 @@ tracker:
                 new TaskRef('T-1'), new TaskSnapshot('T-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none(), false)
 
+        def assembly = newAssembly(FakeAgentSupport.propertiesFor('plain-round'), VirtualTimeEquipment.create())
+
         when:
         new TakeFreshClaim(new SlotWiring(
-                        newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), registered(clone), 'taskId',
-                        new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], ContainerTakeSupport.hostOnly(),
+                        assembly, TaskGitFixture.real(), registered(clone), 'taskId',
+                        new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [], ContainerTakeSupport.hostOnly(),
                         new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)),
-                        VirtualTimeRetries.terminalWrite())).claim(
+                        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(
                 new TakeOrder(new RunOrder(clone, null, pipeline(), false),
                 trackerTask, tracker, InstanceId.generate('test-instance')))
 

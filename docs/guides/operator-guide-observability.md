@@ -219,14 +219,17 @@ incident produced.
 line reuses it, so an alert rule or a saved grep keyed on it simply stops
 matching. Where the line itself lives on under a shared code, the table below
 gives the replacement and the `component` filter that narrows the shared code
-back to the old line. Later rows (janitor, sweep, snapshot) join this table as
-their loops move to the shared codes.
+back to the old line. Every daemon loop now runs on the shared codes, so the
+table is complete.
 
-| Retired code                                  | Replacement code                         | `component` filter |
-|-----------------------------------------------|------------------------------------------|--------------------|
-| GF067 `STANDING_REAPER_TICK_FAILED`           | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=reaper` |
-| GF068 `STANDING_REAPER_WORKER_DIED`           | GF154 `DAEMON_LOOP_WORKER_DIED`          | `component=reaper` |
-| GF069 `STANDING_REAPER_BACKOFF_SLEEP_FAILED`  | GF156 `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` | `component=reaper` |
+| Retired code                                  | Replacement code                         | `component` filter   |
+|-----------------------------------------------|------------------------------------------|----------------------|
+| GF067 `STANDING_REAPER_TICK_FAILED`           | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=reaper`   |
+| GF068 `STANDING_REAPER_WORKER_DIED`           | GF154 `DAEMON_LOOP_WORKER_DIED`          | `component=reaper`   |
+| GF069 `STANDING_REAPER_BACKOFF_SLEEP_FAILED`  | GF156 `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` | `component=reaper`   |
+| GF073 `SANDBOX_LIFECYCLE_TICK_FAILED`         | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=sweep`    |
+| GF077 `WORKTREE_JANITOR_TICK_FAILED`          | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=janitor`  |
+| GF105 `SNAPSHOT_TICK_FAILED`                  | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=snapshot` |
 
 So an old `grep '\[GF067\]'` becomes
 `grep 'component=reaper' "$LOG" | grep '\[GF152\]'`.

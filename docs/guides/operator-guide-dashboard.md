@@ -38,6 +38,40 @@ simply stays. Counts of 1000 and up are shown compactly (`25.6K`, `4.79M`) with
 the exact value on hover, in tabular numerals so columns do not shift under a
 refresh.
 
+## The status line and its WIP stat
+
+<!-- implements FR12, FR13, UX3 of supervise-daemon-loops-and-embed-dashboard -->
+
+The status line states whether the daemon is running and carries up to three
+stats: **slots** (occupied of capacity) and **consecutive failures** from the
+daemon snapshot, and between them **WIP** from the tracker board. Every
+triggered alert condition also surfaces here as a short alarm line.
+
+The WIP stat reads `n / W`, for example `WIP 5 / 10`:
+
+- **n** is the number of **open fronts**: tasks in Working plus tasks in
+  AwaitingHuman, across the whole project — the same count the `serve` feed
+  holds against its limit. Hovering the value gives the exact counts and the
+  split, e.g. `5 of 10 open fronts: 2 working, 3 waiting for a human`.
+- **W** is the project's WIP limit, the `wip-limit` key of the tracker
+  configuration in `.gnomish/config.yaml` (default `10`; see
+  ["Instance knobs vs. protocol constants"](operator-guide-serve.md#instance-knobs-vs-protocol-constants)).
+  It comes with the board itself: it is the very limit the board judged its
+  WIP-held ready rows against, so the stat and the `WIP-held` notes in the
+  in-progress block can never disagree.
+
+The WIP stat is a reference number, not an alarm. It never takes the alarm
+palette, even at `10 / 10`: a full WIP means the system is working as
+configured — the feed has stopped starting fresh work and waits on a human
+(see ["Feed states and the WIP-limit message"](operator-guide-serve.md#feed-states-and-the-wip-limit-message)).
+What needs you is in the waiting-for-a-human block, which already shouts.
+
+The stats degrade per source. The slots and failures stats need a daemon
+snapshot; the WIP stat needs a board model, so it shows even when no daemon
+has run here yet, and after a failed board refresh it keeps showing the
+cached board's numbers. When no board fetch has ever succeeded, the WIP stat
+is absent — no placeholder is drawn in its place.
+
 ## The waiting-for-a-human and in-progress blocks
 
 Both are fed by the same tracker board composition `gnomish board` uses, so a
@@ -158,6 +192,25 @@ all-day open tab costs one tracker read pair (`listReady` + `listOpen`) every
 
 The ledger-fed blocks aggregate the last **7 days** of ledger files, re-read
 every render cycle (local files, effectively free).
+
+<!-- implements FR9, UX5 of supervise-daemon-loops-and-embed-dashboard -->
+
+The render loop is a supervised daemon loop. A tracker outage or a failed
+write never stops it; a defect that keeps killing it does: after more than
+five restarts within ten minutes it gives up, logs one `GF155`
+(`DAEMON_LOOP_GAVE_UP`) ERROR line, and `dashboard --watch` **exits 1** instead
+of idling with a page nobody writes — so a process supervisor (systemd, a
+shell loop) sees the failure and can restart it.
+
+**One-process alternative: `serve --dashboard`.** If the daemon runs on the
+same machine, let it render the page itself instead of running a second
+process:
+`gnomish serve --dashboard` writes the same page, at the same default path, on
+the same cadences, and on stop renders it one last time as
+`Daemon stopped (<reason>)` — see
+["The embedded dashboard"](operator-guide-serve.md#the-embedded-dashboard---dashboard)
+in the serve guide. Do not point both at one file: a `serve --dashboard` and a
+standalone `dashboard --watch` writing the same file overwrite each other.
 
 ## Ticket-snapshot recipe (one-shot, `--out`)
 

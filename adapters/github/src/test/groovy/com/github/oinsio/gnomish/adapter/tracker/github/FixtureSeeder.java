@@ -142,6 +142,6 @@ record FixtureSeeder(FixtureIssueRegistry registry, String instanceId) {
         String body = reason == null
                 ? GithubMarker.render(kind, actor, at, humanText)
                 : GithubMarker.render(kind, actor, at, humanText, reason);
-        issue.appendComment(body, id);
+        issue.appendComment(body, id, at);
     }
 }

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,7 +39,7 @@ class GitTaskRepositoryConsumedRequestSpec extends Specification implements Bare
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
-        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     /** At the gate, its passing round recorded — the state a passing {@code manual} round leaves. */

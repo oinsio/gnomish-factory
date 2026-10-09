@@ -16,13 +16,11 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Instant
-import java.time.ZoneOffset
 /**
  * FR9, UX2 of add-tracker-port (task 5.9): {@link TakeDisposition#dispose} — the explicit-mode
  * {@code take <ref>} disposition matrix over the logical task-state dictionary. Each spec method
@@ -45,14 +43,14 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def claimEpochBook = taskGit.epochs()
 
     private TakeDisposition newDisposition() {
-        new TakeDisposition(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'))), false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC())
+        new TakeDisposition(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'), VirtualTimeEquipment.create())), false, TakeoverConfirmation.UNAVAILABLE)
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
     // over a fixed clock, so the Working case's TakeTakeover path is exercised deterministically.
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
         new TakeDisposition(
-                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'))), takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC))
+                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'), TakeCommands.slotTime(NOW))), takeoverFlag, confirmation)
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -202,8 +200,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def beat = Mock(ClaimBeat)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = new TakeDisposition(
-                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), taskGit, [], new ClaimTenure(beat, new ClaimLossFlag())),
-                false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC))
+                slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'), TakeCommands.slotTime(NOW)), taskGit, [],
+                new ClaimTenure(beat, new ClaimLossFlag())), false, TakeoverConfirmation.UNAVAILABLE)
 
         when:
         disposition.dispose(order(trackerTask(new TrackerTaskState.Ready())))

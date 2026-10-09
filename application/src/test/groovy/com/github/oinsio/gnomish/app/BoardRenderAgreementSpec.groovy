@@ -21,7 +21,7 @@ class BoardRenderAgreementSpec extends Specification {
 
     def model = BoardReferenceFixture.referenceModel()
     def text = renderer.render(model)
-    def json = mapper.toDto(model, BoardReferenceFixture.WIP_LIMIT)
+    def json = mapper.toDto(model)
 
     def "every Ready row's id and title appear on both surfaces"() {
         expect:

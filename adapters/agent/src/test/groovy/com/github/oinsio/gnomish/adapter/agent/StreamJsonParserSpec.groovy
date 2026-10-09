@@ -4,8 +4,8 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.time.Duration
 import java.time.Instant
-import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -194,18 +194,14 @@ class StreamJsonParserSpec extends Specification {
 
     // FR6, NFR-O3, D3: each event is stamped with the InstantSource's reading taken as its line is read
     def "stamps each event with the read-time instant advancing between lines"() {
-        given: 'a two-line stream and a clock advanced between reads'
+        given: 'a two-line stream whose second line arrives 100 seconds after the first'
         def first = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'
         def second = '{"type":"result","subtype":"success","session_id":"sess-1","result":"done"}'
-        def reader = readerOf(first, second)
-        def advancingClock = new AdvancingClock([
-            Instant.ofEpochSecond(100),
-            Instant.ofEpochSecond(200)
-        ])
-        def advancingParser = new StreamJsonParser(advancingClock)
+        clock.advance(Duration.ofSeconds(100))
+        def reader = arrivingAfter(Duration.ofSeconds(100), clock, first, second)
 
         when: 'the stream is parsed'
-        def events = advancingParser.parse(reader)
+        def events = parser.parse(reader)
 
         then: 'each event carries the instant the clock reported when its line was read'
         events.size() == 2
@@ -213,17 +209,27 @@ class StreamJsonParserSpec extends Specification {
         events[1].readAt() == Instant.ofEpochSecond(200)
     }
 
-    private static final class AdvancingClock implements InstantSource {
-        private final Iterator<Instant> readings
-
-        AdvancingClock(List<Instant> readings) {
-            this.readings = readings.iterator()
-        }
-
-        @Override
-        Instant instant() {
-            readings.next()
-        }
+    /**
+     * A stream whose every line after the first arrives {@code gap} later on {@code clock} — the
+     * wait a real agent's stdout imposes between lines, played on the shared virtual clock rather
+     * than on a fake that scripts its readings.
+     */
+    private static BufferedReader arrivingAfter(Duration gap, VirtualClock clock, String... lines) {
+        def pending = (lines as List<String>).iterator()
+        boolean firstLine = true
+        new BufferedReader(new StringReader('')) {
+                    @Override
+                    String readLine() {
+                        if (!pending.hasNext()) {
+                            return null
+                        }
+                        if (!firstLine) {
+                            clock.advance(gap)
+                        }
+                        firstLine = false
+                        pending.next()
+                    }
+                }
     }
 
     // FR4: an unknown event type is silently ignored, parsing continues to subsequent lines

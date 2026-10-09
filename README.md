@@ -207,7 +207,7 @@ The full map of the project's documentation, by the question it answers:
 | [`docs/glossary.md`](docs/glossary.md)                                                                     | learn the project's terms — the normative dictionary every doc and class name follows; start here |
 | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                                   | run one ad-hoc task through a pipeline (`gnomish run`): flags, git mode, resume, exit codes       |
 | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                           | run the factory against a tracker (`take`, `board`): labels, escalations, recovery                |
-| [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                               | run the autonomous daemon (`serve`): slots, write budget, cron operation                          |
+| [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                               | run the autonomous daemon (`serve`): slots, write budget, cron operation, embedded dashboard      |
 | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                           | inspect a task from its branch (`status`, `usage`) and their JSON contracts                       |
 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)                       | put the factory's state on a wall display (`dashboard`)                                           |
 | [`docs/guides/operator-guide-observability.md`](docs/guides/operator-guide-observability.md)               | monitor an unattended daemon: snapshot, ledger, dead-man's-switch alerting                        |

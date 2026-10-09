@@ -26,6 +26,8 @@ import java.time.Instant
 class DashboardBoardFixtures {
 
     static final Instant GENERATED_AT = DashboardSectionFixtures.GENERATED_AT
+    /** The WIP limit every fixture board was judged against (D13 of supervise-daemon-loops-and-embed-dashboard). */
+    static final int WIP_LIMIT = 3
     static final Instant FETCHED_AT = Instant.parse('2026-08-06T08:59:30Z')
 
     /** Renders the whole page around {@code boardView}; every other section is stubbed empty. */
@@ -34,7 +36,7 @@ class DashboardBoardFixtures {
     }
 
     static BoardModel emptyModel() {
-        new BoardModel([], [], [], ReadySummary.tally([]), false, GENERATED_AT)
+        new BoardModel([], [], [], ReadySummary.tally([]), WIP_LIMIT, false, GENERATED_AT)
     }
 
     /** One row in each of the three lists — the shape most block assertions need. */
@@ -48,7 +50,7 @@ class DashboardBoardFixtures {
         def awaitingRows = [
             new AwaitingHumanRow(new TaskRef('task-3'), UntrustedText.tracker('Parked title'), ParkReason.ESCALATION)
         ]
-        new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), false, GENERATED_AT)
+        new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), WIP_LIMIT, false, GENERATED_AT)
     }
 
     /** A board holding one working row only, for the claim-marker cases. */
@@ -56,6 +58,6 @@ class DashboardBoardFixtures {
         new BoardModel([], [
             new WorkingRow(new TaskRef('task-2'), UntrustedText.tracker('Working title'), holder, claim)
         ],
-        [], ReadySummary.tally([]), false, GENERATED_AT)
+        [], ReadySummary.tally([]), WIP_LIMIT, false, GENERATED_AT)
     }
 }

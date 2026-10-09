@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
@@ -56,7 +57,7 @@ class FeedAutomatonSpec extends Specification {
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, SlotRunner runner, Random random, int wipLimit = WIP_LIMIT) {
-        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, runner, sleeper, clock, BASE, CAP, IDLE, wipLimit, random)
+        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, runner, VirtualTimeEquipment.on(clock, sleeper), BASE, CAP, IDLE, wipLimit, random)
     }
 
     // Non-termination guard: drain() and repeated step() park forever in SlotLedger's unbounded
@@ -256,7 +257,7 @@ class FeedAutomatonSpec extends Specification {
             // A fresh single-slot ledger per seed: sharing one across the five step() calls would
             // park the second call forever in acquire() under a permit-leaking mutant.
             def localSleeper = new VirtualSleeper(new VirtualClock())
-            def a = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), capturing([]), localSleeper, clock, BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
+            def a = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), capturing([]), VirtualTimeEquipment.on(clock, localSleeper), BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
             a.step()
             def slept = localSleeper.slept.first()
             slept.toNanos() >= IDLE.toNanos() && slept.toNanos() <= (IDLE.toNanos() * 1.2) as long

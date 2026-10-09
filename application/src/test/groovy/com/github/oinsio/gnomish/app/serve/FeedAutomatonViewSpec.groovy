@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -46,7 +47,7 @@ class FeedAutomatonViewSpec extends Specification {
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, int wipLimit = WIP_LIMIT) {
-        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, noop(), sleeper, clock, BASE, CAP, IDLE, wipLimit, new FixedRandom())
+        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, noop(), VirtualTimeEquipment.on(clock, sleeper), BASE, CAP, IDLE, wipLimit, new FixedRandom())
     }
 
     def "before any cycle runs, the view reports an idle state at construction time"() {

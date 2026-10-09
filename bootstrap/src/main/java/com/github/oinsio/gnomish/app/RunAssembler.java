@@ -97,11 +97,10 @@ final class RunAssembler {
                 assembly.checks.commandRunner(childEnv, sandbox),
                 assembly.checks.externalCheckClient(runLaw, RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
-                        assembly.factoryProperties, assembly.instantSource, childEnv, law, sandbox),
+                        assembly.factoryProperties, assembly.time.clock(), childEnv, law, sandbox),
                 listener,
                 attemptPersistence,
-                assembly.instantSource,
-                assembly.threadSleeper,
+                assembly.time,
                 sandbox == null ? AttemptDelivery.assumedDelivered() : sandbox.attemptDelivery());
 
         var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole);

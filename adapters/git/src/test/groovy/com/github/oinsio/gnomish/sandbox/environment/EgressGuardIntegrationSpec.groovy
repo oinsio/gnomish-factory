@@ -3,13 +3,14 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
-import java.time.Instant
+import java.time.Duration
 import java.time.InstantSource
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -35,12 +36,22 @@ import spock.lang.TempDir
 })
 class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFixture {
 
+    /**
+     * The self-check's guard-readiness pause, waited for real: the guard in the real container needs
+     * the wall time to come up. The production sleeper lives in {@code :bootstrap} (design D20 of
+     * supervise-daemon-loops-and-embed-dashboard), out of this module's reach, so the spec spells
+     * the same blocking wait for itself.
+     */
+    private static final Sleeper REAL_PAUSE = { Duration d ->
+        Thread.sleep(d)
+    } as Sleeper
+
     static final ResourceLimits LIMITS = new ResourceLimits('2', '512m', 256L, '10g')
 
     @TempDir
     Path tempDir
 
-    private final InstantSource clock = { -> Instant.now() } as InstantSource
+    private final InstantSource clock = new VirtualClock()
     private final DockerCli docker = new DockerCli()
 
     private String key
@@ -66,7 +77,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
 
     def "M2: the self-check passes against a real guard and the denial reads back as a finding"() {
         given: 'the production self-check over the real box, guard, and allowlist'
-        def selfCheck = new EnvironmentSelfCheck(env, guard, docker, key, 'runc', [targetIp], new ThreadSleeper())
+        def selfCheck = new EnvironmentSelfCheck(env, guard, docker, key, 'runc', [targetIp], REAL_PAUSE)
 
         when: 'all probes run — direct egress, denied host, allowlisted host, isolation'
         selfCheck.verify()

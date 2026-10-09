@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -57,16 +58,16 @@ class VitalsSnapshotAssemblerSpec extends Specification {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
-                { Duration d -> } as Sleeper,
-                clock,
+                VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
                 INTERVAL,
                 ClaimLostSink.IGNORE)
     }
 
     private StandingReaper newReaper() {
         new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, INTERVAL,
-                { -> [] }, clock)
+                ReaperDuty.NONE, INTERVAL, {
+                    -> []
+                }, VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper))
     }
 
     private WorktreeJanitor newJanitor() {
@@ -74,8 +75,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
                 RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('clone')),
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
-                clock,
-                { Duration d -> } as Sleeper,
+                VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
                 { -> Set.of() })
     }
 
@@ -127,9 +127,9 @@ class VitalsSnapshotAssemblerSpec extends Specification {
             reaper.stop()
             secondTick.countDown()
         } as ReaperDuty
-        reaper = new StandingReaper(duty, { Duration d -> } as Sleeper, INTERVAL, {
+        reaper = new StandingReaper(duty, INTERVAL, {
             -> []
-        }, clock)
+        }, VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper))
         def heartbeat = newHeartbeat()
 
         when:

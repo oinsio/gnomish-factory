@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -58,7 +59,7 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
             ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter(),
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
         new VerifyOrchestrator(builtinRunner, commandRunner,
-                new ExternalPolling(externalClient, attemptDelivery, clock, sleeper),
+                new ExternalPolling(externalClient, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper)),
                 new JudgeVoting(judgeVoter), clock, listener)
     }
 }

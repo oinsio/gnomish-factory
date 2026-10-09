@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -45,7 +46,7 @@ class WorktreeJanitorSpec extends Specification {
     }
 
     private WorktreeJanitor janitor(Set<TaskRef> held = Set.of()) {
-        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, clock, sleeper, {
+        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, VirtualTimeEquipment.on(clock, sleeper), {
             -> held
         })
     }
@@ -88,7 +89,7 @@ class WorktreeJanitorSpec extends Specification {
         } as TaskEnvironmentDisposal
 
         when:
-        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, scopedDisposal, clock, sleeper, {
+        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, scopedDisposal, VirtualTimeEquipment.on(clock, sleeper), {
             -> Set.of()
         }).tick()
 
@@ -233,7 +234,7 @@ class WorktreeJanitorSpec extends Specification {
 
         when: 'a tick completes on a clock set one minute later'
         def laterClock = { -> NOW + Duration.ofMinutes(1) } as InstantSource
-        def later = new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, laterClock, sleeper, {
+        def later = new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, VirtualTimeEquipment.on(laterClock, sleeper), {
             -> Set.of()
         })
         later.tick()

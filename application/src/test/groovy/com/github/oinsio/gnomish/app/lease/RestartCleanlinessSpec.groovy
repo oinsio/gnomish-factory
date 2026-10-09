@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.time.Duration
 import spock.lang.Specification
 
@@ -68,9 +69,9 @@ class RestartCleanlinessSpec extends Specification {
         // The new instance holds nothing of its own, so the standing reaper's live-claims
         // snapshot supplier always returns empty — exactly the shape of a just-restarted process
         // that has not claimed anything yet (FR1, FR2).
-        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, {
+        def standingReaper = new StandingReaper(reaper, INTERVAL, {
             -> []
-        }, new VirtualClock())
+        }, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> }))
 
         expect: 'the restart alone mints a different id — the two lives are never confused'
         newInstanceId != oldInstanceId

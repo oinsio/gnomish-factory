@@ -60,10 +60,21 @@ class ClaimlessGitBoundarySpec extends Specification {
      * parameter now, so the caller supplies the tenure and the type carries the constraint the
      * exemption used to. Their rows were kept by a reach check that asked only whether the path
      * still existed, which is the staleness this gate's own javadoc promises to catch.
+     *
+     * <p>Two rows hand the empty tenure to a tracker adapter rather than a git layer, since the
+     * plugin SPI carries the tenure on one context (design D21 of
+     * supervise-daemon-loops-and-embed-dashboard): {@code TrackerWiring.resolveReadOnly} builds the
+     * reader {@code board} and {@code dashboard} use, which never claims (the claiming funnel,
+     * {@code resolveTracker}, hands the bundle's book); and {@code FixedTrackerAdapterContext}
+     * defaults the tenure to empty for the single-adapter specs of the adapter test trees, which
+     * never claim through a bundle. Before D21 both spelled no token only because the tenureless
+     * {@code create} overload picked the empty source inside the adapter.
      */
     private static final List<String> CLAIMLESS_PRODUCTION = [
+        'application/src/main/java/com/github/oinsio/gnomish/app/TrackerWiring.java',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeededCloneFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/TaskSeedFixture.groovy',
+        'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/FixedTrackerAdapterContext.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/TaskGitFixture.groovy',
     ]
 

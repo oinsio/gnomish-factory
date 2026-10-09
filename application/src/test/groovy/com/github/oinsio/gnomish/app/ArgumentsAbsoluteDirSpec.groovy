@@ -20,7 +20,7 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         take : { Path d ->
             new TakeArguments(d, [], null, false, false)
         },
-        serve : { Path d -> new ServeArguments(d, null, false) },
+        serve : { Path d -> new ServeArguments(d, null, false, false, null) },
         status : { Path d -> new StatusArguments(d, null, false) },
         usage : { Path d -> new UsageArguments(d, 'task-1', false) },
         board : { Path d -> new BoardArguments(d, false, 50) },

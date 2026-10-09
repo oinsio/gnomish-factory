@@ -6,6 +6,7 @@ import static com.github.oinsio.gnomish.app.lease.ReaperLoopRig.Unrenderable
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
@@ -91,9 +92,9 @@ class StandingReaperInterruptedStopSpec extends Specification {
         def standing = new StandingReaper({ own ->
             ticks++
             reaper.reapOnce(own)
-        } as ReaperDuty, { Duration d -> } as Sleeper, INTERVAL, {
+        } as ReaperDuty, INTERVAL, {
             []
-        }, new VirtualClock())
+        }, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper))
         rig.reaper = standing
 
         when: 'the first tick parks inside listOpen, and the daemon stops'
@@ -114,9 +115,9 @@ class StandingReaperInterruptedStopSpec extends Specification {
     def "a stop during the interval wait ends the reaper without a tick, quietly"() {
         given:
         def sleeper = new LatchedSleeper()
-        def standing = new StandingReaper(ReaperDuty.NONE, sleeper, INTERVAL, {
+        def standing = new StandingReaper(ReaperDuty.NONE, INTERVAL, {
             []
-        }, new VirtualClock())
+        }, VirtualTimeEquipment.on(new VirtualClock(), sleeper))
         rig.reaper = standing
 
         when:
@@ -135,9 +136,9 @@ class StandingReaperInterruptedStopSpec extends Specification {
     def "a joining stop during the interval wait returns only after the wait ended"() {
         given:
         def sleeper = new LatchedSleeper()
-        def standing = new StandingReaper(ReaperDuty.NONE, sleeper, INTERVAL, {
+        def standing = new StandingReaper(ReaperDuty.NONE, INTERVAL, {
             []
-        }, new VirtualClock())
+        }, VirtualTimeEquipment.on(new VirtualClock(), sleeper))
         rig.reaper = standing
 
         when:

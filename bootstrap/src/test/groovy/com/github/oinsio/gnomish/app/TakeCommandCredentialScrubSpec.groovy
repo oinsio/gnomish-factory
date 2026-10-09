@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -120,7 +119,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 
@@ -141,7 +140,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 

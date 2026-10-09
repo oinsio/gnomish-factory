@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -42,12 +43,12 @@ class HeartbeatOutageSuppressionSpec extends Specification {
         given:
         def tracker = Stub(Tracker)
         tracker.heartbeat(_, _) >> { throw new RuntimeException('5xx') }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
 
         when: 'the tracker is down across an hour of beats'
         12.times {
-            beater.beat(A)
+            beater.beat(A, clock.instant())
             clock.advance(BEAT)
         }
 
@@ -82,11 +83,11 @@ class HeartbeatOutageSuppressionSpec extends Specification {
         ].iterator()
         def tracker = Stub(Tracker)
         tracker.heartbeat(_, _) >> { throw new RuntimeException(faults.next()) }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
 
         when:
-        3.times { beater.beat(A) }
+        3.times { beater.beat(A, clock.instant()) }
 
         then:
         logs.list.count {
@@ -102,13 +103,13 @@ class HeartbeatOutageSuppressionSpec extends Specification {
         given:
         def tracker = Stub(Tracker)
         tracker.heartbeat(_, _) >> { throw new RuntimeException('5xx') }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
 
         when:
-        beater.beat(A)
+        beater.beat(A, clock.instant())
         beater.forget(A)
-        beater.beat(A)
+        beater.beat(A, clock.instant())
 
         then:
         logs.list.count {
@@ -168,12 +169,12 @@ class HeartbeatOutageSuppressionSpec extends Specification {
             }
             next
         }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater)
 
         when:
-        beater.beat(A)
-        def outcome = beater.beat(A)
+        beater.beat(A, clock.instant())
+        def outcome = beater.beat(A, clock.instant())
 
         then:
         outcome == BeatOutcome.BEATEN
@@ -190,13 +191,13 @@ class HeartbeatOutageSuppressionSpec extends Specification {
         given:
         def tracker = Stub(Tracker)
         tracker.heartbeat(_, _) >> { throw new RuntimeException('5xx') }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
         def b = new TaskRef('github:o/r#2')
 
         when:
-        beater.beat(A)
-        beater.beat(b)
+        beater.beat(A, clock.instant())
+        beater.beat(b, clock.instant())
 
         then: 'both are first occurrences, each naming its own task'
         def announced = logs.list.findAll {
@@ -215,11 +216,11 @@ class HeartbeatOutageSuppressionSpec extends Specification {
         given:
         def tracker = Stub(Tracker)
         tracker.heartbeat(_, _) >> { throw new RuntimeException() }
-        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+        def beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
         def logs = LogCaptureSupport.attach(HeartbeatBeater)
 
         when:
-        beater.beat(A)
+        beater.beat(A, clock.instant())
 
         then:
         def announced = logs.list.find {
@@ -255,7 +256,9 @@ class HeartbeatOutageSuppressionSpec extends Specification {
     // FR19: the heartbeat builds its suppressor on its own injected time source, the one its
     //     alive-at stamps come from — so an outage measured across a roll-up period on a virtual
     //     source rolls up and recovers without any real time passing. On a second, real clock the
-    //     streak would span a few real milliseconds: no roll-up, and a recovery over ~PT0S.
+    //     streak would span a few real milliseconds: no roll-up, and a recovery over ~PT0S. The
+    //     beater holds no clock (task 3.9): the tick hands it the instant it read, so the
+    //     heartbeat's one source is the only one a beat or its suppressor can reach.
     def "the assembled heartbeat's suppression runs on the heartbeat's own time source"() {
         given: 'a tracker down for the first twelve beats, then answering'
         def payloads = []
@@ -268,7 +271,7 @@ class HeartbeatOutageSuppressionSpec extends Specification {
             }
             new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH, new ClaimEpoch(1)))
         }
-        def heartbeat = new InstanceHeartbeat(tracker, new HeartbeatProgress(), { ignored -> } as Sleeper, clock,
+        def heartbeat = new InstanceHeartbeat(tracker, new HeartbeatProgress(), VirtualTimeEquipment.on(clock, { ignored -> } as Sleeper),
         new BeatTiming(BEAT, BEAT.multipliedBy(100)), { ignored -> } as ClaimLostSink, HeartbeatStateListener.IGNORE)
         heartbeat.seedHeldForTest(A)
         def logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
@@ -295,7 +298,7 @@ class HeartbeatOutageSuppressionSpec extends Specification {
             it.formattedMessage.contains("over ${BEAT.multipliedBy(12)}")
         }
 
-        and: 'the alive-at stamps come from that very source'
+        and: 'the alive-at stamps come from that very source, read once per tick'
         payloads.last().endsWith("alive-at=${clock.instant()}")
 
         cleanup:

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -41,7 +42,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     }
 
     private ResumeBaseResolution resolution(GitProcessRunner boundRunner = runner) {
-        new ResumeBaseResolution(boundRunner, new GitInfrastructureRetry(sleeper,
+        new ResumeBaseResolution(boundRunner, new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper),
                 GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF))
     }
 

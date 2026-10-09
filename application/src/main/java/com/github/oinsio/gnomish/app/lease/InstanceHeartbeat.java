@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.lease;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -75,11 +76,10 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     public InstanceHeartbeat(
             Tracker tracker,
             HeartbeatProgress progress,
-            Sleeper sleeper,
-            InstantSource clock,
+            TimeEquipment time,
             Duration interval,
             ClaimLostSink claimLostSink) {
-        this(tracker, progress, sleeper, clock, interval, claimLostSink, HeartbeatStateListener.IGNORE);
+        this(tracker, progress, time, interval, claimLostSink, HeartbeatStateListener.IGNORE);
     }
 
     /**
@@ -92,12 +92,11 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     public InstanceHeartbeat(
             Tracker tracker,
             HeartbeatProgress progress,
-            Sleeper sleeper,
-            InstantSource clock,
+            TimeEquipment time,
             Duration interval,
             ClaimLostSink claimLostSink,
             HeartbeatStateListener stateListener) {
-        this(tracker, progress, sleeper, clock, new BeatTiming(interval, interval), claimLostSink, stateListener);
+        this(tracker, progress, time, new BeatTiming(interval, interval), claimLostSink, stateListener);
     }
 
     /**
@@ -105,8 +104,9 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
      *
      * @param tracker the port the beat writes through; never null
      * @param progress the engine-event-fed progress source for the payload
-     * @param sleeper the interval sleeper (virtual under test)
-     * @param clock the source of the {@code alive-at} instant
+     * @param time the time equipment (virtual under test): its sleeper waits the beat interval, its
+     *     clock is the source of the {@code alive-at} instant (design D20 of
+     *     supervise-daemon-loops-and-embed-dashboard)
      * @param timing the beat interval (design D8 default 5 min) and how far a claim's last
      *     confirmed beat may fall behind before the holder stops writing at its next boundary
      *     (FR13); in production the threshold is strictly shorter than the reaper's reassignment
@@ -118,8 +118,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     public InstanceHeartbeat(
             Tracker tracker,
             HeartbeatProgress progress,
-            Sleeper sleeper,
-            InstantSource clock,
+            TimeEquipment time,
             BeatTiming timing,
             ClaimLostSink claimLostSink,
             HeartbeatStateListener stateListener) {
@@ -128,12 +127,14 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
         // failures (namespaced by HeartbeatBeater) and the tick itself failing. Built here, on the
         // heartbeat's own time source (FR19 of supervise-daemon-loops-and-embed-dashboard), rather
         // than injected because it is log-plane only — it decides how a repeated failure is
-        // *said*, never what the beat does — and the constructor is already at the parameter
-        // limit (process-invariants.md). FR4 of harden-logging-observability.
+        // *said*, never what the beat does. FR4 of harden-logging-observability. The beater holds
+        // no clock: it is handed each tick's instant, so this local is the one source of both the
+        // alive-at stamps and the suppressor's periods (task 3.9).
+        InstantSource clock = time.clock();
         RepeatSuppressor suppressor = new RepeatSuppressor(clock, timing.rollUp());
         this.tickLog = new HeartbeatTickLog(suppressor);
-        this.beater = new HeartbeatBeater(tracker, progress, clock, suppressor);
-        this.sleeper = sleeper;
+        this.beater = new HeartbeatBeater(tracker, progress, suppressor);
+        this.sleeper = time.sleeper();
         this.interval = timing.interval();
         this.claimLostSink = claimLostSink;
         this.clock = clock;
@@ -248,7 +249,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
         Instant now = clock.instant();
         lastTickAt = now;
         for (TaskRef ref : claims.snapshot()) {
-            switch (beater.beat(ref)) {
+            switch (beater.beat(ref, now)) {
                 case CLAIM_GONE -> {
                     claimLostSink.claimLost(ref);
                     unregister(ref);

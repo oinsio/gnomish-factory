@@ -28,11 +28,22 @@ final class LoopControl {
 
     private final Object lock = new Object();
     private volatile boolean stopping;
+    // Set on the dying worker before it terminates, so a join of that worker sees it.
+    private volatile boolean gaveUp;
     private @Nullable Thread worker;
     private @Nullable ActiveWait activeWait;
 
     boolean stopping() {
         return stopping;
+    }
+
+    /** Records that the policy gave up: the loop ended without a stop and will not respawn. */
+    void markGaveUp() {
+        gaveUp = true;
+    }
+
+    boolean gaveUp() {
+        return gaveUp;
     }
 
     /** Spawns the first worker unless one exists or a stop was requested. */

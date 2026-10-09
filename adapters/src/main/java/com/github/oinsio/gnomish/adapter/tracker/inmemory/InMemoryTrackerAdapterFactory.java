@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
+import com.github.oinsio.gnomish.app.TrackerAdapterContext;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -28,9 +29,13 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
  *
  * <p>Discovered through {@code ServiceLoader} like any other provider (FR1 of
  * add-plugin-architecture): it declares no credentials and grades no subsection, so it inherits both
- * SPI defaults and needs the {@link SecretsProvider} for nothing.
+ * SPI defaults and needs the {@link SecretsProvider} for nothing. Its writes are atomic under one
+ * lock and its claim markers are minted from its own logical counter, so it reads nothing from the
+ * {@link TrackerAdapterContext} — not the tenure record, not the time equipment (FR23 of
+ * supervise-daemon-loops-and-embed-dashboard).
  *
- * <p>Implements FR1, FR3 of add-tracker-port; FR1, FR2 of add-plugin-architecture.
+ * <p>Implements FR1, FR3 of add-tracker-port; FR1, FR2 of add-plugin-architecture; FR23 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class InMemoryTrackerAdapterFactory implements TrackerAdapterFactory {
 
@@ -43,7 +48,7 @@ public final class InMemoryTrackerAdapterFactory implements TrackerAdapterFactor
     }
 
     @Override
-    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+    public Tracker create(TrackerAdapterContext context) {
         return new InMemoryTracker();
     }
 

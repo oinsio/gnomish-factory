@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.HeartbeatStateListener
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
@@ -32,7 +33,7 @@ class TakeHeartbeatSpec extends Specification {
         def sleeper = { Duration d -> } as Sleeper
 
         when:
-        def heartbeat = TakeHeartbeat.forRun(tracker, config, sleeper, new VirtualClock())
+        def heartbeat = TakeHeartbeat.forRun(tracker, config, VirtualTimeEquipment.on(new VirtualClock(), sleeper))
 
         then:
         heartbeat != null
@@ -46,7 +47,7 @@ class TakeHeartbeatSpec extends Specification {
     def "tenure carries this heartbeat's own beat and claim-loss flag instances"() {
         given:
         def heartbeat = TakeHeartbeat.forRun(
-                Mock(Tracker), new TrackerConfig('fixture', 3), { Duration d -> } as Sleeper, new VirtualClock())
+                Mock(Tracker), new TrackerConfig('fixture', 3), VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper))
 
         when:
         def tenure = heartbeat.tenure()
@@ -69,7 +70,7 @@ class TakeHeartbeatSpec extends Specification {
         HeartbeatStateListener listener = { -> fired.incrementAndGet() }
 
         when: 'a claim registers through the assembled beat lifecycle, starting the worker'
-        def heartbeat = TakeHeartbeat.forRun(tracker, config, sleeper, listener, new VirtualClock())
+        def heartbeat = TakeHeartbeat.forRun(tracker, config, VirtualTimeEquipment.on(new VirtualClock(), sleeper), listener)
         heartbeat.instance().register(new TaskRef('github:o/r#1'))
         sleeper.awaitEntered()
 

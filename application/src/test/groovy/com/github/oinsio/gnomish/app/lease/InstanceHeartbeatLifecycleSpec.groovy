@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -43,7 +44,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         }
     ] as Tracker
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
-    tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+    tracker, progress, VirtualTimeEquipment.on(new VirtualClock(), sleeper), INTERVAL, ClaimLostSink.IGNORE)
     // Every heartbeat a test starts a real worker on, drained in cleanup (see cleanup()).
     private final List<InstanceHeartbeat> started = [hb]
 
@@ -160,7 +161,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         def base = new BlockingSleeper()
         def sleeper = diesOnSecondSleep(base, new StackOverflowError('adapter blew the stack'))
         def dying = new InstanceHeartbeat(
-                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+                tracker, progress, VirtualTimeEquipment.on(new VirtualClock(), sleeper), INTERVAL, ClaimLostSink.IGNORE)
         started << dying
 
         def logs = LogCaptureSupport.attach(InstanceHeartbeat)
@@ -215,7 +216,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         def base = new BlockingSleeper()
         def sleeper = diesOnSecondSleep(base, new StackOverflowError('adapter blew the stack'))
         def dying = new InstanceHeartbeat(
-                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+                tracker, progress, VirtualTimeEquipment.on(new VirtualClock(), sleeper), INTERVAL, ClaimLostSink.IGNORE)
         started << dying
 
         when: 'the claim registers and the worker beats once, then dies on the second sleep'
@@ -244,7 +245,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
                 }
         def sleeper = new BlockingSleeper()
         def guarded = new InstanceHeartbeat(
-                tracker, progress, sleeper, new VirtualClock(), INTERVAL, throwingSink)
+                tracker, progress, VirtualTimeEquipment.on(new VirtualClock(), sleeper), INTERVAL, throwingSink)
         started << guarded
         // The tick's edge logging moved to HeartbeatTickLog with FR4's repeat suppression, so the
         // line is attributed to that class now; the level and the code are unchanged.

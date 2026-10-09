@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.take
 
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
@@ -33,7 +34,7 @@ class TerminalWriteRetrySpec extends Specification {
     } as Sleeper
 
     private TerminalWriteRetry retry() {
-        new TerminalWriteRetry(sleeper, clock, BOUND)
+        new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), BOUND)
     }
 
     // FR10: a write that lands on the first attempt confirms without sleeping.
@@ -85,7 +86,7 @@ class TerminalWriteRetrySpec extends Specification {
             t
         } as InstantSource
         def attempts = new AtomicInteger()
-        def retry = new TerminalWriteRetry(sleeper, advancingClock, BOUND)
+        def retry = new TerminalWriteRetry(VirtualTimeEquipment.on(advancingClock, sleeper), BOUND)
 
         when:
         def result = retry.confirm({

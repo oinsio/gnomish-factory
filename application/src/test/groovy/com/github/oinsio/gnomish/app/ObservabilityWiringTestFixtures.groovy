@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -60,7 +62,9 @@ class ObservabilityWiringTestFixtures {
                 { -> fixtureSnapshot(lifecycleTracker, instance) },
                 new SnapshotJsonMapper(),
                 snapshotInterval,
-                clock,
+                // The writer's one equipment over the spec's clock; its sleeper only waits a
+                //     respawn backoff, which no fixture provokes.
+                VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
                 0)
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(serveDir.resolve('placeholder'), new LedgerJsonMapper()), serveDir, clock)

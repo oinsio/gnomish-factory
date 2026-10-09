@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import java.util.List;
 import java.util.Map;
@@ -15,16 +14,20 @@ import java.util.Optional;
  * GitHub is one entry of a {@code Map<provider, CheckClientFactory>} like any other.
  *
  * <p>Implementations are discovered through {@code ServiceLoader} and keyed by {@link #provider()},
- * so they must offer a public no-arg constructor and take their collaborators as method arguments
- * (FR1, FR2, design D1/D2).
+ * so they must offer a public no-arg constructor (FR1, FR2, design D1/D2). Every host-provided
+ * collaborator reaches them through the one {@link CheckClientContext} their single {@link
+ * #create(CheckClientContext)} receives — there is no overload chain to override the wrong link of;
+ * a collaborator the host adds later is a new accessor on the context (design D21 of
+ * supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>The configuration split follows the port's two sources. Connection data — endpoint,
  * repository, credential name — arrives as the operator-side {@code factory.check.<provider>}
- * subsection, graded by {@link #subsectionValidator()} and handed to {@link #create}. Per-check
+ * subsection, graded by {@link #subsectionValidator()} and handed to {@link #create} on the context. Per-check
  * selectors travel the other way, as the stage manifest's params on the {@code external} check,
  * graded by {@link #paramsValidator()}.
  *
- * <p>Implements FR2, FR4, FR5, FR15, FR17 of add-plugin-architecture.
+ * <p>Implements FR2, FR4, FR5, FR15, FR17 of add-plugin-architecture; FR23 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public interface CheckClientFactory {
 
@@ -48,37 +51,18 @@ public interface CheckClientFactory {
      * connection; never null. A credential that does not resolve fails closed here, naming the
      * secret — no stage ever runs against an unauthenticated client.
      *
-     * <p>{@code secrets} arrives as a method argument rather than through the constructor because
-     * {@code ServiceLoader} instantiates this factory through its public no-arg constructor, before
-     * any collaborator exists (FR2, design D2).
+     * <p>This is the factory's single {@code create}: every host-provided collaborator — the secrets
+     * seam, the operator subsection, the run's allowlisted variables (NFR-S2, design D5), the time
+     * equipment — arrives through {@code context}, because {@code ServiceLoader} instantiates this
+     * factory through its public no-arg constructor, before any collaborator exists (FR2, design D2;
+     * FR23, design D21 of supervise-daemon-loops-and-embed-dashboard). A provider whose target is
+     * fully determined by its connection and check id ignores the run context; every instant a
+     * provider stamps reads {@link CheckClientContext#timeEquipment()}, never a clock of its own.
      *
-     * @param secrets the seam through which this provider resolves its named credentials (NFR-S1);
-     *     never null
-     * @param subsection this provider's validated {@code factory.check.<provider>} operator
-     *     subsection as raw untyped content; never null, possibly empty for a provider that needs
-     *     no connection configuration
-     */
-    ExternalCheckClient create(SecretsProvider secrets, Map<String, Object> subsection);
-
-    /**
-     * The run-aware form of {@link #create}, called by the composition root: identical except that
-     * the provider is also handed the run's allowlisted variables (NFR-S2, design D5), which a
-     * provider composing a request from manifest text may substitute into it.
-     *
-     * <p>The default ignores {@code runContext} and delegates, so a provider whose target is fully
-     * determined by its connection and check id — a platform provider addressing a run by commit —
-     * implements only the two-argument form. Only a provider serving arbitrary manifest-declared
-     * targets (the built-in {@code http} one) needs the override.
-     *
-     * @param secrets the seam through which this provider resolves its named credentials; never null
-     * @param subsection this provider's validated operator subsection; never null
-     * @param runContext the run's allowlisted variables; never null, possibly supplying none
+     * @param context everything the host hands this provider; never null
      * @return a live, ready-to-poll client; never null
      */
-    default ExternalCheckClient create(
-            SecretsProvider secrets, Map<String, Object> subsection, CheckRunContext runContext) {
-        return create(secrets, subsection);
-    }
+    ExternalCheckClient create(CheckClientContext context);
 
     /**
      * The load-time validator for an {@code external} check's provider-owned {@code params}, so a

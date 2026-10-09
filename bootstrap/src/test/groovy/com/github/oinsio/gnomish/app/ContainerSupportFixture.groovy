@@ -2,12 +2,14 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import java.nio.file.Path
+import java.time.InstantSource
 
 /**
  * The production {@link ContainerSupportFactory} a spec passes wherever the composition root binds
@@ -51,7 +53,18 @@ final class ContainerSupportFixture {
         // The check providers' credential declarations are resolved by the composition root and
         // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
         // provider, so the declared set and the registry are empty.
-        new ContainerRunSupportFactory([], [:], ownershipMode, epochs, sandbox, factory)
+        new ContainerRunSupportFactory([], [:], ownershipMode, epochs, sandbox, factory, realTime())
+    }
+
+    /**
+     * The real time equipment these real-Docker fixtures run on, unchanged from the one the factory
+     * used to build for itself before it took the root's (design D22 of
+     * supervise-daemon-loops-and-embed-dashboard): a box's self-check really waits for its guard.
+     */
+    private static TimeEquipment realTime() {
+        // real-time-wiring: these fixtures drive a real Docker daemon, whose guard readiness the
+        //     self-check's pause must really wait for; the time source is not the subject here.
+        new TimeEquipment(InstantSource.system(), new ThreadSleeper())
     }
 
     /**
@@ -64,7 +77,8 @@ final class ContainerSupportFixture {
     static ContainerRunSupport direct(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
             FactoryProperties factory, OwnershipMode ownershipMode, ClaimEpochSource epochs,
             List<String> checkCredentialEnvVars = []) {
-        (ContainerRunSupport) new ContainerRunSupportFactory(checkCredentialEnvVars, [:], ownershipMode, epochs, sandbox, factory)
-        .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
+        (ContainerRunSupport) new ContainerRunSupportFactory(
+                checkCredentialEnvVars, [:], ownershipMode, epochs, sandbox, factory, realTime())
+                .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
     }
 }

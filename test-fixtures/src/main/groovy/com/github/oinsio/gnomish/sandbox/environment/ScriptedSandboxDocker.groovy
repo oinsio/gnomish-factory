@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Instant
-import java.time.InstantSource
 import java.util.function.Supplier
 
 /**
@@ -99,16 +100,18 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             Supplier<DenialRestoration> restoration = {
                 -> DenialRestoration.none()
             }) {
+        def timing = new BoxTiming(new TimeEquipment(
+                        // A fixed instant git accepts as a commit date (the epoch is rejected), never the
+                        // wall clock (FR21 of supervise-daemon-loops-and-embed-dashboard).
+                        new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), { d -> } as Sleeper), DEFAULT_COMMAND_TIMEOUT)
         new ContainerEnvironments(this, key, new ContainerEnvironmentBuilder(
                         this,
                         new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
                         sandbox,
-                        new BoxTiming({
-                            -> Instant.now()
-                        } as InstantSource, { d -> } as Sleeper, DEFAULT_COMMAND_TIMEOUT),
+                        timing,
                         ChildEnvAllowlist.none(),
                         guardRoot,
-                        new ObjectOwnership(mode, projectId)), restoration)
+                        new ObjectOwnership(mode, projectId)), restoration, timing)
     }
 
     /** Reads a fake-agent scenario's scripted stream from the {@code fake-agent} resources beside this fixture. */

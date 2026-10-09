@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -32,8 +31,8 @@ class ClaimWatchingTrackerFactory implements TrackerAdapterFactory {
     }
 
     @Override
-    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-        new ClaimWatchingTracker(delegate.create(secrets, config, instanceId), issuedEpochs)
+    Tracker create(TrackerAdapterContext context) {
+        new ClaimWatchingTracker(delegate.create(context), issuedEpochs)
     }
 
     @Override

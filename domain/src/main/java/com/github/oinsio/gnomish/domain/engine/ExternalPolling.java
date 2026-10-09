@@ -2,12 +2,11 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
-import java.time.InstantSource;
 import java.util.List;
 
 /**
@@ -20,14 +19,15 @@ import java.util.List;
  * <p>The {@code deadline} is {@code clock.instant() + timeout} captured once at entry. A
  * decided poll maps straight through to the matching {@link Verdict}; {@link
  * PollStatus.Running} keeps waiting. On {@code Running} the timeout is checked
- * <em>before</em> sleeping: once {@code clock.instant()} is no longer before the deadline
+ * <em>before</em> sleeping: once the equipment has no time {@linkplain TimeEquipment#remaining
+ * remaining} until the deadline
  * the loop resolves the check's declared {@link VerifyCheck.External#timeoutClass()}
  * — {@link VerifyCheck.TimeoutClass#QUALITY} (the default) returns a quality {@link
  * Verdict.Fail} with a single timeout {@link Finding}, unchanged prior behavior;
  * {@link VerifyCheck.TimeoutClass#INFRASTRUCTURE} returns a {@link
  * Verdict.CannotVerify} naming the elapsed timeout instead, so the stage escalates
  * without burning an attempt (FR9). Otherwise the loop sleeps the interval on the
- * injected {@link Sleeper} and polls again. Checking before sleeping keeps the loop
+ * equipment's sleeper and polls again. Checking before sleeping keeps the loop
  * deterministic (NFR-R3).
  *
  * <p>Package-private and reentrant: it holds only its immutable injected collaborators
@@ -45,34 +45,31 @@ final class ExternalPolling {
 
     private final ExternalCheckClient externalClient;
     private final AttemptDelivery attemptDelivery;
-    private final InstantSource clock;
-    private final Sleeper sleeper;
+    private final TimeEquipment time;
 
     /**
      * Wires the poll loop's collaborators: the {@link ExternalCheckClient} polled once
      * per iteration, the {@link AttemptDelivery} precondition confirmed before the loop
-     * starts (FR21 of add-sandbox-core), the injected {@link InstantSource} the deadline is
-     * measured against, and the {@link Sleeper} waited between polls (design D8). All
+     * starts (FR21 of add-sandbox-core), and the injected {@link TimeEquipment} whose clock the
+     * deadline is measured against and whose sleeper is waited between polls (design D8). All
      * immutable (NFR-R1).
      *
      * @param externalClient the port polled once per iteration; never null
      * @param attemptDelivery the push-precondition seam confirmed before the loop; never null
-     * @param clock the injected time source timing the poll deadline; never null
-     * @param sleeper the injected sleep seam waited between polls; never null
+     * @param time the injected time equipment: the poll deadline's clock and the sleep seam waited
+     *     between polls (design D20 of supervise-daemon-loops-and-embed-dashboard); never null
      */
-    ExternalPolling(
-            ExternalCheckClient externalClient, AttemptDelivery attemptDelivery, InstantSource clock, Sleeper sleeper) {
+    ExternalPolling(ExternalCheckClient externalClient, AttemptDelivery attemptDelivery, TimeEquipment time) {
         this.externalClient = externalClient;
         this.attemptDelivery = attemptDelivery;
-        this.clock = clock;
-        this.sleeper = sleeper;
+        this.time = time;
     }
 
     /**
      * Polls {@code check} until it decides or its timeout elapses, collapsing the poll
      * sequence into one {@link Verdict}. The deadline is {@code clock.instant() +
      * check.timeout()} captured once at entry; a {@link PollStatus.Running} that never
-     * resolves times out once {@code clock.instant()} is no longer before the deadline,
+     * resolves times out once no time remains until the deadline,
      * classified per {@code check.timeoutClass()}: {@link VerifyCheck.TimeoutClass#QUALITY}
      * (default) into a quality {@link Verdict.Fail}, {@link
      * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link Verdict.CannotVerify} (FR9).
@@ -95,7 +92,7 @@ final class ExternalPolling {
                 instanceof AttemptDelivery.Outcome.Undeliverable(UntrustedText reason, UntrustedText details)) {
             return new Verdict.CannotVerify(reason, details);
         }
-        Instant deadline = clock.instant().plus(check.timeout());
+        Instant deadline = time.clock().instant().plus(check.timeout());
         while (true) {
             switch (externalClient.poll(check, workspace)) {
                 case PollStatus.Pass pass -> {
@@ -108,10 +105,10 @@ final class ExternalPolling {
                     return new Verdict.CannotVerify(cv.reason(), cv.details());
                 }
                 case PollStatus.Running ignored -> {
-                    if (!clock.instant().isBefore(deadline)) {
+                    if (time.remaining(deadline).isZero()) {
                         return timeoutVerdict(check);
                     }
-                    sleeper.sleep(check.interval());
+                    time.sleeper().sleep(check.interval());
                 }
             }
         }

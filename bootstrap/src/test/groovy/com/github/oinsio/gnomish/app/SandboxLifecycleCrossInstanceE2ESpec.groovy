@@ -23,8 +23,8 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -118,7 +118,9 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         // Docker timestamps have sub-second precision but the host clock may lag; a real sleep puts
         // the box reliably past the 1ms thresholds, so the age guard cannot be what spares it.
         Thread.sleep(1500)
-        def pass = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def pass = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), InstantSource.system())
 
         when: "instance A's tick runs with a verdict naming the sibling's claim as fresh"
         def spared = pass.run(project, new LivenessVerdict.Live(Set.of(taskId)))

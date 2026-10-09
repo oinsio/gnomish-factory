@@ -105,13 +105,6 @@ final class TakeWorkRouter {
     }
 
     private SandboxModeSelector.Plan plan(PipelineDefinition definition) {
-        ContainerTakeSupport containerTakeSupport = wiring.containerTakeSupport();
-        return SandboxModeSelector.plan(
-                definition,
-                containerTakeSupport.bindingProperties(),
-                containerTakeSupport.sandboxProperties(),
-                containerTakeSupport.bindingRegistry(),
-                containerTakeSupport.dockerProbe(),
-                wiring.registeredClone());
+        return wiring.containerTakeSupport().modeSelector().plan(definition, wiring.registeredClone());
     }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -207,7 +208,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     /** No-wait budget: the same three attempts and doubling backoff, with the sleeps virtualized. */
     private TaskBranchLocator instantRetryLocator(GitProcessRunner boundRunner = runner) {
         new TaskBranchLocator(boundRunner, new GitInfrastructureRetry(
-                        { Duration ignored -> } as Sleeper, GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
+                        VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
     }
 
     def "FR6: an unreachable origin is unavailable, never absent — no fresh branch may be forked from it"() {
@@ -281,7 +282,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def clone = initWorkingRepo(tempDir, 'clone-stalled-fetch')
         commit(clone, 'a.txt', 'first')
         def stalling = new GitProcessRunner(stallingNetworkGit().toString(), Duration.ofMillis(500))
-        def oneAttempt = new GitInfrastructureRetry({ Duration ignored -> } as Sleeper, 1, Duration.ofMillis(1))
+        def oneAttempt = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), 1, Duration.ofMillis(1))
 
         when:
         def location = new TaskBranchLocator(stalling, oneAttempt).locate(clone, 'PROJ-12')

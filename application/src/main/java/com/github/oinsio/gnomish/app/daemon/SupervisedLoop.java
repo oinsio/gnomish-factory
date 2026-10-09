@@ -1,8 +1,7 @@
 package com.github.oinsio.gnomish.app.daemon;
 
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
-import java.time.InstantSource;
 
 /**
  * The one long-lived daemon thread shape of the factory: a tick repeated on a cadence, guarded,
@@ -17,7 +16,7 @@ import java.time.InstantSource;
  * failure streak and resets the policy's backoff.
  *
  * <p><b>The suppressor is the loop's own (D2).</b> The loop builds its {@link RepeatSuppressor}
- * from the {@link InstantSource} it is given and a roll-up period derived from its wait's interval by
+ * from the clock of the {@link TimeEquipment} it is given and a roll-up period derived from its wait's interval by
  * {@link RollUpPeriod} — at most one reminder per six ticks — so no loop class constructs or passes
  * one, and a loop on a virtual clock rolls up and recovers on virtual time. The suppressor takes
  * that same source directly, so the loop holds one clock, the same its owner stamps {@code
@@ -41,31 +40,30 @@ import java.time.InstantSource;
  * {@link LoopControl}: it guards {@code stopping}'s companions — the worker and the active wait —
  * and nothing blocking runs under it: no tick, no wait, no join, no log line.
  *
- * <p>Implements FR1, FR2, FR3, FR4, FR5, NFR-R2, NFR-R3, NFR-O1 of
+ * <p>Implements FR1, FR2, FR3, FR4, FR5, FR22, NFR-R2, NFR-R3, NFR-O1 of
  * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SupervisedLoop {
 
     private final LoopShape shape;
     private final Runnable tick;
-    private final Sleeper backoffSleeper;
+    private final TimeEquipment time;
     private final LoopEvents events;
     private final LoopControl control = new LoopControl();
 
     /**
      * @param shape the component, order, wait and restart policy of this loop; never null
      * @param tick one run of the loop's work, on the worker thread; never null
-     * @param backoffSleeper the sleep seam the restart backoff is waited on (virtual under test);
-     *     never null
-     * @param clock the time source the loop's failure streaks are measured on — their roll-ups and
-     *     the recovery's outage duration (virtual under test); never null
+     * @param time the loop's time equipment (virtual under test): its sleeper waits the restart
+     *     backoff, its clock measures the failure streaks — their roll-ups and the recovery's outage
+     *     duration (design D20 of supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public SupervisedLoop(LoopShape shape, Runnable tick, Sleeper backoffSleeper, InstantSource clock) {
+    public SupervisedLoop(LoopShape shape, Runnable tick, TimeEquipment time) {
         this.shape = shape;
         this.tick = tick;
-        this.backoffSleeper = backoffSleeper;
+        this.time = time;
         RepeatSuppressor suppressor = new RepeatSuppressor(
-                clock, RollUpPeriod.forInterval(shape.loopWait().interval()));
+                time.clock(), RollUpPeriod.forInterval(shape.loopWait().interval()));
         this.events = new LoopEvents(shape.component(), suppressor);
     }
 
@@ -97,9 +95,19 @@ public final class SupervisedLoop {
         return shape.policy().restartCount();
     }
 
-    // Package-private: a spec awaits a loop that ends on its own (a bounded give-up), no stop.
-    void joinWorkers() {
+    /**
+     * Blocks until the loop has ended — by a stop, or by a {@link RestartPolicy.Bounded} giving up
+     * — and no worker remains, then says which. An owner whose process has nothing else to do (the
+     * standalone {@code gnomish dashboard --watch}) joins its loop here and exits non-zero on a
+     * give-up. If the calling thread is interrupted the wait ends early, its flag restored.
+     *
+     * <p>Implements FR3, FR9 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return true if the loop ended because its policy gave up, false otherwise
+     */
+    public boolean awaitEnd() {
         control.joinWorkers();
+        return control.gaveUp();
     }
 
     // Package-private: specs wait for the worker to be inside a wait before they act on it.
@@ -173,10 +181,13 @@ public final class SupervisedLoop {
             return;
         }
         switch (decision) {
-            case RestartDecision.GiveUp giveUp -> events.gaveUp(dead, giveUp, cause);
+            case RestartDecision.GiveUp giveUp -> {
+                control.markGaveUp();
+                events.gaveUp(dead, giveUp, cause);
+            }
             case RestartDecision.Respawn respawn -> {
                 events.workerDied(dead, respawn, cause);
-                respawnAfter(new LoopWait.FixedInterval(backoffSleeper, respawn.backoff()));
+                respawnAfter(new LoopWait.FixedInterval(time.sleeper(), respawn.backoff()));
             }
         }
     }

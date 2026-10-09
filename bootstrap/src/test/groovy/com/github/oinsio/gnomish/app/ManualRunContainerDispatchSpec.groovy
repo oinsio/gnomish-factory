@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
-import java.util.function.BooleanSupplier
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -32,7 +32,7 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 // Container by default (D13): no explicit binding, image configured.
                 new BindingProperties(null, [:]),
                 // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
-                { true } as BooleanSupplier)
+                { -> true } as ContainerRuntimeProbe)
     }
 
     // D13, FR14: a fresh git-mode run under container bindings dispatches to

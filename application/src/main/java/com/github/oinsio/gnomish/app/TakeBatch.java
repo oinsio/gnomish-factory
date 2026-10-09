@@ -117,7 +117,7 @@ final class TakeBatch {
     static List<TakeBatchOutcome> dispatch(
             TakeDispatcher dispatcher, TakeArguments takeArguments, BoundTracker bound, int slots)
             throws InterruptedException {
-        return run(takeArguments.refs(), slots, dispatcher.clock(), rawRef -> {
+        return run(takeArguments.refs(), slots, dispatcher.wiring().time().clock(), rawRef -> {
             try {
                 return dispatcher.runOneRef(takeArguments, rawRef, bound, TakeoverConfirmation.UNAVAILABLE);
             } finally {

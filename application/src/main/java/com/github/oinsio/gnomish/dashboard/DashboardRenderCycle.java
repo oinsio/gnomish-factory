@@ -17,9 +17,8 @@ import org.slf4j.LoggerFactory;
 /**
  * One dashboard render: reads the daemon snapshot and the ledger history window fresh, and
  * composes them with a caller-resolved board section into the page HTML (task 4.1-4.4). Shared by
- * the one-shot render ({@code DashboardCommand}) and each cycle of {@link DashboardWatchLoop} — in
- * both cases the snapshot and ledger are re-read every call (FR9: local files, effectively free),
- * while the board section is the caller's concern (a fresh {@link DashboardBoardCache} fetch for
+ * {@code app.DashboardWatch}'s one-shot render and each cycle of its watch loop — in both cases
+ * the snapshot and ledger are re-read every call (FR9: local files, effectively free), while the board section is the caller's concern (a fresh {@link DashboardBoardCache} fetch for
  * one-shot; the cache's cadence-gated {@code refresh}/{@code cached} choice for watch mode).
  *
  * <p>An unreadable ledger window (a malformed non-tail line, {@link

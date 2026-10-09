@@ -100,7 +100,7 @@ final class RequestSnapshotKillPoints {
         def objects = GitObjects.open(world.repoDir, Files.createDirectories(world.repoDir.resolveSibling('snapshot-index')))
         def tip = objects.resolveRef(ref).get()
         def identity = new CommitIdentity('gnome', 'gnome@sandbox.local')
-        def now = Instant.now()
+        def now = Instant.parse('2026-01-01T00:00:00Z')
         objects.commit(new CommitRequest(ref, Optional.of(tip), tip,
                 [
                     new TreeEdit.PutFile(round.decisionFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))

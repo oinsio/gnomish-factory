@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import java.time.InstantSource;
 
 /**
@@ -58,6 +59,8 @@ public final class FeedAutomaton {
      * add-parameter-count-gate; the two defaulting constructors had already moved to {@code
      * FeedAutomatonFixture} in {@code :test-fixtures} under D5 of collapse-composition-roots).
      *
+     * @param time the time equipment: the Idle state sleeps on its sleeper, every poll is stamped on
+     *     its clock (design D20 of supervise-daemon-loops-and-embed-dashboard)
      * @param idleTiming the Idle interval and jitter, and the backoff bounds and random source the
      *     feed's selection grades against
      * @param wipLimit the WIP limit W (FR6)
@@ -67,15 +70,14 @@ public final class FeedAutomaton {
      */
     FeedAutomaton(
             SlotLedger slotLedger,
-            Sleeper sleeper,
-            InstantSource clock,
+            TimeEquipment time,
             IdleTiming idleTiming,
             int wipLimit,
             FeedCycle cycle,
             FeedViewTracker viewTracker) {
         this.slotLedger = slotLedger;
-        this.sleeper = sleeper;
-        this.clock = clock;
+        this.sleeper = time.sleeper();
+        this.clock = time.clock();
         this.wipLimit = wipLimit;
         this.idleTiming = idleTiming;
         this.stateLogger = cycle.stateLogger();

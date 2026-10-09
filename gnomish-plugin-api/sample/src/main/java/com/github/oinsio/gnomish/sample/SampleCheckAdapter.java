@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.sample;
 
+import com.github.oinsio.gnomish.app.CheckClientContext;
 import com.github.oinsio.gnomish.app.CheckClientFactory;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +18,9 @@ import java.util.Map;
  * neither reachable from {@code :application}. That is the whole proof: if either ever leaves the
  * api, this module stops compiling (FR4, G1, design D4).
  *
+ * <p>Every host collaborator arrives on the one {@link CheckClientContext} its single {@code create}
+ * receives (FR23 of supervise-daemon-loops-and-embed-dashboard).
+ *
  * <p>Implements FR4, G1 of close-plugin-api-compilability-gap.
  */
 public final class SampleCheckAdapter implements CheckClientFactory {
@@ -31,8 +34,8 @@ public final class SampleCheckAdapter implements CheckClientFactory {
     }
 
     @Override
-    public ExternalCheckClient create(SecretsProvider secrets, Map<String, Object> subsection) {
-        secrets.find("GNOMISH_SAMPLE_TOKEN");
+    public ExternalCheckClient create(CheckClientContext context) {
+        context.secrets().find("GNOMISH_SAMPLE_TOKEN");
         return new SampleExternalCheckClient();
     }
 

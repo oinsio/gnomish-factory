@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.time.Instant
 import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -20,7 +20,7 @@ import spock.lang.TempDir
  */
 class HostExecHandleTreeKillSpec extends Specification {
 
-    private final InstantSource clock = { -> Instant.now() } as InstantSource
+    private final InstantSource clock = new VirtualClock()
 
     @TempDir
     Path tempDir
@@ -48,7 +48,7 @@ wait
 """)
         cli.toFile().setExecutable(true)
         process = new ProcessBuilder(cli.toString(), pidFile.toString()).start()
-        def handle = new HostExecHandle(process, Instant.now())
+        def handle = new HostExecHandle(process, clock.instant())
 
         and: 'the child really exists before the round is cut short'
         eventually('the fake agent CLI has recorded its child pid') {
@@ -71,7 +71,7 @@ wait
     def "FR6, FR11: an interrupted wait is named, not coded, and still kills the tree"() {
         given: 'a process that would far outlive the round'
         process = new ProcessBuilder('sleep', '600').start()
-        def handle = new HostExecHandle(process, Instant.now())
+        def handle = new HostExecHandle(process, clock.instant())
 
         when: 'the wait is interrupted before it begins, which drives the path deterministically'
         Thread.currentThread().interrupt()

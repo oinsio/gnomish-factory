@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,10 +16,9 @@ import org.slf4j.LoggerFactory;
 /**
  * The two ways {@link ServeCommand#run} can drive its assembled {@link FeedAutomaton} to
  * completion, each registering the SAME JVM shutdown hook shape around a {@link ServeShutdown}
- * (FR11, design D9): a single hook safely covers SIGTERM on the forever-loop path and the
- * ordinary post-drain normal exit on the drain path (see {@link ServeShutdown}'s own Javadoc for
- * why a no-op flag/wait/kill on an already-empty ledger is safe). Extracted purely to keep {@link
- * ServeCommand} within the file-size limit (process-invariants.md) — holds no state of its own.
+ * (FR11, design D9): one hook covers a signal on the forever-loop path and the normal exit on the
+ * drain path ({@link ServeShutdown} says why a pass over an already-empty ledger is safe). It holds
+ * no state of its own.
  *
  * <p><b>The hook owns the whole teardown order</b> (design D6 of harden-logging-observability):
  * mark the {@link ShutdownPhase}, drain, finalize the observability lifecycle, then hand off to
@@ -29,8 +29,14 @@ import org.slf4j.LoggerFactory;
  * OrderedExit#reserveSignalOwner()} at <em>registration</em> time, standing the composition root's
  * generic signal hook down before any signal can arrive, and a second pass is a no-op (NFR-R1).
  *
+ * <p><b>The page renders last</b> (design D9 of supervise-daemon-loops-and-embed-dashboard): every
+ * finalize — the drain body's and both hooks' — goes through {@link #finalizeStopped}, which writes
+ * the {@code stopped} snapshot and then, when the dashboard is on, renders the page from it once
+ * more, so the operator's open page says the daemon stopped (FR11, UX2). Both steps are idempotent,
+ * so whichever caller arrives second changes nothing.
+ *
  * <p>Implements FR10, FR11, NFR-O2, M3, D9 of add-factory-serve; FR9, NFR-R1 of
- * harden-logging-observability.
+ * harden-logging-observability; FR11, UX2 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class ServeShutdownWiring {
 
@@ -46,12 +52,9 @@ final class ServeShutdownWiring {
     static final String DRAIN_COMPLETE_REASON = "drainComplete";
 
     /**
-     * The lifecycle reason of a stop the operating system asked for. Named after the mechanism, not
-     * after one signal: the JVM runs its shutdown hooks for SIGINT (an operator's Ctrl-C) exactly as
-     * it does for SIGTERM (an orchestrator stopping the daemon), and the hook cannot tell which
-     * arrived — the previous {@code "sigterm"} therefore misreported half the stops it recorded.
-     * The reason travels as opaque text through the snapshot and the ledger, so readers of either
-     * are unaffected by the wording (task 3.4 of harden-logging-observability).
+     * The lifecycle reason of a stop the operating system asked for — named after the mechanism,
+     * because the hook runs alike for SIGINT and SIGTERM and cannot tell which arrived (task 3.4 of
+     * harden-logging-observability). Opaque text to the snapshot's and the ledger's readers.
      */
     static final String SIGNAL_REASON = "signal";
 
@@ -67,37 +70,33 @@ final class ServeShutdownWiring {
      * through {@code draining} then {@code stopping}, attaches a fresh {@link
      * RunSummaryAccumulator} to {@code slotRunner} so the drain run's {@code runSummary} ledger
      * line can be built (design D6; standing mode never attaches one, so it never writes this
-     * line), and finalizes with reason {@code "drainComplete"} — a no-op if the registered
-     * shutdown hook already reached {@link ObservabilityWiring#finalizeStopped} first (the JVM
-     * runs the hook on every exit, including this one's own normal return).
+     * line), and finalizes with reason {@code "drainComplete"} — a no-op if the shutdown hook
+     * (which the JVM runs on every exit) already finalized first.
      *
-     * <p>The hook picks its own reason from a {@code drainCompleted} flag the main body sets once
-     * {@link FeedAutomaton#drain} returns: on the ordinary post-drain exit the flag is set, so the
-     * hook (were it to win the finalize) would still say {@code "drainComplete"}; but on a SIGTERM
-     * that lands mid-drain the flag is still clear and the main body may never reach its own
-     * {@link ObservabilityWiring#finalizeStopped}/{@code runSummary} write, so the hook finalizes
-     * with {@link #SIGNAL_REASON} — the final {@code stopped} snapshot then truthfully records an
-     * interrupted drain rather than a misleading {@code "drainComplete"} (FR12, FR13, UX4).
-     */
-    static void runDrain(
-            TakeSlotRunner slotRunner,
-            FeedAutomaton automaton,
-            ServeShutdown shutdown,
-            ObservabilityWiring observability)
-            throws InterruptedException {
-        runDrain(slotRunner, automaton, shutdown, observability, Runtime.getRuntime()::addShutdownHook);
-    }
-
-    /**
-     * Same as {@link #runDrain(TakeSlotRunner, FeedAutomaton, ServeShutdown, ObservabilityWiring)},
-     * but with the JVM shutdown-hook registration seamed behind {@code hookRegistrar} so tests can
-     * verify the hook is registered (and drive its body) without touching the real {@link Runtime}.
+     * <p>The hook picks its reason from a {@code drainCompleted} flag set once {@link
+     * FeedAutomaton#drain} returns: a signal that lands mid-drain finalizes with {@link
+     * #SIGNAL_REASON}, so the {@code stopped} snapshot records an interrupted drain (FR12, FR13, UX4).
      */
     static void runDrain(
             TakeSlotRunner slotRunner,
             FeedAutomaton automaton,
             ServeShutdown shutdown,
             ObservabilityWiring observability,
+            Optional<DashboardWatch> dashboard)
+            throws InterruptedException {
+        runDrain(slotRunner, automaton, shutdown, observability, dashboard, Runtime.getRuntime()::addShutdownHook);
+    }
+
+    /**
+     * As the overload above, with the hook registration seamed behind {@code hookRegistrar} so
+     * specs capture and drive the hook body without touching the real {@link Runtime}.
+     */
+    static void runDrain(
+            TakeSlotRunner slotRunner,
+            FeedAutomaton automaton,
+            ServeShutdown shutdown,
+            ObservabilityWiring observability,
+            Optional<DashboardWatch> dashboard,
             ShutdownHookRegistrar hookRegistrar)
             throws InterruptedException {
         DrainReport report = new DrainReport();
@@ -116,7 +115,7 @@ final class ServeShutdownWiring {
                     // same reason the final snapshot records, so log and snapshot never disagree.
                     AnchorLog.serveStopping(reason);
                     shutdown.shutdown(null);
-                    observability.finalizeStopped(reason);
+                    finalizeStopped(observability, dashboard, reason);
                     OrderedExit.closeAndStopLogging();
                 },
                 SHUTDOWN_HOOK_THREAD_NAME));
@@ -125,44 +124,40 @@ final class ServeShutdownWiring {
         drainCompleted.set(true);
         observability.beginStopping();
         observability.newRunSummaryLedgerWriter().write(accumulator, drainStartedAt);
-        observability.finalizeStopped(DRAIN_COMPLETE_REASON);
+        finalizeStopped(observability, dashboard, DRAIN_COMPLETE_REASON);
         log.info("gnomish serve --drain finished: {}", report.summary());
     }
 
     /**
-     * FR11, D9: starts the forever loop on {@link #FEED_THREAD_NAME} so the shutdown hook (which
-     * runs on a JVM-spawned thread of its own on SIGTERM) can interrupt it, registers that hook,
-     * then waits for the feed thread to actually stop before returning. An ordinary SIGTERM stop
-     * therefore no longer surfaces as a thrown {@link InterruptedException} out of this method —
-     * {@link #runFeedLoop} absorbs the interrupt on the feed thread itself (design D7: a
-     * requested stop is a success, not a failure).
+     * FR11, D9: starts the forever loop on {@link #FEED_THREAD_NAME} so the shutdown hook can
+     * interrupt it, registers that hook, then waits for the feed thread to stop; {@link
+     * #runFeedLoop} absorbs the interrupt, so a requested stop is a success, not a thrown {@link
+     * InterruptedException} (design D7).
      *
-     * <p>FR4, FR12 of add-serve-observability: the shutdown hook also drives {@code observability}
-     * through {@code draining} (before the SIGTERM sequence stops claiming/awaits the grace
-     * window), {@code stopping} (once it returns), then finalizes with {@link #SIGNAL_REASON} —
-     * the final {@code stopped} snapshot and ledger line — before {@link
-     * OrderedExit#closeAndStopLogging()} closes the context and flushes the log file.
-     */
-    static void runForever(
-            FeedAutomaton automaton,
-            ServeShutdown shutdown,
-            FeedAutomatonStarter starter,
-            ObservabilityWiring observability)
-            throws InterruptedException {
-        runForever(automaton, shutdown, starter, observability, Runtime.getRuntime()::addShutdownHook);
-    }
-
-    /**
-     * Same as {@link #runForever(FeedAutomaton, ServeShutdown, FeedAutomatonStarter,
-     * ObservabilityWiring)}, but with the JVM shutdown-hook registration seamed behind {@code
-     * hookRegistrar} so tests can verify the hook is registered (and drive its body) without
-     * touching the real {@link Runtime}.
+     * <p>FR4, FR12 of add-serve-observability: the hook drives {@code observability} through
+     * {@code draining} and {@code stopping}, then finalizes with {@link #SIGNAL_REASON} before
+     * {@link OrderedExit#closeAndStopLogging()} closes the context and flushes the log file.
      */
     static void runForever(
             FeedAutomaton automaton,
             ServeShutdown shutdown,
             FeedAutomatonStarter starter,
             ObservabilityWiring observability,
+            Optional<DashboardWatch> dashboard)
+            throws InterruptedException {
+        runForever(automaton, shutdown, starter, observability, dashboard, Runtime.getRuntime()::addShutdownHook);
+    }
+
+    /**
+     * As the overload above, with the hook registration seamed behind {@code hookRegistrar} so
+     * specs capture and drive the hook body without touching the real {@link Runtime}.
+     */
+    static void runForever(
+            FeedAutomaton automaton,
+            ServeShutdown shutdown,
+            FeedAutomatonStarter starter,
+            ObservabilityWiring observability,
+            Optional<DashboardWatch> dashboard,
             ShutdownHookRegistrar hookRegistrar)
             throws InterruptedException {
         Thread feedThread = new Thread(() -> runFeedLoop(automaton, starter), FEED_THREAD_NAME);
@@ -174,7 +169,7 @@ final class ServeShutdownWiring {
                     observability.beginDraining();
                     shutdown.shutdown(feedThread);
                     observability.beginStopping();
-                    observability.finalizeStopped(SIGNAL_REASON);
+                    finalizeStopped(observability, dashboard, SIGNAL_REASON);
                     OrderedExit.closeAndStopLogging();
                 },
                 SHUTDOWN_HOOK_THREAD_NAME));
@@ -182,14 +177,17 @@ final class ServeShutdownWiring {
         feedThread.join();
     }
 
-    /**
-     * Testability seam (no behavioral change) for {@code Runtime.getRuntime()::addShutdownHook}:
-     * lets specs verify hook registration and capture/run the hook body without registering a real
-     * JVM shutdown hook.
-     */
+    /** The seam over {@code Runtime.getRuntime()::addShutdownHook} specs capture the hook through. */
     @FunctionalInterface
     interface ShutdownHookRegistrar {
         void register(Thread hook);
+    }
+
+    /** The final {@code stopped} snapshot, then the page rendered from it (D9, FR11, UX2). */
+    private static void finalizeStopped(
+            ObservabilityWiring observability, Optional<DashboardWatch> dashboard, String reason) {
+        observability.finalizeStopped(reason);
+        dashboard.ifPresent(DashboardWatch::stopAndRenderFinal);
     }
 
     private static void runFeedLoop(FeedAutomaton automaton, FeedAutomatonStarter starter) {

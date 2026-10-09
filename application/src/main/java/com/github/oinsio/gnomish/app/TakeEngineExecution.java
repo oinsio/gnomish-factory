@@ -4,14 +4,13 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.RevocationHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
+import com.github.oinsio.gnomish.app.take.TerminalTransitions;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -58,17 +57,24 @@ import java.util.List;
  * task's <em>law binding</em> — the repository and the commit its {@code .gnomish/} law and
  * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
  * argument taken from the claim, never derived per medium. A binding that changes on one side and
- * not the other would make the same task read different law in host and container mode.
+ * not the other would make the same task read different law in host and container mode. Both end
+ * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the root's one
+ * terminal-write retry and the slot's abort fuse (design D22 of
+ * supervise-daemon-loops-and-embed-dashboard); each twin only builds its {@link
+ * TerminalTransitions} from its own park and finish closures, so neither can retry or abort a
+ * terminal write differently from the other.
  *
- * <p>Implements FR9, FR12, D2, D3 of add-tracker-port; FR9 of add-project-registry.
+ * <p>Implements FR9, FR12, D2, D3 of add-tracker-port; FR9 of add-project-registry; FR18, FR22 of
+ * supervise-daemon-loops-and-embed-dashboard.
  *
  * @param assembly builds the {@code EnginePorts} bundle for the run; never null
  * @param git the task-git capability set: the run's repository and round persistence, the
  *     revocation protocol's best-effort push, and salvage plus terminal cleanup; never null
  * @param registeredClone the registered clone the task's lifecycle repository is rooted at; its worktree
  *     folder holds the task's worktree (FR9 of add-project-registry); never null
- * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
- *     when the engine returns {@code Aborted}; never null
+ * @param dispatch the slot's outcome dispatch ({@link SlotWiring#outcomeDispatch()}): the
+ *     infrastructure-abort protocol applied when the engine returns {@code Aborted}, and the root's
+ *     terminal-write retry every park and finish runs under; never null
  * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
  *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
  *     {@link RunAssembly#assemble}; never null
@@ -85,7 +91,7 @@ record TakeEngineExecution(
         RunAssembly assembly,
         TaskGit git,
         RegisteredClone registeredClone,
-        AbortFuse abortFuse,
+        TakeOutcomeDispatch dispatch,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
         LawBinding lawBinding) {
@@ -180,11 +186,7 @@ record TakeEngineExecution(
                     GitOutcomeRecorder.disposeWorkspace(git, cloneDir, worktree, outcome);
                 });
 
-        // FR18 of supervise-daemon-loops-and-embed-dashboard, open decision (task 3.3): the slot
-        // wiring carries the root's retry, but taking it here makes this leaf's eighth member, which
-        // process-invariants.md answers with a facade, not a wider record.
-        var retry = TerminalWriteRetry.system();
-        return new TakeOutcomeDispatch(retry, park, abortFuse, finish)
-                .dispatch(outcome, context, bootstrap.branchName(), order);
+        return dispatch.dispatch(
+                outcome, context, bootstrap.branchName(), order, new TerminalTransitions(park, finish));
     }
 }

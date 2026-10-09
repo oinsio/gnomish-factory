@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
@@ -54,7 +55,7 @@ class EnginePreflightGateSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter, listener,
-                persistence, clock, sleeper, delivery)
+                persistence, VirtualTimeEquipment.on(clock, sleeper), delivery)
     }
 
     static StageDefinition stage(String name) {

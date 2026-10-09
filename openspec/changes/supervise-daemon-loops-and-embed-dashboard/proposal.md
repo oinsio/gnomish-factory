@@ -394,10 +394,10 @@ written before anyone here knew it.
   instant-source-plus-sleeper pair (`:application` assemblies, loops,
   heartbeat, reaper, seams; `sandbox/docker` `BoxTiming`) takes the carrier;
   `:test-fixtures` builds its virtual retries on the same type.
-- Plugin SPI (FR23) — `gnomish-plugin-api` 0.9.0 → 0.10.0 with a regenerated
+- Plugin SPI (FR23) — `gnomish-plugin-api` 0.10.0 → 0.11.0 with a regenerated
   `compat-baseline/`; `TrackerAdapterFactory`, `CheckClientFactory` and the
   two new context types; implementors `adapters/github` (tracker and check
-  factories), `adapters` (in-memory tracker factory), the sample plugin; the
+  factories), `adapters` (in-memory tracker factory, `http` check provider), the sample plugin; the
   callers `TrackerWiring`, `CheckEquipment` and
   `ProviderDispatchingExternalCheckClient` receive the time equipment.
 - Docs — new `docs/adr/0013-supervised-daemon-loop.md`, new

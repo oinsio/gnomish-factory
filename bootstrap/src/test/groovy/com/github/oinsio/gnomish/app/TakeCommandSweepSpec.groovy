@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -74,7 +73,7 @@ tracker:
     private TakeCommand newCommand(SandboxLifecyclePass pass) {
         newTakeCommand(
                 testProperties(instanceName: 'gnomish-factory'), registeredClone, [github: fakeFactory(tracker)],
-                TakeCommandSeams.defaults(new VirtualClock()), pass)
+                { time -> TakeCommandSeams.defaults(time) }, pass)
     }
 
     def "the startup sweep pass runs once, for this invocation's own directory and liveness verdict"() {

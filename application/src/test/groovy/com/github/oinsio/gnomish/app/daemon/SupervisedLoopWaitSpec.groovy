@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.daemon
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.InterruptOnlySleeper
 import java.time.Duration
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -83,7 +83,7 @@ class SupervisedLoopWaitSpec extends Specification {
 
         where:
         kind | wait
-        'sleeper' | new LoopWait.FixedInterval(new ThreadSleeper(), Duration.ofHours(1))
+        'sleeper' | new LoopWait.FixedInterval(new InterruptOnlySleeper(), Duration.ofHours(1))
         'signal' | new LoopWait.IntervalOrSignal(Duration.ofHours(1))
     }
 }

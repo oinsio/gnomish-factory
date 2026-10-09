@@ -160,12 +160,14 @@ tasks.withType(Test).configureEach {
 
 // --- Time injection in tests (harden-task-branch-contract, task 9.1) ---
 //
-// Every module gets this gate, because every module can grow a spec that calls a
-// production `system()` factory and thereby wires a real sleeper with a production
-// bound. The failure that costs is latent — such a spec sleeps only once some
-// collaborator starts reporting the outage the retry waits on — so it is worth
-// asking at write time rather than hoping a review notices code that is currently
-// green. See TestTimeInjectionCheck for the rule and how to satisfy it.
+// Every module gets this gate, because every module can grow a spec that builds real
+// time — a system clock, a direct `Instant.now()`, the real sleeper, a `system()`
+// factory (widened to that literal set by supervise-daemon-loops-and-embed-dashboard,
+// FR21). The failure that costs is latent — such a spec sleeps only once some
+// collaborator starts reporting the outage the retry waits on, or stamps with a clock
+// no other component reads — so it is worth asking at write time rather than hoping a
+// review notices code that is currently green. See TestTimeInjectionCheck for the rule
+// and how to satisfy it.
 def testTimeInjection = tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
     group = 'verification'
     description = 'Fails when a test source wires production real time instead of injecting it.'

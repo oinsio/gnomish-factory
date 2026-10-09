@@ -12,7 +12,9 @@ import org.springframework.boot.ApplicationArguments;
  * Parses {@code gnomish serve}'s command-line flags into a {@link ServeArguments} (task 5.1 of
  * add-factory-serve): a required-nothing {@code --dir} (the registered clone, defaulting to
  * {@code .}), a positive-only {@code --slots} override of {@code
- * ServeProperties#slots()} (design D3), and the {@code --drain} flag.
+ * ServeProperties#slots()} (design D3), the {@code --drain} flag, and the embedded dashboard's
+ * {@code --dashboard} and {@code --dashboard-out} (design D12 of
+ * supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>{@code serve} has no ad-hoc task source and no {@code <ref>} — it works the whole ready
  * queue, not one task — so every flag meaningful only to a single-task {@code take} invocation is
@@ -21,7 +23,12 @@ import org.springframework.boot.ApplicationArguments;
  * --task-file}, {@code --task-id}, {@code --from-stage}, {@code --resume}, {@code --base}, {@code
  * --discard-work}, {@code --takeover}.
  *
- * <p>Implements FR2, FR4, D3 of add-factory-serve; FR3 of add-project-registry.
+ * <p>The effective dashboard switch — the flag or the configured {@code factory.serve.dashboard} —
+ * is folded here and only here: {@link ServeArguments#dashboard()} carries it, and {@code
+ * --dashboard-out} while it is off is refused before the tracker is touched.
+ *
+ * <p>Implements FR2, FR4, D3 of add-factory-serve; FR3 of add-project-registry; FR8 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 final class ServeArgumentsParser {
 
@@ -29,6 +36,8 @@ final class ServeArgumentsParser {
     private static final String DIR = "dir";
     private static final String SLOTS = "slots";
     private static final String DRAIN = "drain";
+    private static final String DASHBOARD = "dashboard";
+    private static final String DASHBOARD_OUT = "dashboard-out";
 
     /** Flags {@code serve} never accepts: {@code take}'s single-task flag set (see class doc). */
     private static final List<String> REJECTED_FLAGS =
@@ -38,24 +47,38 @@ final class ServeArgumentsParser {
      * Every option {@code serve} knows (FR8 of fix-operator-blockers): its own flags plus {@link
      * #REJECTED_FLAGS}, which stay known so their specific refusal wins over the generic one.
      */
-    private static final List<String> ACCEPTED =
-            Stream.concat(Stream.of(DIR, SLOTS, DRAIN), REJECTED_FLAGS.stream()).toList();
+    private static final List<String> ACCEPTED = Stream.concat(
+                    Stream.of(DIR, SLOTS, DRAIN, DASHBOARD, DASHBOARD_OUT), REJECTED_FLAGS.stream())
+            .toList();
 
     /**
      * @param args the raw application arguments, including the leading {@code serve} token
      * @param clone the registered clone the configuration loader resolved from {@code --dir}; the
      *     {@code dir} component is its path (FR3, design D9 of add-project-registry)
+     * @param dashboardConfigured the configured {@code factory.serve.dashboard}, which turns the
+     *     dashboard on without the flag (FR8 of supervise-daemon-loops-and-embed-dashboard)
      * @return the validated flags
-     * @throws UsageException if a rejected flag is present, or {@code --slots} is given but is
-     *     not a positive integer
+     * @throws UsageException if a rejected flag is present, {@code --slots} is given but is not a
+     *     positive integer, or {@code --dashboard-out} is given while the dashboard is off
      */
-    ServeArguments parse(ApplicationArguments args, RegisteredClone clone) {
+    ServeArguments parse(ApplicationArguments args, RegisteredClone clone, boolean dashboardConfigured) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, SERVE_TOKEN, ACCEPTED, Map.of());
         rejectInapplicableFlags(args);
         Path dir = clone.clonePath();
         Integer slots = parseSlots(args);
         boolean drain = args.containsOption(DRAIN);
-        return new ServeArguments(dir, slots, drain);
+        boolean dashboard = dashboardConfigured || args.containsOption(DASHBOARD);
+        Path dashboardOut = parseDashboardOut(args, dashboard);
+        return new ServeArguments(dir, slots, drain, dashboard, dashboardOut);
+    }
+
+    private @Nullable Path parseDashboardOut(ApplicationArguments args, boolean dashboard) {
+        Path out = DashboardOutputFlag.parse(args, DASHBOARD_OUT);
+        if (out != null && !dashboard) {
+            throw new UsageException("--" + DASHBOARD_OUT + " needs the dashboard on: pass --" + DASHBOARD
+                    + " or set factory.serve.dashboard: true");
+        }
+        return out;
     }
 
     private void rejectInapplicableFlags(ApplicationArguments args) {

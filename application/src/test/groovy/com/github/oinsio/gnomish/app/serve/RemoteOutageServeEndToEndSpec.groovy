@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -146,7 +147,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         and: 'three slots, three ready tasks, a WIP limit that never blocks this scenario'
         def ledger = new SlotLedger(3, new VirtualClock())
         def automaton = new FeedAssembly(
-                sleeper, clock, new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
+                VirtualTimeEquipment.on(clock, sleeper), new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
                 .feedAutomaton(tracker, INSTANCE, ledger, runner, DirtyNotifier.NOOP, gate)
 
         when: 'the feed fills all three slots — the only claims the outage costs the tracker (G5)'

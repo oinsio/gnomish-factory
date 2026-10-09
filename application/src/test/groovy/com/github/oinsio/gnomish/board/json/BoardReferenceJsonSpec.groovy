@@ -13,7 +13,8 @@ import spock.lang.Specification
  * {@code BoardRenderAgreementSpec} to check the spec's "Text and JSON agree" scenario, so both
  * specs stay anchored to one shared shape.
  *
- * <p>Implements FR6, UX4, M1 of add-board-command.
+ * <p>Implements FR6, UX4, M1 of add-board-command; FR14 of supervise-daemon-loops-and-embed-dashboard
+ * (the output is unchanged now that the model carries its WIP limit, D13).
  */
 class BoardReferenceJsonSpec extends Specification {
 
@@ -24,6 +25,6 @@ class BoardReferenceJsonSpec extends Specification {
         def referenceText = getClass().getResourceAsStream('/board-v1.reference.json').getText('UTF-8')
 
         expect:
-        mapper.serialize(BoardReferenceFixture.referenceModel(), BoardReferenceFixture.WIP_LIMIT) == referenceText
+        mapper.serialize(BoardReferenceFixture.referenceModel()) == referenceText
     }
 }

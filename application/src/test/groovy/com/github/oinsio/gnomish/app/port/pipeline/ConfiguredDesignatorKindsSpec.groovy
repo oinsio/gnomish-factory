@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.port.pipeline
 
+import com.github.oinsio.gnomish.app.TrackerAdapterContext
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -28,7 +28,7 @@ class ConfiguredDesignatorKindsSpec extends Specification {
         }
 
         @Override
-        Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+        Tracker create(TrackerAdapterContext context) {
             throw new UnsupportedOperationException()
         }
 

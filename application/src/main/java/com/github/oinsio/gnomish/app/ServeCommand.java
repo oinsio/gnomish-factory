@@ -1,17 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
-import com.github.oinsio.gnomish.app.serve.ServeShutdown;
-import com.github.oinsio.gnomish.app.serve.SlotLedger;
-import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -34,26 +28,18 @@ import org.springframework.boot.ApplicationArguments;
  * tracker binding is printed and {@link ServeExitCodeException} carries exit code 1 out, never a
  * direct {@code System.exit}.
  *
- * <p>Once the tracker is live, one {@link TakeHeartbeat} is built via {@link TakeHeartbeat#forRun}
- * (FR13): its {@link ClaimBeat} and {@link ClaimLossFlag} are the SAME instances threaded into
- * every slot's {@link TakeSlotRunner}, so one heartbeat thread beats every slot's held claim. The
- * reaper duty itself is a STANDING thread on its OWN interval, started here beside {@link
- * com.github.oinsio.gnomish.app.lease.StandingReaper} and independent of both the heartbeat's tick
- * and the feed automaton's state — a foreign claim still goes stale and is reaped while every slot
- * is busy (Full) or the feed is Idle-blocked (fix-reaper-idle-liveness FR1, FR5, design D1/D2;
- * design D3/D4, FR13's "Reaping while saturated" scenario). Its {@link HeartbeatProgress} joins the
- * assembly ONCE, before {@link TakeSlotRunner} is built, since the runner is reused for the
- * daemon's whole lifetime unlike {@link TakeCommand}'s per-invocation join. One {@link
- * TakeSlotRunner}, one {@link SlotLedger}, one {@link FeedAutomaton}, and one {@link ServeShutdown}
- * are then assembled, alongside the {@link ObservabilityWiring} {@link ObservabilityAssembly}
- * builds (FR1, FR4, FR9, FR12 of add-serve-observability) — snapshot writer + ledger appender,
- * started beside the worktree janitor and stopped by {@link ServeShutdownWiring}, which also
- * drives either the drain path (FR10, NFR-O2, M3) or the forever loop (FR11, design D9) — see its
- * Javadoc for the full sequence.
+ * <p>Once the tracker is live, {@link ServeRuntimeAssembly} builds the daemon over it — the one
+ * {@link TakeHeartbeat} whose claim beat and loss flag every slot shares (FR13), the standing
+ * reaper among the {@link com.github.oinsio.gnomish.app.serve.DaemonLoops} (fix-reaper-idle-liveness
+ * FR1, FR5), the {@link ObservabilityWiring} (FR1, FR4, FR9, FR12 of add-serve-observability) and
+ * the embedded dashboard when it is on. This command starts them — the observability, then the
+ * page (D12 of supervise-daemon-loops-and-embed-dashboard), then the loops — and hands off to
+ * {@link ServeShutdownWiring}, which drives the drain path (FR10, NFR-O2, M3) or the forever loop
+ * (FR11, design D9) — see its Javadoc for the full sequence.
  *
  * <p>Implements FR2, FR4, FR10, FR11, FR12, FR13, NFR-O2, M3, D3, D7, D9 of add-factory-serve.
  * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability. Implements FR3, FR10 of
- * add-project-registry.
+ * add-project-registry. Implements FR9, UX1, NFR-O2 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class ServeCommand {
 
@@ -74,7 +60,9 @@ final class ServeCommand {
      *     the instance id it claims under, which names the project (FR3, FR10 of add-project-registry)
      * @param errorConsole the console owner bound to {@code stderr} (FR5, FR6 of
      *     harden-untrusted-text-sinks): the two startup-failure sentences go out on its human
-     *     path, since each carries a message from a tracker or a git remote
+     *     path, since each carries a message from a tracker or a git remote, and so does the
+     *     dashboard's page line (UX1 of supervise-daemon-loops-and-embed-dashboard) — the daemon's
+     *     one operator console
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
      */
@@ -110,7 +98,8 @@ final class ServeCommand {
      *     wait for the feed thread to stop, is itself interrupted
      */
     void run(ApplicationArguments args) throws IOException, InterruptedException {
-        ServeArguments serveArguments = argumentsParser.parse(args, scope.registeredClone());
+        ServeArguments serveArguments =
+                argumentsParser.parse(args, scope.registeredClone(), serveProperties.dashboard());
         TrustedTierStartup.StartupLaw startupLaw = bindStartupLaw(serveArguments.dir());
         PipelineDefinition definition = startupLaw.definition();
         // FR13, D15 of add-base-ref-resolution: bound once here, threaded to every slot's fresh
@@ -133,30 +122,40 @@ final class ServeCommand {
                 effectiveSlots);
 
         // FR2 of harden-logging-observability: the start anchor names the configuration the daemon
-        // actually resolved — flags, properties and defaults already folded together — so a
-        // post-mortem never has to reconstruct which settings were in effect.
+        // actually resolved — flags, properties and defaults folded together, the page included
+        // (NFR-O2 of supervise-daemon-loops-and-embed-dashboard) — so no post-mortem re-derives it.
+        Path page =
+                runtime.dashboard().map(w -> w.outputFile().toAbsolutePath()).orElse(null);
         AnchorLog.serveStarted(new AnchorLog.ServeConfig(
                 instanceId.value(),
                 effectiveSlots,
                 trackerConfig.wipLimit(),
                 serveProperties.idlePollInterval(),
-                serveProperties.sigtermGrace()));
+                serveProperties.sigtermGrace(),
+                serveArguments.dashboard(),
+                page));
 
-        runtime.worktreeJanitor().start();
-        // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole
-        // lifetime, exactly like WorktreeJanitor above — ServeShutdown.shutdown() stops it (FR4).
-        runtime.standingReaper().start();
-        runtime.observability().start(); // FR1, FR12: started beside the worktree janitor
-        // FR6, NFR-P1, design D7 of add-serve-sandbox-lifecycle: its own thread, beside the
-        // worktree janitor — disjoint object populations, disjoint cleaners.
-        runtime.sandboxLifecycleTick().start();
+        runtime.observability().start(); // FR1, FR12: the snapshot writer and the `started` line
+        // D12, UX1: after the writer, so the first render finds a snapshot; named before any claim.
+        runtime.dashboard().ifPresent(watch -> {
+            watch.start();
+            errorConsole.print("gnomish serve: dashboard -> " + page + ConsoleIO.LINE_END);
+        });
+        // D9: the reaper, the janitor (FR14) and the sweep tick (FR6 of add-serve-sandbox-lifecycle)
+        // start after the `started` ledger line so no sweep line precedes it; the shutdown stops them.
+        runtime.daemonLoops().start();
 
         if (serveArguments.drain()) {
             ServeShutdownWiring.runDrain(
-                    runtime.slotRunner(), runtime.automaton(), runtime.shutdown(), runtime.observability());
+                    runtime.slotRunner(),
+                    runtime.automaton(),
+                    runtime.shutdown(),
+                    runtime.observability(),
+                    runtime.dashboard());
             return;
         }
-        ServeShutdownWiring.runForever(runtime.automaton(), runtime.shutdown(), starter, runtime.observability());
+        ServeShutdownWiring.runForever(
+                runtime.automaton(), runtime.shutdown(), starter, runtime.observability(), runtime.dashboard());
     }
 
     /**

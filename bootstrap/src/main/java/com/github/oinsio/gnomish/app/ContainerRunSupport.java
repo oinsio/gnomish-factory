@@ -29,6 +29,7 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.Segment;
@@ -37,7 +38,6 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import com.github.oinsio.gnomish.sandbox.environment.LeasedEnvironment;
 import java.nio.file.Path;
-import java.time.InstantSource;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -57,7 +57,7 @@ import org.jspecify.annotations.Nullable;
  * the port alone (task 4.4, D12 of split-into-modules).
  *
  * <p>Implements FR3, FR5, FR6, FR12, FR21, FR25 of add-sandbox-core; FR13 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class ContainerRunSupport implements SandboxRunSupport {
 
@@ -77,15 +77,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final BranchPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
     final ClaimEpochSource epochs;
-
-    /**
-     * The bundle's one time source: the lifecycle store's {@code createdAt}, its first push's
-     * suppressor and the round source all read it. Still built here rather than handed down from
-     * the root's {@code instantSource} bean: the constructor is at the parameter limit and the
-     * {@link ContainerSupports} test constructor would pass it (FR18 of
-     * supervise-daemon-loops-and-embed-dashboard, task 3.3 — open decision).
-     */
-    private final InstantSource instantSource = InstantSource.system();
+    private final TimeEquipment time;
 
     /**
      * Canonical wiring over an already-built environments seam. Package-private (not {@code
@@ -113,12 +105,18 @@ final class ContainerRunSupport implements SandboxRunSupport {
         // The lifecycle push belongs to the adapter, not to this bundle's terminal boundaries
         // (FR1, FR6, design D1 of fix-lifecycle-push): every write through this repository is
         // replicated best-effort before it returns, so no caller here pushes by hand.
+        // The run's one time equipment is the installation's, read from the box timing its
+        // environments were built with (design D22 of supervise-daemon-loops-and-embed-dashboard):
+        // the store's createdAt, its first push's suppressor, its infrastructure retry and the
+        // round source all measure on the root's one time source, never one of their own.
+        this.time = environments.timing().equipment();
         this.taskRepository = new PushBestEffortTaskLifecycleStore(
-                new GitObjectsTaskRepository(gitObjects, instantSource, epochs, this::currentDenialPosition),
+                new GitObjectsTaskRepository(gitObjects, time.clock(), epochs, this::currentDenialPosition),
                 runner,
                 cloneDir,
-                GitInfrastructureRetry.system(),
-                instantSource);
+                new GitInfrastructureRetry(
+                        time, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF),
+                time.clock());
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -150,7 +148,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public SandboxRunPieces pieces(@Nullable PendingVerification pendingVerification) {
         return new SandboxRunPieces(
-                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, instantSource),
+                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, time.clock()),
                 judgeEnvironments,
                 new SandboxCheckEnvironmentSource(lease, environments, branch),
                 gitObjects,

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
@@ -13,6 +14,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -47,7 +49,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
 
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    1, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
+    1, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null, null)
 
     Tracker tracker = Mock(Tracker)
     TrackerAdapterFactory factory = Stub(TrackerAdapterFactory)
@@ -70,21 +72,22 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, PipelineDefinition definition, List<String> creds ->
             stubSupport(repositories[id])
         }
-        new ContainerTakeSupport(bindings, sandbox, registry, {
-            true
-        }, containerSupport)
+        new ContainerTakeSupport(new SandboxModeSelector(bindings, sandbox, registry, {
+            -> true
+        } as ContainerRuntimeProbe),
+        containerSupport)
     }
 
     private TakeDispatcher dispatcher(
             Map<String, TaskRepository> repositories, RunAssembly assembly, TakeHeartbeat heartbeat) {
         new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, containerTakeSupport(repositories),
-                heartbeat.tenure()), testProperties(), FIXED_CLOCK,
-                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                heartbeat.tenure()), testProperties(),
+                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
-        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper, new VirtualClock())
+        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper))
         def assembly = assemblyRunning(new ScriptedExecutor([
             completedRound('PROJ-1'),
             completedRound('PROJ-2')

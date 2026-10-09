@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -125,7 +126,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def ports = new EnginePorts(
                 executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
+                new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock))
         new Engine().run(
                 pipeline(), context, TaskState.atStageStart('build'), new FakeWorkspace(), ports) as TaskOutcome
     }

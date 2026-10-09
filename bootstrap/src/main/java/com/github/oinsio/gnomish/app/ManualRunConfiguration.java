@@ -23,7 +23,7 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.time.InstantSource;
 import java.util.Map;
@@ -139,10 +139,13 @@ public class ManualRunConfiguration {
      */
     @Bean
     public TaskGit taskGit(
-            GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook, InstantSource instantSource) {
-        // FR18 of supervise-daemon-loops-and-embed-dashboard: one infrastructure retry and the one
-        // time source for every git collaborator below — none builds its own.
-        GitInfrastructureRetry retry = GitInfrastructureRetry.system();
+            GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook, TimeEquipment timeEquipment) {
+        // FR18, FR22 of supervise-daemon-loops-and-embed-dashboard: one infrastructure retry, built
+        // on the root's one time equipment, and the one time source for every git collaborator
+        // below — none builds its own.
+        GitInfrastructureRetry retry = new GitInfrastructureRetry(
+                timeEquipment, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF);
+        InstantSource instantSource = timeEquipment.clock();
         return new TaskGit(
                 new GitTaskStore(gitProcessRunner, claimEpochBook, retry, instantSource),
                 new GitTaskBranches(gitProcessRunner, claimEpochBook, retry),
@@ -199,21 +202,29 @@ public class ManualRunConfiguration {
     }
 
     /**
+     * The installation's one time equipment (design D20 of
+     * supervise-daemon-loops-and-embed-dashboard): the only place real time enters production —
+     * the system instant source and the real sleeper, built together once. Every component that
+     * reads the current instant or waits receives this bean, the {@link #instantSource} derived from
+     * it, or a retry or suppressor the composition root built on it.
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     */
+    @Bean
+    public TimeEquipment timeEquipment() {
+        return new TimeEquipment(InstantSource.system(), new ThreadSleeper());
+    }
+
+    /**
      * The installation's one time source (design D16, D17 of
-     * supervise-daemon-loops-and-embed-dashboard): the only place real time enters production.
-     * Every component that reads the current instant receives this bean, or a retry or suppressor
-     * the composition root built on it.
+     * supervise-daemon-loops-and-embed-dashboard): the clock half of {@link #timeEquipment}, the
+     * same instance, for the components that read the current instant and never wait.
      *
      * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
      */
     @Bean
-    public InstantSource instantSource() {
-        return InstantSource.system();
-    }
-
-    @Bean
-    public ThreadSleeper threadSleeper() {
-        return new ThreadSleeper();
+    public InstantSource instantSource(TimeEquipment timeEquipment) {
+        return timeEquipment.clock();
     }
 
     /**
@@ -251,24 +262,19 @@ public class ManualRunConfiguration {
             SystemConsoleIO systemConsoleIO,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO,
             CheckEquipment checkEquipment,
-            InstantSource instantSource,
-            ThreadSleeper threadSleeper,
+            TimeEquipment timeEquipment,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
         return new ManualRunAssembly(
-                systemConsoleIO,
-                errorConsoleIO,
-                checkEquipment,
-                instantSource,
-                threadSleeper,
-                factoryProperties,
-                sandboxProperties);
+                systemConsoleIO, errorConsoleIO, checkEquipment, timeEquipment, factoryProperties, sandboxProperties);
     }
 
     /**
      * The installation's check equipment (design D11 and the {@code CheckEquipment} row of
      * collapse-composition-roots): the two built-in check runners, the discovered check-client
-     * registry and the credential seam, which every run's check ports are built from.
+     * registry, the credential seam and the time equipment every check provider is handed on its
+     * context (design D21 of supervise-daemon-loops-and-embed-dashboard), which every run's check
+     * ports are built from.
      */
     @Bean
     public CheckEquipment checkEquipment(
@@ -276,13 +282,15 @@ public class ManualRunConfiguration {
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
             SecretsProvider secretsProvider,
-            FactoryProperties factoryProperties) {
+            FactoryProperties factoryProperties,
+            TimeEquipment timeEquipment) {
         return new CheckEquipment(
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 checkClientRegistry,
                 secretsProvider,
-                factoryProperties);
+                factoryProperties,
+                timeEquipment);
     }
 
     /**

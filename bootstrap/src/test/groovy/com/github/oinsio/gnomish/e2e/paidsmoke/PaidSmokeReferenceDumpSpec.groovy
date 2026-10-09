@@ -50,7 +50,7 @@ class PaidSmokeReferenceDumpSpec extends Specification {
 
     private final String claudeBinary = System.getProperty('paidSmoke.claudeBinary', 'claude')
 
-    // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+    // real-time-wiring: real wall time, unchanged from the deleted SystemClock adapter
     //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
     private final InstantSource clock = InstantSource.system()
 

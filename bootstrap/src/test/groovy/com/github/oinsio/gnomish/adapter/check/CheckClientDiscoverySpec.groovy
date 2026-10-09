@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.app.CheckClientContext
 import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
@@ -150,7 +151,7 @@ class BlankProviderCheckClientFactory implements CheckClientFactory {
     }
 
     @Override
-    ExternalCheckClient create(SecretsProvider secrets, Map<String, Object> subsection) {
+    ExternalCheckClient create(CheckClientContext context) {
         throw new UnsupportedOperationException()
     }
 }

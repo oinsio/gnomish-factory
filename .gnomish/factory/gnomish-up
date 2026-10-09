@@ -3,14 +3,14 @@
 # gnomish wrapper and drives the factory only through it, so gnomish.env, gnomish.local.env,
 # project.yaml and the secrets apply exactly as for any other invocation. Callable from any directory.
 #
-# Equivalent to running these three side by side, in three terminals:
-#   .gnomish/factory/gnomish dashboard --watch --out=.gnomish/factory/logs/dashboard.html
+# Equivalent to running these two side by side, in two terminals:
+#   .gnomish/factory/gnomish serve --slots=1 --dashboard --dashboard-out=.gnomish/factory/logs/dashboard.html
 #   tail -F ~/.gnomish/projects/gnomish-factory/logs/<instance>.log
-#   .gnomish/factory/gnomish serve --slots=1
 #
-# The dashboard renderer and the log follower go to the background, the daemon stays in the
-# foreground, and Ctrl-C stops all three: the daemon drains its in-flight slots as it does on
-# its own, then the other two are torn down with it.
+# The daemon renders the dashboard page itself (`--dashboard`) and prints
+# `gnomish serve: dashboard -> <path>` when it starts. Ctrl-C stops both: the daemon drains its
+# in-flight slots as it does on its own and writes a last page saying it stopped, then the log
+# follower is torn down with it.
 #
 # The log follower is there because the daemon's console carries only WARN and above: the
 # INFO narrative — what each gnome is doing, stage by stage — only reaches the log file.
@@ -21,7 +21,9 @@
 #   .gnomish/factory/gnomish-up --drain --no-open --no-logs
 #
 # --no-open (skip the browser) and --no-logs (skip the log follower) are this script's own
-# flags; everything else belongs to `gnomish serve`.
+# flags; everything else belongs to `gnomish serve` — except `--dashboard` and
+# `--dashboard-out`, which this script always passes itself and refuses from the caller: the
+# page lives in GNOMISH_DASHBOARD_DIR, so set that instead.
 set -euo pipefail
 
 factory_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +59,6 @@ factory_log="$factory_log_dir/${instance_name:-default}.log"
 
 dashboard_dir="$(read_setting GNOMISH_DASHBOARD_DIR)"
 dashboard_out="$dashboard_dir/dashboard.html"
-dashboard_log="$dashboard_dir/dashboard-render.log"
 default_slots="$(read_setting GNOMISH_UP_SLOTS)"
 render_wait_seconds="$(read_setting GNOMISH_UP_RENDER_WAIT_SECONDS)"
 render_poll_interval_seconds=0.5
@@ -69,6 +70,10 @@ for arg in "$@"; do
     case "$arg" in
         --no-open) open_browser=0 ;;
         --no-logs) follow_logs=0 ;;
+        --dashboard|--dashboard=*|--dashboard-out|--dashboard-out=*)
+            echo "gnomish-up: $arg is this script's to pass — set GNOMISH_DASHBOARD_DIR to move the page" >&2
+            exit 2
+            ;;
         *) serve_args+=("$arg") ;;
     esac
 done
@@ -84,31 +89,45 @@ done
 if [[ $has_slots -eq 0 ]]; then
     serve_args=(--slots="$default_slots" ${serve_args[@]+"${serve_args[@]}"})
 fi
+serve_args+=(--dashboard --dashboard-out="$dashboard_out")
 
 mkdir -p "$dashboard_dir" "$factory_log_dir"
+# The previous run's page would satisfy the first-render wait below at once; remove it, so a
+# page on disk means this daemon rendered it.
+rm -f "$dashboard_out"
 
-"$gnomish" dashboard --watch --out="$dashboard_out" >"$dashboard_log" 2>&1 &
-dashboard_pid=$!
 logs_pid=""
+serve_pid=""
+serve_stopping=0
 
-# shellcheck disable=SC2329  # called from cleanup
-stop_pid() {
-    local pid="$1"
-    [[ -n "$pid" ]] || return 0
-    if kill -0 "$pid" 2>/dev/null; then
-        kill "$pid" 2>/dev/null || true
-        wait "$pid" 2>/dev/null || true
-    fi
+# One daemon process, started in the background so this script can wait for its first page,
+# and then waited on. Stopping it is this script's job, not the terminal's: bash starts the
+# background jobs of a non-interactive script with SIGINT ignored, and the JVM keeps an ignored
+# SIGINT ignored, so the daemon never sees the Ctrl-C itself. The trap turns it — and a TERM
+# sent to this script — into exactly one SIGTERM to the daemon, which runs serve's shutdown
+# hook (drain, then the final "stopped" page) the same way a TERM from anywhere else would. A
+# second Ctrl-C sends nothing more: the drain is already under way.
+# shellcheck disable=SC2329  # invoked by the trap and by cleanup
+stop_serve() {
+    [[ -n "$serve_pid" && $serve_stopping -eq 0 ]] || return 0
+    serve_stopping=1
+    kill -TERM "$serve_pid" 2>/dev/null || true
 }
 
 # shellcheck disable=SC2329  # invoked by the trap
 cleanup() {
-    stop_pid "$dashboard_pid"
-    stop_pid "$logs_pid"
+    # Only reached with the daemon alive when this script itself failed: never leave it orphaned.
+    if [[ -n "$serve_pid" ]] && kill -0 "$serve_pid" 2>/dev/null; then
+        stop_serve
+        wait "$serve_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$logs_pid" ]] && kill -0 "$logs_pid" 2>/dev/null; then
+        kill "$logs_pid" 2>/dev/null || true
+        wait "$logs_pid" 2>/dev/null || true
+    fi
 }
-trap cleanup EXIT INT TERM
-
-echo "gnomish-up: dashboard renderer pid $dashboard_pid -> $dashboard_out (log: $dashboard_log)"
+trap cleanup EXIT
+trap stop_serve INT TERM
 
 if [[ $follow_logs -eq 1 ]]; then
     # -n 0: this run's narrative only, not yesterday's. -F: follow by name, so the follower
@@ -124,28 +143,40 @@ if [[ $follow_logs -eq 1 ]]; then
     echo "gnomish-up: following $factory_log (INFO and below; WARN+ comes from the daemon itself)"
 fi
 
+echo "gnomish-up: starting the daemon — .gnomish/factory/gnomish serve ${serve_args[*]}"
+"$gnomish" serve "${serve_args[@]}" &
+serve_pid=$!
+
 # Wait for the first render before opening the browser: a tab on a file that is not there
 # yet is a blank page for no reason.
 render_polls="$(awk -v total="$render_wait_seconds" -v step="$render_poll_interval_seconds" \
     'BEGIN { print int(total / step) }')"
 for _ in $(seq 1 "$render_polls"); do
     [[ -s "$dashboard_out" ]] && break
-    kill -0 "$dashboard_pid" 2>/dev/null || break
-    sleep "$render_poll_interval_seconds"
+    kill -0 "$serve_pid" 2>/dev/null || break
+    [[ $serve_stopping -eq 0 ]] || break
+    # A Ctrl-C kills the sleep too; that is the trap's business, not a failure of this script.
+    sleep "$render_poll_interval_seconds" || true
 done
 
-if ! kill -0 "$dashboard_pid" 2>/dev/null; then
-    echo "gnomish-up: the dashboard renderer exited early, see $dashboard_log — starting the daemon anyway" >&2
+if [[ $serve_stopping -eq 1 ]]; then
+    :
+elif ! kill -0 "$serve_pid" 2>/dev/null; then
+    echo "gnomish-up: the daemon exited before its first dashboard render" >&2
 elif [[ ! -s "$dashboard_out" ]]; then
-    echo "gnomish-up: no page rendered within ${render_wait_seconds}s, see $dashboard_log — starting the daemon anyway" >&2
+    echo "gnomish-up: no page rendered within ${render_wait_seconds}s — not opening the browser; the daemon keeps running" >&2
 elif [[ $open_browser -eq 1 ]] && command -v open >/dev/null 2>&1; then
     open "file://$dashboard_out"
 fi
 
-echo "gnomish-up: starting the daemon — .gnomish/factory/gnomish serve ${serve_args[*]}"
-
-set +e
-"$gnomish" serve ${serve_args[@]+"${serve_args[@]}"}
-serve_status=$?
-set -e
+# A trapped signal interrupts `wait` with a status above 128 while the daemon is still
+# draining, so wait again until the daemon itself has exited; its status is this script's.
+serve_status=0
+while :; do
+    set +e
+    wait "$serve_pid"
+    serve_status=$?
+    set -e
+    kill -0 "$serve_pid" 2>/dev/null || break
+done
 exit "$serve_status"

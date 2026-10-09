@@ -16,6 +16,10 @@ import spock.lang.TempDir
  * exactly as {@code GitInfrastructureRetry.system()} does. The zero-arity-only pattern the check
  * shipped with let the whole argument-carrying class of factories through unseen.
  *
+ * <p>The literal set widened with FR21 of supervise-daemon-loops-and-embed-dashboard: a system
+ * clock, a direct {@code Instant.now()} and the real sleeper are real time just as a {@code
+ * system()} factory is, so the gate names each of them too.
+ *
  * <p>Hermetic: the mini project registers the task type straight off TestKit's plugin classpath —
  * no convention plugin is applied, so nothing is resolved and every run is {@code --offline}.
  */
@@ -88,10 +92,67 @@ tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
         build().task(':checkTestTimeInjection').outcome.name() == 'SUCCESS'
     }
 
-    def "a call that merely starts with 'system' is not a violation"() {
-        given: 'the JDK factories a spec legitimately uses'
-        writeSpec('''def clock = Clock.systemUTC()
-        def zone = Clock.systemDefaultZone()''')
+    // FR21 of supervise-daemon-loops-and-embed-dashboard: the gate bans the same real-time literal
+    //     set as the production gate, not only the system() factories.
+    def "a spec building real time fails the gate: #shape"() {
+        given:
+        writeSpec(body)
+
+        expect:
+        buildAndFail().output.contains(named)
+
+        where:
+        shape | body || named
+        'the system clock' | 'def clock = Clock.systemUTC()' || 'Clock.systemUTC()'
+        'the system zone clock' | 'def zone = Clock.systemDefaultZone()' || 'Clock.systemDefaultZone()'
+        'the JDK instant source' | 'def source = InstantSource.system()' || 'InstantSource.system()'
+        'a direct read' | 'def at = Instant.now()' || 'Instant.now()'
+        'the real sleeper' | 'def sleeper = new ThreadSleeper()' || 'new ThreadSleeper()'
+        'the deleted adapter' | 'def clock = new SystemClock()' || 'new SystemClock()'
+    }
+
+    def "a look-alike of a real-time read is not a violation"() {
+        given: 'a declaration named now, a fixed clock, and a virtual source'
+        writeSpec('''Instant now() { clock.instant() }
+        def fixed = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)
+        def virtual = new VirtualClock()''')
+
+        expect:
+        build().task(':checkTestTimeInjection').outcome.name() == 'SUCCESS'
+    }
+
+    def "the marker excuses a real clock in a fixture that assembles the shipped composition"() {
+        given:
+        writeSpec("""// ${MARKER} the shipped composition's one time equipment; time is not the subject.
+        def clock = InstantSource.system()""")
+
+        expect:
+        build().task(':checkTestTimeInjection').outcome.name() == 'SUCCESS'
+    }
+
+    // A marker left over from a call that moved would silently excuse the next real time written
+    //     under it, so the gate reports it — as the parameter-count gate reports an exemption that
+    //     would pass without itself.
+    def "a marker that excuses nothing fails the gate: #shape"() {
+        given:
+        writeSpec(body)
+
+        expect:
+        buildAndFail().output.contains('marker excuses nothing')
+
+        where:
+        shape | body
+        'above a call with no real time' | "// ${MARKER} stale.\n        def time = new ManualRunConfiguration().timeEquipment()"
+        'trailing a call with no real time' | "def clock = new VirtualClock() // ${MARKER} stale"
+        'above a blank line' | "// ${MARKER} stale.\n\n        def clock = new VirtualClock()"
+    }
+
+    def "a mention of the marker in prose is not a marker"() {
+        given:
+        writeSpec("""/**
+         * Honours the in-place {@code ${MARKER}} justification.
+         */
+        def clock = new VirtualClock()""")
 
         expect:
         build().task(':checkTestTimeInjection').outcome.name() == 'SUCCESS'

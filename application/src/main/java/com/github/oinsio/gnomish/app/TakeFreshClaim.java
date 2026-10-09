@@ -129,7 +129,7 @@ final class TakeFreshClaim {
                 wiring.assembly(),
                 git,
                 clone,
-                wiring.abort(),
+                wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 bound.lawBinding());

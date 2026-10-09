@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
 import java.time.InstantSource;
 import java.util.Random;
-import java.util.function.Consumer;
 
 /**
  * Where a production {@link RemoteOutageGate} is built (tasks 7.3, 7.4 of add-base-ref-resolution):
@@ -44,8 +43,8 @@ public final class RemoteOutageGates {
             Path cloneDir,
             ServeProperties serveProperties,
             InstantSource source,
-            Runnable onTransition,
-            Consumer<RemoteOutageClosedOutage> onClosedOutage) {
+            DirtyNotifier onTransition,
+            RemoteOutageLedgerSink onClosedOutage) {
         return new RemoteOutageGate(
                 baseRefGit,
                 cloneDir,

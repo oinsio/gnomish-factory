@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
@@ -19,7 +19,6 @@ import com.github.oinsio.gnomish.sandbox.environment.BoxTiming;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentFactory;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.nio.file.Path;
-import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +40,8 @@ import org.jspecify.annotations.NullMarked;
  * run}, {@code TRACKED} for {@code take}/{@code serve}; the environment factory and the lifecycle
  * pass are therefore built once per mode and shared by every run of it.
  *
- * <p>Implements FR20 of make-checkpoint-gate-durable.
+ * <p>Implements FR20 of make-checkpoint-gate-durable; FR18, FR22 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 // Null-marked explicitly (JSpecify): this module carries no package-info, and the application
 // module's one does not reach this source root, so without the class-level marker the
@@ -83,9 +83,13 @@ record ContainerRunSupportFactory(
     }
 
     /**
-     * The installation constructor (design D12 of make-checkpoint-gate-durable): builds the
-     * environment factory and the sandbox lifecycle pass from the two property sets, once, for every
-     * run of this ownership mode, on the system time source.
+     * The installation constructor (design D12 of make-checkpoint-gate-durable; D22 of
+     * supervise-daemon-loops-and-embed-dashboard): builds the environment factory — {@code time}
+     * and {@code factory.docker-command-timeout} as the box timing, the factory-private guard
+     * config root under {@code java.io.tmpdir}, the ownership label — and the sandbox lifecycle
+     * pass on the same equipment's clock, once, for every run of this ownership mode, so the two
+     * measure on the root's one time source (FR18, FR22 of
+     * supervise-daemon-loops-and-embed-dashboard).
      */
     ContainerRunSupportFactory(
             List<String> checkCredentialEnvVars,
@@ -93,36 +97,8 @@ record ContainerRunSupportFactory(
             OwnershipMode ownershipMode,
             ClaimEpochSource epochs,
             SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties) {
-        // FR18 of supervise-daemon-loops-and-embed-dashboard: one source for the box timing and the
-        // sweep pass. Still built here rather than taken from the root's instantSource bean: the
-        // ContainerSupports test constructor that builds this factory is at the parameter limit
-        // (task 3.3 — open decision).
-        this(
-                checkCredentialEnvVars,
-                checkClientRegistry,
-                ownershipMode,
-                epochs,
-                sandboxProperties,
-                factoryProperties,
-                InstantSource.system());
-    }
-
-    /**
-     * Builds the environment factory — {@code instantSource}, the thread sleeper and {@code
-     * factory.docker-command-timeout} as the box timing, the factory-private guard config root
-     * under {@code java.io.tmpdir}, the ownership label — and the sandbox lifecycle pass on the same
-     * {@code instantSource}, so the two measure on one time source (FR18 of
-     * supervise-daemon-loops-and-embed-dashboard).
-     */
-    private ContainerRunSupportFactory(
-            List<String> checkCredentialEnvVars,
-            Map<String, CheckClientFactory> checkClientRegistry,
-            OwnershipMode ownershipMode,
-            ClaimEpochSource epochs,
-            SandboxProperties sandboxProperties,
             FactoryProperties factoryProperties,
-            InstantSource instantSource) {
+            TimeEquipment time) {
         this(
                 checkCredentialEnvVars,
                 checkClientRegistry,
@@ -132,10 +108,10 @@ record ContainerRunSupportFactory(
                 factoryProperties,
                 new ContainerEnvironmentFactory(
                         sandboxProperties,
-                        new BoxTiming(instantSource, new ThreadSleeper(), factoryProperties.dockerCommandTimeout()),
+                        new BoxTiming(time, factoryProperties.dockerCommandTimeout()),
                         Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
                         ownershipMode),
-                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, instantSource));
+                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, time.clock()));
     }
 
     /**

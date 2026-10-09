@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -43,7 +44,9 @@ class HostResumeMechanicsCheckpointSpec extends Specification implements RunChai
     private HostResumeMechanics mechanics() {
         def git = new TaskGit(store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(),
                 resumingBaseRefGit(), new ClaimEpochBook())
-        def runner = new TakeResumeRunner(slotWiring(Stub(RunAssembly), git, Stub(Tracker)))
+        def runner = new TakeResumeRunner(slotWiring([timeEquipment: {
+                -> VirtualTimeEquipment.create()
+            }] as RunAssembly, git, Stub(Tracker)))
         // The mechanics' own bound pipeline is deliberately NOT the gated one: the approval must
         // resolve the gate against the order's pinned definition.
         new HostResumeMechanics(runner, git, CLONE, pipeline())

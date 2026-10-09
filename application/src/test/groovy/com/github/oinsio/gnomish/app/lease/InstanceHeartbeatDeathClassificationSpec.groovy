@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -64,7 +65,7 @@ class InstanceHeartbeatDeathClassificationSpec extends Specification {
             base.sleep(d)
         } as Sleeper
         def dying = new InstanceHeartbeat(
-                tracker, progress, dyingSleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+                tracker, progress, VirtualTimeEquipment.on(new VirtualClock(), dyingSleeper), INTERVAL, ClaimLostSink.IGNORE)
         started << dying
         def capture = LogCaptureSupport.attach(InstanceHeartbeat)
         try {

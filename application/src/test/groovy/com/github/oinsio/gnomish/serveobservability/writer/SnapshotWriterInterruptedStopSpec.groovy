@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -11,12 +11,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
-import spock.util.concurrent.PollingConditions
 
 /**
  * {@link SnapshotWriter#stopAfterFinalWrite}: an {@link InterruptedException} while joining the
  * background worker thread must not abort the final write — the calling thread's interrupt
- * status is restored (never swallowed) and the final synchronous write still happens (FR4).
+ * status is restored (never swallowed) and the final synchronous write still happens (FR4). The
+ * join is the supervised loop's ({@code SupervisedLoop#stopAndJoin}, design D4 of
+ * supervise-daemon-loops-and-embed-dashboard); a stray interrupt of the writer's own thread is
+ * {@link SnapshotWriterSupervisionSpec}'s subject.
  *
  * <p>Implements FR4 of add-serve-observability.
  */
@@ -37,6 +39,7 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
         given:
         def target = tempDir.resolve('snapshot.json')
         def calls = new AtomicInteger()
+        Thread worker = null
         def firstCallStarted = new CountDownLatch(1)
         def releaseTick = new CountDownLatch(1)
         // Only the worker's first tick blocks (pinning it alive); stopAfterFinalWrite's own final
@@ -44,11 +47,12 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
         def writer = new SnapshotWriter(target, {
             ->
             if (calls.incrementAndGet() == 1) {
+                worker = Thread.currentThread()
                 firstCallStarted.countDown()
                 releaseTick.await()
             }
             SnapshotWriterSpec.fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
         writer.start()
         assert firstCallStarted.await(2, TimeUnit.SECONDS) // worker now pinned mid-tick
 
@@ -65,35 +69,6 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
         cleanup:
         Thread.interrupted() // clear the flag so it doesn't leak into other tests
         releaseTick.countDown()
-        writer.worker()?.join(2000)
-    }
-
-    // The background loop's own wait — awaitNextWake()'s lock.wait(remainingMillis) — must
-    // also tolerate an interrupt without dying: it restores the interrupt flag and returns,
-    // and the outer loop() keeps running rather than exiting (FR1: only stop() ends the loop).
-    def "the worker thread keeps looping after its wait is interrupted mid-sleep"() {
-        given:
-        def calls = new AtomicInteger()
-        def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'), {
-                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
-                },
-                mapper,
-                Duration.ofSeconds(30),
-                Clock.systemUTC(),
-                0)
-        writer.start()
-        new PollingConditions(timeout: 3).eventually { assert calls.get() >= 1 }
-        Thread.sleep(50) // let the worker settle into its long lock.wait()
-
-        when: 'the worker thread is interrupted while asleep, well before the 30s timer'
-        writer.worker().interrupt()
-
-        then: 'the loop survives the interrupt and keeps ticking rather than exiting'
-        new PollingConditions(timeout: 3).eventually { assert calls.get() >= 2 }
-
-        cleanup:
-        writer.stop()
-        writer.worker()?.join(2000)
+        worker?.join(2000)
     }
 }

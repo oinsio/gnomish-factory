@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
@@ -59,13 +60,13 @@ class DeadHeartbeatReapingSpec extends Specification {
         base.sleep(d)
     } as Sleeper
     private final InstanceHeartbeat heartbeat = new InstanceHeartbeat(
-    tracker, new HeartbeatProgress(), dyingSleeper, new VirtualClock(), INTERVAL,
+    tracker, new HeartbeatProgress(), VirtualTimeEquipment.on(new VirtualClock(), dyingSleeper), INTERVAL,
     ClaimLostSink.IGNORE)
     // Wired exactly like TakeHeartbeat#forRun: the standing reaper's live-claims supplier is this
     // SAME heartbeat, so OWN is excluded from staleness observation only while it is actually
     // beating.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
+    new StandingReaper(reaper, INTERVAL, heartbeat.&liveClaimsSnapshot, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> }))
 
     def cleanup() {
         heartbeat.unregister(OWN)

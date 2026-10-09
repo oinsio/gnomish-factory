@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -28,7 +29,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
 
     /** The production attempts and backoff, measured on virtual time rather than waited out. */
     private RemoteDefaultBranch discovery(GitProcessRunner boundRunner = runner) {
-        new RemoteDefaultBranch(boundRunner, new GitInfrastructureRetry(sleeper,
+        new RemoteDefaultBranch(boundRunner, new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper),
                 GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF))
     }
 

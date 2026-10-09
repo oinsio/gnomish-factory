@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -62,7 +63,9 @@ final class ReaperLoopRig {
             journal << "tick${n}".toString()
             body(n)
         } as ReaperDuty
-        reaper = new StandingReaper(duty, sleeper, interval, { -> [] }, clock)
+        reaper = new StandingReaper(duty, interval, {
+            -> []
+        }, VirtualTimeEquipment.on(clock, sleeper))
     }
 
     private void guardRunaway(int n) {

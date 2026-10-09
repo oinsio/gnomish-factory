@@ -38,12 +38,14 @@ import org.springframework.stereotype.Component;
  *       manual checkpoint, parked on its branch (FR2, FR7 of make-run-headless)</td></tr>
  *   <tr><td>{@link AbortedException}</td><td>12</td><td>persistence failed</td></tr>
  *   <tr><td>{@link InternalErrorException}</td><td>1</td><td>unreachable-in-process internal error</td></tr>
+ *   <tr><td>{@link DashboardDisabledException}</td><td>1</td><td>{@code dashboard --watch}: the render
+ *       loop kept dying and was disabled (FR9 of supervise-daemon-loops-and-embed-dashboard)</td></tr>
  *   <tr><td>anything else</td><td>1</td><td>generic internal-error fallback</td></tr>
  * </table>
  *
  * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
  * harden-task-branch-contract; FR5, FR8 of remove-interactive-console; FR4, FR7 of
- * make-run-headless.
+ * make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -65,6 +67,7 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case DecisionRequiredException ignored -> 10;
             case AbortedException ignored -> 12;
             case InternalErrorException ignored -> 1;
+            case DashboardDisabledException ignored -> 1;
             default -> 1;
         };
     }

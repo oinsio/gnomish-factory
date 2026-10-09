@@ -6,8 +6,6 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.util.Locale;
-import java.util.function.BooleanSupplier;
-import java.util.function.Supplier;
 
 /**
  * The production {@link TakeoverConfirmation} (design D9, FR6 of add-claim-heartbeat): it consults
@@ -17,16 +15,17 @@ import java.util.function.Supplier;
  * facts and a {@code [y/N]} prompt through a {@link ConsoleIO} and reads one line: {@code y}/{@code
  * yes} (case-insensitive) confirms, anything else — including EOF — declines.
  *
- * <p>Both the TTY probe and the {@link ConsoleIO} are injected suppliers so the class is unit- and
- * mutation-testable without a real terminal; {@link #systemTty()} wires the production pair
- * ({@code System.console()} and a {@link SystemConsoleIO} over the process's own stdin/stdout,
- * matching {@code ManualRunConfiguration#systemConsoleIO}). The {@link ConsoleIO} is built lazily,
- * only when a TTY is confirmed present, so a headless run never touches {@code System.in}.
+ * <p>The TTY probe and the console are injected as role interfaces ({@link TerminalPresence}, {@link
+ * ConsoleOpener}) so the class is unit- and mutation-testable without a real terminal; {@link
+ * #systemTty()} wires the production pair ({@code System.console()} and a {@link SystemConsoleIO}
+ * over the process's own stdin/stdout, matching {@code ManualRunConfiguration#systemConsoleIO}). The
+ * {@link ConsoleIO} is opened lazily, only when a TTY is confirmed present, so a headless run never
+ * touches {@code System.in}.
  *
- * <p>Implements FR6 of add-claim-heartbeat.
+ * <p>Implements FR6 of add-claim-heartbeat; the two role types implement FR18 of
+ * supervise-daemon-loops-and-embed-dashboard (design D22).
  */
-record ConsoleTakeoverConfirmation(BooleanSupplier ttyPresent, Supplier<ConsoleIO> consoleFactory)
-        implements TakeoverConfirmation {
+record ConsoleTakeoverConfirmation(TerminalPresence terminal, ConsoleOpener opener) implements TakeoverConfirmation {
 
     /**
      * The production wiring: a real interactive terminal as the TTY probe, {@link SystemConsoleIO}
@@ -60,10 +59,10 @@ record ConsoleTakeoverConfirmation(BooleanSupplier ttyPresent, Supplier<ConsoleI
 
     @Override
     public Decision confirm(TaskRef ref, String holder, String lastBeatAge) {
-        if (!ttyPresent().getAsBoolean()) {
+        if (!terminal().attached()) {
             return Decision.UNAVAILABLE;
         }
-        ConsoleIO console = consoleFactory().get();
+        ConsoleIO console = opener().open();
         console.print("Task " + ref.id() + " is claimed by " + holder + " (last beat " + lastBeatAge
                 + "). Take it over? [y/N] ");
         return isYes(readAnswer(console)) ? Decision.CONFIRMED : Decision.DECLINED;

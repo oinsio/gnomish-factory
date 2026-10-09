@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.logtext.FailureReason;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import java.time.InstantSource;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,21 +34,34 @@ import org.slf4j.LoggerFactory;
  * <p>A beat that fails on a thread whose interrupt is set is the stop of that thread: it is
  * {@code UNCONFIRMED} with no WARN and no streak (FR12, NFR-O2 of fix-operator-blockers).
  *
+ * <p><b>No clock of its own (task 3.9 of supervise-daemon-loops-and-embed-dashboard).</b> The
+ * {@code alive-at} instant is the data of one beat, so it arrives with the call: {@link
+ * InstanceHeartbeat#tick} reads its clock once per tick and hands that instant to every beat of the
+ * tick. The only time source this class can reach is therefore the suppressor's, which {@link
+ * InstanceHeartbeat} builds on the same source — a beater holding a second clock beside the
+ * suppressor is not constructible.
+ *
  * <p>Implements FR8 of add-claim-heartbeat. Implements FR13 of harden-task-branch-contract.
  * Implements FR4 of harden-logging-observability. Implements FR12, NFR-O2 of fix-operator-blockers.
+ * Implements FR19 of supervise-daemon-loops-and-embed-dashboard.
  *
  * @param tracker the port the beat writes through
  * @param progress the engine-event-fed progress source for the payload
- * @param clock the source of the {@code alive-at} instant
  * @param suppressor the edge-logging owner for each claim's beat-failure streak
  */
-record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, InstantSource clock, RepeatSuppressor suppressor) {
+record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, RepeatSuppressor suppressor) {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatBeater.class);
 
-    /** What this beat learned about {@code ref}'s claim. */
-    BeatOutcome beat(TaskRef ref) {
-        String payload = HeartbeatPayload.render(progress.progressFor(ref.id()), clock.instant());
+    /**
+     * What this beat learned about {@code ref}'s claim.
+     *
+     * @param ref the claim to beat; never null
+     * @param aliveAt the tick's instant, stamped as the payload's {@code alive-at}; never null
+     * @return the beat's answer; never null
+     */
+    BeatOutcome beat(TaskRef ref, Instant aliveAt) {
+        String payload = HeartbeatPayload.render(progress.progressFor(ref.id()), aliveAt);
         HeartbeatResult result;
         try {
             result = tracker.heartbeat(ref, payload);

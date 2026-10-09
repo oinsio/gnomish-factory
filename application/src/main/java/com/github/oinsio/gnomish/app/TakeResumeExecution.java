@@ -54,7 +54,7 @@ record TakeResumeExecution(SlotWiring wiring) {
                 wiring.assembly(),
                 wiring.git(),
                 wiring.registeredClone(),
-                wiring.abort(),
+                wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 lawBinding);

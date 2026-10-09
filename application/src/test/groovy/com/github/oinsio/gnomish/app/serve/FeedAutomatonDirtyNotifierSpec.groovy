@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -52,7 +53,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), VirtualTimeEquipment.on(clock, sleeper),
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when:
@@ -70,7 +71,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), VirtualTimeEquipment.on(clock, sleeper),
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when: 'a second cycle lands back in the same Idle-empty state as construction'
@@ -87,7 +88,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), VirtualTimeEquipment.on(clock, sleeper),
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1))
 
         expect:

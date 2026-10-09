@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -14,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -26,9 +28,6 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
 import spock.lang.IgnoreIf
@@ -121,20 +120,20 @@ tracker:
         ], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
         new ContainerTakeSupport(
-                bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                new SandboxModeSelector(bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable as ContainerRuntimeProbe),
                 ContainerSupportFixture.tracked(epochs, sandbox, factoryProperties))
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties, TrackerAdapterFactory trackerFactory) {
         def git = TaskGitFixture.real()
         TakeCommands.of(
+                // Real time, the root's: the container support's boxes run on it, so the slot does too.
                 newAssembly(factoryProperties),
                 git,
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 SandboxLifecyclePass.NONE,
                 containerTakeSupport(factoryProperties, git.epochs()))
     }

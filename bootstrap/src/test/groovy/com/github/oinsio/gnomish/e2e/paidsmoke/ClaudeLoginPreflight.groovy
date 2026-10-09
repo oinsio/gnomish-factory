@@ -49,7 +49,7 @@ final class ClaudeLoginPreflight {
      *     CLI) or a human-readable reason the preflight failed — never throws
      */
     static Result check(String binary = 'claude', Path workspaceRoot) {
-        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        // real-time-wiring: real wall time, unchanged from the deleted SystemClock adapter
         //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
         def clock = InstantSource.system()
         if (!Files.isDirectory(workspaceRoot)) {

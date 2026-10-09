@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -179,7 +180,7 @@ class TakeFinishReportSpec extends Specification {
         Sleeper sleeper = { Duration d ->
             now.set(now.get() + d)
         } as Sleeper
-        def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
+        def retry = new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), Duration.ofMinutes(10))
         def attempts = new AtomicInteger()
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, _ as String) >> {

@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  * occupancy — wake the injected {@link DirtyNotifier} for an immediate snapshot write. Implements
  * FR18 of supervise-daemon-loops-and-embed-dashboard: every constructor takes its time source.
  */
-public final class SlotLedger {
+public final class SlotLedger implements OccupiedSlots {
 
     private final Semaphore permits;
     private final Map<TaskRef, Instant> occupied = new ConcurrentHashMap<>();
@@ -181,6 +181,7 @@ public final class SlotLedger {
      * D9): every ref {@link #assign} has tied to a permit and {@link #release} has not yet freed.
      * A snapshot, not a live view.
      */
+    @Override
     public Set<TaskRef> occupiedRefs() {
         return Set.copyOf(occupied.keySet());
     }

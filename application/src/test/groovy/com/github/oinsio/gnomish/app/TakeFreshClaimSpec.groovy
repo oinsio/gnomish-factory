@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Files
@@ -249,6 +250,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             bindTaskTier: { binding ->
                 new BoundTaskTier(new LoadOutcome.Invalid(errors), LAW_COMMIT)
             },
+            timeEquipment: { -> VirtualTimeEquipment.create() },
         ] as RunAssembly
 
         and:

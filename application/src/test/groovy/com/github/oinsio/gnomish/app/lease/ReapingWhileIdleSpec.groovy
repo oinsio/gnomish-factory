@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.time.Duration
 import spock.lang.Specification
 
@@ -36,10 +37,10 @@ class ReapingWhileIdleSpec extends Specification {
     // Never register()ed: liveClaimsSnapshot() stays empty for the whole spec, modelling
     // Idle-empty / just-restarted with zero claims of this instance's own.
     private final InstanceHeartbeat heartbeat = new InstanceHeartbeat(
-    tracker, new HeartbeatProgress(), new BlockingSleeper(), new VirtualClock(),
+    tracker, new HeartbeatProgress(), VirtualTimeEquipment.on(new VirtualClock(), new BlockingSleeper()),
     INTERVAL, ClaimLostSink.IGNORE)
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
+    new StandingReaper(reaper, INTERVAL, heartbeat.&liveClaimsSnapshot, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> }))
 
     // FR13 "Reaping while idle with no claims of its own": with the instance holding nothing —
     // its heartbeat never started, so the live-claims snapshot is empty on every tick — a

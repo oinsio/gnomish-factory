@@ -164,8 +164,15 @@ saying the same thing would be one of them too many.
 .gnomish/factory/gnomish take <issue-ref>      # one task from the tracker
 .gnomish/factory/gnomish run --task="add-claim-return" --mode=in-place
 .gnomish/factory/gnomish status --task=<id>
-.gnomish/factory/gnomish-up                    # serve + dashboard + log follower
+.gnomish/factory/gnomish-up                    # serve --dashboard + log follower
 ```
+
+`gnomish-up` runs one daemon process: `serve --dashboard` renders the page into
+`GNOMISH_DASHBOARD_DIR` (`.gnomish/factory/logs/dashboard.html` by default), and the
+script opens it once the first render lands (`--no-open` skips that) and follows the
+daemon's INFO log beside it (`--no-logs` skips that). `Ctrl-C` drains the daemon and
+leaves a last page saying it stopped. The page path is the script's own: it refuses
+`--dashboard` and `--dashboard-out`, so move the page by setting `GNOMISH_DASHBOARD_DIR`.
 
 `run` reads the pipeline from the working tree, so it is the way to try a change
 to this directory before committing it. `--mode=in-place` keeps the run out of

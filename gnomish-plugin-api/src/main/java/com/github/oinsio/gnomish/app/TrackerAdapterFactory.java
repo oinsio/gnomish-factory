@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -20,17 +19,21 @@ import java.util.Set;
  * on the project's own {@code .gnomish/config.yaml}, read per invocation like {@code
  * PipelineDefinition} itself).
  *
- * <p>{@code create} takes the minted {@link com.github.oinsio.gnomish.app.port.tracker.InstanceId}
- * string alongside {@code config} (task 5.15): several GitHub collaborators (e.g. {@code
+ * <p>{@code create} receives the minted {@link com.github.oinsio.gnomish.app.port.tracker.InstanceId}
+ * string on its context (task 5.15): several GitHub collaborators (e.g. {@code
  * GithubStateWrites}, {@code GithubCorrespondence}, {@code GithubDecisions}) stamp the instance id
  * into structural markers at construction time, so {@code TakeCommand} mints the {@code
  * InstanceId} before resolving the tracker rather than after.
  *
  * <p>Implementations are discovered through {@code ServiceLoader} and keyed by {@link #type()}, so
- * they must offer a public no-arg constructor and take their collaborators as method arguments
- * (FR1, FR2 of add-plugin-architecture).
+ * they must offer a public no-arg constructor (FR1, FR2 of add-plugin-architecture). Every
+ * host-provided collaborator reaches them through the one {@link TrackerAdapterContext} their single
+ * {@link #create(TrackerAdapterContext)} receives — there is no overload chain to override the
+ * wrong link of; a collaborator the host adds later is a new accessor on the context (design D21 of
+ * supervise-daemon-loops-and-embed-dashboard).
  *
- * <p>Implements FR9, FR17 of add-tracker-port; FR1, FR2, FR4, FR17 of add-plugin-architecture.
+ * <p>Implements FR9, FR17 of add-tracker-port; FR1, FR2, FR4, FR17 of add-plugin-architecture;
+ * FR23 of supervise-daemon-loops-and-embed-dashboard.
  */
 public interface TrackerAdapterFactory {
 
@@ -49,44 +52,24 @@ public interface TrackerAdapterFactory {
     String type();
 
     /**
-     * Returns a live, ready-to-use {@link Tracker} for {@code config.type()}; never null.
+     * Returns a live, ready-to-use {@link Tracker} for {@code context.config().type()}; never null.
+     * This is the factory's single {@code create}: every host-provided collaborator — the secrets
+     * seam, the configuration, the instance id, the tenure record, the time equipment — arrives
+     * through {@code context}, because {@code ServiceLoader} instantiates this factory through its
+     * public no-arg constructor, before any collaborator exists (FR2, design D2 of
+     * add-plugin-architecture; FR23, design D21 of supervise-daemon-loops-and-embed-dashboard).
      *
-     * <p>{@code secrets} arrives as a method argument rather than through the constructor because
-     * {@code ServiceLoader} instantiates this factory through its public no-arg constructor, before
-     * any collaborator exists (FR2, design D2 of add-plugin-architecture).
+     * <p>An adapter whose writes are physically non-atomic — the GitHub adapter — stamps every
+     * marker it writes with the tenure {@link TrackerAdapterContext#epochs()} reports, so a reader
+     * of a frozen intermediate state can tell which tenure left it (FR13 of
+     * harden-task-branch-contract); an adapter whose writes are already atomic (the in-memory
+     * reference) may ignore it. The stamp is provenance, not a fence. Every instant the adapter
+     * stamps reads {@link TrackerAdapterContext#timeEquipment()}, never a clock of its own.
      *
-     * @param secrets the seam through which this adapter resolves its named credentials (NFR-S1);
-     *     never null
-     * @param config the project's validated {@code tracker} section; never null
-     * @param instanceId this process's minted {@link
-     *     com.github.oinsio.gnomish.app.port.tracker.InstanceId} value, stamped into structural
-     *     markers by adapters that need it at construction time; never null
+     * @param context everything the host hands this adapter; never null
+     * @return the live tracker; never null
      */
-    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId);
-
-    /**
-     * Returns a live {@link Tracker} that can stamp the claim epoch of the tenure it is writing
-     * under into its own tracker writes (FR13 of harden-task-branch-contract).
-     *
-     * <p>This is the form the composition root calls. The default ignores {@code epochs} and falls
-     * back to {@link #create(SecretsProvider, TrackerConfig, String)}, because epoch stamping is
-     * adapter-optional: a tracker whose writes are already atomic (the in-memory reference) has no
-     * frozen intermediate state to attribute, and a tracker with its own monotonic source may
-     * choose to carry the epoch differently. An adapter whose writes are physically non-atomic —
-     * the GitHub adapter — overrides this method and stamps every marker it writes, so a reader of
-     * a frozen intermediate state can tell which tenure left it. The stamp is provenance, not a
-     * fence: a superseded holder's writes are stopped by the fast-forward-only push on the branch
-     * and by the round-boundary revocation check at the tracker.
-     *
-     * <p>Implementations override <em>this</em> method, never both: the three-argument form stays
-     * the caller-facing entry point and always routes here.
-     *
-     * @param epochs this instance's tenure record — which epoch it holds on a given task right now;
-     *     {@link ClaimEpochSource#NONE} for a caller that never claims; never null
-     */
-    default Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
-        return create(secrets, config, instanceId);
-    }
+    Tracker create(TrackerAdapterContext context);
 
     /**
      * Expands a recognized short ref (a bare or {@code #}-prefixed non-negative integer, e.g.

@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.board;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
-import com.github.oinsio.gnomish.app.take.BackoffPolicy;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,19 +24,24 @@ import java.util.Objects;
  * 3.2), and {@code generatedAt} is the caller's observation instant.
  *
  * <p>Each {@link ReadyRow} carries the real eligibility reason (design D7,
- * {@link EligibilityPolicy}) when {@link #build(List, List, boolean,
- * Instant, EligibilityInputs)} is used; the shorter
- * {@link #build(List, List, boolean, Instant)} overload defaults every row
- * to eligible, for callers that only need the Working/AwaitingHuman columns
- * or row ordering. Either way, {@link ReadySummary#tally(List)} reconciles
- * the built {@code readyRows} into the full FR3 breakdown — with the
- * shorter overload, every row is eligible, so the ineligible counts are all
- * zero.
+ * {@link EligibilityPolicy}), and {@link ReadySummary#tally(List)} reconciles
+ * the built {@code readyRows} into the full FR3 breakdown.
+ *
+ * <p>The model also carries the WIP limit its WIP-held rows were judged by
+ * ({@code wipLimit}, the very {@link EligibilityInputs#wipLimit()} handed to
+ * {@link #build}) and derives the open-front count from its own columns
+ * ({@link #openFrontCount()}), so every renderer of the board — the JSON
+ * contract, the dashboard's WIP stat — reads both from here rather than
+ * taking a second copy of the limit beside the model (design D13). There is
+ * deliberately no {@code build} overload without {@link EligibilityInputs}:
+ * it would be a second path that puts a made-up limit on the page.
  *
  * <p>Inert value data compared by content.
  *
  * <p>Implements FR2, FR3, FR4, FR5, NFR-P1 of add-board-command; FR6 of
- * add-parameter-count-gate (the five-parameter {@code build}).
+ * add-parameter-count-gate (the five-parameter {@code build}); FR12, FR14 of
+ * supervise-daemon-loops-and-embed-dashboard ({@code wipLimit},
+ * {@link #openFrontCount()}).
  *
  * @param readyRows the Ready column, in {@code listReady} order; defensively
  *     copied, unmodifiable
@@ -46,6 +50,8 @@ import java.util.Objects;
  * @param awaitingHumanRows the AwaitingHuman column, in {@code listOpen}
  *     order; defensively copied, unmodifiable
  * @param summary the Ready column's summary counts; never null
+ * @param wipLimit the WIP limit the Ready rows' WIP-held eligibility was
+ *     judged against
  * @param truncated true when the ready window was capped at the requested
  *     limit; passed through unchanged
  * @param generatedAt the observation instant this model was built at; never
@@ -56,6 +62,7 @@ public record BoardModel(
         List<WorkingRow> workingRows,
         List<AwaitingHumanRow> awaitingHumanRows,
         ReadySummary summary,
+        int wipLimit,
         boolean truncated,
         Instant generatedAt) {
 
@@ -68,33 +75,14 @@ public record BoardModel(
     }
 
     /**
-     * Builds a {@code BoardModel} from one {@code listReady} result and one
-     * {@code listOpen} result. Ready rows preserve {@code ready}'s order
-     * one-to-one, each defaulted to eligible (task 2.2's seam). Open rows
-     * route by {@link TrackerTaskState}: {@code Working} entries become
-     * {@link WorkingRow}s, {@code AwaitingHuman} entries become {@link
-     * AwaitingHumanRow}s, both in {@code open}'s original order — {@code
-     * Ready}/{@code Finished}/{@code Gone} never appear in a {@code
-     * listOpen} result ({@link
-     * com.github.oinsio.gnomish.app.port.tracker.Tracker#listOpen()}
-     * contract) and are rejected defensively rather than silently dropped.
+     * The open front this board observed: its {@code Working} plus its
+     * {@code AwaitingHuman} rows, i.e. the size of the {@code listOpen}
+     * result the model was built from.
      *
-     * @param ready the {@code listReady} result, in adapter queue order;
-     *     never null
-     * @param open the {@code listOpen} result, in adapter order; never null
-     * @param truncated whether the ready window was capped at the requested
-     *     limit; passed through unchanged
-     * @param generatedAt the observation instant; never null
-     * @return the assembled model
+     * @return the open-front count
      */
-    public static BoardModel build(List<ReadyTask> ready, List<OpenTask> open, boolean truncated, Instant generatedAt) {
-        return build(
-                ready,
-                open,
-                truncated,
-                generatedAt,
-                new EligibilityInputs(
-                        BackoffPolicy.DEFAULT_BASE, BackoffPolicy.DEFAULT_CAP, open.size(), Integer.MAX_VALUE));
+    public int openFrontCount() {
+        return workingRows.size() + awaitingHumanRows.size();
     }
 
     /**
@@ -103,8 +91,14 @@ public record BoardModel(
      * is resolved by {@link EligibilityPolicy#resolve} in the feed's own
      * precedence — in backoff, then {@code finished}, then WIP-held —
      * without reimplementing {@code FeedPolicy}'s claim-selection logic.
-     * Open-row routing is identical to {@link #build(List, List, boolean,
-     * Instant)}.
+     * Open rows route by {@link TrackerTaskState}: {@code Working} entries
+     * become {@link WorkingRow}s, {@code AwaitingHuman} entries become {@link
+     * AwaitingHumanRow}s, both in {@code open}'s original order — {@code
+     * Ready}/{@code Finished}/{@code Gone} never appear in a {@code
+     * listOpen} result ({@link
+     * com.github.oinsio.gnomish.app.port.tracker.Tracker#listOpen()}
+     * contract) and are rejected defensively rather than silently dropped.
+     * The model keeps {@code eligibility.wipLimit()} as its {@code wipLimit}.
      *
      * @param ready the {@code listReady} result, in adapter queue order;
      *     never null
@@ -115,7 +109,8 @@ public record BoardModel(
      *     ready row's backoff is evaluated at; never null
      * @param eligibility the backoff shape, open-front count and WIP limit
      *     every ready row is judged against, resolved exactly as the take
-     *     feed resolves them; never null
+     *     feed resolves them; its WIP limit becomes the model's {@code
+     *     wipLimit}; never null
      * @return the assembled model
      */
     public static BoardModel build(
@@ -143,7 +138,13 @@ public record BoardModel(
         }
 
         return new BoardModel(
-                readyRows, workingRows, awaitingHumanRows, ReadySummary.tally(readyRows), truncated, generatedAt);
+                readyRows,
+                workingRows,
+                awaitingHumanRows,
+                ReadySummary.tally(readyRows),
+                eligibility.wipLimit(),
+                truncated,
+                generatedAt);
     }
 
     private static IllegalStateException unexpectedOpenState(OpenTask task) {

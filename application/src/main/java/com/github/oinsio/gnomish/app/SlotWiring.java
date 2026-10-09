@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import java.util.List;
 
 /**
@@ -18,6 +19,14 @@ import java.util.List;
  * one (design, "Where a {@code SlotWiring} is built"). Its two named sub-groups, {@link AbortFuse}
  * and {@link ClaimTenure}, are the pairs their consumers already take together. It carries no
  * claim epoch: {@link TaskGit#epochs()} is that book's single owner (design D5).
+ *
+ * <p><b>One time source per slot, by construction.</b> The slot's time is its assembly's {@link
+ * RunAssembly#timeEquipment()} and nothing else: {@link #time()} reads it, and the time-built
+ * policy every terminal write runs under, {@link #terminalWriteRetry()}, is derived from it here
+ * rather than carried as a member — so no wiring can hold a retry measured on a clock other than
+ * the one its resume paths stamp with (task 3.9 of supervise-daemon-loops-and-embed-dashboard).
+ * The slot's abort fuse is built over the same clock by its one production producer, {@link
+ * SlotWiringFactory}.
  *
  * <p>Never log a wiring whole: the record {@code toString} renders the credential variable names
  * it carries (NFR-S1). It carries names only, never a credential value.
@@ -36,9 +45,6 @@ import java.util.List;
  * @param containerTakeSupport the container-mode seam of the take chain
  * @param tenure the claim beat and claim-loss flag of the run's heartbeat
  * @param trustedBase the trusted tier bound once at startup
- * @param terminalWriteRetry the bounded retry every terminal tracker write (finish, park, and their
- *     reconciled re-drives) runs under, built by the composition root on its one time source
- *     (FR18 of supervise-daemon-loops-and-embed-dashboard)
  */
 public record SlotWiring(
         RunAssembly assembly,
@@ -49,5 +55,47 @@ public record SlotWiring(
         List<String> credentialEnvVarsToScrub,
         ContainerTakeSupport containerTakeSupport,
         ClaimTenure tenure,
-        TrustedBaseContext trustedBase,
-        TerminalWriteRetry terminalWriteRetry) {}
+        TrustedBaseContext trustedBase) {
+
+    /**
+     * The slot's one time equipment: its assembly's (design D20 of
+     * supervise-daemon-loops-and-embed-dashboard). Every component of the slot that reads "now" or
+     * waits takes it from here, so the slot cannot run on two time sources.
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return the assembly's time equipment; never null
+     */
+    TimeEquipment time() {
+        return assembly.timeEquipment();
+    }
+
+    /**
+     * The bounded retry every terminal tracker write (finish, park, and their reconciled re-drives)
+     * runs under: {@link TerminalWriteRetry#DEFAULT_BOUND} measured on {@link #time()} — the one
+     * production construction of the retry, derived from the slot's own time so the two cannot
+     * diverge (task 3.9 of supervise-daemon-loops-and-embed-dashboard).
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard; FR10, D10 of
+     * add-claim-heartbeat.
+     *
+     * @return the slot's terminal-write retry; never null
+     */
+    public TerminalWriteRetry terminalWriteRetry() {
+        return new TerminalWriteRetry(time(), TerminalWriteRetry.DEFAULT_BOUND);
+    }
+
+    /**
+     * The slot's outcome dispatch: the one construction site of {@link TakeOutcomeDispatch}
+     * (design D22 of supervise-daemon-loops-and-embed-dashboard), over this wiring's own terminal
+     * write retry and abort fuse, so every run of the slot dispatches its terminal outcome under the
+     * retry derived from the slot's one time — no engine execution builds a retry of its own.
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return the dispatch shared by every run of this slot; never null
+     */
+    TakeOutcomeDispatch outcomeDispatch() {
+        return new TakeOutcomeDispatch(terminalWriteRetry(), abort);
+    }
+}

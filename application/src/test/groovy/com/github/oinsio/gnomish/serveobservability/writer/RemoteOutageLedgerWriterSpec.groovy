@@ -44,7 +44,7 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
                 'connection refused')
 
         when:
-        writer().accept(outage)
+        writer().outageClosed(outage)
 
         then:
         def lines = ledgerLines()
@@ -64,7 +64,7 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
                 'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 1, 0, 'boom')
 
         when:
-        writer().accept(outage)
+        writer().outageClosed(outage)
 
         then:
         noExceptionThrown()

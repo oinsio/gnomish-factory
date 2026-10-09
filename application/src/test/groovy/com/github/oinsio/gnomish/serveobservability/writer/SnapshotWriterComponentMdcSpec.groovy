@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.status.DaemonComponent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -43,7 +43,7 @@ class SnapshotWriterComponentMdcSpec extends Specification {
                 { -> throw new IllegalStateException('assembler bug') },
                 new SnapshotJsonMapper(),
                 Duration.ofSeconds(30),
-                Clock.fixed(Instant.parse('2026-08-31T10:00:00Z'), ZoneOffset.UTC),
+                VirtualTimeEquipment.on(new VirtualClock(Instant.parse('2026-08-31T10:00:00Z'))),
                 0)
 
         when:

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
@@ -48,7 +49,8 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
         mechanics.readFinalState(branch) >> recorded
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new TakeLoadedBranchRoutes<ResumeBootstrap>(mechanics, new TakeDecisionResume<ResumeBootstrap>(mechanics), git)
+        new TakeLoadedBranchRoutes<ResumeBootstrap>(mechanics, new TakeDecisionResume<ResumeBootstrap>(mechanics), git,
+                VirtualTimeRetries.terminalWrite())
                 .route(takeOrder(heldByUs(), tracker))
     }
 

@@ -7,12 +7,11 @@ import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
-import java.time.InstantSource;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 
 /**
- * The bundle of ten collaborators the engine drives instead of touching the outside
+ * The bundle of nine collaborators the engine drives instead of touching the outside
  * world — the {@code ports} argument of {@link Engine#run} (design D1). Grouping the
  * ports into one value keeps the entry-point signature small and lets a caller wire a
  * factory once and reuse it across runs; the engine reads each field but never stores
@@ -21,10 +20,10 @@ import java.time.InstantSource;
  * <p>Five execution/verification ports do the real work — {@link StageExecutor} runs a
  * round, and the four check ports ({@link BuiltinCheckRunner}, {@link CommandCheckRunner},
  * {@link ExternalCheckClient}, {@link JudgeVoter}) serve the verify chain (design D2).
- * The remaining five are cross-cutting seams: {@link EngineEventListener} observes the
+ * The remaining four are cross-cutting seams: {@link EngineEventListener} observes the
  * event stream (D7), {@link AttemptPersistence} durably records each round (D7), the
- * two environment ports — the JDK {@link InstantSource} (the one type for the current
- * instant across the codebase) and {@link Sleeper} — make the poll loop's timing
+ * environment ports — the {@link TimeEquipment}, the current instant and waiting as one value
+ * (design D20 of supervise-daemon-loops-and-embed-dashboard) — make the poll loop's timing
  * deterministic (D8), and {@link AttemptDelivery} verifies the external-check push
  * precondition before the poll loop starts (FR21 of add-sandbox-core).
  *
@@ -32,7 +31,8 @@ import java.time.InstantSource;
  * non-null-by-default contract of the {@code @NullMarked} package. Compared by content.
  *
  * <p>Implements FR1 of add-stage-engine; FR21 of add-sandbox-core; FR17 of
- * supervise-daemon-loops-and-embed-dashboard (the instant-source environment port).
+ * supervise-daemon-loops-and-embed-dashboard (the instant-source environment port); FR22 of
+ * supervise-daemon-loops-and-embed-dashboard (the time equipment as the environment ports).
  *
  * @param executor the port that runs one round of a stage's work; never null
  * @param builtinRunner the port that runs built-in declarative checks; never null
@@ -41,8 +41,8 @@ import java.time.InstantSource;
  * @param judgeVoter the port that casts one judge vote; never null
  * @param listener the observer the engine emits its event stream to; never null
  * @param persistence the port that durably records each executed round; never null
- * @param clock the injected instant source (environment port) for timestamps and poll deadlines; never null
- * @param sleeper the injected sleep seam the poll loop waits on; never null
+ * @param time the environment ports: the instant source for timestamps and poll deadlines and the
+ *     sleep seam the poll loop waits on, as one value; never null
  * @param attemptDelivery the external-check push-precondition seam; never null
  */
 public record EnginePorts(
@@ -53,12 +53,11 @@ public record EnginePorts(
         JudgeVoter judgeVoter,
         EngineEventListener listener,
         AttemptPersistence persistence,
-        InstantSource clock,
-        Sleeper sleeper,
+        TimeEquipment time,
         AttemptDelivery attemptDelivery) {
 
     /**
-     * The dominant nine-port construction: assemblies and specs whose external checks have no
+     * The dominant eight-port construction: assemblies and specs whose external checks have no
      * push precondition to verify (the in-place shape) default {@code
      * attemptDelivery} to {@link AttemptDelivery#assumedDelivered()}; sandboxed git assemblies
      * use the canonical constructor with a real push-verifying implementation (FR21 of
@@ -72,8 +71,7 @@ public record EnginePorts(
             JudgeVoter judgeVoter,
             EngineEventListener listener,
             AttemptPersistence persistence,
-            InstantSource clock,
-            Sleeper sleeper) {
+            TimeEquipment time) {
         this(
                 executor,
                 builtinRunner,
@@ -82,8 +80,7 @@ public record EnginePorts(
                 judgeVoter,
                 listener,
                 persistence,
-                clock,
-                sleeper,
+                time,
                 AttemptDelivery.assumedDelivered());
     }
 }

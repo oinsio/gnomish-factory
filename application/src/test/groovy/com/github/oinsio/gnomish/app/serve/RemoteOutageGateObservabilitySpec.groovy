@@ -11,7 +11,6 @@ import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
-import java.util.function.Consumer
 import spock.lang.Specification
 
 /**
@@ -46,8 +45,8 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     private RemoteOutageGate gate(
             BaseRefGit baseRefGit,
             String target = 'origin',
-            Runnable onTransition = {},
-            Consumer<RemoteOutageClosedOutage> onClosedOutage = { ignored -> }) {
+            DirtyNotifier onTransition = {},
+            RemoteOutageLedgerSink onClosedOutage = { ignored -> }) {
         new RemoteOutageGate(
                 baseRefGit, Path.of('.'), clock, NO_JITTER, IDLE, CAP,
                 new RemoteOutageWiring(target, suppressor, SUSTAINED_OPEN, onTransition, onClosedOutage))

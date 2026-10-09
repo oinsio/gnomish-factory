@@ -16,12 +16,11 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicBoolean
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -40,6 +39,13 @@ import spock.lang.TempDir
  */
 class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
+    /**
+     * The dispatch graph's one time equipment, the root's own (FR21 of
+     * supervise-daemon-loops-and-embed-dashboard): the serve feature drives a real serve startup
+     * whose threads must really wait, and every command in the graph reads the same source.
+     */
+    private final TimeEquipment time = rootTimeEquipment()
+
     @TempDir
     Path projectDir
 
@@ -48,8 +54,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
 
     private TakeCommand newTakeCommand() {
         TakeCommands.of(
-                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), registeredClone(), 'taskId',
-                testProperties(), Clock.systemUTC(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, testProperties(), time), TaskGitFixture.real(),
+                registeredClone(), 'taskId', testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     /**
@@ -63,24 +69,21 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
 
     private ServeCommand newServeCommand() {
         ServeCommands.of(
-                newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, testProperties(), time), TaskGitFixture.real(),
                 registeredClone(), 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
-                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-                InstantSource.system(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE,
                 ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     private BoardCommand newBoardCommand() {
-        new BoardCommand(Clock.systemUTC(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
-                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), LiveConsoleIO.onStdout())
+        new BoardCommand(time.clock(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
+                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), LiveConsoleIO.onStdout())
     }
 
     private DashboardCommand newDashboardCommand() {
-        new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), RegisteredCloneFixture.scope(registeredClone()),
-                testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
+        new DashboardCommand(time, RegisteredCloneFixture.scope(registeredClone()),
+                testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()))
     }
 
     def statusCommand = new StatusCommand(
@@ -243,14 +246,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def serveDispatch = new SubcommandDispatch(
                 dispatch.reportCommands(), dispatch.takeCommand(),
                 ServeCommands.of(
-                        newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
+                        newAssembly(new ByteArrayInputStream(new byte[0]), System.out, testProperties(), time), TaskGitFixture.real(),
                         registeredClone(), 'taskId',
-                        testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
-                        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-                        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-                        InstantSource.system(), new TrackerWiring([github: new FixedTrackerAdapterFactory({
+                        testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new TrackerWiring([github: new FixedTrackerAdapterFactory({
                                 trackerStub
-                            })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), { FeedAutomaton automaton ->
+                            })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
                         } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                         LiveConsoleIO.onStderr()))
@@ -291,10 +291,10 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def boardTrackerStub = Stub(Tracker)
         def boardDispatch = new SubcommandDispatch(
                 new ReportCommands(statusCommand, usageCommand,
-                new BoardCommand(Clock.systemUTC(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
+                new BoardCommand(time.clock(), testProperties(), RegisteredCloneFixture.scope(registeredClone()),
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         boardTrackerStub
-                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 LiveConsoleIO.onStdout()),
                 newDashboardCommand()),
                 dispatch.takeCommand(), dispatch.serveCommand())
@@ -338,11 +338,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def dashboardTrackerStub = Stub(Tracker)
         def dashboardDispatch = new SubcommandDispatch(
                 new ReportCommands(statusCommand, usageCommand, newBoardCommand(),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), RegisteredCloneFixture.scope(registeredClone()),
+                new DashboardCommand(time, RegisteredCloneFixture.scope(registeredClone()),
                 testProperties(),
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         dashboardTrackerStub
-                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))),
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()))),
                 dispatch.takeCommand(), dispatch.serveCommand())
         def args = new DefaultApplicationArguments('dashboard', "--dir=${projectDir}".toString())
 

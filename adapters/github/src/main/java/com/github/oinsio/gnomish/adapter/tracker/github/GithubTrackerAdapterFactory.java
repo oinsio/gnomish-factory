@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.adapter.github.GithubCredential;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
+import com.github.oinsio.gnomish.app.TrackerAdapterContext;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -32,11 +33,13 @@ import java.util.Set;
  * entries (schema-validated by {@link GithubLabelsValidator}) override the default for that state.
  *
  * <p>Discovered through {@code ServiceLoader} (FR1, FR12 of add-plugin-architecture): a public
- * no-arg constructor, with the {@link SecretsProvider} arriving as a method argument rather than in
- * the constructor (FR2, design D2).
+ * no-arg constructor, with the {@link SecretsProvider} — and every other host collaborator, the
+ * time equipment included — arriving on the {@link TrackerAdapterContext} its one {@code create}
+ * receives rather than in the constructor (FR2, design D2; FR23, design D21 of
+ * supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port; FR1, FR2, FR4, FR17 of
- * add-plugin-architecture; FR20 of supervise-daemon-loops-and-embed-dashboard.
+ * add-plugin-architecture; FR20, FR23 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory {
 
@@ -54,36 +57,24 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return TYPE;
     }
 
-    // PIT M4 documented exception: @DoNotMutate — the token resolves through the SecretsProvider
-    // handed in by the composition root (the missing-token throw is covered by
-    // GithubTrackerAdapterFactorySpec with an empty provider), but this method's success path drives
-    // the WireMock-backed assembly of the 3-arg create(...) seam (label provisioning, collaborator
-    // wiring) — an integration boundary the spec exercises through that seam directly.
-    @DoNotMutate
-    @Override
-    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-        return create(secrets, config, instanceId, ClaimEpochSource.NONE);
-    }
-
     /**
-     * The epoch-aware entry point the composition root calls (FR13 of harden-task-branch-contract):
-     * every structural marker this adapter writes is stamped with the tenure {@code epochs} reports
-     * for the task, so a reader can tell a superseded tenure's write from the current one.
+     * The one entry point the composition root calls (FR23, design D21 of
+     * supervise-daemon-loops-and-embed-dashboard): everything — the credential, the configuration,
+     * the instance id, the tenure record and the time equipment — is read from {@code context}. Every
+     * structural marker this adapter writes is stamped with the tenure {@code context.epochs()}
+     * reports for the task (FR13 of harden-task-branch-contract), and every instant it stamps reads
+     * {@code context.timeEquipment()} — the host's time, virtual under test (FR20) — never a clock
+     * this factory builds itself.
      */
-    // PIT M4 documented exception (same integration-boundary rationale as the 3-arg create above):
-    // @DoNotMutate — the body is one hand-off into requireToken plus the 4-arg assembly seam; the
-    // missing-token throw is covered by GithubTrackerAdapterFactorySpec with an empty provider, and
-    // a resolved token flows into the WireMock-backed assembly that same spec drives through the
-    // explicit-token seam. No decision lives here.
-    //
-    // FR20 of supervise-daemon-loops-and-embed-dashboard, open decision (task 3.3): the
-    // ServiceLoader-built factory is reached only through the plugin API's create(...), which
-    // carries no time source, so this entry point is still where real time enters the adapter;
-    // every collaborator below it takes the source from here.
-    @DoNotMutate
     @Override
-    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
-        return create(config, instanceId, requireToken(secrets, config), epochs, InstantSource.system());
+    public Tracker create(TrackerAdapterContext context) {
+        TrackerConfig config = context.config();
+        return create(
+                config,
+                context.instanceId(),
+                requireToken(context.secrets(), config),
+                context.epochs(),
+                context.timeEquipment().clock());
     }
 
     /**
@@ -91,8 +82,8 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      * reading {@code GNOMISH_GITHUB_TOKEN} from the environment, so tests can exercise the
      * assembly (label provisioning, collaborator wiring) against WireMock without mutating the
      * real process environment (not reliably possible on module-path JVMs without {@code
-     * --add-opens}). The public {@link #create(SecretsProvider, TrackerConfig, String)} is the only production
-     * entry point and always resolves the token from the environment (NFR-S1).
+     * --add-opens}). The public {@link #create(TrackerAdapterContext)} is the only production entry
+     * point and always resolves the token through the context's secrets seam (NFR-S1).
      */
     Tracker create(TrackerConfig config, String instanceId, String token, InstantSource clock) {
         return create(config, instanceId, token, ClaimEpochSource.NONE, clock);
@@ -164,8 +155,8 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return GithubRefExpander.expand(config.subsection(), issueNumber);
     }
 
-    // PIT M4 documented exception (same integration-boundary rationale as create(config, id)): this
-    // entry point resolves GNOMISH_GITHUB_TOKEN through the SecretsProvider and delegates. The
+    // PIT M4 documented exception: @DoNotMutate — this entry point resolves GNOMISH_GITHUB_TOKEN
+    // through the SecretsProvider and delegates, holding no decision of its own. The
     // foreign-repo logic (owner/repo threading, verify delegation, exception→refusal translation) is
     // fully covered via the explicit-token testing seam below.
     @DoNotMutate
@@ -246,14 +237,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      * add-sandbox-core), failing closed with a clear {@link GithubTrackerConfigException} when it is
      * absent or blank — the provider's {@link SecretsProvider#find} already treats blank as absent,
      * so there is no silent empty value. The token is never logged.
-     *
-     * <p>PIT M4 documented exception: {@code @DoNotMutate} — reachable only from the two
-     * {@code @DoNotMutate} entry points ({@link #create(SecretsProvider, TrackerConfig,
-     * String)} and {@link #refuseForeignRef(SecretsProvider, TrackerConfig, TaskRef)}); the missing-token throw is covered behaviorally
-     * by GithubTrackerAdapterFactorySpec with an empty provider, while a resolved token flows into
-     * the WireMock-backed assembly of those entry points — an integration boundary.
      */
-    @DoNotMutate
     private String requireToken(SecretsProvider secrets, TrackerConfig config) {
         String credential = GithubCredential.nameOr(config.subsection(), TOKEN_ENV_VAR);
         return secrets.find(credential)

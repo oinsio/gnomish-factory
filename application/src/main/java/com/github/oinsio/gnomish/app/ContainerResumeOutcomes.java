@@ -88,7 +88,8 @@ final class ContainerResumeOutcomes {
         var escalated = new TaskOutcome.Escalated(state, report);
 
         var console = runner.assembly.dialogConsole();
-        var resumption = new EscalationResume(console, runner.assembly.instantSource(), returnPath(order, taskJson))
+        var resumption = new EscalationResume(
+                        console, runner.assembly.timeEquipment().clock(), returnPath(order, taskJson))
                 .decide(taskJson.context(), escalated, decision);
 
         // The kept box carried the park, and its clone cannot learn of the park's outcome commit —

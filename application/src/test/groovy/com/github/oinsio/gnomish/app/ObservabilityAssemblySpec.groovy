@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLostSink
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
+import com.github.oinsio.gnomish.app.lease.LiveClaims
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
@@ -16,6 +17,7 @@ import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
+import com.github.oinsio.gnomish.app.serve.OccupiedSlots
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
@@ -26,16 +28,16 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -64,15 +66,24 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
 
     private static final String INSTANCE_NAME = 'gnomish-observability-test'
 
-    private static FeedAutomaton newAutomaton(SlotLedger slotLedger, Tracker tracker, InstanceId instanceId, DirtyNotifier notifier) {
+    /**
+     * The one time source of every assembled graph (FR21 of
+     * supervise-daemon-loops-and-embed-dashboard): the snapshot writer and ledger, the slot ledger,
+     * the tracker-health decorator, the remote-outage gate and every loop the snapshot reads all
+     * read this clock, as the composition root hands them its one equipment.
+     */
+    private final VirtualClock clock = new VirtualClock(Instant.parse('2026-08-03T10:00:00Z'))
+
+    /** The equipment over {@link #clock}; no component here is started, so the sleeper never runs. */
+    private final TimeEquipment time = VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper)
+
+    private FeedAutomaton newAutomaton(SlotLedger slotLedger, Tracker tracker, InstanceId instanceId, DirtyNotifier notifier) {
         FeedAutomatonFixture.feedAutomaton(
                 tracker,
                 instanceId,
                 slotLedger,
                 { TaskRef ref -> } as SlotRunner,
-                { Duration d -> } as Sleeper, {
-                    -> Instant.now()
-                } as java.time.InstantSource,
+                time,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(60),
                 Duration.ofSeconds(30),
@@ -81,52 +92,41 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 notifier)
     }
 
-    private static InstanceHeartbeat newHeartbeat(Tracker tracker, java.time.InstantSource clock) {
+    private InstanceHeartbeat newHeartbeat(Tracker tracker) {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
-                { Duration d -> } as Sleeper,
-                clock,
+                time,
                 Duration.ofSeconds(30),
                 ClaimLostSink.IGNORE)
     }
 
-    private static StandingReaper newStandingReaper(java.time.InstantSource clock) {
+    private StandingReaper newStandingReaper() {
         new StandingReaper(
                 ReaperDuty.NONE,
-                { Duration d -> } as Sleeper,
-                Duration.ofSeconds(30),
-                { [] } as Supplier,
-                clock)
+                Duration.ofSeconds(30), {
+                    []
+                } as LiveClaims, time)
     }
 
-    private WorktreeJanitor newWorktreeJanitor(java.time.InstantSource clock) {
+    private WorktreeJanitor newWorktreeJanitor() {
         new WorktreeJanitor(
                 RegisteredCloneFixture.unregistered(homeDir, homeDir.resolve('clone')),
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
-                clock,
-                { Duration d -> } as Sleeper,
-                { -> Set.of() } as Supplier)
+                time,
+                { -> Set.of() } as OccupiedSlots)
     }
 
     def "assembles a functional ObservabilityWiring: binds the dirty notifier and writes a snapshot reflecting the given collaborators"() {
         given:
         def instanceId = InstanceId.generate(INSTANCE_NAME)
         def tracker = Stub(Tracker)
-        def trackerHealth = new TrackerHealthTracker(tracker, {
-            -> Instant.now()
-        } as java.time.InstantSource)
+        def trackerHealth = new TrackerHealthTracker(tracker, clock)
         def dirtyNotifier = new ForwardingDirtyNotifier()
-        def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(3, {
-            -> clock.instant()
-        } as java.time.InstantSource, dirtyNotifier)
+        def slotLedger = new SlotLedger(3, clock, dirtyNotifier)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null, null, null)
-        def engineClock = {
-            -> clock.instant()
-        } as java.time.InstantSource
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null, null, null, null)
 
         when:
         def observability = ObservabilityAssembly.assemble(
@@ -134,18 +134,18 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 instanceId,
                 serveDir(),
                 dirtyNotifier,
-                clock,
+                time,
                 new SnapshotSources(
                         automaton,
                         slotLedger,
                         3,
                         new HeartbeatProgress(),
                         trackerHealth,
-                        newHeartbeat(tracker, engineClock),
-                        newStandingReaper(engineClock),
-                        newWorktreeJanitor(engineClock),
+                        newHeartbeat(tracker),
+                        newStandingReaper(),
+                        newWorktreeJanitor(),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> })))
 
         then: 'a genuine, non-null wiring is returned'
         observability != null
@@ -182,22 +182,14 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         given:
         def instanceId = InstanceId.generate(INSTANCE_NAME)
         def tracker = Stub(Tracker)
-        def trackerHealth = new TrackerHealthTracker(tracker, {
-            -> Instant.now()
-        } as java.time.InstantSource)
+        def trackerHealth = new TrackerHealthTracker(tracker, clock)
         def dirtyNotifier = new ForwardingDirtyNotifier()
-        def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(1, {
-            -> clock.instant()
-        } as java.time.InstantSource, dirtyNotifier)
+        def slotLedger = new SlotLedger(1, clock, dirtyNotifier)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null, null, null)
-        def engineClock = {
-            -> clock.instant()
-        } as java.time.InstantSource
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null, null, null, null)
 
         when:
         def observability = ObservabilityAssembly.assemble(
@@ -205,18 +197,18 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 instanceId,
                 serveDir(),
                 dirtyNotifier,
-                clock,
+                time,
                 new SnapshotSources(
                         automaton,
                         slotLedger,
                         1,
                         new HeartbeatProgress(),
                         trackerHealth,
-                        newHeartbeat(tracker, engineClock),
-                        newStandingReaper(engineClock),
-                        newWorktreeJanitor(engineClock),
+                        newHeartbeat(tracker),
+                        newStandingReaper(),
+                        newWorktreeJanitor(),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> })))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 

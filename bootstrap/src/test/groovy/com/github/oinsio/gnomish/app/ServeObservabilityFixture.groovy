@@ -9,11 +9,9 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.InstantSource
-
 /**
  * Shared scaffolding for {@link ServeObservabilityIntegrationSpec} and its
  * companion {@link ServeObservabilityRestartIntegrationSpec} (split apart
@@ -66,12 +64,8 @@ trait ServeObservabilityFixture {
                 clone,
                 'taskId',
                 factoryProperties,
-                new ServeProperties(1, null, null, null, null, null, null, null, null),
-                Clock.systemUTC(),
-                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-                InstantSource.system(),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                new ServeProperties(1, null, null, null, null, null, null, null, null, null),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())
     }

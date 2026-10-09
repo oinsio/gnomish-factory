@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.dashboard
 
+import com.github.oinsio.gnomish.app.DashboardWatch
+
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -139,7 +141,7 @@ class DashboardResourcesSpec extends Specification {
         def fallback = matcher.group(1) as long
 
         expect:
-        fallback == DashboardWatchLoop.RENDER_CADENCE.toMillis() * 3
+        fallback == DashboardWatch.RENDER_CADENCE.toMillis() * 3
     }
 
     // NFR-O1 of redesign-dashboard: both themes come from the token blocks alone —

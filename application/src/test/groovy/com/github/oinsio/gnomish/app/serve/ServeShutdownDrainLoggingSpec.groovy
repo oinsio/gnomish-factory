@@ -27,7 +27,7 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofMillis(500)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
 
         and: "a fake round that reacts to the flag almost immediately, well inside the grace window"
         Thread.ofVirtual().start({
@@ -58,7 +58,7 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
         ledger.assign(A)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }
@@ -83,7 +83,7 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
         def ledger = new SlotLedger(2, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }

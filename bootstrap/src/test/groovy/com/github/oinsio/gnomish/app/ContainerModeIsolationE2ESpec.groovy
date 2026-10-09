@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.app.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -74,9 +75,9 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
         key = taskKey
         new ContainerEnvironmentFactory(
                 new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
-                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-                new BoxTiming(InstantSource.system(), new ThreadSleeper(), Duration.ofMinutes(5)),
+                // real-time-wiring: a real Docker box, whose guard readiness the self-check's pause must
+                //     really wait for (end-to-end layer); the time source is not the subject here.
+                new BoxTiming(new TimeEquipment(InstantSource.system(), new ThreadSleeper()), Duration.ofMinutes(5)),
                 tempDir.resolve('guard-config'),
                 OwnershipMode.MANUAL).forTask(
                 taskKey,

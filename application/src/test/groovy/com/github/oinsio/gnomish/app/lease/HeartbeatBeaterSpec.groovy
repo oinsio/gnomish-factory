@@ -27,7 +27,7 @@ class HeartbeatBeaterSpec extends Specification {
     VirtualClock clock = new VirtualClock(Instant.parse('2026-09-28T10:00:00Z'))
     RepeatSuppressor suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(30))
     Tracker tracker = Stub()
-    HeartbeatBeater beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
+    HeartbeatBeater beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), suppressor)
     LogCaptureSupport logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
 
     def cleanup() {
@@ -44,7 +44,7 @@ class HeartbeatBeaterSpec extends Specification {
         }
 
         when:
-        def outcome = beater.beat(A)
+        def outcome = beater.beat(A, clock.instant())
 
         then:
         outcome == BeatOutcome.UNCONFIRMED
@@ -65,13 +65,13 @@ class HeartbeatBeaterSpec extends Specification {
         }
 
         and: 'the stop arrives first'
-        beater.beat(A)
+        beater.beat(A, clock.instant())
         Thread.interrupted()
         interruptNext = false
         def beforeOutage = logs.list.size()
 
         when: 'a genuine outage follows'
-        beater.beat(A)
+        beater.beat(A, clock.instant())
 
         then: 'its failure is the announced first one'
         logs.list.drop(beforeOutage).any {
@@ -85,7 +85,7 @@ class HeartbeatBeaterSpec extends Specification {
         tracker.heartbeat(_, _) >> { throw new RuntimeException('5xx') }
 
         when:
-        def outcome = beater.beat(A)
+        def outcome = beater.beat(A, clock.instant())
 
         then:
         outcome == BeatOutcome.UNCONFIRMED

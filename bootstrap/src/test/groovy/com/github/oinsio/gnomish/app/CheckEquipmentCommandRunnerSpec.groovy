@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import spock.lang.Specification
 
@@ -26,7 +27,8 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     new ShellCommandCheckRunner(new VirtualClock()),
     [:],
     MapSecretsProvider.NONE,
-    new FactoryProperties('check-equipment', null, null, null))
+    new FactoryProperties('check-equipment', null, null, null),
+    VirtualTimeEquipment.create())
 
     private final ChildEnvAllowlist childEnv = ChildEnvAllowlist.of(['PATH'], ['TRACKER_TOKEN'])
 

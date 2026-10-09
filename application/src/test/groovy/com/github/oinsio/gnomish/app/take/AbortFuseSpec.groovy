@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.take
 
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import java.time.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import spock.lang.Specification
 
 /**
@@ -13,7 +13,7 @@ import spock.lang.Specification
  */
 class AbortFuseSpec extends Specification {
 
-    private AbortHandler handler = new AbortHandler(Stub(Tracker), Clock.systemUTC())
+    private AbortHandler handler = new AbortHandler(Stub(Tracker), new VirtualClock())
 
     def "FR2: a non-positive threshold is refused at construction"() {
         when:

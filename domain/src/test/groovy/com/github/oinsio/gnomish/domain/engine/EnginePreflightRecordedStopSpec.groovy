@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
@@ -18,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -49,14 +51,14 @@ class EnginePreflightRecordedStopSpec extends Specification {
 
     EnginePorts livePorts() {
         new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, clock, new VirtualSleeper(clock))
+                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock))
     }
 
     /** Ports whose every call throws, so any call the re-escalation makes surfaces at once. */
     EnginePorts throwingPorts(RecordingEventListener listener) {
         new EnginePorts(throwing(StageExecutor), throwing(BuiltinCheckRunner), throwing(CommandCheckRunner),
                 throwing(ExternalCheckClient), throwing(JudgeVoter), listener, throwing(AttemptPersistence),
-                throwing(InstantSource), throwing(Sleeper), throwing(AttemptDelivery))
+                new TimeEquipment(throwing(InstantSource), throwing(Sleeper)), throwing(AttemptDelivery))
     }
 
     def throwing(Class<?> type) {

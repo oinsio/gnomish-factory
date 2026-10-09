@@ -107,7 +107,7 @@ final class GitResumeContinuation {
         var escalated = new TaskOutcome.Escalated(finalState, report);
 
         DialogConsole console = assembly.dialogConsole();
-        var resumption = new EscalationResume(console, assembly.instantSource(), returnPath())
+        var resumption = new EscalationResume(console, assembly.timeEquipment().clock(), returnPath())
                 .decide(bootstrap.context(), escalated, decision);
         EscalationResume.land(taskRepository, bootstrap.taskId(), resumption, decision);
         runToTerminalBoundary(order, resumption.context(), resumption.state());

@@ -4,11 +4,10 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 
 /**
  * Production-shaped retries wired to virtual time — the thing a spec should reach for wherever
- * production code would call a {@code system()} factory.
+ * production code takes a retry the composition root built on the real time equipment.
  *
- * <p>The hazard those factories carry into a test is not that they are wrong, it is that they are
- * silent. {@code TerminalWriteRetry.system()} reads as a harmless default and wires a real {@link
- * com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper} with a ten-minute bound and a backoff
+ * <p>The hazard real time carries into a test is not that it is wrong, it is that it is silent. The
+ * root's terminal-write retry runs on the real sleeper with a ten-minute bound and a backoff
  * climbing to sixty seconds per attempt. A spec whose collaborator never reports an outage never
  * sleeps — so the call looks fine, indefinitely, until the day a change makes that collaborator
  * report one. Then the spec does not fail: it blocks, for ten real minutes per exercise of the
@@ -17,7 +16,9 @@ import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
  *
  * <p>The retries below keep the production bound and the production backoff and change only where
  * time comes from, so a spec asserts the real shape and an outage exhausts the bound in
- * microseconds. Deliberately not a no-op sleeper: one that never advances a clock turns a
+ * microseconds. Both are built on {@link VirtualTimeEquipment}, the one test carrier of the time
+ * equipment (design D20 of supervise-daemon-loops-and-embed-dashboard). Deliberately not a no-op
+ * sleeper: one that never advances a clock turns a
  * ten-minute block into an infinite one against a permanent outage. For the same reason the
  * sleeper is budgeted ({@link BudgetedVirtualSleeper}): a mutant that shrinks the backoff to zero
  * stops the virtual clock, and against a permanent outage the bound would never elapse — PIT would
@@ -40,7 +41,6 @@ final class VirtualTimeRetries {
      * TerminalWriteRetry#DEFAULT_BOUND} measured on a virtual clock.
      */
     static TerminalWriteRetry terminalWrite() {
-        def clock = new VirtualClock()
-        new TerminalWriteRetry(new BudgetedVirtualSleeper(clock), clock, TerminalWriteRetry.DEFAULT_BOUND)
+        new TerminalWriteRetry(VirtualTimeEquipment.create(), TerminalWriteRetry.DEFAULT_BOUND)
     }
 }

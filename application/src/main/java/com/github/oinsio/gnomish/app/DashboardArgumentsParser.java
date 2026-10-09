@@ -4,15 +4,14 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish dashboard}'s command-line flags into a {@link DashboardArguments} (task
  * 4.1): {@code --dir} (the registered clone, defaulting to {@code .}), {@code
  * --out} (defaults to {@code null}, meaning the instance-directory default path — design D8), and
- * the {@code --watch} boolean flag (FR7). Reuses {@link ArgumentsParsingSupport#singleValue} for
- * the shared single-valued-flag idiom.
+ * the {@code --watch} boolean flag (FR7). {@code --out} resolves through {@link
+ * DashboardOutputFlag}, shared with {@code serve --dashboard-out}.
  *
  * <p>Implements FR1, FR7 of add-dashboard-page; FR3 of add-project-registry.
  */
@@ -37,13 +36,8 @@ final class DashboardArgumentsParser {
     DashboardArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, DASHBOARD_TOKEN, ACCEPTED, Map.of());
         Path dir = clone.clonePath();
-        Path out = parseOut(args);
+        Path out = DashboardOutputFlag.parse(args, OUT);
         boolean watch = args.containsOption(WATCH);
         return new DashboardArguments(dir, out, watch);
-    }
-
-    private @Nullable Path parseOut(ApplicationArguments args) {
-        String value = ArgumentsParsingSupport.singleValue(args, OUT);
-        return value == null ? null : Path.of(value);
     }
 }

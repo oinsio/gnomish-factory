@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -12,7 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
@@ -159,11 +160,12 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     }
 
     private VerifyOrchestrator orchestrator() {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
-        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-        def clock = InstantSource.system()
-        def polling = new ExternalPolling(client, AttemptDelivery.assumedDelivered(), clock, new ThreadSleeper())
+        // real-time-wiring: a real Gitea Actions runner finishes on the wall clock, and the poll must
+        //     really wait for it between polls; one equipment for the whole chain.
+        def time = new TimeEquipment(InstantSource.system(), new ThreadSleeper())
+        def clock = time.clock()
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, clock)
+        def polling = new ExternalPolling(client, AttemptDelivery.assumedDelivered(), time)
         new VerifyOrchestrator(
                 new ScriptedBuiltinCheckRunner(),
                 new ScriptedCommandCheckRunner(),

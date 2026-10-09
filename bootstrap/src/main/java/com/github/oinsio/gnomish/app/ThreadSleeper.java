@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.domain.engine.time;
+package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.time.Duration;
@@ -9,7 +9,13 @@ import java.time.Duration;
  * interrupt flag rather than swallowing the interruption, per the port's explicit
  * "no checked exception on the contract, but don't swallow interruption" contract.
  *
- * <p>Implements D10, M2 of add-manual-run.
+ * <p>Lives in the composition root's module (design D20 of
+ * supervise-daemon-loops-and-embed-dashboard): no other module can construct the real sleeper, so
+ * every component outside {@code :bootstrap} waits on the sleeper half of the {@link
+ * com.github.oinsio.gnomish.domain.engine.time.TimeEquipment} the root builds once in {@link
+ * ManualRunConfiguration}.
+ *
+ * <p>Implements D10, M2 of add-manual-run; FR22 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class ThreadSleeper implements Sleeper {
 

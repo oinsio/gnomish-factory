@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
@@ -42,11 +44,11 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         ContainerSupportFactory factory = { cloneDir, taskId, segments, definition, creds ->
             support
         }
-        new ContainerTakeSupport(
-                new BindingProperties(null, [:]),
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
-                AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
-                { false },
+        new ContainerTakeSupport(new SandboxModeSelector(
+                        new BindingProperties(null, [:]),
+                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
+                        { -> false } as ContainerRuntimeProbe),
                 factory)
     }
 
@@ -168,6 +170,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             bindTaskTier: { binding ->
                 new BoundTaskTier(new LoadOutcome.Invalid(errors), LAW_COMMIT)
             },
+            timeEquipment: { -> VirtualTimeEquipment.create() },
         ] as RunAssembly
 
         when:

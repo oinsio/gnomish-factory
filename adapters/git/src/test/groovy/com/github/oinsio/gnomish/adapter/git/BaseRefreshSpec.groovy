@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -41,7 +42,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
      * backoff — measured on virtual time, so an outage exhausts the real bound in microseconds.
      */
     private BaseRefresh refresh(GitProcessRunner boundRunner = runner) {
-        new BaseRefresh(boundRunner, new GitInfrastructureRetry(sleeper,
+        new BaseRefresh(boundRunner, new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper),
                 GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF))
     }
 

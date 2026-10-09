@@ -73,6 +73,7 @@ public final class ContainerEnvironmentFactory {
                 docker,
                 baseKey,
                 new ContainerEnvironmentBuilder(docker, link, sandbox, timing, allowlist, guardConfigRoot, ownership),
-                restoration);
+                restoration,
+                timing);
     }
 }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
 import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.FixedCheckClientContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
@@ -41,7 +42,7 @@ class GithubCheckClientFactorySpec extends Specification {
         def factory = new GithubCheckClientFactory()
 
         expect:
-        factory.create(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), SUBSECTION) != null
+        factory.create(new FixedCheckClientContext(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), SUBSECTION)) != null
     }
 
     // FR26: the owner/name split is exact — the built client polls the configured repository,
@@ -52,7 +53,7 @@ class GithubCheckClientFactorySpec extends Specification {
         def factory = new GithubCheckClientFactory()
 
         when:
-        def client = factory.create(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), SUBSECTION)
+        def client = factory.create(new FixedCheckClientContext(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), SUBSECTION))
 
         then:
         client.owner() == 'acme'
@@ -64,7 +65,7 @@ class GithubCheckClientFactorySpec extends Specification {
         def factory = new GithubCheckClientFactory()
 
         when:
-        factory.create(providing([:]), SUBSECTION)
+        factory.create(new FixedCheckClientContext(providing([:]), SUBSECTION))
 
         then:
         def e = thrown(GithubCheckTokenException)
@@ -110,7 +111,7 @@ class GithubCheckClientFactorySpec extends Specification {
         def factory = new GithubCheckClientFactory()
 
         when:
-        factory.create(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), [('api-url'): 'https://api.github.com', repo: repo])
+        factory.create(new FixedCheckClientContext(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), [('api-url'): 'https://api.github.com', repo: repo]))
 
         then:
         def e = thrown(IllegalArgumentException)
@@ -132,7 +133,7 @@ class GithubCheckClientFactorySpec extends Specification {
         def factory = new GithubCheckClientFactory()
 
         when:
-        factory.create(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), [('api-url'): 'https://api.github.com'])
+        factory.create(new FixedCheckClientContext(providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok']), [('api-url'): 'https://api.github.com']))
 
         then:
         def e = thrown(IllegalArgumentException)

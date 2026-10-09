@@ -190,7 +190,7 @@ sub-agent to discover.
       points, `ContainerRunSupportFactory`/`ContainerRunSupport` — each marked in code with
       "open decision (task 3.3)" — plus seven `new ThreadSleeper()` sites (D20), which this task's
       grep did not cover.
-- [ ] 3.4 One carrier for real time: `TimeEquipment` (D20, single-owner row 8; FR22, G5, M9). Add
+- [x] 3.4 One carrier for real time: `TimeEquipment` (D20, single-owner row 8; FR22, G5, M9). Add
       `domain/.../engine/time/TimeEquipment.java`: `record TimeEquipment(InstantSource clock, Sleeper
       sleeper)` with `sleepUntil(Instant)` and `remaining(Instant)` — answer ADR 0010's three
       questions in the record's javadoc; if (b) fails, record the rejection in the design table and
@@ -224,7 +224,7 @@ sub-agent to discover.
       and `HostResolver.system()` (not time); `grep -rn "InstantSource [a-z]*, *Sleeper\|Sleeper [a-z]*, *InstantSource"
       --include='*.java' */src/main adapters/*/src/main sandbox/*/src/main` hits only
       `TimeEquipment.java` itself.
-- [ ] 3.5 Plugin SPI context objects (D21, single-owner row 9; FR20, FR23, G6, M10). In
+- [x] 3.5 Plugin SPI context objects (D21, single-owner row 9; FR20, FR23, G6, M10). In
       `gnomish-plugin-api`: add `TrackerAdapterContext` (`secrets()`, `config()`, `instanceId()`,
       `epochs()`, `timeEquipment()`) and `CheckClientContext` (`secrets()`, `subsection()`,
       `runContext()`, `timeEquipment()`) as interfaces, each with a javadoc stating the evolution
@@ -232,7 +232,7 @@ sub-agent to discover.
       `Implements FR23 of supervise-daemon-loops-and-embed-dashboard`; replace every `create`
       overload on `TrackerAdapterFactory` and `CheckClientFactory` with the single
       `create(<Context>)` — delete the old forms, no `@Deprecated` (NG10); update the class javadoc
-      that today says "override this, never both". Bump `version` to `0.10.0` with the usual
+      that today says "override this, never both". Bump `version` to `0.11.0` (0.10.0 was taken by the merged `make-checkpoint-gate-durable`) with the usual
       header-comment line naming this change and FR23, run `updateApiCompatibilityBaseline`, and
       update the breaking-release table in `gnomish-plugin-api/README.md` (it lags today — bring it
       to the full list from the build file). Move the implementors: `GithubTrackerAdapterFactory`
@@ -256,35 +256,87 @@ sub-agent to discover.
       `openspec/specs/plugin/plugin-discovery/spec.md` requirement "SPI factories construct with no
       args and receive dependencies as method arguments" is the one this change's delta MODIFIES
       (created by `/opsx:continue`, see the group note below).
-- [ ] 3.6 The two leaves the parameter limit pushed into hiding (D22; FR18, FR22). (a)
-      `TakeEngineExecution`: test the `abortFuse` + `retry` cluster against ADR 0010's three questions
-      in the design table (used together in `TakeOutcomeDispatch`; behavior = `dispatch`; the name
-      "terminal protocol"). If all three hold, introduce the member type (`TerminalProtocol` or the
-      name the glossary's take-chain entries already use) holding the fuse and the retry, built by
-      `TakeWorkRouter`/`TakeFreshClaim`/`TakeResumeExecution` from `SlotWiring`, and give both twins
-      that member in place of `abortFuse` (host 7→7, container 6→5); update both `Kept in sync with`
-      sentences. If one fails, record the rejection in the table and take the retry as the eighth
-      member with `@ParameterLimitExemption(reason = …)` citing it. Either way delete the
-      `TerminalWriteRetry.system()` call and the "open decision" comment. (b) `ContainerRunSupportFactory`
-      gains a fifth component, the `BoxTiming` the root builds from the equipment (`ContainerSupports`
-      takes a `BoxTiming` parameter in place of its separate timing values, so its test constructor
-      stays at 7 — state the count); `ContainerEnvironments` gains `timing()`; `ContainerRunSupport`
-      drops its `InstantSource` field and reads `environments.timing().equipment()`, and builds its
-      `GitInfrastructureRetry` from the same equipment; `SandboxLifecyclePassFactory.create` takes the
-      equipment. Delete both "open decision" comments. Verify: `TakeEngineExecutionSpec`,
-      `TakeContainerEngineExecutionSpec`, `TakeOutcomeDispatchSpec`, `ContainerRunSupportSpec`,
+- [x] 3.6 The two leaves the parameter limit pushed into hiding (D22 as revised 2026-10-09; FR18,
+      FR22; single-owner rows "`SlotWiring.outcomeDispatch()`" and "`SandboxModeSelector` as an
+      instance"). **(a) The slot's outcome dispatch.** Reshape `TakeOutcomeDispatch` (`:application`):
+      fields `TerminalWriteRetry retry`, `AbortFuse abortFuse` (package-private constructor);
+      `dispatch(TaskOutcome, TaskContext, String branchName, TakeOrder, TerminalTransitions)`; the
+      javadoc states the per-call lifetime rule (the transitions are valid for the call and never
+      retained) and names ADR 0010's three answers. Add `app/take/TerminalTransitions.java`: `record
+      TerminalTransitions(ParkTransition park, FinishTransition finish)` with a compact constructor
+      refusing a null half and a javadoc that names `fix-terminal-receipt-convergence` as the change
+      that will reshape it. Add `SlotWiring.outcomeDispatch()` returning `new
+      TakeOutcomeDispatch(terminalWriteRetry, abort)` — the one construction site. Both twins take
+      `TakeOutcomeDispatch dispatch` in place of `abortFuse`; the container twin also drops `retry`
+      (host 7 → 7, container 6 → 5 — state the counts); each builds its `TerminalTransitions` from
+      its park and finish closures and calls `dispatch.dispatch(…)`. Delete the `new
+      TerminalWriteRetry(assembly.timeEquipment(), DEFAULT_BOUND)` line and the "open decision"
+      comment in `TakeEngineExecution`; update the four builder sites (`TakeFreshClaim`,
+      `TakeResumeExecution`, `TakeContainerFreshClaim`, `TakeContainerResumeRunner`) to pass
+      `wiring.outcomeDispatch()`; rewrite both `Kept in sync with` sentences to name the dispatch as
+      the shared terminal path; record in `TakeOutcomeDispatch`'s javadoc why the retry is a member
+      and not a decorator (it changes the outcome on give-up). Lifetimes: state in the dispatch
+      javadoc that it holds nothing shorter-lived than the slot. **(b) The execution-mode selector.**
+      Add `app/port/run/ContainerRuntimeProbe.java` (`boolean available()`, `Implements FR18 of
+      supervise-daemon-loops-and-embed-dashboard` and FR14/D13 of add-sandbox-core for the
+      fail-closed semantics). Turn `SandboxModeSelector` into an instance: constructor
+      `(BindingProperties, SandboxProperties, AdapterBindingRegistry, ContainerRuntimeProbe)`,
+      method `Plan plan(PipelineDefinition definition, RegisteredClone clone)`; the private static
+      helpers become instance methods or stay static over their own parameters; the class stays
+      under 200 lines (158 today). `ContainerTakeSupport` becomes `(SandboxModeSelector modeSelector,
+      ContainerSupportFactory containerSupportFactory)`; `hostOnly()` builds the selector over
+      a probe that throws if asked (D22, amended); `TakeWorkRouter.plan` calls `wiring.containerTakeSupport().modeSelector().plan(definition,
+      wiring.registeredClone())`. `ContainerSupports`: one constructor `(Map<String, CheckClientFactory>,
+      FactoryProperties, SandboxProperties, SandboxModeSelector, TaskGit, TimeEquipment)` — delete
+      the 7-argument test constructor, the `@Autowired` marker and the `DockerRuntimeProbe` import;
+      `plan` delegates to the selector; `takeSupport()` builds `new ContainerTakeSupport(modeSelector,
+      supportFactory(TRACKED))`; `supportFactory` passes the equipment to
+      `ContainerRunSupportFactory`'s installation constructor, which becomes the 7-argument
+      `(…, FactoryProperties, TimeEquipment)` one (delete the 6-argument one and its "open decision"
+      comment; the canonical 8-component form is unchanged). Root beans, beside the one that provides
+      `AdapterBindingRegistry` (`grep -rn "AdapterBindingRegistry" bootstrap/src/main`): `@Bean
+      ContainerRuntimeProbe containerRuntimeProbe()` returning `DockerRuntimeProbe::dockerAvailable`,
+      and `@Bean SandboxModeSelector sandboxModeSelector(BindingProperties, SandboxProperties,
+      AdapterBindingRegistry, ContainerRuntimeProbe)`. `ContainerEnvironments` (`sandbox/docker`)
+      gains `BoxTiming timing` as its fifth constructor argument (passed by
+      `ContainerEnvironmentFactory.forTask`) and a `timing()` accessor; `ContainerRunSupport` deletes
+      its `time` and `instantSource` fields and the "open decision" comment, reading
+      `environments.timing().equipment()` once into a local for the store, the suppressor, the round
+      source and its `GitInfrastructureRetry`. Migrate the specs: the three `ContainerSupports`
+      constructions (`AppAssemblyFixture`, `ContainerSupportsSpec`, `ManualRunRunnerContainerOwnershipSpec`)
+      pass a selector over a scripted probe and the virtual equipment; the six
+      `new ContainerTakeSupport(` sites (`grep -rl "new ContainerTakeSupport(" --include='*.groovy' .`)
+      and `TakeContainerEngineExecutionSpec` move to the new shapes; `ContainerEnvironments`
+      fixtures pass a `BoxTiming` over the virtual equipment. Verify: `TakeContainerEngineExecutionSpec`,
+      `ContainerTakeSupportSpec`, `SlotWiringFactorySpec`, `TakeContainerFreshClaimSpec`,
+      `TakeResumeRoutingSpec`, `TakeContainerResumeRoutingSpec`, `ContainerRunSupportSpec`,
       `ContainerSupportsSpec`, `ManualRunRunnerContainerOwnershipSpec`, `SandboxLifecyclePassFactorySpec`
-      green; `pitestVerifyAllKilled -PpitScope=` the host and container engine executions,
-      `TakeOutcomeDispatch` and the new member type. Old-way sweep:
-      `grep -rn "open decision (task 3.3)\|InstantSource.system(\|GitInfrastructureRetry.system(" --include='*.java' .`
-      hits only the equipment bean in `ManualRunConfiguration`.
-- [ ] 3.7 Gates (D17, D20, FR18, FR21). Write `TimeSourceOwnerBoundarySpec` in `:bootstrap`
+      and the `SandboxModeSelector` specs green; write `TakeOutcomeDispatchSpec` (one feature per
+      arm, plus the null-half refusal of `TerminalTransitions`) and the identity feature of the
+      dispatch row (a slot assembled on a virtual equipment with a distinguishable retry bound; the
+      dispatch of a run waits on that bound; red with `outcomeDispatch()` bypassed);
+      `pitestVerifyAllKilled -PpitScope=com.github.oinsio.gnomish.app.TakeOutcomeDispatch,com.github.oinsio.gnomish.app.take.TerminalTransitions,com.github.oinsio.gnomish.app.SandboxModeSelector,com.github.oinsio.gnomish.app.ContainerTakeSupport,com.github.oinsio.gnomish.app.TakeEngineExecution,com.github.oinsio.gnomish.app.TakeContainerEngineExecution`.
+      Old-way sweep: `grep -rn "open decision (task 3.3)\|InstantSource.system(\|GitInfrastructureRetry.system(\|new TerminalWriteRetry(\|BooleanSupplier\|DockerRuntimeProbe" --include='*.java' */src/main adapters/*/src/main sandbox/*/src/main`
+      hits only the equipment bean and the retry bean in the root configuration files, the probe
+      bean, and `DockerRuntimeProbe.java` itself; `grep -rn "new TakeOutcomeDispatch(" --include='*.java' .`
+      hits only `SlotWiring.java`.
+- [x] 3.7 Gates (D17, D20, FR18, FR21). Write `TimeSourceOwnerBoundarySpec` in `:bootstrap`
       (`BaseHeadDefaultBoundarySpec` shape): scan every module's `src/main` for `Clock.systemUTC(`,
       `Clock.systemDefaultZone(`, `InstantSource.system(`, `Instant\.now(` (dot escaped — the bare
       pattern matches `Instant now()` in `ObservabilityWiring`), `new SystemClock(`,
       `new ThreadSleeper(` and `\.system(`; allow only the one `:bootstrap` file that builds the
       time equipment (with its reason) and `EgressAllowlist.java` (`HostResolver.system()`, not
-      time); assert the scan reached every allowlisted file. Widen `TestTimeInjectionCheck`
+      time); assert the scan reached every allowlisted file. Two more literals with one-file
+      allowlists, from D22 (revised): `new TerminalWriteRetry(` only in
+      `TrackerCommandConfiguration.java` (a second producer of the time-built retry is the defect
+      3.6 removed) and `new TakeOutcomeDispatch(` only in `SlotWiring.java`; and a sibling scan over
+      `application/src/main` and `bootstrap/src/main` banning `BooleanSupplier` outright (the probe
+      is `ContainerRuntimeProbe`), allowlist asserted reached. The ban's one pre-existing hit,
+      `ConsoleTakeoverConfirmation(BooleanSupplier ttyPresent, …)`, is not exempted (user decision
+      2026-10-09, clause (iii) of 3.8): add a role interface `TerminalPresence` (`boolean attached()`)
+      in `app`, make the record take it, and move its specs to the new type. The literal scans
+      cover `src/main` only — the same-package specs that build `new TakeOutcomeDispatch(` are
+      outside them. Widen `TestTimeInjectionCheck`
       (`build-logic/src/main/groovy/test-conventions.gradle`) from `.system(` to the same literal set
       over every test tree and `:test-fixtures/src/main`; migrate the current hits (about 134 at
       design time, plus the 24 `real-time-wiring` markers 3.1 placed in `:bootstrap`): fixtures that
@@ -302,8 +354,11 @@ sub-agent to discover.
       compile — record that instead) and a scratch `InstantSource.system()` in `FinishedDecline` are
       each red naming the file (record the runs, then revert); `./gradlew checkTestTimeInjection` is
       green and a scratch `Clock.systemUTC()` in a spec is red; the `build-logic` functional spec for
-      the check covers the new literals.
-- [ ] 3.8 Durable record (D15, D19, D20, D21; FR16's shape for the time source). Write
+      the check covers the new literals. Also write the identity spec of single-owner row 8
+      (assigned here 2026-10-09, after 3.4 found no task owning it): `AppAssemblyFixture` assembled
+      on a frozen `TimeEquipment` — every stamp a container run writes and every roll-up it logs
+      reads the frozen instant (the shape of FR19, across the whole run); name it in row 8.
+- [x] 3.8 Durable record (D15, D19, D20, D21; FR16's shape for the time source). Write
       `docs/adr/0014-one-time-source.md`: the decision (one type, `InstantSource`; one carrier,
       `TimeEquipment`; one production source, the root; the real sleeper lives in the root), the
       history (the port came from `add-stage-engine` D8 with the motivation of JDK-8266847, and
@@ -314,17 +369,39 @@ sub-agent to discover.
       a `ServiceLoader`-built plugin (D21), and the two gates. Confirm 0014 is free (`ls docs/adr`;
       `grep -rn "0014" openspec/changes`), else take the next number and update D15. Add the glossary
       entries "instant source" (*Never:* "clock port", "domain clock") and, if 3.4 did not, "time
-      equipment". Update `.claude/rules/testing.md` "Time is injected": the type is `InstantSource`,
+      equipment"; from D22 (revised): "execution mode" (host | container; the fail-closed decision
+      one selector makes over the bindings, the sandbox settings, the registry and the runtime probe;
+      type `SandboxModeSelector`; *Never:* "run mode", "sandbox flag") and "terminal transitions"
+      (one run's park and finish steps as one value; type `TerminalTransitions`), and update the
+      "Container supports" and "Slot wiring" entries (the probe and the four selector inputs leave
+      the former; `outcomeDispatch()` joins the latter). Add to `.claude/rules/process-invariants.md`,
+      beside the parameter-count rule, the three clauses D22 borrowed: (i) a constructor takes the
+      collaborators and configuration stable for the object's lifetime, a method takes the data of
+      one operation (van Deursen; the test for "field or parameter?"); (ii) a shorter constructor
+      may supply only a Local Default (a no-op, a Null Object), never another module's adapter — a
+      "test constructor" is that defect by another name (`grep -rn "test constructor" --include='*.java'`
+      lists the survivors to fix as they are touched); (iii) a seam a spec fakes is a role interface
+      in the owning module, never a JDK functional type. Each clause names D22 of this change as its
+      provenance. Update `.claude/rules/testing.md` "Time is injected": the type is `InstantSource`,
       the carrier is `TimeEquipment`, the fake is the virtual equipment, the gate's literal set, and
       that no `system()` factory exists — real time is built in one root file. Verify: the files
       exist; `grep -rn "clock port\|domain clock" --include='*.java' --include='*.groovy' --include='*.md' .
       | grep -v archive` is empty outside this change.
-- [ ] 3.9 Measure M6–M10 for the task report: types for "now" in `src/main` (1), beans (1 equipment,
+- [x] 3.9 Measure M6–M10 for the task report: types for "now" in `src/main` (1), beans (1 equipment,
       1 instant source derived from it), production sites outside the root constructing real time
       (the 3.7 grep: 0), `system()` factories wiring time (0), signatures carrying the pair (0),
       fakes for the current instant (`VirtualClock` plus the `:logtext` copy), specs holding two
       clocks (0), `create` overloads per SPI factory (1). Verify: the numbers and the greps are in
       the report.
+      *Result (2026-10-09):* M6 1 type, 1 equipment bean + 1 derived `InstantSource` bean; M7 0
+      (the 3.7 literal grep hits only `ManualRunConfiguration` and `EgressAllowlist`); M9 0 `system()`
+      factories, 0 pair signatures; M10 1 + 1. M8 first missed (a third fake `AdvancingClock`; two
+      specs with two clocks through the `ServeAssembly.observability(…, InstantSource)` hatch) and was
+      fixed systemically: the hatch removed; the slot's time derived from `RunAssembly.timeEquipment()`
+      (`SlotWiringFactory` takes no clock or retry, `new TerminalWriteRetry(` pinned to `SlotWiring`,
+      `new AbortHandler(` to `SlotWiringFactory`; `TakeCommandSeams.withClock` deleted); the heartbeat
+      beater takes the tick's instant; clause (iii) seams in the group-3 classes became role
+      interfaces; `checkTestTimeInjection` reports a marker that excuses nothing. After: M8 = 0.
 
 *Group note:* FR23 modifies the stable requirement "SPI factories construct with no args and
 receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delta spec
@@ -333,31 +410,31 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 
 ## 4. Worktree janitor and sandbox sweep tick on the supervised loop (D7, D9, D14; FR6)
 
-- [ ] 4.1 Rewrite `app/serve/WorktreeJanitor.java` to hold a `SupervisedLoop` (tick → wait,
+- [x] 4.1 Rewrite `app/serve/WorktreeJanitor.java` to hold a `SupervisedLoop` (tick → wait,
       `FixedInterval(1 h)`, `Unbounded(1 h, 10 min)`, component `JANITOR`, the janitor's own
       `InstantSource` per D16) and add `stop()`. Keep
       `tick()` and `lastRunAt`. Retire GF077. The tick's own codes (GF078, GF079) stay. Remove the
       `Kept in sync with SandboxLifecycleTick` paragraph. Verify: the janitor policy spec is unchanged
       and green. Its lifecycle spec asserts survival of an `Error` (daemon-supervision "The worktree
       cleaner survives an Error") and that `stop()` ends it.
-- [ ] 4.2 The same for `app/serve/SandboxLifecycleTick.java` (component `SWEEP`, its configured
+- [x] 4.2 The same for `app/serve/SandboxLifecycleTick.java` (component `SWEEP`, its configured
       interval, its own `InstantSource` per D16, retiring GF073), removing its `Kept in sync with WorktreeJanitor` paragraph. Verify:
       its specs are green, and `grep -rn "Kept in sync with" application/src/main/java/com/github/oinsio/gnomish/app/serve/WorktreeJanitor.java
       application/src/main/java/com/github/oinsio/gnomish/app/serve/SandboxLifecycleTick.java` is
       empty (the pair is dissolved, D14).
-- [ ] 4.3 Give `app/serve/ServeShutdown.java` a `DaemonLoops` component (reaper, janitor, sweep
+- [x] 4.3 Give `app/serve/ServeShutdown.java` a `DaemonLoops` component (reaper, janitor, sweep
       tick) in place of the bare `StandingReaper`, stopped where the reaper is stopped today, before
       the grace wait (D9). Wire it in `ServeRuntimeAssembly`/`ServeAssembly`. Verify: a
       `ServeShutdown` spec asserts all three stop before `awaitDrained` and that a second `shutdown`
       is a no-op. The factory-serve scenario "No cleaner run during drain" passes in
       `ServeShutdownWiringSpec` (or its successor).
-- [ ] 4.4 Add the GF073 and GF077 rows to the "Retired codes" subsection created in 2.2, and
+- [x] 4.4 Add the GF073 and GF077 rows to the "Retired codes" subsection created in 2.2, and
       in `docs/guides/operator-guide-serve.md` state that `serve` shutdown stops the janitor and the
       sweep tick. Verify: grep as in 2.2.
 
 ## 5. Snapshot writer on the supervised loop (D3, D7, D8; FR6, FR7)
 
-- [ ] 5.1 Rewrite `serveobservability/writer/SnapshotWriter.java` to hold a `SupervisedLoop` (tick
+- [x] 5.1 Rewrite `serveobservability/writer/SnapshotWriter.java` to hold a `SupervisedLoop` (tick
       → wait, `IntervalOrSignal(interval)`, `Unbounded(interval, 10 min)`, component `SNAPSHOT`, the
       writer's own `InstantSource` per D16).
       `markDirty()` becomes `wait.signal()`. `stopAfterFinalWrite()` becomes `loop.stopAndJoin()` then
@@ -366,17 +443,17 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       green, and the spec "Interrupted writer does not spin" asserts one write per timer period after
       a stray interrupt. Old-way sweep: `grep -n "log-contract-exempt\|Semaphore\|Thread.ofVirtual"
       SnapshotWriter.java` is empty.
-- [ ] 5.2 Identity spec `SnapshotWriterFinalWriteRaceSpec` (real threads, M5): the writer's tick is
+- [x] 5.2 Identity spec `SnapshotWriterFinalWriteRaceSpec` (real threads, M5): the writer's tick is
       made to throw an `Error` on a latch so its thread dies, and `stopAfterFinalWrite()` is called
       while the respawn backoff is latched. Assert that the file's last content is the `stopped`
       record and that the counting writer saw no write after it. Also: a single death is followed
       by a write within two intervals on virtual time (serve-observability "Writer death is not a dead
       daemon"). Verify: 20 consecutive green runs.
-- [ ] 5.3 Add the GF105 row to the "Retired codes" subsection created in 2.2. Verify: grep as in 2.2.
+- [x] 5.3 Add the GF105 row to the "Retired codes" subsection created in 2.2. Verify: grep as in 2.2.
 
 ## 6. Enforcement and durable guidance (D14, D15, single-owner rows 1–2; FR16, M1, M2)
 
-- [ ] 6.1 Write `DaemonLoopOwnerBoundarySpec` in `:bootstrap` (`ClaimlessGitBoundarySpec` shape). It
+- [x] 6.1 Write `DaemonLoopOwnerBoundarySpec` in `:bootstrap` (`ClaimlessGitBoundarySpec` shape). It
       scans `application/src/main` for `Thread.ofVirtual(`, `Thread.ofPlatform(` and `new Thread(`
       and allows only `app/daemon/SupervisedLoop.java`, `app/lease/HeldClaims.java`,
       `app/serve/FeedCycle.java`, `app/TakeBatch.java` and `app/ServeShutdownWiring.java`, each with
@@ -390,27 +467,27 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       allowlisted file. Verify: the spec is green, and a scratch
       `Thread.ofVirtual()` added to `WorktreeJanitor` makes it fail naming the file, and so does a
       scratch `Executors.newSingleThreadScheduledExecutor()` (record both red runs, then revert).
-- [ ] 6.2 Write `docs/adr/0013-supervised-daemon-loop.md`: context (four loops, the silent-death
+- [x] 6.2 Write `docs/adr/0013-supervised-daemon-loop.md`: context (four loops, the silent-death
       history, `fix-reaper-idle-liveness` D4/D5), the decision (D1–D3, D5, D6), alternatives
       (`ScheduledExecutorService`, base class, per-loop codes), and the restart-policy choice (Unbounded
       / Bounded / unsupervised-by-design, the heartbeat). Confirm 0013 is still free (`ls docs/adr`,
       and `grep -rn "0013" openspec/changes`), else take the next number and update D15. Verify: the
       file exists and is linked from `SupervisedLoop`'s javadoc (the javadoc already cites it since
       task 1.3; this task makes the link resolve).
-- [ ] 6.3 Write `.claude/rules/daemon-loops.md` in the shape of `lock-scope.md`. It covers what
+- [x] 6.3 Write `.claude/rules/daemon-loops.md` in the shape of `lock-scope.md`. It covers what
       counts as a daemon loop, when to use `SupervisedLoop` and when not to (the five exemptions with
       reasons), how to pick the order, the wait and the restart policy, adding a `DaemonComponent`
       constant, the gate (`DaemonLoopOwnerBoundarySpec`, its scope `application/src/main` and its
       banned patterns, the scheduled executors and `Timer` included) and the review/audit obligation. Add its
       row to the "Process Rules" table in `CLAUDE.md`. Verify: the row exists, and the rule names
       the spec, the ADR and the glossary term.
-- [ ] 6.4 Measure M1: `grep -rln "Thread.ofVirtual().name(\"gnomish-" application/src/main` lists only
+- [x] 6.4 Measure M1: `grep -rln "Thread.ofVirtual().name(\"gnomish-" application/src/main` lists only
       `SupervisedLoop.java` (or nothing, if the name is built there) and allowlisted files. Verify:
       the grep output is in the task report.
 
 ## 7. WIP stat from the board (D13, single-owner row 5; FR12–FR14, UX3)
 
-- [ ] 7.1 Give `board/BoardModel.java` an `int wipLimit` (set in `build` from
+- [x] 7.1 Give `board/BoardModel.java` an `int wipLimit` (set in `build` from
       `EligibilityInputs.wipLimit()`) and an `openFrontCount()` method. Drop the `wipLimit` parameter
       from `board/json/BoardJsonMapper.serialize/toDto` and have it read the model. Rewrite that
       class's javadoc paragraph on `wipLimit` to state the reversed decision and why (D13). Update
@@ -423,23 +500,23 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       reference-fixture spec is byte-identical (FR14), and `grep -rn "workingRows().size() +
       \|serialize(model, \|Integer.MAX_VALUE" application/src/main/java/com/github/oinsio/gnomish/board`
       is empty.
-- [ ] 7.2 Pass the `BoardSectionView` to `dashboard/DashboardStatusCardRenderer.java` (from
+- [x] 7.2 Pass the `BoardSectionView` to `dashboard/DashboardStatusCardRenderer.java` (from
       `DashboardHtmlRenderer.java:92`). Split `appendStats` so the slots and failures stats need a
       snapshot and the WIP stat needs a board model: value `n / W`, title `n of W open fronts: a
       working, b waiting for a human`, never `bad`. Verify: a status-card spec covers the
       dashboard-page scenarios "WIP stat with its split", "Full WIP is not an alarm", "No daemon
       yet" and "Board never loaded", plus a cached model after a failed refresh.
-- [ ] 7.3 Identity spec (single-owner row 5): build one `BoardModel` through `BoardComposition.compose`
+- [x] 7.3 Identity spec (single-owner row 5): build one `BoardModel` through `BoardComposition.compose`
       with limit 3, three open fronts and a WIP-held ready row. Assert that the JSON `wipLimit`, the
       rendered WIP denominator and the limit the held row was judged against are all 3 (dashboard-page
       "Limit matches the held rows"). Verify: the spec passes.
-- [ ] 7.4 Document the WIP stat in `docs/guides/operator-guide-dashboard.md` (the reference for
+- [x] 7.4 Document the WIP stat in `docs/guides/operator-guide-dashboard.md` (the reference for
       `gnomish dashboard`, in its status-card description): what counts as an open front, that the limit is the project's `wip-limit`, and that it
       is a reference number and not an alarm. Verify: the section exists.
 
 ## 8. One dashboard assembly (D10, single-owner row 3; FR9, FR14)
 
-- [ ] 8.1 Extract `app/DashboardWatch.java` taking `(ProjectLayout, String instanceName, @Nullable
+- [x] 8.1 Extract `app/DashboardWatch.java` taking `(ProjectLayout, String instanceName, @Nullable
       Path outOverride, BoardSource)`, with `BoardSource(Tracker, TrackerConfig,
       FactoryProperties.Tracker)` as a record. It owns `DEFAULT_FILE_NAME`, `BOARD_READY_LIMIT`, the
       `BoardComposition.compose` call, the render cycle, the board cache and a `SupervisedLoop`
@@ -448,32 +525,32 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       `stopAndRenderFinal()`. Move `DashboardWatchLoop.renderOnce` into the tick and delete
       `DashboardWatchLoop.run`. Verify: the existing watch-loop specs, retargeted to the tick, are green,
       and the dashboard-page scenario "Tracker outage is not a death" holds on virtual time.
-- [ ] 8.2 Route `app/DashboardCommand.java` through `DashboardWatch`: one-shot = `renderOnce`;
+- [x] 8.2 Route `app/DashboardCommand.java` through `DashboardWatch`: one-shot = `renderOnce`;
       `--watch` = `start()` then `awaitEnd()`, exiting 1 if the loop gave up (dashboard-page
       "Standalone renderer gives up"). It still builds its source from `TrackerWiring.resolveReadOnly`.
       Verify: `DashboardCommand` specs green. Old-way sweep: `grep -rn "\"dashboard.html\"\|BoardComposition.compose("
       application/src/main` hits `"dashboard.html"` only in `DashboardWatch.java` and
       `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`.
-- [ ] 8.3 Extend `DaemonLoopOwnerBoundarySpec` (6.1) with the row-3 checks, one allowlist per
+- [x] 8.3 Extend `DaemonLoopOwnerBoundarySpec` (6.1) with the row-3 checks, one allowlist per
       marker, each file asserted reached: the `"dashboard.html"` literal only in `DashboardWatch.java`;
       `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`. Verify: the spec is green, and a scratch violation is red (record the run).
 
 ## 9. `serve --dashboard` (D9, D11, D12, single-owner row 4; FR8–FR11, FR15, NFR-R1, NFR-S1, NFR-P1, NFR-O2, UX1, UX2, UX5)
 
-- [ ] 9.1 Add `dashboard` and `dashboardOut` to `app/ServeArguments.java` and
+- [x] 9.1 Add `dashboard` and `dashboardOut` to `app/ServeArguments.java` and
       `ServeArgumentsParser`, and `@ConfigLevel(Level.ANY) @Nullable Boolean dashboard` to
       `ServeProperties` (default `false`). `--dashboard-out` with the effective switch off throws
       `UsageException`. Verify: the parser spec covers both flags, `--dashboard-out` resolved like
       `dashboard --out`, and the factory-serve scenario "Output path without the dashboard". The
       `ConfigLevelCoverageSpec` and the unknown-option spec stay green.
-- [ ] 9.2 Add `Tracker boardReader(BoundTracker bound, InstanceId readerId)` to
+- [x] 9.2 Add `Tracker boardReader(BoundTracker bound, InstanceId readerId)` to
       `app/TrackerWiring.java` (D11): `bound.factory().create(secrets, bound.trackerConfig(),
       readerId.value())`, no `Path dir`, not health-wrapped, not epoch-stamped. Expose it through a new
       role interface `BoardReaders` that `TrackerWiring` implements, as it implements `RefResolution`.
       Verify: a `TrackerWiring` spec asserts the reader is built from the bound configuration (a
       checkout config is never read) under the given reader id, and `TrackerWiringOwnerBoundarySpec`
       stays green unchanged (no new `SecretsProvider` holder).
-- [ ] 9.3 In the serve runtime assembly (`app/ServeRuntimeAssembly.java` / `ServeAssembly.java`),
+- [x] 9.3 In the serve runtime assembly (`app/ServeRuntimeAssembly.java` / `ServeAssembly.java`),
       when the switch is on, build `BoardSource` from `BoardReaders.boardReader(bound,
       scope.mintInstanceId())` (a minted reader id, as `resolveReadOnly` mints one) with
       `bound.trackerConfig()`, and a `DashboardWatch` for the serve's layout and instance name. The
@@ -482,23 +559,23 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       `dashboardOut` to `AnchorLog.ServeConfig`. Verify: a serve-level spec asserts the printed line
       and the anchor fields (UX1, NFR-O2). Old-way sweep: `grep -rn "resolveReadOnly(" application/src/main`
       hits only `TrackerWiring.java`, `DashboardCommand.java` and `BoardCommand.java`.
-- [ ] 9.4 Extend `DaemonLoopOwnerBoundarySpec` with row 4, as its own marker allowlist:
+- [x] 9.4 Extend `DaemonLoopOwnerBoundarySpec` with row 4, as its own marker allowlist:
       `resolveReadOnly(` appears only in `TrackerWiring.java` (the declaration),
       `DashboardCommand.java` and `BoardCommand.java`, each asserted reached. Verify: green, and a
       scratch call from `ServeRuntimeAssembly` is red (record the run).
-- [ ] 9.5 In `app/ServeShutdownWiring.java`, call `dashboard.stopAndRenderFinal()` after
+- [x] 9.5 In `app/ServeShutdownWiring.java`, call `dashboard.stopAndRenderFinal()` after
       `observability.finalizeStopped(...)` on both `runDrain` and `runForever` paths when enabled
       (D9). Verify: a spec drives `serve --dashboard --drain` with the in-memory tracker and fake
       agent through the real composition root (`ServeRuntimeWiringSpec` style) and asserts that the
       page's last render shows the stopped state (factory-serve "Page after Ctrl-C", UX2), and that a
       second shutdown pass changes nothing.
-- [ ] 9.6 Isolation specs: (a) board reads failing for the whole run leave the snapshot's tracker
+- [x] 9.6 Isolation specs: (a) board reads failing for the whole run leave the snapshot's tracker
       `consecutiveFailures` at 0 while slots complete ("Board outage is not a daemon tracker
       failure"). (b) A dashboard loop given up by injected tick `Error`s leaves the daemon claiming
       and completing tasks ("Disabled dashboard, working daemon"). (c) At most one `listReady` and one
       `listOpen` per board interval from the dashboard client over virtual time ("Tracker reads
       bounded"). Verify: all three green.
-- [ ] 9.7 Identity spec (single-owner row 4): a `serve --dashboard` run over a bare origin whose
+- [x] 9.7 Identity spec (single-owner row 4): a `serve --dashboard` run over a bare origin whose
       default branch sets `wip-limit: 10` while the clone's checkout sets `wip-limit: 3`. The rendered
       WIP denominator is 10 ("Checkout differs from origin"). Verify: the spec passes on the real
       git medium (`BareGitRepoFixture`).
@@ -509,7 +586,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       follower. Update `.gnomish/README.md`. Verify: `bash -n` and `shellcheck` are clean, and a
       manual run is recorded in the task report: one `gnomish` JVM in `ps`, the page opens, `Ctrl-C`
       leaves a "stopped" page (M3).
-- [ ] 9.9 Document in `docs/guides/operator-guide-serve.md`: `--dashboard`, `--dashboard-out` and
+- [x] 9.9 Document in `docs/guides/operator-guide-serve.md`: `--dashboard`, `--dashboard-out` and
       `factory.serve.dashboard`, the printed line, the final render, the bounded give-up, and that a
       `serve --dashboard` and a standalone `dashboard --watch` writing one file overwrite each other
       (UX5), with a pointer to `operator-guide-dashboard.md` for the page itself. In

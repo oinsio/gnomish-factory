@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
 import java.time.InstantSource;
-import java.util.function.Consumer;
 
 /**
  * {@link RemoteOutageGate}'s observability collaborators (task 7.4 of add-base-ref-resolution),
@@ -29,8 +28,8 @@ record RemoteOutageWiring(
         String target,
         RepeatSuppressor suppressor,
         Duration sustainedOpenThreshold,
-        Runnable onTransition,
-        Consumer<RemoteOutageClosedOutage> onClosedOutage) {
+        DirtyNotifier onTransition,
+        RemoteOutageLedgerSink onClosedOutage) {
 
     /**
      * The defaults: {@link RemoteOutageReporter#DEFAULT_TARGET}, no-op callbacks, and a suppressor
@@ -42,7 +41,7 @@ record RemoteOutageWiring(
                 RemoteOutageReporter.DEFAULT_TARGET,
                 RepeatSuppressor.withDefaultRollUp(clock),
                 RemoteOutageReporter.DEFAULT_SUSTAINED_OPEN_THRESHOLD,
-                () -> {},
-                ignored -> {});
+                DirtyNotifier.NOOP,
+                RemoteOutageLedgerSink.NONE);
     }
 }

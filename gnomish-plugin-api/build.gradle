@@ -33,6 +33,20 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// FR23 (and FR17, FR22) of supervise-daemon-loops-and-embed-dashboard: 0.10.0 -> 0.11.0, the
+// ninth BREAKING move. Each plugin SPI factory now has exactly one `create`, taking a host-built
+// context object (design D21): `TrackerAdapterFactory.create(TrackerAdapterContext)` replaces the
+// `create(secrets, config, instanceId)` / `create(..., epochs)` overload chain, and
+// `CheckClientFactory.create(CheckClientContext)` replaces `create(secrets, subsection)` /
+// `create(..., runContext)`. The old forms are deleted, not deprecated — no third-party plugin
+// exists (NG10) — and a host collaborator added later is a new accessor on the context, never an
+// overload. The same change retires the `:domain` `Clock` port for `java.time.InstantSource`
+// (`TrackerHealthTracker` and the re-exposed engine types take the JDK source, FR17) and moves
+// `SystemClock`/`ThreadSleeper` out of `:domain`, carrying real time as the new `TimeEquipment`
+// value (FR22) that both contexts expose. Pre-1.0, a breaking change is a MINOR bump;
+// `compat-baseline/` was regenerated (`updateApiCompatibilityBaseline`) in the same change so a
+// reviewer sees the break and the bump that accepts it in one diff.
+//
 // FR1, FR5, FR11 of make-checkpoint-gate-durable: 0.9.0 -> 0.10.0, the eighth BREAKING move.
 // A recorded position no longer implies an authorisation not yet recorded, and the re-exposed
 // `:domain` records carry what that takes, so each loses its old canonical constructor:
@@ -116,7 +130,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.10.0'
+version = '0.11.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

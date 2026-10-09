@@ -54,7 +54,7 @@ class AtomicWriteBoundarySpec extends Specification {
                 .or().haveFullyQualifiedName('com.github.oinsio.gnomish.adapter.git.TerminalWriteMarker')
                 .or().haveFullyQualifiedName('com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter')
                 .or().haveFullyQualifiedName('com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriteCycle')
-                .or().haveFullyQualifiedName('com.github.oinsio.gnomish.dashboard.DashboardWatchLoop')
+                .or().haveFullyQualifiedName('com.github.oinsio.gnomish.app.DashboardWatch')
                 .should().dependOnClassesThat()
                 .haveFullyQualifiedName('com.github.oinsio.gnomish.atomicfile.AtomicFileWriter')
 

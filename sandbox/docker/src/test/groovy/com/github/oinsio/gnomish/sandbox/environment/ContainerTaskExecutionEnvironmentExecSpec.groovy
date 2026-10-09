@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.time.Instant
-import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
@@ -23,7 +22,7 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
 
     static final ResourceLimits LIMITS = new ResourceLimits('2', '2g', 512L, '10g')
 
-    def clock = { -> Instant.now() } as InstantSource
+    def clock = new VirtualClock()
     def harvester = { String container, String branch -> } as ContainerHarvest
 
     private ContainerTaskExecutionEnvironment env(DockerCli docker) {

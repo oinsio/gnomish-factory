@@ -89,30 +89,32 @@ The bar: excluding the suite must remove **no production line** from mutation co
 
 ## Time is injected in tests, and the build checks it
 
-Components that retry or poll take their `Sleeper` and `InstantSource` as constructor arguments so a
-spec can drive them on virtual time (`VirtualClock`/`VirtualSleeper`, or the ready-made
-`VirtualTimeRetries` in `:test-fixtures`). Beside each such component sits a no-argument
-`system()` factory that wires the real `ThreadSleeper` and `InstantSource.system()` with the production bound —
-**for the composition root, not for specs**.
+The factory has one type for the current instant, `java.time.InstantSource`, and one carrier for
+real time's two halves, `TimeEquipment(InstantSource clock, Sleeper sleeper)` in `:domain`
+(ADR 0014). A component that only reads "now" takes the `InstantSource`; one that also waits — a
+retry, a poll, a loop's wait — takes the `TimeEquipment`. Real time is built in one place: the
+`timeEquipment` bean in `:bootstrap`'s `ManualRunConfiguration`, where `ThreadSleeper` lives, so
+no other module can even construct the real sleeper. No `system()` factory wiring time exists.
 
-A spec that calls `system()` does not go red. Its collaborator never reports the failure the
-retry waits on, so it never sleeps, and the call looks correct indefinitely — until some later
-change makes that collaborator report an outage. Then the spec does not fail, it *blocks*, for
-the whole production bound, once per exercise of the path; under PIT that is the "mutant hangs
-on real I/O instead of failing fast" mode recorded above. Because there is nothing red to
-notice, review is the wrong instrument for it.
+Specs build the virtual equipment: `VirtualTimeEquipment` in `:test-fixtures` (the one fake
+instant source, `VirtualClock`, with a budgeted sleeper advancing it), or `VirtualTimeRetries`,
+built on it. A spec on real time does not go red: its collaborator never reports the failure the
+retry waits on — until a later change makes it, and then the spec *blocks* for the production
+bound (under PIT, the "mutant hangs on real I/O" mode above). Nothing red, so review cannot see it.
 
-So `check` asks instead: **`checkTestTimeInjection`** (registered by `test-conventions` in every
-module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system(...)` call in a
-test source — with or without arguments, since a factory that takes collaborators and bounds
-(`RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)`) wires the real clock just the same. Satisfy it by building the component with virtual time — which keeps the production
-bound and elapses it instantly — or, where the call really is right (a spec asserting the
-production defaults themselves, a factory with no time in it), justify it in place:
+So `check` asks instead: **`checkTestTimeInjection`** (`TestTimeInjectionCheck`, registered by
+`test-conventions` over every module's test tree and by `:test-fixtures` over its own `src/main`)
+fails on any real-time literal in a test source — `Clock.systemUTC(`, `Clock.systemDefaultZone(`,
+`InstantSource.system(`, `Instant.now(`, `new SystemClock(`, `new ThreadSleeper(`, and any
+`.system(...)` call with or without arguments. The set is the one `TimeSourceOwnerBoundarySpec`
+bans in production outside the root; the two are a declared sync pair, and that spec fails when
+the sets differ. Where real time really is the subject (a fixture assembling the shipped
+composition, a real Docker daemon or remote that stamps on the wall clock), justify it in place:
 
 ```groovy
-// real-time-wiring: the production defaults ARE the subject here — the retry is only
-//     constructed and read, never run, so no sleep can happen.
-GitInfrastructureRetry.system().attempts() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+// real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+//     pass ages them against its clock; the end-to-end layer needs the same time.
+def summary = SandboxLifecyclePassFactory.create(tinyAges, factoryProperties, InstantSource.system())
 ```
 
 The marker goes on the call's own line or in the comment block directly above it, so the

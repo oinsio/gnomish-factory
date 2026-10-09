@@ -6,13 +6,13 @@ import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.time.Instant
 import java.time.InstantSource
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -40,7 +40,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
     Path tempDir
 
     def runner = new GitProcessRunner()
-    private final InstantSource clock = { -> Instant.now() } as InstantSource
+    private final InstantSource clock = new VirtualClock()
     private final List<ContainerTaskExecutionEnvironment> envs = []
 
     def setupSpec() {

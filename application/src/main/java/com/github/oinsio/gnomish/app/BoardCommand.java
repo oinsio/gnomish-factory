@@ -65,7 +65,7 @@ final class BoardCommand {
      */
     void run(ApplicationArguments args) throws IOException {
         BoardArguments boardArguments = argumentsParser.parse(args, scope.registeredClone());
-        TrackerWiring.ReadOnlyTrackerResolution resolution =
+        ReadOnlyTrackerResolution resolution =
                 trackerWiring.resolveReadOnly(boardArguments.dir(), scope.mintInstanceId());
         TrackerConfig trackerConfig = resolution.trackerConfig();
 
@@ -73,7 +73,7 @@ final class BoardCommand {
                 resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());
 
         if (boardArguments.json()) {
-            console.printMachine(jsonMapper.serialize(model, trackerConfig.wipLimit()) + ConsoleIO.LINE_END);
+            console.printMachine(jsonMapper.serialize(model) + ConsoleIO.LINE_END);
         } else {
             // The human path, and the one that matters most here: a board row carries the tracker's
             // own issue title, which is attacker-influenced text arriving at a terminal (UX2, FR5 of

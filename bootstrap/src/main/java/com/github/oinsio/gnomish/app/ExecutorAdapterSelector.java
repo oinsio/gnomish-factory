@@ -47,14 +47,14 @@ final class ExecutorAdapterSelector {
             // unconditionally IS the previous host construction when nothing was attached.
             return new CliStageExecutor(
                     assembly.factoryProperties,
-                    assembly.instantSource,
+                    assembly.time.clock(),
                     new LoggingAgentProgressListener(),
                     law,
-                    assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.instantSource, childEnv)));
+                    assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.time.clock(), childEnv)));
         }
         var cli = new CliStageExecutor(
                 assembly.factoryProperties,
-                assembly.instantSource,
+                assembly.time.clock(),
                 new LoggingAgentProgressListener(),
                 law,
                 sandbox.executorRounds());

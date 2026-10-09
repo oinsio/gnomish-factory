@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.inmemory
 
+import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import spock.lang.Specification
@@ -23,7 +24,7 @@ class InMemoryTrackerAdapterFactorySpec extends Specification {
         def factory = new InMemoryTrackerAdapterFactory()
 
         when:
-        def tracker = factory.create(NO_SECRETS, new TrackerConfig('inmemory', 3), 'gnomish-factory-abc123')
+        def tracker = factory.create(new FixedTrackerAdapterContext(NO_SECRETS, new TrackerConfig('inmemory', 3), 'gnomish-factory-abc123'))
 
         then:
         tracker instanceof InMemoryTracker
@@ -36,7 +37,7 @@ class InMemoryTrackerAdapterFactorySpec extends Specification {
         def config = new TrackerConfig('inmemory', 3)
 
         expect:
-        !factory.create(NO_SECRETS, config, 'a').is(factory.create(NO_SECRETS, config, 'b'))
+        !factory.create(new FixedTrackerAdapterContext(NO_SECRETS, config, 'a')).is(factory.create(new FixedTrackerAdapterContext(NO_SECRETS, config, 'b')))
     }
 
     def "expandRef has no short-ref scheme and always refuses"() {

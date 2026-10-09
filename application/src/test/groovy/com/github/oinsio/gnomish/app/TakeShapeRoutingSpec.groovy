@@ -77,7 +77,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
 
         when:
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
                 .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), new BranchShape.AwaitingApproval())
 
         then:

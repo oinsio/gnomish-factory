@@ -17,6 +17,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -34,7 +36,7 @@ import spock.lang.TempDir
  * static helpers this class absorbed.
  *
  * <p>Implements FR4, NFR-S1 of collapse-composition-roots; FR9, FR17 of add-tracker-port; FR4 of
- * fix-claim-epoch-fence.
+ * fix-claim-epoch-fence; FR10, FR23, NFR-S1 of supervise-daemon-loops-and-embed-dashboard.
  */
 class TrackerWiringSpec extends Specification {
 
@@ -44,9 +46,12 @@ class TrackerWiringSpec extends Specification {
     @TempDir
     Path projectDir
 
+    /** The wiring's own time equipment: the identity every context it builds must carry (FR23). */
+    private static final TimeEquipment TIME = VirtualTimeEquipment.create()
+
     private static TrackerWiring wiring(Map<String, TrackerAdapterFactory> registry,
             PipelineSource source = TrackerValidatorStub.acceptingGithubSource()) {
-        new TrackerWiring(registry, SECRETS, source)
+        new TrackerWiring(registry, SECRETS, source, TIME)
     }
 
     // FR4 of fix-claim-epoch-fence: the claiming funnel builds the adapter over the bundle's own
@@ -63,8 +68,11 @@ class TrackerWiringSpec extends Specification {
         when:
         def resolved = wiring([fixture: factory]).resolveTracker(factory, trackerConfig, instanceId, book)
 
-        then: 'the adapter was handed the SAME book and the wiring\'s own secrets, so its writers stamp the live tenure'
-        1 * factory.create(SECRETS, trackerConfig, instanceId.value(), book) >> live
+        then: 'the adapter was handed one context carrying the SAME book, the wiring\'s own secrets and time'
+        1 * factory.create({ TrackerAdapterContext c ->
+            c.secrets().is(SECRETS) && c.config().is(trackerConfig) && c.instanceId() == instanceId.value() &&
+            c.epochs().is(book) && c.timeEquipment().is(TIME)
+        }) >> live
 
         when: 'a claim is acquired through the resolved tracker'
         def claimed = resolved.claim(new TaskRef('PROJ-1'), instanceId.value())
@@ -121,12 +129,44 @@ class TrackerWiringSpec extends Specification {
         when:
         def resolution = wiring([github: factory]).resolveReadOnly(projectDir, readerId)
 
-        then: 'the three-argument create — no tenure record — with the wiring\'s own secrets'
-        1 * factory.create(SECRETS, { TrackerConfig c ->
-            c.type() == 'github'
-        }, readerId.value()) >> tracker
+        then: 'one context — no tenure record — with the wiring\'s own secrets and time (FR23)'
+        1 * factory.create({ TrackerAdapterContext c ->
+            c.secrets().is(SECRETS) && c.config().type() == 'github' && c.instanceId() == readerId.value() &&
+            c.epochs().epochFor('PROJ-1').isEmpty() && c.timeEquipment().is(TIME)
+        }) >> tracker
         resolution.tracker().is(tracker)
         resolution.trackerConfig().type() == 'github'
+    }
+
+    // FR10, NFR-S1 of supervise-daemon-loops-and-embed-dashboard, design D11: the board client
+    //     inside serve is built from the configuration and adapter factory serve bound from origin —
+    //     the checkout's .gnomish/ is never read — under the reader's own id, with no tenure record,
+    //     and handed back raw: neither health-wrapped nor epoch-stamped, and never the daemon's tracker.
+    def "FR10: boardReader builds a plain reader from the bound configuration under the reader id"() {
+        given: 'a bound tracker whose factory is NOT in the registry, and a definition source that must stay untouched'
+        def boundConfig = new TrackerConfig('github', 5, [:])
+        def factory = Mock(TrackerAdapterFactory)
+        def daemonTracker = Mock(Tracker)
+        def bound = new BoundTracker(new PipelineDefinition('1', new AutonomyLimits(3), []),
+        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')), boundConfig, factory, daemonTracker,
+        InstanceId.generate('gnomish-factory'))
+        def source = Mock(PipelineSource)
+        def reader = Mock(Tracker)
+        def readerId = InstanceId.generate('widgets-reader-instance')
+
+        when:
+        def built = wiring([:], source).boardReader(bound, readerId)
+
+        then: 'one context from the bound configuration, under the reader id, with no tenure record'
+        1 * factory.create({ TrackerAdapterContext c ->
+            c.secrets().is(SECRETS) && c.config().is(boundConfig) && c.instanceId() == readerId.value() &&
+            c.epochs().epochFor('PROJ-1').isEmpty() && c.timeEquipment().is(TIME)
+        }) >> reader
+        0 * source._
+        0 * daemonTracker._
+
+        and: 'the adapter instance comes back as built — no wrapper around it'
+        built.is(reader)
     }
 
     def "resolveReadOnly refuses when no factory is registered for the project's tracker type"() {

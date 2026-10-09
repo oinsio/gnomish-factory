@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.daemon
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.status.DaemonComponent
@@ -87,7 +88,7 @@ final class SupervisedLoopHarness {
             haltIfRunaway(n)
             journal << "tick${n}".toString()
             body(n)
-        } as Runnable, backoffSleeper, clock)
+        } as Runnable, VirtualTimeEquipment.on(clock, backoffSleeper))
     }
 
     private void haltIfRunaway(int n) {
@@ -116,9 +117,12 @@ final class SupervisedLoopHarness {
         joiner.join(JOIN_BOUND)
     }
 
-    /** {@link SupervisedLoop#joinWorkers()} on a helper thread; false if it did not return in time. */
-    boolean joinWithinBound() {
-        def joiner = Thread.ofVirtual().start { loop.joinWorkers() }
+    /** What the last {@link #awaitEndWithinBound()} answered: true when the loop gave up. */
+    volatile Boolean gaveUp
+
+    /** {@link SupervisedLoop#awaitEnd()} on a helper thread; false if it did not return in time. */
+    boolean awaitEndWithinBound() {
+        def joiner = Thread.ofVirtual().start { gaveUp = loop.awaitEnd() }
         joiner.join(JOIN_BOUND)
     }
 

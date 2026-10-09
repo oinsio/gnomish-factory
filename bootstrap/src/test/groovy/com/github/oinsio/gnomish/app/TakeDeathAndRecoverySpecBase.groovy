@@ -12,13 +12,10 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -130,31 +127,26 @@ tracker:
     /** A production {@link TakeCommand} (real beat sleeper + monotonic time): its beat thread just parks for real. */
     private TakeCommand productionCommand(FactoryProperties factoryProperties) {
         TakeCommands.of(
-                newAssembly(factoryProperties),
+                newAssembly(factoryProperties, TakeCommands.slotTime()),
                 TaskGitFixture.real(),
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     /** Instance B's {@link TakeCommand}: the standing reaper's own sleeper and its monotonic clock
      * are both controllable, independent of B's beat sleeper (fix-reaper-idle-liveness FR5). */
     private TakeCommand steppableCommand(FactoryProperties factoryProperties) {
         TakeCommands.of(
-                newAssembly(factoryProperties),
+                newAssembly(factoryProperties, TakeCommands.slotTime()),
                 TaskGitFixture.real(),
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                TakeCommandSeams.defaults(new VirtualClock())
-                .withHeartbeatSleeper(sleeper)
-                .withReaperSleeper(reaperSleeper)
-                .withHeartbeatMonotonicTime(monotonic)
-                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
+                    TakeCommandSeams.defaults(time).withHeartbeatSleeper(sleeper).withReaperSleeper(reaperSleeper).withHeartbeatMonotonicTime(monotonic).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
+                }, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     def "M2: a dead instance's Working claim is reaped by another run and later resumed from its branch"() {

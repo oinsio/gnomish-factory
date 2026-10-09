@@ -65,7 +65,7 @@ class BoardLabelsSpec extends Specification {
             new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null),
             new ReadyRow(new TaskRef('r-2'), UntrustedText.tracker('t2'), false, null)
         ]
-        def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), true, NOW)
+        def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), 3, true, NOW)
 
         expect:
         BoardLabels.truncationMarker(model) == 'truncated: showing first 2 only'
@@ -76,7 +76,7 @@ class BoardLabelsSpec extends Specification {
         def rows = [
             new ReadyRow(new TaskRef('r-1'), UntrustedText.tracker('t1'), false, null)
         ]
-        def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), false, NOW)
+        def model = new BoardModel(rows, [], [], ReadySummary.tally(rows), 3, false, NOW)
 
         expect:
         BoardLabels.truncationMarker(model) == null

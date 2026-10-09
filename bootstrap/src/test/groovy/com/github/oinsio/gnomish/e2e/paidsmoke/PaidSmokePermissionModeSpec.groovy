@@ -133,7 +133,7 @@ class PaidSmokePermissionModeSpec extends Specification {
 
     @TypeChecked
     private static List<Map> launch(List<String> command, Path box, String prompt) {
-        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        // real-time-wiring: real wall time, unchanged from the deleted SystemClock adapter
         //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
         def clock = InstantSource.system()
         def handle = PaidSmokeAgentLauncher.launch(command, box, clock, prompt)

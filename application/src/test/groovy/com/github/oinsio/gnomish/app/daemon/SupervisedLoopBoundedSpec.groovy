@@ -46,9 +46,10 @@ class SupervisedLoopBoundedSpec extends Specification {
 
         when:
         rig.loop.start()
-        rig.joinWithinBound()
+        rig.awaitEndWithinBound()
 
-        then:
+        then: 'the wait for the end returns, answering that the loop gave up'
+        rig.gaveUp == true
         rig.ticks.get() == 6
         restartCounts() == [1, 2, 3, 4, 5]
         backoffSleeper.slept == [1, 2, 4, 8, 16].collect {
@@ -59,6 +60,23 @@ class SupervisedLoopBoundedSpec extends Specification {
         gaveUp.size() == 1
         gaveUp[0].level == Level.ERROR
         gaveUp[0].argumentArray[1..3] == [5, 5, Duration.ofMinutes(10)]
+    }
+
+    // FR3, FR9: the end of a loop that was stopped is no give-up — the standalone dashboard exits 0.
+    def "awaiting the end of a stopped Bounded loop answers that it did not give up"() {
+        given:
+        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), CAP, 5, Duration.ofMinutes(10), clock)
+        rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
+            rig.stopHere()
+        }, policy, backoffSleeper)
+
+        when:
+        rig.loop.start()
+        rig.awaitEndWithinBound()
+
+        then:
+        rig.gaveUp == false
+        rig.ticks.get() == 1
     }
 
     // FR3: the Bounded policy resets its backoff on a clean tick exactly as the Unbounded one does.

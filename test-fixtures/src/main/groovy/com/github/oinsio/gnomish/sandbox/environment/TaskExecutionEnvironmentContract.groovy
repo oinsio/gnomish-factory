@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.contract.PortContractSupport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
@@ -8,7 +9,6 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
 import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -96,9 +96,7 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         // load, yet well inside PIT's per-mutation budget so the drop-the-pump mutant — which hangs
         // cat forever — dies as a red Exited assertion within the budget rather than as a TIMED_OUT.
         def handle = e.exec(shell('cat', 'piped-prompt-content'))
-        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(12), {
-            -> Instant.now()
-        })
+        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(12), new VirtualClock())
         def out = readFully(handle.output())
 
         then: 'cat saw EOF (stdin was delivered and closed), exited, and echoed the bytes back'
@@ -260,9 +258,7 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
 
         when: 'a fast command runs under a generous timeout'
         def handle = e.exec(shell('true'))
-        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(30), {
-            -> Instant.now()
-        })
+        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(30), new VirtualClock())
 
         then: 'it exited naturally'
         wait instanceof ExecHandle.Wait.Exited

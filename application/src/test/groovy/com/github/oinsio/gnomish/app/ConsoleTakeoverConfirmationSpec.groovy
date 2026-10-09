@@ -3,15 +3,13 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import java.util.function.BooleanSupplier
-import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.Unroll
 
 /**
  * FR6, UX2 of add-claim-heartbeat (task 6.2): the production {@link ConsoleTakeoverConfirmation} —
  * the pre-claim takeover prompt. UX2 is the operator surface: one confirmed command, holder and
- * last-beat age shown before the "yes". TTY presence and the {@link ConsoleIO} are injected so the seam is
+ * last-beat age shown before the "yes". TTY presence and the console are injected as role interfaces so the seam is
  * unit-testable without a terminal: no TTY answers UNAVAILABLE (the flag-only headless path), a TTY
  * prints the claim facts and reads one line (y/yes confirm, anything else — including EOF — decline).
  */
@@ -45,8 +43,11 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
     }
 
     private static ConsoleTakeoverConfirmation confirmation(boolean tty, RecordingConsole console) {
-        new ConsoleTakeoverConfirmation(
-                { tty } as BooleanSupplier, { console } as Supplier<ConsoleIO>)
+        new ConsoleTakeoverConfirmation({
+            -> tty
+        } as TerminalPresence, {
+            console
+        } as ConsoleOpener)
     }
 
     // FR6: no TTY → UNAVAILABLE, and the console is never even built (a headless run must not touch stdin).
@@ -54,8 +55,8 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         given:
         def built = false
         def seam = new ConsoleTakeoverConfirmation(
-                { false } as BooleanSupplier,
-                { built = true; new RecordingConsole() } as Supplier<ConsoleIO>)
+                { -> false } as TerminalPresence,
+                { built = true; new RecordingConsole() } as ConsoleOpener)
 
         when:
         def decision = seam.confirm(REF, 'gnomish-other-x1', '47m')
@@ -131,7 +132,7 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
 
         then:
         production != null
-        production.ttyPresent() != null
-        production.consoleFactory() != null
+        production.terminal() != null
+        production.opener() != null
     }
 }

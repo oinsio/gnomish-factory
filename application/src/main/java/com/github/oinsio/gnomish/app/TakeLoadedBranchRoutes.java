@@ -146,8 +146,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         var park = new ParkTransition.Fresh(
                 () -> mechanics.recordPark(order, branch, paused),
                 () -> mechanics.confirmTerminalWrite(order.run().cloneDir(), branch));
-        return TakePauseExit.finish(
-                paused, branch.context(), branch.branchName(), order, TerminalWriteRetry.system(), park);
+        return TakePauseExit.finish(paused, branch.context(), branch.branchName(), order, retry, park);
     }
 
     /**

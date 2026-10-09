@@ -43,23 +43,18 @@ public final class TakeBareAuto {
     /**
      * @param wiring the slot's equipment (D2 of introduce-slot-wiring), fixed for the whole take
      *     invocation; its MDC key is set to the claimed candidate's ref id the moment a claim
-     *     actually succeeds (NFR-O1), matching {@link GitResumeRunner}'s own key; never null
+     *     actually succeeds (NFR-O1), matching {@link GitResumeRunner}'s own key; its one time,
+     *     {@link SlotWiring#time()}, supplies "now" for the backoff filter and the decline latch;
+     *     never null
      * @param backoffBase the abort-backoff base (design D10); never null
      * @param backoffCap the abort-backoff cap (design D10); never null
-     * @param clock supplies "now" for the backoff filter; never null
      * @param wipLimit the configured WIP limit W (design D3 of add-factory-serve): fresh tasks are
      *     claimable only while the open-front count stays below it
      * @param random the source of randomness for {@link FeedPolicy}'s head-zone pick (design D4);
      *     never null — a seeded instance makes the pick deterministic for tests
      */
-    TakeBareAuto(
-            SlotWiring wiring,
-            Duration backoffBase,
-            Duration backoffCap,
-            InstantSource clock,
-            int wipLimit,
-            Random random) {
-        this.clock = clock;
+    TakeBareAuto(SlotWiring wiring, Duration backoffBase, Duration backoffCap, int wipLimit, Random random) {
+        this.clock = wiring.time().clock();
         var claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.walk = new BareTakeClaimWalk(
                 claimAndWork, wiring.taskIdMdcKey(), backoffBase, backoffCap, clock, wipLimit, random);

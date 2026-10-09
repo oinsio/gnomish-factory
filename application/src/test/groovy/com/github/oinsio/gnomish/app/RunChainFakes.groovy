@@ -48,6 +48,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -213,7 +214,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(),
             List hostGitPushAttached = []) {
-        def clock = new VirtualClock()
+        def time = VirtualTimeEquipment.create()
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
         [
@@ -221,14 +222,14 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, clock, new VirtualSleeper(clock))
+                persistence, time)
                 new Run(null, ports)
             },
             dialogConsole: {
                 ->
                 throw new UnsupportedOperationException('no console in this spec')
             },
-            instantSource: { -> clock },
+            timeEquipment: { -> time },
             withExtraListener: { listener ->
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
@@ -264,7 +265,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(),
             Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
-        def clock = new VirtualClock()
+        def time = VirtualTimeEquipment.create()
         def console = new DialogConsole(io)
         def self = null
         self = [
@@ -273,11 +274,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, clock, new VirtualSleeper(clock))
+                persistence, time)
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
             dialogConsole: { -> console },
-            instantSource: { -> clock },
+            timeEquipment: { -> time },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
             withHostGitPush: { decoration ->
@@ -396,8 +397,8 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             ContainerTakeSupport containerTakeSupport = ContainerTakeSupport.hostOnly(),
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
-        containerTakeSupport, tenure, trustedBase, VirtualTimeRetries.terminalWrite())
+        new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [],
+        containerTakeSupport, tenure, trustedBase)
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
@@ -30,7 +32,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
     Path tempDir
 
     def mapper = new SnapshotJsonMapper()
-    def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
+    def clock = new VirtualClock(Instant.parse('2026-08-03T10:00:00Z'))
 
     def "a supplier failure (unchecked, not an IOException) is swallowed and the retention sweep still runs"() {
         given:
@@ -39,7 +41,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         Files.writeString(staleLedger, 'stale')
         def writer = new SnapshotWriter(target, {
             -> throw new NullPointerException('assembler bug')
-        }, mapper, Duration.ofSeconds(30), clock, 1)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 1)
 
         when:
         writer.tick()
@@ -67,7 +69,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
                 malformed.remote())
         def writer = new SnapshotWriter(target, {
             -> poisoned
-        }, mapper, Duration.ofSeconds(30), clock, 1)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 1)
 
         when:
         writer.tick()
@@ -88,7 +90,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def target = blockingFile.resolve('snapshot.json')
         def writer = new SnapshotWriter(target, {
             -> SnapshotWriterSpec.fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), clock, 1)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 1)
         def logs = LogCaptureSupport.attach(SnapshotWriteCycle)
 
         when:
@@ -157,7 +159,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def calls = 0
         def writer = new SnapshotWriter(target, {
             -> calls++; throw new RuntimeException('still broken')
-        }, mapper, Duration.ofSeconds(30), clock, 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 0)
 
         when:
         writer.tick()

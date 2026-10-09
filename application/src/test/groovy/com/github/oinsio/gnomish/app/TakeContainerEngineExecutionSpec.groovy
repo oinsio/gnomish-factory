@@ -62,8 +62,9 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
         new TakeContainerEngineExecution(
-                assembly, new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [], new ClaimLossFlag(),
-                LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD), VirtualTimeRetries.terminalWrite())
+                assembly,
+                new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)),
+                [], new ClaimLossFlag(), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
     }
 
     // FR18, D19: a fresh Completed outcome disposes the environment and finishes the tracker for

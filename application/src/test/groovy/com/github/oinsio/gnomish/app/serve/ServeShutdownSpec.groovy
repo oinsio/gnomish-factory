@@ -1,23 +1,18 @@
 package com.github.oinsio.gnomish.app.serve
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.lease.ReaperDuty
-import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.function.Supplier
 
 /**
  * ServeShutdown: the individual steps of the SIGTERM sequence (FR11, design D9, M3) — interrupt the
  * feed thread, flag every occupied slot's claim with the shutdown reason, always kill the process
- * tree, stay null-safe, return promptly when nothing is occupied, and stop the standing reaper.
- * Shared fixtures live in {@link ServeShutdownSpecBase}; the grace-window race and its summary line
+ * tree, stay null-safe, and return promptly when nothing is occupied. Shared fixtures live in
+ * {@link ServeShutdownSpecBase}; the grace-window race, its summary line and the daemon loops' stop
  * have their own specs.
  *
- * Implements FR11, D9, M3 of add-factory-serve; fix-reaper-idle-liveness FR4.
+ * Implements FR11, D9, M3 of add-factory-serve.
  */
 class ServeShutdownSpec extends ServeShutdownSpecBase {
 
@@ -27,7 +22,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         def ledger = new SlotLedger(1, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(200), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(200), killer, inertLoops())
         def feedThread = Thread.ofVirtual().unstarted({
             try {
                 Thread.sleep(5000)
@@ -52,7 +47,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         def ledger = new SlotLedger(1, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         shutdown.shutdown(null)
@@ -74,7 +69,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         ledger.assign(B)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         shutdown.shutdown(null)
@@ -97,7 +92,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         def ledger = new SlotLedger(2, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofSeconds(30), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofSeconds(30), killer, inertLoops())
 
         when:
         long startNanos = System.nanoTime()
@@ -118,7 +113,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         ledger.assign(A)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(100), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(100), killer, inertLoops())
 
         when:
         shutdown.shutdown(null)
@@ -129,52 +124,5 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
 
         cleanup:
         ledger.release(A)
-    }
-
-    // fix-reaper-idle-liveness FR4: shutdown() stops the standing reaper as part of the sequence
-    // so its worker thread does not outlive the daemon. StandingReaper is a final class (not
-    // mockable via Spock/CGLIB), so this drives a real one with a tick-counting ReaperDuty and
-    // proves the observable effect of stop(): no further ticks happen once shutdown() returns.
-    def "stops the standing reaper as part of the shutdown sequence"() {
-        given:
-        def ledger = new SlotLedger(1, new VirtualClock())
-        def flag = new ClaimLossFlag()
-        def killer = new RecordingKiller()
-        def tickCount = new AtomicInteger()
-        def reaperDuty = { Collection refs ->
-            tickCount.incrementAndGet()
-        } as ReaperDuty
-        // Honours the stop's interrupt as the production ThreadSleeper does: the flag is restored,
-        // nothing is thrown, so the supervised loop ends quietly (design D3/D4 of
-        // supervise-daemon-loops-and-embed-dashboard).
-        def sleeper = { Duration d ->
-            try {
-                Thread.sleep(5)
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt()
-            }
-        } as Sleeper
-        def standingReaper =
-                new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), {
-                    []
-                } as Supplier, new VirtualClock())
-        standingReaper.start()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, standingReaper)
-
-        when: 'let a handful of ticks happen before shutting down'
-        Thread.sleep(50)
-        int tickedBeforeShutdown = tickCount.get()
-
-        then:
-        tickedBeforeShutdown> 0
-
-        when:
-        shutdown.shutdown(null)
-        Thread.sleep(20) // allow an in-flight tick, if any, to finish unwinding
-        int tickCountAtStop = tickCount.get()
-        Thread.sleep(100)
-
-        then: 'no further ticks happened after shutdown() stopped the reaper'
-        tickCount.get() == tickCountAtStop
     }
 }

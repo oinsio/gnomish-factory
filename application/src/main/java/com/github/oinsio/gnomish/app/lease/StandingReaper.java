@@ -5,14 +5,11 @@ import com.github.oinsio.gnomish.app.daemon.LoopShape;
 import com.github.oinsio.gnomish.app.daemon.LoopWait;
 import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
-import java.util.Collection;
-import java.util.function.Supplier;
 
 /**
  * The standing reaper (design D1 of fix-reaper-idle-liveness): unlike the old beat-riding reaper,
@@ -45,38 +42,33 @@ public final class StandingReaper {
 
     private final ReaperDuty reaperDuty;
     private final Duration interval;
-    private final Supplier<Collection<TaskRef>> liveClaimsSnapshot;
+    private final LiveClaims liveClaims;
     private final InstantSource clock;
     private final SupervisedLoop loop;
     private volatile Instant lastRunAt;
 
     /**
      * @param reaperDuty the duty run every tick; never null
-     * @param sleeper the interval sleeper, also the restart backoff's (virtual under test); never null
      * @param interval the tick interval, also the first restart backoff; never null
-     * @param liveClaimsSnapshot supplies, fresh on every tick, the claims this instance holds live,
+     * @param liveClaims answers, fresh on every tick, the claims this instance holds live,
      *     excluded from staleness observation (design D3); never null
-     * @param clock the source of the {@code lastRunAt} instant stamped after every completed tick
-     *     (task 2.5, FR7 of add-serve-observability), and the loop's, whose failure roll-ups it
-     *     times (design D2 of supervise-daemon-loops-and-embed-dashboard); never null
+     * @param time the time equipment (virtual under test): its sleeper waits the interval and the
+     *     restart backoff; its clock stamps {@code lastRunAt} after every completed tick (task 2.5,
+     *     FR7 of add-serve-observability) and times the loop's failure roll-ups (design D2, D20 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public StandingReaper(
-            ReaperDuty reaperDuty,
-            Sleeper sleeper,
-            Duration interval,
-            Supplier<Collection<TaskRef>> liveClaimsSnapshot,
-            InstantSource clock) {
+    public StandingReaper(ReaperDuty reaperDuty, Duration interval, LiveClaims liveClaims, TimeEquipment time) {
         this.reaperDuty = reaperDuty;
         this.interval = interval;
-        this.liveClaimsSnapshot = liveClaimsSnapshot;
-        this.clock = clock;
+        this.liveClaims = liveClaims;
+        this.clock = time.clock();
         this.lastRunAt = clock.instant();
         LoopShape shape = new LoopShape(
                 DaemonComponent.REAPER,
                 LoopOrder.WAIT_THEN_TICK,
-                new LoopWait.FixedInterval(sleeper, interval),
+                new LoopWait.FixedInterval(time.sleeper(), interval),
                 new RestartPolicy.Unbounded(interval, RESTART_BACKOFF_CAP));
-        this.loop = new SupervisedLoop(shape, this::tick, sleeper, clock);
+        this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 
     /** Starts the reaper's loop (FR1). Idempotent: a second call never starts a second thread. */
@@ -99,7 +91,7 @@ public final class StandingReaper {
 
     // Package-private: the direct-tick specs drive one reap synchronously, no thread involved.
     void tick() {
-        reaperDuty.reapOnce(liveClaimsSnapshot.get());
+        reaperDuty.reapOnce(liveClaims.snapshot());
         lastRunAt = clock.instant();
     }
 

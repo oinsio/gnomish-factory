@@ -59,18 +59,4 @@ class BoardModelEligibilitySpec extends Specification {
         'finished wins over WIP-held (both apply, fresh)' | AbortFacts.none() | false | true | 3 | 3 || new EligibilityReason.Finished()
         'backoff wins over WIP-held too (all three apply)' | BACKED_OFF_FACTS | false | true | 3 | 3 || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
     }
-
-    // Task 2.2 seam confirmation: the shorter build overload still defaults every row to eligible
-    def "the four-argument build overload keeps defaulting Ready rows to eligible"() {
-        given: 'a fresh ready task with no abort history'
-        def readyTasks = [
-            task(AbortFacts.none(), false, false)
-        ]
-
-        when: 'the model is built via the shorter overload'
-        def model = BoardModel.build(readyTasks, [], false, NOW)
-
-        then: 'the row carries no eligibility reason'
-        model.readyRows()[0].eligibilityReason() == null
-    }
 }

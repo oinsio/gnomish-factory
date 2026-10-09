@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.board.BoardModel;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import java.time.Instant;
@@ -22,11 +23,26 @@ import org.jspecify.annotations.Nullable;
  * hygiene block itself becomes the page's quietest reference block and
  * carries no alert styling at all.
  *
- * <p>Implements FR1, FR2, FR9 of redesign-dashboard.
+ * <p>The stats degrade per source: the slots and consecutive-failures stats
+ * need a snapshot, the WIP stat needs a board model — the fresh one or the one
+ * cached across a failed refresh — and renders without a snapshot too. Its
+ * value is the model's own {@link BoardModel#openFrontCount()} against the
+ * model's own {@link BoardModel#wipLimit()}, the limit eligibility judged the
+ * WIP-held rows by, so no renderer is handed the limit separately. A full WIP
+ * is the system working as configured, so the stat never takes the alarm
+ * palette.
+ *
+ * <p>Implements FR1, FR2, FR9 of redesign-dashboard; FR12, FR13, UX3 of
+ * supervise-daemon-loops-and-embed-dashboard (design D13).
  */
 final class DashboardStatusCardRenderer {
 
-    void append(StringBuilder out, DaemonSnapshotView view, SandboxHygieneView hygiene, Instant now) {
+    void append(
+            StringBuilder out,
+            DaemonSnapshotView view,
+            BoardSectionView boardView,
+            SandboxHygieneView hygiene,
+            Instant now) {
         List<AlertCondition> flagged = new ArrayList<>(AlertConditionEvaluator.evaluate(view, now));
         flagged.addAll(SandboxHygieneAlertEvaluator.evaluate(hygiene, now));
 
@@ -43,7 +59,17 @@ final class DashboardStatusCardRenderer {
                     .append("</div>\n");
         }
         out.append("</div>\n");
-        appendStats(out, snapshotOf(view));
+        Snapshot snapshot = snapshotOf(view);
+        if (snapshot != null) {
+            appendSlotsStat(out, snapshot);
+        }
+        BoardModel model = boardView.model();
+        if (model != null) {
+            appendWipStat(out, model);
+        }
+        if (snapshot != null) {
+            appendFailuresStat(out, snapshot);
+        }
         out.append("</div>\n");
     }
 
@@ -60,10 +86,7 @@ final class DashboardStatusCardRenderer {
         out.append("</div>\n");
     }
 
-    private static void appendStats(StringBuilder out, @Nullable Snapshot snapshot) {
-        if (snapshot == null) {
-            return;
-        }
+    private static void appendSlotsStat(StringBuilder out, Snapshot snapshot) {
         int occupied = snapshot.slots().entries().size();
         appendStat(
                 out,
@@ -72,6 +95,23 @@ final class DashboardStatusCardRenderer {
                         + DashboardCompactNumber.format(snapshot.slots().capacity()),
                 occupied + " of " + snapshot.slots().capacity(),
                 false);
+    }
+
+    /** FR12, UX3: open fronts against the model's own limit, with the split on hover; never alarm-styled. */
+    private static void appendWipStat(StringBuilder out, BoardModel model) {
+        int open = model.openFrontCount();
+        int limit = model.wipLimit();
+        appendStat(
+                out,
+                "WIP",
+                DashboardCompactNumber.format(open) + " / " + DashboardCompactNumber.format(limit),
+                open + " of " + limit + " open fronts: "
+                        + model.workingRows().size() + " working, "
+                        + model.awaitingHumanRows().size() + " waiting for a human",
+                false);
+    }
+
+    private static void appendFailuresStat(StringBuilder out, Snapshot snapshot) {
         int failures = snapshot.tracker().consecutiveFailures();
         appendStat(
                 out,
@@ -97,7 +137,7 @@ final class DashboardStatusCardRenderer {
     private static String dotModifier(DaemonSnapshotView view) {
         return switch (view) {
             case DaemonSnapshotView.Fresh ignored -> "";
-            case DaemonSnapshotView.StoppedStale ignored -> " status--stopped";
+            case DaemonSnapshotView.Stopped ignored -> " status--stopped";
             case DaemonSnapshotView.Absent ignored -> " status--down";
             case DaemonSnapshotView.DeadDaemon ignored -> " status--down";
         };
@@ -108,7 +148,7 @@ final class DashboardStatusCardRenderer {
             case DaemonSnapshotView.Absent ignored -> "Daemon has not run here";
             case DaemonSnapshotView.Fresh ignored -> "Daemon running";
             case DaemonSnapshotView.DeadDaemon ignored -> "Snapshot not updating";
-            case DaemonSnapshotView.StoppedStale stopped -> "Daemon stopped" + stopReason(stopped.snapshot());
+            case DaemonSnapshotView.Stopped stopped -> "Daemon stopped" + stopReason(stopped.snapshot());
         };
     }
 
@@ -121,7 +161,7 @@ final class DashboardStatusCardRenderer {
             case DaemonSnapshotView.Absent ignored -> null;
             case DaemonSnapshotView.Fresh fresh -> fresh.snapshot();
             case DaemonSnapshotView.DeadDaemon dead -> dead.snapshot();
-            case DaemonSnapshotView.StoppedStale stopped -> stopped.snapshot();
+            case DaemonSnapshotView.Stopped stopped -> stopped.snapshot();
         };
     }
 }

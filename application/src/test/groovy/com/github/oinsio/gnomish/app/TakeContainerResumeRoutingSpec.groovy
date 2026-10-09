@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
@@ -70,11 +71,11 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def containerSupportFactory = { cloneDir, taskId, segments, definition, creds ->
             builtSupport
         } as ContainerSupportFactory
-        def containerTakeSupport = new ContainerTakeSupport(
-                new BindingProperties(null, [:]),
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
-                AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
-                { false },
+        def containerTakeSupport = new ContainerTakeSupport(new SandboxModeSelector(
+                        new BindingProperties(null, [:]),
+                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
+                        { -> false } as ContainerRuntimeProbe),
                 containerSupportFactory)
         def resumeRunner = new TakeContainerResumeRunner(slotWiring(
                         assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE,

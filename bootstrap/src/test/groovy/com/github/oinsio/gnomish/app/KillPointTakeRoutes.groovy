@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -23,8 +24,6 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import java.nio.file.Path
-import java.time.Clock
-import java.util.function.BooleanSupplier
 
 /**
  * The real take routes a kill-point pickup runs through (NFR-R1, design D8 of
@@ -56,8 +55,8 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
      */
     Closure<TakeResult> host(
             RegisteredClone clone, TaskGit git, Tracker tracker, PipelineDefinition definition, FactoryProperties agent) {
-        def runner = new TakeResumeRunner(wiring(clone, git, tracker, agent, ContainerTakeSupport.hostOnly()))
-        routes(new HostResumeMechanics(runner, git, clone, definition), git)
+        def wiring = wiring(clone, git, tracker, agent, ContainerTakeSupport.hostOnly())
+        routes(new HostResumeMechanics(new TakeResumeRunner(wiring), git, clone, definition), wiring)
     }
 
     /**
@@ -77,11 +76,11 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
             docker.environments(TaskIdSanitizer.sanitize(t), c, SANDBOX, guard), s, SandboxLifecyclePass.NONE,
             git.epochs())
         } as ContainerSupportFactory
-        def hostOnly = ContainerTakeSupport.hostOnly()
-        def support = new ContainerTakeSupport(hostOnly.bindingProperties(), SANDBOX, hostOnly.bindingRegistry(),
-                { -> true } as BooleanSupplier, factory)
-        def runner = new TakeContainerResumeRunner(wiring(clone, git, tracker, testProperties(), support))
-        routes(new ContainerResumeMechanics(runner, segments(definition), definition), git)
+        // The routes run the container mechanics directly, never the selector: the host-only one
+        // stands in for it (design D22 of supervise-daemon-loops-and-embed-dashboard).
+        def support = new ContainerTakeSupport(ContainerTakeSupport.hostOnly().modeSelector(), factory)
+        def wiring = wiring(clone, git, tracker, testProperties(), support)
+        routes(new ContainerResumeMechanics(new TakeContainerResumeRunner(wiring), segments(definition), definition), wiring)
     }
 
     /** The one container segment the routes run every stage of {@code definition} in. */
@@ -91,17 +90,20 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
         ]
     }
 
-    private static <B extends ResumedBranch> Closure<TakeResult> routes(ResumeMechanics<B> mechanics, TaskGit git) {
-        def routes = new TakeLoadedBranchRoutes<B>(mechanics, new TakeDecisionResume<B>(mechanics), git)
+    /** The routes over {@code wiring}'s own git and terminal-write retry, as {@code TakeWorkRouter} builds them. */
+    private static <B extends ResumedBranch> Closure<TakeResult> routes(ResumeMechanics<B> mechanics, SlotWiring wiring) {
+        def routes = new TakeLoadedBranchRoutes<B>(mechanics, new TakeDecisionResume<B>(mechanics), wiring.git(),
+                wiring.terminalWriteRetry())
         return { TakeOrder order -> routes.route(order) }
     }
 
     private SlotWiring wiring(
             RegisteredClone clone, TaskGit git, Tracker tracker, FactoryProperties agent, ContainerTakeSupport support) {
+        // The slot's one time, virtual: its abort stamps and its terminal-write retry derive from it.
         def assembly = newAssembly(new ByteArrayInputStream(new byte[0]),
-                new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8'), agent)
+                new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8'), agent, VirtualTimeEquipment.create())
         new SlotWiring(assembly, git, clone, MDC_KEY,
-                new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], support,
+                new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [], support,
                 new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(clone.clonePath()))))
     }

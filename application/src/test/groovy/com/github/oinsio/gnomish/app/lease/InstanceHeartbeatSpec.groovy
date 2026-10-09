@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -39,8 +40,7 @@ class InstanceHeartbeatSpec extends Specification {
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
     tracker,
     progress,
-    new BlockingSleeper(),
-    clock,
+    VirtualTimeEquipment.on(clock, new BlockingSleeper()),
     INTERVAL,
     { TaskRef ref -> lost << ref } as ClaimLostSink)
 
@@ -226,7 +226,7 @@ class InstanceHeartbeatSpec extends Specification {
             }
         ] as Tracker
         def loopHb = new InstanceHeartbeat(
-                gone, progress, recordingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
+                gone, progress, VirtualTimeEquipment.on(clock, recordingSleeper), INTERVAL, ClaimLostSink.IGNORE)
         progressAt(A, 'plan', 0)
         loopHb.seedHeldForTest(A)
 
@@ -253,7 +253,7 @@ class InstanceHeartbeatSpec extends Specification {
                     }
                 }
         def guarded = new InstanceHeartbeat(
-                tracker, progress, new BlockingSleeper(), clock, INTERVAL, toggleSink)
+                tracker, progress, VirtualTimeEquipment.on(clock, new BlockingSleeper()), INTERVAL, toggleSink)
         guarded.seedHeldForTest(A)
         progressAt(A, 'plan', 0)
         def logs = LogCaptureSupport.attach(HeartbeatTickLog)

@@ -17,13 +17,11 @@ import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.time.InstantSource
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -153,20 +151,21 @@ class ThreeProviderVerifyChainSpec extends Specification {
         platform.wireMock.verify(0, getRequestedFor(urlPathEqualTo(QUALITY_GATE)))
     }
 
-    /** The engine's own verify chain, on a production clock and sleeper, over one attempt commit. */
+    /** The engine's own verify chain, on one virtual time equipment, over one attempt commit. */
     private VerificationResult verifyChain(
             List<VerifyCheck> checks,
             String sha,
             RecordingEventListener listener = new RecordingEventListener(),
             List<String> allowlist = LOOPBACK_ALLOWLIST) {
-        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-        def clock = InstantSource.system()
+        // FR21 of supervise-daemon-loops-and-embed-dashboard: one virtual equipment for the whole
+        //     chain; a poll's wait advances it instead of passing real time.
+        def time = VirtualTimeEquipment.create()
+        def clock = time.clock()
         def polling = new ExternalPolling(
-                platform.checkClient(allowlist), AttemptDelivery.assumedDelivered(), clock, new ThreadSleeper())
+                platform.checkClient(allowlist), AttemptDelivery.assumedDelivered(), time)
         def orchestrator = new VerifyOrchestrator(
                 new ScriptedBuiltinCheckRunner(),
-                new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(new TempDirCheckEnvironments(tempDir, clock)),
+                new ShellCommandCheckRunner(clock).withEnvironments(new TempDirCheckEnvironments(tempDir, clock)),
                 polling,
                 new JudgeVoting(new ScriptedJudgeVoter()),
                 clock,

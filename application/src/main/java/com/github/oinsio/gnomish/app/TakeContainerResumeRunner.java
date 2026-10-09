@@ -120,7 +120,7 @@ final class TakeContainerResumeRunner {
     TaskContext appendDecision(
             ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         var decision = ResumeDecisionCommit.decisionFor(
-                finalState, text, wiring.assembly().instantSource().instant());
+                finalState, text, wiring.assembly().timeEquipment().clock().instant());
         bootstrap.support().disposeExistingEnvironment();
         bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
@@ -129,10 +129,9 @@ final class TakeContainerResumeRunner {
     private TakeContainerEngineExecution newExecution(LawBinding lawBinding) {
         return new TakeContainerEngineExecution(
                 wiring.assembly(),
-                wiring.abort(),
+                wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
-                lawBinding,
-                wiring.terminalWriteRetry());
+                lawBinding);
     }
 }

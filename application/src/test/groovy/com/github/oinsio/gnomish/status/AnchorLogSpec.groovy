@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
 
@@ -51,7 +52,7 @@ class AnchorLogSpec extends Specification {
     def "the serve start anchor names every configured value"() {
         when:
         AnchorLog.serveStarted(new AnchorLog.ServeConfig(
-                        'factory-a1b2', 2, 3, Duration.ofSeconds(30), Duration.ofSeconds(45)))
+                        'factory-a1b2', 2, 3, Duration.ofSeconds(30), Duration.ofSeconds(45), false, null))
 
         then:
         capture.list.size() == 1
@@ -64,6 +65,23 @@ class AnchorLogSpec extends Specification {
         message.contains('wipLimit=3')
         message.contains('idlePoll=PT30S')
         message.contains('sigtermGrace=PT45S')
+    }
+
+    // NFR-O2 of supervise-daemon-loops-and-embed-dashboard: the start anchor records whether the
+    //     embedded dashboard is on and the page it writes — and says "none" when it writes none.
+    def "NFR-O2: the serve start anchor records the dashboard switch and its page"() {
+        when:
+        AnchorLog.serveStarted(new AnchorLog.ServeConfig(
+                        'factory-a1b2', 2, 3, Duration.ofSeconds(30), Duration.ofSeconds(45), dashboard, page))
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].formattedMessage.endsWith(expected)
+
+        where:
+        dashboard | page || expected
+        true | Path.of('/srv/gf/dash.html') || ', dashboard=true, dashboardOut=/srv/gf/dash.html'
+        false | null || ', dashboard=false, dashboardOut=none'
     }
 
     // FR2: the stopping anchor carries the wire-safe reason the snapshot also records

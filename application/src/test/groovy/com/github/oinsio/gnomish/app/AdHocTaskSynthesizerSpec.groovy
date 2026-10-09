@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -51,7 +52,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
 
     def "FR2: --task-id present is used verbatim"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args('my-task-1', null, new TaskSource.Inline('title'))
 
         when:
@@ -91,7 +92,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
     @Unroll
     def "FR2: title/body split — #description"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, null, new TaskSource.Inline(text))
 
         when:
@@ -117,7 +118,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         given:
         Path taskFile = tmpDir.resolve('task.md')
         Files.writeString(taskFile, '# Investigate flaky spec\n\nSteps here.\n')
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, null, new TaskSource.FromFile(taskFile))
 
         when:
@@ -130,7 +131,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
 
     def "FR2: initial decisions are empty"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, null, new TaskSource.Inline('title'))
 
         when:
@@ -142,7 +143,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
 
     def "FR2/D4: --from-stage naming a real stage resolves the initial state to that stage"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, 'build', new TaskSource.Inline('title'))
 
         when:
@@ -154,7 +155,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
 
     def "FR2/D4: --from-stage absent resolves to the first stage"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, null, new TaskSource.Inline('title'))
 
         when:
@@ -166,7 +167,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
 
     def "D4: --from-stage naming an unknown stage throws UsageException listing the known stage names"() {
         given:
-        def synthesizer = new AdHocTaskSynthesizer(Clock.systemUTC(), new Random())
+        def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
         def runArgs = args(null, 'missing', new TaskSource.Inline('title'))
 
         when:

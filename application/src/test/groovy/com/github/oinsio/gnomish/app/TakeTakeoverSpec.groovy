@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -63,7 +64,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     def "a declined confirmation refuses, naming the holder, and returns no claim"() {
         given:
         def tracker = Mock(Tracker)
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, _age ->
             TakeoverConfirmation.Decision.DECLINED
         } as TakeoverConfirmation,
         false, FIXED_CLOCK)
@@ -89,7 +92,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     def "an unavailable confirmation refuses and points at the headless flag"() {
         given:
         def tracker = trackerHolding(null)
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, _age ->
             TakeoverConfirmation.Decision.UNAVAILABLE
         } as TakeoverConfirmation,
         false, FIXED_CLOCK)
@@ -110,7 +115,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         given:
         def observed = new ClaimVersion('marker-7', NOW.minusSeconds(90), new ClaimEpoch(1))
         def tracker = Mock(Tracker)
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, _age ->
             TakeoverConfirmation.Decision.CONFIRMED
         } as TakeoverConfirmation,
         false, FIXED_CLOCK)
@@ -135,7 +142,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     def "a confirmed takeover with no observable claim version skips the stale-claim removal"() {
         given:
         def tracker = Mock(Tracker)
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, _age ->
             TakeoverConfirmation.Decision.CONFIRMED
         } as TakeoverConfirmation,
         false, FIXED_CLOCK)
@@ -156,7 +165,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         given:
         def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.minusSeconds(5), new ClaimEpoch(1)))
         def consulted = false
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, _age ->
             consulted = true
             TakeoverConfirmation.Decision.DECLINED
         } as TakeoverConfirmation,
@@ -179,7 +190,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         def version = beatAge == null ? null : new ClaimVersion('marker-7', NOW - beatAge, new ClaimEpoch(1))
         def tracker = trackerHolding(version)
         String shown = null
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, age ->
             shown = age
             TakeoverConfirmation.Decision.DECLINED
         } as TakeoverConfirmation,
@@ -209,7 +222,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         given:
         def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.plusSeconds(30), new ClaimEpoch(1)))
         String shown = null
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, age ->
             shown = age
             TakeoverConfirmation.Decision.DECLINED
         } as TakeoverConfirmation,
@@ -229,7 +244,9 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         def other = new TaskRef('github:o/r#999')
         def tracker = Mock(Tracker)
         String shown = null
-        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
+        def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), { _ref, _holder, age ->
             shown = age
             TakeoverConfirmation.Decision.DECLINED
         } as TakeoverConfirmation,

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -46,7 +45,7 @@ tracker:
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         throw failure
                     }
 

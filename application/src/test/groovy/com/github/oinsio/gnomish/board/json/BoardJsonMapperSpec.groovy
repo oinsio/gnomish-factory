@@ -23,12 +23,16 @@ import spock.lang.Specification
  * claim version, and AwaitingHuman park reasons.
  *
  * FR6, NFR-O1: JSON contract v1, self-describing eligibility and claim facts.
+ * FR14 of supervise-daemon-loops-and-embed-dashboard: {@code wipLimit} and
+ * {@code openFrontCount} are read from the model, never passed beside it (D13).
  */
 class BoardJsonMapperSpec extends Specification {
 
     private static final Instant NOW = Instant.parse('2026-08-05T09:00:00Z')
     private static final Duration BASE = BackoffPolicy.DEFAULT_BASE
     private static final Duration CAP = BackoffPolicy.DEFAULT_CAP
+    /** The WIP limit every model here is judged against, unless a feature states its own. */
+    private static final int WIP_LIMIT = 3
 
     def mapper = new BoardJsonMapper()
 
@@ -36,12 +40,16 @@ class BoardJsonMapperSpec extends Specification {
         new ReadyTask(new TaskRef(id), abortFacts, returned, finished, UntrustedText.tracker("title for ${id}"))
     }
 
+    private static BoardModel boardOf(List<ReadyTask> ready, List<OpenTask> open, boolean truncated) {
+        BoardModel.build(ready, open, truncated, NOW, new EligibilityInputs(BASE, CAP, open.size(), WIP_LIMIT))
+    }
+
     def "top-level document carries version 1, generatedAt, and truncated"() {
         given:
-        def model = BoardModel.build([], [], true, NOW)
+        def model = boardOf([], [], true)
 
         when:
-        def dto = mapper.toDto(model, 5)
+        def dto = mapper.toDto(model)
 
         then:
         dto.version() == 1
@@ -54,10 +62,10 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#1', AbortFacts.none(), false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
+        def model = boardOf(ready, [], false)
 
         when:
-        def row = mapper.toDto(model, 3).ready().rows()[0]
+        def row = mapper.toDto(model).ready().rows()[0]
 
         then:
         row.id() == 'github:o/r#1'
@@ -73,10 +81,10 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#2', facts, false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
+        def model = boardOf(ready, [], false)
 
         when:
-        def eligibility = mapper.toDto(model, 3).ready().rows()[0].eligibility()
+        def eligibility = mapper.toDto(model).ready().rows()[0].eligibility()
 
         then:
         eligibility == new EligibilityDto(false, 'inBackoff', deadline.toString())
@@ -87,10 +95,10 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#3', AbortFacts.none(), false, true)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
+        def model = boardOf(ready, [], false)
 
         when:
-        def eligibility = mapper.toDto(model, 3).ready().rows()[0].eligibility()
+        def eligibility = mapper.toDto(model).ready().rows()[0].eligibility()
 
         then:
         eligibility == new EligibilityDto(false, 'finished', null)
@@ -104,15 +112,17 @@ class BoardJsonMapperSpec extends Specification {
         def open = [
             new OpenTask(new TaskRef('github:o/r#10'), new TrackerTaskState.Working('holder-a'), null, UntrustedText.tracker('working title'))
         ]
-        def model = BoardModel.build(ready, open, false, NOW, new EligibilityInputs(BASE, CAP, 3, 3))
+        def model = BoardModel.build(ready, open, false, NOW, new EligibilityInputs(BASE, CAP, 1, 1))
 
         when:
-        def dto = mapper.toDto(model, 3)
+        def dto = mapper.toDto(model)
 
-        then:
+        then: 'both numbers are the model\'s: the limit eligibility used and the open front it observed'
         dto.ready().rows()[0].eligibility() == new EligibilityDto(false, 'wipHeld', null)
+        dto.ready().openFrontCount() == model.openFrontCount()
         dto.ready().openFrontCount() == 1
-        dto.ready().wipLimit() == 3
+        dto.ready().wipLimit() == model.wipLimit()
+        dto.ready().wipLimit() == 1
     }
 
     def "ready summary counts are carried through from ReadySummary"() {
@@ -120,10 +130,10 @@ class BoardJsonMapperSpec extends Specification {
         def ready = [
             readyTask('github:o/r#5', AbortFacts.none(), false, false)
         ]
-        def model = BoardModel.build(ready, [], false, NOW, new EligibilityInputs(BASE, CAP, 0, 3))
+        def model = boardOf(ready, [], false)
 
         when:
-        def readyDto = mapper.toDto(model, 3).ready()
+        def readyDto = mapper.toDto(model).ready()
 
         then:
         readyDto.queuedCount() == 1
@@ -140,10 +150,10 @@ class BoardJsonMapperSpec extends Specification {
             new OpenTask(new TaskRef('github:o/r#20'), new TrackerTaskState.Working('holder-b'),
             new ClaimVersion('marker-1', updatedAt, new ClaimEpoch(1)), UntrustedText.tracker('working title'))
         ]
-        def model = BoardModel.build([], open, false, NOW)
+        def model = boardOf([], open, false)
 
         when:
-        def row = mapper.toDto(model, 3).working()[0]
+        def row = mapper.toDto(model).working()[0]
 
         then:
         row.id() == 'github:o/r#20'
@@ -156,11 +166,11 @@ class BoardJsonMapperSpec extends Specification {
         def open = [
             new OpenTask(new TaskRef('github:o/r#21'), new TrackerTaskState.Working('holder-c'), null, UntrustedText.tracker('working title'))
         ]
-        def model = BoardModel.build([], open, false, NOW)
+        def model = boardOf([], open, false)
 
         when:
-        def json = mapper.serialize(model, 3)
-        def row = mapper.toDto(model, 3).working()[0]
+        def json = mapper.serialize(model)
+        def row = mapper.toDto(model).working()[0]
 
         then:
         row.claimUpdatedAt() == null
@@ -174,10 +184,10 @@ class BoardJsonMapperSpec extends Specification {
             new OpenTask(new TaskRef('github:o/r#31'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, UntrustedText.tracker('infra title')),
             new OpenTask(new TaskRef('github:o/r#32'), new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT), null, UntrustedText.tracker('checkpoint title'))
         ]
-        def model = BoardModel.build([], open, false, NOW)
+        def model = boardOf([], open, false)
 
         when:
-        def rows = mapper.toDto(model, 3).awaitingHuman()
+        def rows = mapper.toDto(model).awaitingHuman()
 
         then:
         rows*.parkReason() == [
@@ -189,10 +199,10 @@ class BoardJsonMapperSpec extends Specification {
 
     def "serialize produces pretty-printed JSON containing the version field"() {
         given:
-        def model = BoardModel.build([], [], false, NOW)
+        def model = boardOf([], [], false)
 
         when:
-        def json = mapper.serialize(model, 3)
+        def json = mapper.serialize(model)
 
         then:
         json.contains('"version" : 1')

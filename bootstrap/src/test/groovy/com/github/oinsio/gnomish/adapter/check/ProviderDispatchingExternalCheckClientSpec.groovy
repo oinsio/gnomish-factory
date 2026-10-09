@@ -2,9 +2,14 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckTokenException
+import com.github.oinsio.gnomish.app.CheckClientContext
+import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.CheckRunContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
@@ -50,10 +55,59 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 [(PluginStandInCheckClientFactory.PROVIDER): plugin],
                 [(PluginStandInCheckClientFactory.PROVIDER): [endpoint: 'https://plugin.example']],
-                providing([:]))
+                providing([:]), VirtualTimeEquipment.create())
 
         expect:
         dispatcher.poll(check('ci', PluginStandInCheckClientFactory.PROVIDER), workspace()) instanceof PollStatus.Running
+    }
+
+    // FR23, design D21 of supervise-daemon-loops-and-embed-dashboard: the provider is built through
+    //     one context the composite assembles — its secrets, the selected provider's own subsection,
+    //     the run context and the host's time equipment, each the very value the composite holds.
+    def "FR23: a provider is built from one context carrying the composite's secrets, subsection, run context and time"() {
+        given:
+        def secrets = providing([:])
+        def runContext = { name ->
+            Optional.of('gnomish/PROJ-42')
+        } as CheckRunContext
+        def time = VirtualTimeEquipment.create()
+        def subsection = [endpoint: 'https://plugin.example']
+        def factory = Mock(CheckClientFactory)
+        def client = Stub(ExternalCheckClient) {
+            poll(_, _) >> new PollStatus.Pass()
+        }
+        def dispatcher = new ProviderDispatchingExternalCheckClient(
+                [alpha: factory], [alpha: subsection, beta: [endpoint: 'b']], secrets, runContext, time)
+
+        when:
+        def status = dispatcher.poll(check('ci', 'alpha'), workspace())
+
+        then:
+        1 * factory.create({ CheckClientContext c ->
+            c.secrets().is(secrets) && c.subsection() == subsection && c.runContext().is(runContext) &&
+            c.timeEquipment().is(time)
+        }) >> client
+        status instanceof PollStatus.Pass
+    }
+
+    // FR3, NFR-S2: a provider with no configured subsection is handed an empty one, and the
+    //     hand-assembled composite hands every provider a run context that supplies nothing.
+    def "an unconfigured provider gets an empty subsection, and the short form an empty run context"() {
+        given:
+        def factory = Mock(CheckClientFactory)
+        def client = Stub(ExternalCheckClient) {
+            poll(_, _) >> new PollStatus.Pass()
+        }
+        def dispatcher = new ProviderDispatchingExternalCheckClient(
+                [alpha: factory], [:], providing([:]), VirtualTimeEquipment.create())
+
+        when:
+        dispatcher.poll(check('ci', 'alpha'), workspace())
+
+        then:
+        1 * factory.create({ CheckClientContext c ->
+            c.subsection().isEmpty() && c.runContext().value(CheckRunContext.TASK_ID).isEmpty()
+        }) >> client
     }
 
     // FR6: "one stage runs external checks from different providers" — each check resolves its own
@@ -65,7 +119,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 ['alpha': first, 'beta': second],
                 ['alpha': [endpoint: 'a'], 'beta': [endpoint: 'b']],
-                providing([:]))
+                providing([:]), VirtualTimeEquipment.create())
 
         expect:
         dispatcher.poll(check('a-check', 'alpha'), workspace()) instanceof PollStatus.Pass
@@ -82,7 +136,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
                     'dormant': new PluginStandInCheckClientFactory()],
                 ['alpha': [endpoint: 'a'],
                     'dormant': [endpoint: 'd', credential: 'DORMANT_TOKEN']],
-                providing([ALPHA_TOKEN: 'tok', DORMANT_TOKEN: 'tok'], resolved))
+                providing([ALPHA_TOKEN: 'tok', DORMANT_TOKEN: 'tok'], resolved), VirtualTimeEquipment.create())
 
         when:
         dispatcher.poll(check('ci', 'alpha'), workspace())
@@ -100,7 +154,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 ['alpha': new PluginStandInCheckClientFactory()],
                 ['alpha': [endpoint: 'a', credential: 'ALPHA_TOKEN']],
-                providing([ALPHA_TOKEN: 'tok'], resolved))
+                providing([ALPHA_TOKEN: 'tok'], resolved), VirtualTimeEquipment.create())
 
         when:
         3.times { dispatcher.poll(check('ci', 'alpha'), workspace()) }
@@ -118,7 +172,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory(),
                     (PluginStandInCheckClientFactory.PROVIDER): new PluginStandInCheckClientFactory()],
                 [(GithubCheckClientFactory.PROVIDER): GITHUB_SUBSECTION],
-                providing([:]))
+                providing([:]), VirtualTimeEquipment.create())
 
         expect:
         dispatcher.pinContributor().pinPaths(check('.github/workflows/ci.yml', 'github')) ==
@@ -136,7 +190,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 [(GithubCheckClientFactory.PROVIDER): GITHUB_SUBSECTION],
-                providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok'], resolved))
+                providing([GNOMISH_GITHUB_ACTIONS_TOKEN: 'tok'], resolved), VirtualTimeEquipment.create())
 
         when: 'the github client is built, then refuses this spec\'s workspace stand-in'
         dispatcher.poll(check('ci', GithubCheckClientFactory.PROVIDER), workspace())
@@ -156,7 +210,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 [(GithubCheckClientFactory.PROVIDER): GITHUB_SUBSECTION],
-                providing([:]))
+                providing([:]), VirtualTimeEquipment.create())
 
         when:
         dispatcher.poll(check('ci', GithubCheckClientFactory.PROVIDER), workspace())
@@ -173,7 +227,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
         def dispatcher = new ProviderDispatchingExternalCheckClient(
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 [(GithubCheckClientFactory.PROVIDER): GITHUB_SUBSECTION],
-                providing([:]))
+                providing([:]), VirtualTimeEquipment.create())
 
         when:
         dispatcher.poll(check('quality-gate', 'sonar'), workspace())

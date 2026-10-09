@@ -77,11 +77,6 @@ final class FixtureIssue {
         return body.get();
     }
 
-    /** Appends a comment posted "now" with the given (monotonically increasing) comment id. */
-    void appendComment(String rawBody, long commentId) {
-        appendComment(rawBody, commentId, Instant.now());
-    }
-
     /** Appends a comment with an explicit {@code createdAt} (e.g. a seeded human reply's own posting time). */
     void appendComment(String rawBody, long commentId, Instant createdAt) {
         appendComment(rawBody, commentId, createdAt, createdAt);

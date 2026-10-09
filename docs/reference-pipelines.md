@@ -61,7 +61,7 @@ check after cheaper `command` checks.
   the issue stays with a human.
 - Command checks that print the fix in their failure message (the exact `openspec archive`
   or `gh pr edit` command). The gnome's next attempt receives that message as feedback.
-- `gnomish-up`: starts `serve`, the dashboard and a log follower with one command.
+- `gnomish-up`: starts `serve --dashboard` and a log follower with one command.
 
 **Limitations:**
 

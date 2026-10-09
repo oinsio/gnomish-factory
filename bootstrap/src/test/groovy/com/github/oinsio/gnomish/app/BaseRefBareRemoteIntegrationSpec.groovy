@@ -18,12 +18,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -90,15 +88,14 @@ advancement: auto
     private TakeCommand newCommand() {
         def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')
         TakeCommands.of(
-                newAssembly(factoryProperties),
+                newAssembly(factoryProperties, TakeCommands.slotTime()),
                 TaskGitFixture.real(),
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         tracker
-                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private void seedReady(TaskRef ref, TaskDesignators designators = TaskDesignators.none()) {

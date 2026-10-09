@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -45,7 +46,7 @@ class AdvancementSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, clock, sleeper)
+                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -216,6 +217,6 @@ class AdvancementSpec extends Specification {
             InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
         new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, new VirtualClock(), new VirtualSleeper(new VirtualClock()))
+                persistence, VirtualTimeEquipment.on(new VirtualClock()))
     }
 }

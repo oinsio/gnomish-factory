@@ -15,7 +15,7 @@ class ServeArgumentsSpec extends Specification implements RunChainFakes {
         def definition = pipeline()
 
         when:
-        def order = new ServeArguments(Path.of('/work/widgets'), 3, true).slotRunOrder(definition)
+        def order = new ServeArguments(Path.of('/work/widgets'), 3, true, false, null).slotRunOrder(definition)
 
         then:
         order == new RunOrder(Path.of('/work/widgets'), null, definition, false)

@@ -27,7 +27,7 @@ import java.util.List;
  * instead of recomputing {@code writtenAt} staleness — {@link
  * SnapshotReader} already owns that computation (design D3). Rules 2–5 are
  * only evaluated for {@link DaemonSnapshotView.Fresh} and {@link
- * DaemonSnapshotView.DeadDaemon}: a {@link DaemonSnapshotView.StoppedStale}
+ * DaemonSnapshotView.DeadDaemon}: a {@link DaemonSnapshotView.Stopped}
  * snapshot is a clean, deliberate exit (not an alert — FR4) and vitals frozen
  * at that exit are not evidence of anything ongoing; {@link
  * DaemonSnapshotView.Absent} carries no snapshot to read.
@@ -67,7 +67,7 @@ public final class AlertConditionEvaluator {
      *     or {@code view} carries no snapshot to evaluate
      */
     public static List<AlertCondition> evaluate(DaemonSnapshotView view, Instant now) {
-        if (view instanceof DaemonSnapshotView.StoppedStale || view instanceof DaemonSnapshotView.Absent) {
+        if (view instanceof DaemonSnapshotView.Stopped || view instanceof DaemonSnapshotView.Absent) {
             return List.of();
         }
 
@@ -113,14 +113,14 @@ public final class AlertConditionEvaluator {
 
     /**
      * Rules 2–5 read {@link DaemonSnapshotView.Fresh} and {@link DaemonSnapshotView.DeadDaemon}
-     * snapshots alike — the only two variants reachable here, {@link DaemonSnapshotView.StoppedStale}
+     * snapshots alike — the only two variants reachable here, {@link DaemonSnapshotView.Stopped}
      * and {@link DaemonSnapshotView.Absent} having already returned above.
      */
     private static Snapshot snapshotOf(DaemonSnapshotView view) {
         return switch (view) {
             case DaemonSnapshotView.Fresh fresh -> fresh.snapshot();
             case DaemonSnapshotView.DeadDaemon deadDaemon -> deadDaemon.snapshot();
-            case DaemonSnapshotView.StoppedStale ignored -> throw new IllegalStateException("unreachable");
+            case DaemonSnapshotView.Stopped ignored -> throw new IllegalStateException("unreachable");
             case DaemonSnapshotView.Absent ignored -> throw new IllegalStateException("unreachable");
         };
     }

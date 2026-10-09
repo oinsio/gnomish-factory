@@ -156,7 +156,7 @@ final class TakeResumeRunner {
         // FR18 of supervise-daemon-loops-and-embed-dashboard: the decision stamp reads the run
         // assembly's one time source, the root's.
         var decision = ResumeDecisionCommit.decisionFor(
-                finalState, text, assembly.instantSource().instant());
+                finalState, text, assembly.timeEquipment().clock().instant());
         taskRepository.appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
     }

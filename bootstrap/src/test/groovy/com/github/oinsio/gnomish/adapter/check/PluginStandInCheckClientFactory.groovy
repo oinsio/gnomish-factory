@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.app.CheckClientContext
 import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.CheckParamsValidator
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
@@ -43,10 +43,10 @@ class PluginStandInCheckClientFactory implements CheckClientFactory {
     }
 
     @Override
-    ExternalCheckClient create(SecretsProvider secrets, Map<String, Object> subsection) {
-        String credential = subsection[CREDENTIAL_KEY] as String
+    ExternalCheckClient create(CheckClientContext context) {
+        String credential = context.subsection()[CREDENTIAL_KEY] as String
         if (credential != null) {
-            secrets.find(credential)
+            context.secrets().find(credential)
                     .orElseThrow {
                         new IllegalStateException(credential + ' is required by ' + PROVIDER)
                     }

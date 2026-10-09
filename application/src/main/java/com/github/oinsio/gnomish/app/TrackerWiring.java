@@ -5,9 +5,11 @@ import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker;
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
@@ -28,20 +30,24 @@ import org.springframework.stereotype.Component;
  *
  * <p>The credential seam never leaves this class (NFR-S1): there is no accessor for it, so a holder
  * of the wiring can have a tracker built with the secrets but cannot obtain them. Dispatch code
- * that needs only the ref checks takes the narrower {@link RefResolution} face.
+ * that needs only the ref checks takes the narrower {@link RefResolution} face; the serve runtime
+ * assembly, which needs only the embedded board client, takes {@link BoardReaders}.
  *
- * <p>A tracker is built per call, never cached: each invocation of a command resolves its own,
- * over its own tenure record, exactly as before this owner existed.
+ * <p>Every adapter is built, per call and never cached, through the one {@link
+ * TrackerAdapterContext} this owner assembles (secrets, configuration, instance id, tenure record,
+ * the host's {@link TimeEquipment}), so a plugin has no second route to any of them (D21).
  *
  * <p>Implements FR1, FR4, NFR-S1 of collapse-composition-roots; FR9, FR17 of add-tracker-port;
- * FR4 of fix-claim-epoch-fence; FR13 of add-base-ref-resolution; FR10 of add-project-registry.
+ * FR4 of fix-claim-epoch-fence; FR13 of add-base-ref-resolution; FR10 of add-project-registry;
+ * FR10, FR20, FR23 of supervise-daemon-loops-and-embed-dashboard.
  */
 @Component
-final class TrackerWiring implements RefResolution {
+final class TrackerWiring implements RefResolution, BoardReaders {
 
     private final Map<String, TrackerAdapterFactory> registry;
     private final SecretsProvider secrets;
     private final PipelineSource pipelineSource;
+    private final TimeEquipment timeEquipment;
 
     /**
      * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
@@ -49,11 +55,19 @@ final class TrackerWiring implements RefResolution {
      *     call rather than captured in the factory, which {@code ServiceLoader} builds with no args
      *     (FR2, design D2 of add-plugin-architecture); never null
      * @param pipelineSource where the definition is read from; never null
+     * @param timeEquipment the host's time equipment, handed to every adapter on its context so a
+     *     plugin stamps on the host's time (FR20, FR23, design D21 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    TrackerWiring(Map<String, TrackerAdapterFactory> registry, SecretsProvider secrets, PipelineSource pipelineSource) {
+    TrackerWiring(
+            Map<String, TrackerAdapterFactory> registry,
+            SecretsProvider secrets,
+            PipelineSource pipelineSource,
+            TimeEquipment timeEquipment) {
         this.registry = registry;
         this.secrets = secrets;
         this.pipelineSource = pipelineSource;
+        this.timeEquipment = timeEquipment;
     }
 
     /**
@@ -102,13 +116,14 @@ final class TrackerWiring implements RefResolution {
      * git.epochs()}) — the record its git writers already stamp from.
      *
      * @param factory the resolved adapter factory for the project's {@code tracker.type}; never null
-     * @param instanceId this process's minted instance id, passed through to the factory's {@link
-     *     TrackerAdapterFactory#create} (task 5.15 of add-tracker-port); never null
+     * @param instanceId this process's minted instance id, handed to the factory's {@link
+     *     TrackerAdapterFactory#create} on its context (task 5.15 of add-tracker-port); never null
      * @param epochs the bundle's tenure record; never null
      */
     Tracker resolveTracker(
             TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId instanceId, ClaimEpochBook epochs) {
-        return new EpochRecordingTracker(factory.create(secrets, trackerConfig, instanceId.value(), epochs), epochs);
+        var context = new HostContext(secrets, trackerConfig, instanceId.value(), epochs, timeEquipment);
+        return new EpochRecordingTracker(factory.create(context), epochs);
     }
 
     /**
@@ -127,12 +142,34 @@ final class TrackerWiring implements RefResolution {
     ReadOnlyTrackerResolution resolveReadOnly(Path dir, InstanceId readerId) throws IOException {
         PipelineDefinition definition = TakeCommandSupport.loadPipeline(dir, pipelineSource);
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
-        Tracker tracker = resolveFactory(trackerConfig).create(secrets, trackerConfig, readerId.value());
+        Tracker tracker = plainReader(resolveFactory(trackerConfig), trackerConfig, readerId);
         return new ReadOnlyTrackerResolution(trackerConfig, tracker);
     }
 
-    /** The pair {@link #resolveReadOnly} resolves: the {@code tracker} section and the reader built from it. */
-    record ReadOnlyTrackerResolution(TrackerConfig trackerConfig, Tracker tracker) {}
+    /** Over {@code bound}'s own factory and configuration — no {@code .gnomish/} reload (D11). */
+    @Override
+    public Tracker boardReader(BoundTracker bound, InstanceId readerId) {
+        return plainReader(bound.factory(), bound.trackerConfig(), readerId);
+    }
+
+    /** A reader: no tenure record and no wrapper, since it never claims (D8 of add-board-command, D11). */
+    private Tracker plainReader(TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId readerId) {
+        return factory.create(
+                new HostContext(secrets, trackerConfig, readerId.value(), ClaimEpochSource.NONE, timeEquipment));
+    }
+
+    /**
+     * The host's {@link TrackerAdapterContext} (design D21 of
+     * supervise-daemon-loops-and-embed-dashboard): built here, per call, and nowhere else, so the
+     * credential seam it carries reaches the adapter without leaving this owner (NFR-S1).
+     */
+    private record HostContext(
+            SecretsProvider secrets,
+            TrackerConfig config,
+            String instanceId,
+            ClaimEpochSource epochs,
+            TimeEquipment timeEquipment)
+            implements TrackerAdapterContext {}
 
     @Override
     public TaskRef resolveRef(String rawRef, TrackerConfig trackerConfig) {

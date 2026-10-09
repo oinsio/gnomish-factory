@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
@@ -25,6 +26,6 @@ class RetryFixtures {
             t
         } as InstantSource
         Sleeper sleeper = { Duration d -> } as Sleeper
-        new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
+        new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), Duration.ofMinutes(10))
     }
 }

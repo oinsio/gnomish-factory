@@ -27,7 +27,8 @@ import java.util.function.Supplier;
  * (design D12 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core; FR2, FR8 of
- * add-serve-sandbox-lifecycle; FR17, FR19 of make-checkpoint-gate-durable.
+ * add-serve-sandbox-lifecycle; FR17, FR19 of make-checkpoint-gate-durable; FR18, FR22 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class ContainerEnvironments {
 
@@ -35,6 +36,7 @@ public final class ContainerEnvironments {
     private final String baseKey;
     private final ContainerEnvironmentBuilder builder;
     private final Supplier<DenialRestoration> restoration;
+    private final BoxTiming timing;
 
     /**
      * @param docker the docker subprocess seam shared by every role; never null
@@ -44,16 +46,35 @@ public final class ContainerEnvironments {
      * @param restoration what the task branch tip records about denials already reported, read
      *     afresh each time a round environment is built (design D11 of
      *     make-checkpoint-gate-durable); never null
+     * @param timing the installation's box timing every role is built with — the same value the
+     *     builder holds — exposed through {@link #timing()} to the run that owns this seam; never
+     *     null
      */
     ContainerEnvironments(
             DockerCli docker,
             String baseKey,
             ContainerEnvironmentBuilder builder,
-            Supplier<DenialRestoration> restoration) {
+            Supplier<DenialRestoration> restoration,
+            BoxTiming timing) {
         this.docker = docker;
         this.baseKey = baseKey;
         this.builder = builder;
         this.restoration = restoration;
+        this.timing = timing;
+    }
+
+    /**
+     * The installation's box timing this task's environments run on (design D22 of
+     * supervise-daemon-loops-and-embed-dashboard): the run that owns this seam reads its time
+     * equipment here — for its lifecycle store, its first push and its round source — instead of
+     * building one of its own, so a run and its boxes measure on one time source. A plain
+     * accessor: the timing carries no authority, only the root's time equipment and the docker
+     * command bound.
+     *
+     * @return the box timing; never null
+     */
+    public BoxTiming timing() {
+        return timing;
     }
 
     /**

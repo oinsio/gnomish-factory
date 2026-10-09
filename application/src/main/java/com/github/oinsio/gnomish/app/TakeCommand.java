@@ -69,7 +69,8 @@ final class TakeCommand {
      * @param seams the heartbeat and reaper sleepers (FR1; fix-reaper-idle-liveness FR5), the
      *     reaper's monotonic time (FR4, M2), the takeover confirmation (FR6, D9) and batch mode's
      *     {@link ServeProperties} (FR2 of add-factory-serve: "the N limit applies to batch and
-     *     serve") and the clock that supplies "now" for bare-mode backoff and takeover
+     *     serve") and the heartbeat's time equipment; "now" for bare-mode backoff and takeover is
+     *     the slot wiring's own time ({@link SlotWiring#time()})
      * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
      *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
      */
@@ -131,12 +132,7 @@ final class TakeCommand {
             // into the engine run's listener composite and its lifecycle is driven at the claim choke
             // point (TakeClaimAndWork#dispatchAfterClaim).
             TakeHeartbeat heartbeat = TakeHeartbeat.forRun(
-                    tracker,
-                    trackerConfig,
-                    seams.heartbeatSleeper(),
-                    seams.reaperSleeper(),
-                    seams.heartbeatMonotonicTime(),
-                    seams.clock());
+                    tracker, trackerConfig, seams.time(), seams.reaperSleeper(), seams.heartbeatMonotonicTime());
             // The take side's one slot wiring (design "Where a SlotWiring is built" of
             // introduce-slot-wiring; built by the factory of design D9 of collapse-composition-roots):
             // built once per invocation, as soon as the heartbeat exists, and shared by explicit,
@@ -161,8 +157,8 @@ final class TakeCommand {
                             takeArguments.dir(),
                             heartbeat.livenessOracle().evaluate(),
                             log);
-                    var dispatcher = new TakeDispatcher(
-                            wiring, factoryProperties, seams.clock(), trackerWiring, seams.takeoverConfirmation());
+                    var dispatcher =
+                            new TakeDispatcher(wiring, factoryProperties, trackerWiring, seams.takeoverConfirmation());
                     TakeRefDispatch.run(dispatcher, takeArguments, bound, seams.serveProperties(), log);
                 } finally {
                     heartbeat.standingReaper().stop();

@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.domain.engine.time
+package com.github.oinsio.gnomish.app
 
 import java.time.Duration
 import spock.lang.Specification
@@ -13,6 +13,7 @@ class ThreadSleeperSpec extends Specification {
 
     def "sleep(duration) blocks for approximately the requested duration"() {
         given:
+        // real-time-wiring: the real sleeper is this spec's subject; it must really block.
         def sleeper = new ThreadSleeper()
         def requested = Duration.ofMillis(30)
 
@@ -28,6 +29,7 @@ class ThreadSleeperSpec extends Specification {
 
     def "interruption during sleep re-sets the thread's interrupt flag"() {
         given:
+        // real-time-wiring: the real sleeper is this spec's subject; it must really block.
         def sleeper = new ThreadSleeper()
         def interruptedAfterSleep = false
 

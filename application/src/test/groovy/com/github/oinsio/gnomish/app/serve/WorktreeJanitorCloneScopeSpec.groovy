@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.project.CloneName
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -40,7 +41,11 @@ class WorktreeJanitorCloneScopeSpec extends Specification {
         new WorktreeJanitor(clone, AGE_THRESHOLD, { String key ->
             disposed << key
         } as TaskEnvironmentDisposal,
-        { -> NOW } as InstantSource, Mock(Sleeper), { -> Set.of() })
+        VirtualTimeEquipment.on({
+            -> NOW
+        } as InstantSource, Mock(Sleeper)), {
+            -> Set.of()
+        })
     }
 
     private static Path agedWorktree(Path folder) {

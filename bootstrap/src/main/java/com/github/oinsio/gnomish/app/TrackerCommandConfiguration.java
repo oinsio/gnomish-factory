@@ -7,8 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.time.InstantSource;
 import org.springframework.beans.factory.ObjectProvider;
@@ -49,26 +48,22 @@ public class TrackerCommandConfiguration {
      * from once its tracker is bound (design D9 of collapse-composition-roots). The container
      * support stamps {@code tracked}: both commands claim through the tracker. The slots work in the
      * registered clone, read lazily because the bean exists only once a project was resolved (design
-     * D9 of add-project-registry).
+     * D9 of add-project-registry). It takes no time of its own: every slot's time — the abort
+     * stamp, the terminal-write retry, the resume stamps — is the assembly's, the root's one time
+     * equipment (task 3.9 of supervise-daemon-loops-and-embed-dashboard).
      */
     @Bean
     SlotWiringFactory slotWiringFactory(
             ManualRunAssembly manualRunAssembly,
             ObjectProvider<RegisteredClone> registeredClone,
-            InstantSource instantSource,
-            ThreadSleeper threadSleeper,
             ContainerSupports containerSupports,
             TrackerWiring trackerWiring) {
         return new SlotWiringFactory(
                 manualRunAssembly,
                 registeredClone,
                 ManualRunRunner.TASK_ID_KEY,
-                instantSource,
                 containerSupports.takeSupport(),
-                trackerWiring.pipelineSource(),
-                // FR18 of supervise-daemon-loops-and-embed-dashboard: the one terminal-write retry
-                // every slot's finish and park run under, on the root's one time source.
-                new TerminalWriteRetry(threadSleeper, instantSource, TerminalWriteRetry.DEFAULT_BOUND));
+                trackerWiring.pipelineSource());
     }
 
     /**
@@ -80,9 +75,23 @@ public class TrackerCommandConfiguration {
     ServeAssembly serveAssembly(
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            InstantSource instantSource,
+            TimeEquipment timeEquipment,
             ObjectProvider<RegisteredClone> registeredClone) {
-        return new ServeAssembly(factoryProperties, serveProperties, instantSource, registeredClone);
+        return new ServeAssembly(factoryProperties, serveProperties, timeEquipment, registeredClone);
+    }
+
+    /**
+     * The page inside {@code serve} (design D11, D12 of supervise-daemon-loops-and-embed-dashboard):
+     * handed the tracker wiring as its {@link BoardReaders} role only, so the credential seam
+     * behind it gains no second holder (NFR-S1).
+     */
+    @Bean
+    ServeDashboard serveDashboard(
+            TrackerWiring trackerWiring,
+            ProjectScope projectScope,
+            FactoryProperties factoryProperties,
+            TimeEquipment timeEquipment) {
+        return new ServeDashboard(trackerWiring, projectScope, factoryProperties, timeEquipment);
     }
 
     /**
@@ -94,21 +103,21 @@ public class TrackerCommandConfiguration {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly serveAssembly,
             TaskGit git,
-            InstantSource instantSource,
             SandboxLifecyclePass sandboxLifecyclePass,
-            SandboxProperties sandboxProperties) {
+            SandboxProperties sandboxProperties,
+            ServeDashboard serveDashboard) {
         return new ServeRuntimeAssembly(
-                slotWiringFactory, serveAssembly, git, instantSource, sandboxLifecyclePass, sandboxProperties);
+                slotWiringFactory, serveAssembly, git, sandboxLifecyclePass, sandboxProperties, serveDashboard);
     }
 
     /**
      * {@code take}'s production seams, with the installation's {@link ServeProperties} for batch
      * mode (FR2 of add-factory-serve: "the N limit applies to batch and serve") and the process
-     * clock.
+     * time equipment.
      */
     @Bean
-    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, InstantSource instantSource) {
-        return TakeCommandSeams.defaults(instantSource).withServeProperties(serveProperties);
+    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, TimeEquipment timeEquipment) {
+        return TakeCommandSeams.defaults(timeEquipment).withServeProperties(serveProperties);
     }
 
     /**

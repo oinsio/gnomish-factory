@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -107,7 +108,7 @@ class RecordOutcomeLostParkSpec extends Specification implements BareGitRepoFixt
         addOrigin(cloneDir, tempDir)
         refRepo = cloneDir
         def repository = new GitTaskRepository(new GitProcessRunner(),
-                RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE)
+                RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE, new VirtualClock())
         repository.createTask(context(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), GATED)
         repository
     }

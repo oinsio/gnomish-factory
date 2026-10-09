@@ -9,7 +9,6 @@ import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
 import com.github.oinsio.gnomish.status.WallTime;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -21,14 +20,15 @@ import org.slf4j.MDC;
  * the invocation's one {@link SlotWiring}, shared by explicit, bare and batch mode as the heartbeat
  * inside it already is (D2 of introduce-slot-wiring); each dispatch method takes only the
  * run-specific values — the {@link BoundTracker} {@link TakeCommand#run} bound, which it uses whole
- * (design D8 of collapse-composition-roots), and derives its {@link RunOrder} from.
+ * (design D8 of collapse-composition-roots), and derives its {@link RunOrder} from. It holds no
+ * clock of its own: "now" for the takeover facts and the bare-mode backoff is the wiring's one
+ * time, {@link SlotWiring#time()} (task 3.9 of supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR9, FR10, D8, D15, D16 of add-tracker-port; FR4 of introduce-slot-wiring.
  */
 record TakeDispatcher(
         SlotWiring wiring,
         FactoryProperties factoryProperties,
-        InstantSource clock,
         RefResolution refs,
         TakeoverConfirmation takeoverConfirmation) {
 
@@ -66,7 +66,7 @@ record TakeDispatcher(
         var run = new RunOrder(
                 takeArguments.dir(), takeArguments.base(), bound.definition(), takeArguments.discardWork());
         var order = new TakeOrder(run, bound.tracker().fetchTask(ref), bound.tracker(), bound.instanceId());
-        var disposition = new TakeDisposition(wiring, takeArguments.takeover(), confirmation, clock);
+        var disposition = new TakeDisposition(wiring, takeArguments.takeover(), confirmation);
         long startedNanos = System.nanoTime();
         TakeResult result = disposition.dispose(order);
         summarize(result, startedNanos);
@@ -79,7 +79,6 @@ record TakeDispatcher(
                 wiring,
                 trackerProperties.abortBackoffBase(),
                 trackerProperties.abortBackoffCap(),
-                clock,
                 bound.trackerConfig().wipLimit(),
                 new Random());
         // The bare-mode place a TakeArguments becomes a run order (D1 of introduce-take-order). The

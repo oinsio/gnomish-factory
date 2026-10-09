@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
 import com.github.oinsio.gnomish.app.lease.LivenessOracle
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
@@ -21,8 +22,10 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 /**
  * FR2, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s remaining leaf
@@ -38,7 +41,40 @@ import spock.lang.Specification
 class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null, null)
+
+    // FR18 of supervise-daemon-loops-and-embed-dashboard (task 3.9): the daemon's heartbeat is built
+    // on this assembly's one time equipment — the runtime assembly holds no time of its own to
+    // hand it — so its first stamp is the assembly clock's instant, over the caller's served tracker.
+    def "builds the daemon heartbeat on the assembly's own clock"() {
+        given:
+        def start = Instant.parse('2026-05-06T07:08:09Z')
+        def served = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, new TrackerConfig('github', 3),
+                Stub(TrackerAdapterFactory), Stub(Tracker), INSTANCE)
+
+        when:
+        def heartbeat = new ServeAssembly(testProperties(), SERVE_PROPERTIES, VirtualTimeEquipment.on(new VirtualClock(start)), null)
+                .heartbeat(served, new ForwardingDirtyNotifier())
+
+        then:
+        (heartbeat.instance() as InstanceHeartbeat).lastTickAt() == start
+    }
+
+    // NFR-O1 of add-serve-sandbox-lifecycle; task 3.9: the sweep tick log stamps each completed tick
+    // from the assembly's clock, so the dashboard's vital and the daemon read one time source.
+    def "builds the sweep tick log on the assembly's own clock"() {
+        given:
+        def start = Instant.parse('2026-05-06T07:08:09Z')
+        def log = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.on(new VirtualClock(start)), null)
+                .sweepTickLog(Duration.ofHours(1))
+
+        when:
+        log.beginTick()
+        def record = log.endTick()
+
+        then:
+        record.tickAt() == start
+    }
 
     // FR2: the feed automaton enforces the WIP limit from the caller's OWN tracker config — the
     // limit is what decides whether a fresh task may start, so a builder that dropped it would
@@ -50,9 +86,9 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def trackerConfig = new TrackerConfig('github', 3, Duration.ofMinutes(5), 3, 7, [:] as Map)
 
         when:
-        def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, clock, null).feedAutomaton(trackerConfig,
+        def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, VirtualTimeEquipment.on(clock), null).feedAutomaton(trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
-                RemoteOutageGates.forServe(BaseRefGit.UNWIRED, CLONE_DIR, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }))
+                RemoteOutageGates.forServe(BaseRefGit.UNWIRED, CLONE_DIR, new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }))
 
         then:
         automaton.view().wipLimit() == 7
@@ -67,7 +103,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
 
         when:
-        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), RegisteredCloneFixture.provider(CLONE))
+        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), RegisteredCloneFixture.provider(CLONE))
                 .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git)
 
         then:
@@ -88,8 +124,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                         new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), null).sandboxLifecycleTick(
-                new ServeArguments(CLONE_DIR, null, false),
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), null).sandboxLifecycleTick(
+                new ServeArguments(CLONE_DIR, null, false, false, null),
                 SandboxLifecyclePass.NONE,
                 livenessOracle,
                 tickLog,
@@ -121,8 +157,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 Duration.ofDays(7), new VirtualClock(), 20)
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), null).sandboxLifecycleTick(
-                new ServeArguments(CLONE_DIR, null, false),
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), null).sandboxLifecycleTick(
+                new ServeArguments(CLONE_DIR, null, false, false, null),
                 pass,
                 livenessOracle,
                 realTickLog,

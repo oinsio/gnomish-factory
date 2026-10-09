@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
@@ -59,7 +60,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
                 new FactoryProperties(INSTANCE_NAME, null, null, null),
                 RegisteredCloneFixture.scope(
                         RegisteredCloneFixture.unregistered(tempDir.resolve('gnomish-home'), projectDir), INSTANCE_NAME),
-                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 console)
     }
 

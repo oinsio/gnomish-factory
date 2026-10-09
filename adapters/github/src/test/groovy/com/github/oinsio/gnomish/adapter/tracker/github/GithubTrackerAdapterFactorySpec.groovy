@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.containing
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
@@ -8,14 +9,19 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -26,20 +32,27 @@ import spock.lang.Specification
  * clearly, label provisioning runs before any tracker method touches the issue, and the
  * assembled tracker's {@code listReady}/{@code fetchTask} work end to end against WireMock.
  *
- * <p>The package-private {@code create(TrackerConfig, String, String)} overload is used for the
- * assembly tests: it takes the token explicitly rather than reading {@code GNOMISH_GITHUB_TOKEN}
- * from the environment, since mutating the real process environment is not reliably possible on
- * a module-path JVM without {@code --add-opens}. The public, environment-reading entry point
- * ({@code create(SecretsProvider, TrackerConfig, String)}) is covered separately by the
- * missing-token test, which needs no environment manipulation at all.
+ * <p>The package-private {@code create(TrackerConfig, String, String, InstantSource)} seam is used
+ * for most assembly tests: it takes the token explicitly. The public entry point ({@code
+ * create(TrackerAdapterContext)}) is covered by the missing-token test and by the time-identity
+ * test, which hands it a context carrying a map-backed secret and virtual time equipment.
  *
- * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port.
+ * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port; FR20, FR23 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 class GithubTrackerAdapterFactorySpec extends Specification {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
     private static final String INSTANCE_ID = 'gnomish-factory-x7k2q1'
+    private static final String PROVISIONED_LABELS = '''
+            [
+              {"name":"gnomish:ready","color":"2ea44f"},
+              {"name":"gnomish:working","color":"1f6feb"},
+              {"name":"gnomish:needs-human","color":"d73a4a"},
+              {"name":"gnomish:delivered","color":"8250df"}
+            ]
+            '''
 
     WireMockServer wireMock
 
@@ -92,9 +105,9 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         def factory = new GithubTrackerAdapterFactory()
 
         when:
-        factory.create({ name ->
+        factory.create(new FixedTrackerAdapterContext({ name ->
             Optional.empty()
-        } as SecretsProvider, configFor(subsection()), INSTANCE_ID)
+        } as SecretsProvider, configFor(subsection()), INSTANCE_ID))
 
         then:
         def ex = thrown(GithubTrackerConfigException)
@@ -102,17 +115,43 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         wireMock.findAllUnmatchedRequests().isEmpty()
     }
 
+    // FR20, FR23 of supervise-daemon-loops-and-embed-dashboard (delta scenario "The plugin's time
+    //     comes from the host"): the adapter built through the public create reads its token, its
+    //     instance id and its time from the context — a context on a virtual instant makes the stamp
+    //     of a marker the adapter writes read that instant, not the wall clock.
+    def "FR23: a marker written by the adapter built from a context is stamped with the context's virtual instant"() {
+        given: 'labels already provisioned, an empty thread, and a comment endpoint accepting the write'
+        wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/labels?per_page=100"))
+                .willReturn(aResponse().withStatus(200).withBody(PROVISIONED_LABELS)))
+        wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/issues/42/comments?per_page=100"))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        wireMock.stubFor(post(urlEqualTo("/repos/$OWNER/$REPO/issues/42/comments"))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":7}')))
+
+        and: 'a context whose secret resolves and whose time equipment sits at a far-future instant'
+        def virtualNow = Instant.parse('2031-02-03T04:05:06Z')
+        def context = new FixedTrackerAdapterContext(
+                new MapSecretsProvider([(GithubTrackerAdapterFactory.TOKEN_ENV_VAR): 'context-token']),
+                configFor(subsection()),
+                INSTANCE_ID,
+                ClaimEpochSource.NONE,
+                VirtualTimeEquipment.on(new VirtualClock(virtualNow)))
+
+        when:
+        Tracker tracker = new GithubTrackerAdapterFactory().create(context)
+        tracker.postNote(new TaskRef("github:$OWNER/$REPO#42"), 'a note')
+
+        then: 'the marker carries the virtual instant and the context instance id, sent with the context token'
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/repos/$OWNER/$REPO/issues/42/comments"))
+                .withHeader('Authorization', containing('context-token'))
+                .withRequestBody(containing(virtualNow.toString()))
+                .withRequestBody(containing(INSTANCE_ID)))
+    }
+
     def "label provisioning runs before any tracker method is usable, then listReady/fetchTask work"() {
         given:
         wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/labels?per_page=100"))
-                .willReturn(aResponse().withStatus(200).withBody('''
-                        [
-                          {"name":"gnomish:ready","color":"2ea44f"},
-                          {"name":"gnomish:working","color":"1f6feb"},
-                          {"name":"gnomish:needs-human","color":"d73a4a"},
-                          {"name":"gnomish:delivered","color":"8250df"}
-                        ]
-                        ''')))
+                .willReturn(aResponse().withStatus(200).withBody(PROVISIONED_LABELS)))
         wireMock.stubFor(get(urlEqualTo(
                         "/repos/$OWNER/$REPO/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100"))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))

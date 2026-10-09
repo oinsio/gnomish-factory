@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -57,7 +58,7 @@ class SnapshotWriterSpec extends Specification {
         def clock = new VirtualClock(writeInstant)
         def writer = new SnapshotWriter(target, {
             -> snapshot
-        }, mapper, Duration.ofSeconds(45), clock, 0)
+        }, mapper, Duration.ofSeconds(45), VirtualTimeEquipment.on(clock), 0)
 
         when:
         writer.tick()
@@ -77,7 +78,7 @@ class SnapshotWriterSpec extends Specification {
         def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), clock, 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 0)
 
         when:
         writer.tick()
@@ -100,7 +101,7 @@ class SnapshotWriterSpec extends Specification {
         def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(90), clock, 0)
+        }, mapper, Duration.ofSeconds(90), VirtualTimeEquipment.on(clock), 0)
 
         when:
         writer.tick()
@@ -115,7 +116,7 @@ class SnapshotWriterSpec extends Specification {
         def calls = new AtomicInteger()
         def writer = new SnapshotWriter(target, {
             -> calls.incrementAndGet(); fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
 
         when:
         writer.tick()
@@ -135,7 +136,7 @@ class SnapshotWriterSpec extends Specification {
         def target = blockingFile.resolve('snapshot.json')
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
 
         when:
         writer.tick()
@@ -155,7 +156,7 @@ class SnapshotWriterSpec extends Specification {
         def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), clock, 30)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 30)
 
         when:
         writer.tick()
@@ -175,7 +176,7 @@ class SnapshotWriterSpec extends Specification {
         def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), clock, 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.on(clock), 0)
 
         when:
         writer.tick()
@@ -192,9 +193,10 @@ class SnapshotWriterSpec extends Specification {
         given:
         def target = tempDir.resolve('snapshot.json')
         def stopped = new AtomicBoolean(false)
+        def calls = new AtomicInteger()
         def writer = new SnapshotWriter(target, {
-            -> stopped.get() ? stoppedSnapshot() : fixtureSnapshot()
-        }, mapper, Duration.ofMillis(20), new VirtualClock(), 0)
+            -> calls.incrementAndGet(); stopped.get() ? stoppedSnapshot() : fixtureSnapshot()
+        }, mapper, Duration.ofMillis(20), VirtualTimeEquipment.create(), 0)
         writer.start()
         new PollingConditions(timeout: 2).eventually {
             assert Files.exists(target)
@@ -207,8 +209,10 @@ class SnapshotWriterSpec extends Specification {
         then: 'the file on disk reflects the stopped content, not a stale running one'
         Files.readString(target).contains('"state" : "stopped"')
 
-        and: 'the worker thread has actually terminated'
-        !writer.worker().isAlive()
+        and: 'the loop has actually ended: no write follows over several of its 20 ms intervals'
+        def writesAfterStop = calls.get()
+        Thread.sleep(150)
+        calls.get() == writesAfterStop
     }
 
     // Task 6.3, FR4: stopAfterFinalWrite() must WAIT for the background thread's in-flight tick
@@ -232,7 +236,7 @@ class SnapshotWriterSpec extends Specification {
                 return fixtureSnapshot()
             }
             return stoppedSnapshot()
-        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
         writer.start()
         assert firstCallStarted.await(2, TimeUnit.SECONDS)
 
@@ -251,49 +255,12 @@ class SnapshotWriterSpec extends Specification {
         Files.readString(target).contains('"state" : "stopped"')
     }
 
-    // Task 6.3, FR1: awaitNextWake's InterruptedException catch must restore the interrupt status
-    // (Thread.currentThread().interrupt()) rather than swallowing it — Object#wait() itself clears
-    // the flag as part of throwing, so only the explicit restore leaves it set afterward. Driven by
-    // directly interrupting the parked worker thread (the only way to reach this catch); the
-    // supplier's second call self-stops the writer so the loop terminates deterministically right
-    // after, with nothing further touching the thread's interrupt status.
-    def "awaitNextWake restores the interrupt status after being interrupted while waiting"() {
-        given:
-        def target = tempDir.resolve('snapshot.json')
-        def calls = new AtomicInteger()
-        SnapshotWriter writer
-        writer = new SnapshotWriter(target, {
-            ->
-            if (calls.incrementAndGet() == 2) {
-                writer.stop()
-            }
-            fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(10), new VirtualClock(), 0)
-        writer.start()
-
-        when: 'wait until the worker thread is genuinely parked waiting for its next tick'
-        new PollingConditions(timeout: 2).eventually {
-            assert writer.worker().getState() == Thread.State.TIMED_WAITING
-        }
-
-        and: 'interrupt it directly — the only way to drive the InterruptedException catch path'
-        writer.worker().interrupt()
-
-        and: 'wait for the thread to run its self-stopping second tick and terminate'
-        new PollingConditions(timeout: 2).eventually {
-            assert !writer.worker().isAlive()
-        }
-
-        then: 'the interrupt status survived to thread termination — restored by the catch, not lost'
-        writer.worker().isInterrupted()
-    }
-
     def "stopAfterFinalWrite() throws if the writer was never started"() {
         given:
         def target = tempDir.resolve('snapshot.json')
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
 
         when:
         writer.stopAfterFinalWrite()

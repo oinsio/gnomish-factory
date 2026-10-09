@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -21,8 +20,8 @@ class RecordingTrackerAdapterFactory implements TrackerAdapterFactory {
     }
 
     @Override
-    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-        capturedInstanceId = instanceId
+    Tracker create(TrackerAdapterContext context) {
+        capturedInstanceId = context.instanceId()
         tracker
     }
 

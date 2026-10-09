@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.FirstPushFailedException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -34,7 +35,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
 
     /** The production budget with its sleeps virtualized, so exhaustion is instant under test. */
     private static GitInfrastructureRetry instantRetry() {
-        new GitInfrastructureRetry({ Duration ignored -> } as Sleeper,
+        new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper),
         GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1))
     }
 

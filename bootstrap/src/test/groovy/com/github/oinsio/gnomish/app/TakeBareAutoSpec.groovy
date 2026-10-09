@@ -12,10 +12,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 
 /**
  * FR10, NFR-C1 of add-tracker-port (task 5.10), FR6/FR9/D2 of add-factory-serve (task 2.3): {@link
@@ -36,7 +34,6 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     private static final Duration BASE = Duration.ofMinutes(2)
     private static final Duration CAP = Duration.ofHours(1)
     private static final Instant NOW = Instant.parse('2026-07-23T12:00:00Z')
-    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC)
 
     /** Never blocks on the WIP limit — the default for scenarios that carry no WIP concern. */
     private static final int UNLIMITED_WIP = Integer.MAX_VALUE
@@ -59,7 +56,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         // fresh claim's base resolution; setup() wires a real 'origin' remote (TakeResumeSpecBase),
         // so this spec's claimed scenarios need the clone's actual default branch instead — which
         // is the trusted tier the fixture's slot wiring carries.
-        new TakeBareAuto(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real()), BASE, CAP, CLOCK, wipLimit, random)
+        new TakeBareAuto(slotWiring(newAssembly(FakeAgentSupport.propertiesFor('plain-round'), TakeCommands.slotTime(NOW)), TaskGitFixture.real()), BASE, CAP, wipLimit, random)
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {

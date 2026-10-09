@@ -3,12 +3,12 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.time.Instant
 import java.time.InstantSource
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -41,7 +41,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
     @TempDir
     Path tempDir
 
-    private final InstantSource clock = { -> Instant.now() } as InstantSource
+    private final InstantSource clock = new VirtualClock()
     private final DockerCli docker = new DockerCli()
 
     private String key

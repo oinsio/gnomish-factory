@@ -2,6 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -36,6 +39,13 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
     Path cloneDir
 
     SandboxProperties sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+
+    TimeEquipment time = VirtualTimeEquipment.create()
+
+    SandboxModeSelector selector = new SandboxModeSelector(
+    new BindingProperties(null, [:]), sandbox, DiscoveredBindings.real(), {
+        -> true
+    } as ContainerRuntimeProbe)
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
@@ -85,9 +95,38 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
         .environments.ownershipMode() == OwnershipMode.TRACKED
     }
 
+    // FR18, FR22 of supervise-daemon-loops-and-embed-dashboard (design D22): the equipment the
+    // supports are given is the one every run's box timing carries — no run builds its own.
+    def "every run of either mode measures on the time equipment the supports were given"() {
+        given:
+        def supports = newSupports()
+
+        when:
+        def manualRun = (ContainerRunSupport) supports.manualSupport().create(cloneDir, 'T-m', segments(), pipeline(), [])
+        def trackedRun = (ContainerRunSupport) supports.takeSupport().containerSupportFactory()
+                .create(cloneDir, 'T-t', segments(), pipeline(), [])
+
+        then:
+        manualRun.environments.timing().equipment().is(time)
+        trackedRun.environments.timing().equipment().is(time)
+    }
+
+    // FR18 of supervise-daemon-loops-and-embed-dashboard (design D22): manual runs and take/serve
+    // ask one execution-mode selector — the one the supports were given.
+    def "a manual run's plan and take's bundle ask the selector the supports were given"() {
+        given:
+        def supports = newSupports()
+
+        expect: 'the bundle carries the very selector'
+        supports.takeSupport().modeSelector().is(selector)
+
+        and: 'the manual plan is the answer of that selector: container by default, over the scripted probe'
+        supports.plan(pipeline(), RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)).mode() ==
+                SandboxModeSelector.Plan.Mode.CONTAINER
+    }
+
     private ContainerSupports newSupports() {
-        new ContainerSupports([:], testProperties(), sandbox, new BindingProperties(null, [:]),
-        DiscoveredBindings.real(), TaskGitFixture.real())
+        new ContainerSupports([:], testProperties(), sandbox, selector, TaskGitFixture.real(), time)
     }
 
     private static List<Segment> segments() {

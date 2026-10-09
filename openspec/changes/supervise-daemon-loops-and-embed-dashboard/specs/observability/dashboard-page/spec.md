@@ -29,6 +29,50 @@ the rendering of the others.
 - **THEN** the page renders with "daemon has not run here", the ledger
   blocks' empty-state sentences, and populated board-fed blocks
 
+### Requirement: Daemon section computes staleness and flags alert conditions
+The snapshot's surface is the status card (the page's second priority
+layer). A snapshot whose last `lifecycle.state` is `stopped` SHALL show the
+stopped state and its reason at any age: `stopped` is terminal, so
+staleness adds nothing to it, and its vitals, frozen at the stop, SHALL
+raise none of the daemon alert rules below. For every other lifecycle
+state the card SHALL compute snapshot staleness from the snapshot's own
+`writtenAt` and `intervalSeconds` and SHALL flag the operator-guide alert
+conditions observable from a single snapshot — rules 1–5 of the guide's
+six: stale snapshot in any non-`stopped` lifecycle state (daemon dead),
+occupied slots with heartbeat not `running`, long `idleBlocked`, growing
+tracker `consecutiveFailures`, stale reaper `lastRunAt` or growing
+`restartCount` — each triggered condition rendered as a short alarm-palette
+line inside the card. The sandbox-hygiene alert conditions SHALL surface as
+the same kind of alarm lines in this card, not in the sandbox-hygiene
+block. Rule 6 (`heldClaims` vs slot-count desync on two consecutive
+checks) needs check-to-check history and stays with the external
+dead-man's-switch monitor.
+<!-- implements FR1, FR2 of redesign-dashboard -->
+<!-- implements FR11 of supervise-daemon-loops-and-embed-dashboard -->
+
+#### Scenario: Dead daemon reddens the section
+- **WHEN** the snapshot's age exceeds `k × intervalSeconds` and its last
+  `lifecycle.state` is not `stopped` (`running`, `draining`, or
+  `stopping`)
+- **THEN** the status card carries a "daemon dead" alarm line
+
+#### Scenario: Clean stop is not an alert
+- **WHEN** the snapshot is stale and its last `lifecycle.state` is `stopped`
+- **THEN** the card shows the stopped state and reason without a
+  dead-daemon alarm line
+
+#### Scenario: Fresh stopped snapshot shows the stopped state
+- **WHEN** the snapshot is within `k × intervalSeconds` of its `writtenAt`
+  and its last `lifecycle.state` is `stopped` — the page `serve` renders
+  right after its final snapshot
+- **THEN** the card shows the stopped state and reason with the stopped
+  marker, never "running", and carries no daemon alarm line
+
+#### Scenario: Hygiene alert surfaces in the status card
+- **WHEN** a sandbox-hygiene alert condition triggers at render time
+- **THEN** it renders as an alarm line in the status card, and the
+  sandbox-hygiene block itself carries no alert styling
+
 ## ADDED Requirements
 
 ### Requirement: Status card shows the WIP stat from the board

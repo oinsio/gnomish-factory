@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
 import com.github.oinsio.gnomish.app.serve.RemoteOutageClosedOutage;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageLedgerSink;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.RemoteOutageLine;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements NFR-O1, NFR-O3, NFR-R3 of add-base-ref-resolution.
  */
-public final class RemoteOutageLedgerWriter implements Consumer<RemoteOutageClosedOutage> {
+public final class RemoteOutageLedgerWriter implements RemoteOutageLedgerSink {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteOutageLedgerWriter.class);
 
@@ -46,7 +46,7 @@ public final class RemoteOutageLedgerWriter implements Consumer<RemoteOutageClos
      * @param outage the closed outage's summary; never null
      */
     @Override
-    public void accept(RemoteOutageClosedOutage outage) {
+    public void outageClosed(RemoteOutageClosedOutage outage) {
         try {
             appender.append(new RemoteOutageLine(
                     instance,

@@ -14,8 +14,8 @@ package com.github.oinsio.gnomish.app.lease;
  * observer's own machine, so it must ride a monotonic counter ({@code
  * System.nanoTime}-based, per D2) that only ever advances — never a wall clock, and
  * never {@code updatedAt} from the tracker (D2 forbids cross-host clock arithmetic).
- * Kept to one method, mirroring the minimal {@code Clock}/{@code Sleeper} engine
- * seams.
+ * Kept to one method, mirroring the minimal {@code InstantSource}/{@code Sleeper} halves of the
+ * engine's time equipment ({@code TimeEquipment}).
  *
  * <p>Supports FR2, D2, NFR-R1 of add-claim-heartbeat.
  */

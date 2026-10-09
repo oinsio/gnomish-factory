@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.adapter.tracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeLifecycleRevocationSpecBase
+import com.github.oinsio.gnomish.app.TrackerAdapterContext
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -49,7 +49,7 @@ class InMemoryTakeLifecycleRevocationSpec extends TakeLifecycleRevocationSpecBas
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 

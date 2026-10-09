@@ -6,7 +6,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * Extracts the sweep vital out of whichever {@link DaemonSnapshotView} variant carries a snapshot
  * (NFR-O3 of add-serve-sandbox-lifecycle). Unlike {@link AlertConditionEvaluator}, a
- * {@link DaemonSnapshotView.StoppedStale} snapshot is read here too: a cleanly stopped daemon's
+ * {@link DaemonSnapshotView.Stopped} snapshot is read here too: a cleanly stopped daemon's
  * last sweep is still the truth about what is on the host — the kept environments it lists are
  * exactly what an operator returning to a stopped instance needs to see — while the alert
  * conditions, which claim something is wrong NOW, rightly stay silent for it.
@@ -32,7 +32,7 @@ final class SweepVitalReader {
             case DaemonSnapshotView.Absent ignored -> null;
             case DaemonSnapshotView.Fresh fresh -> fresh.snapshot().vitals().sweep();
             case DaemonSnapshotView.DeadDaemon dead -> dead.snapshot().vitals().sweep();
-            case DaemonSnapshotView.StoppedStale stopped ->
+            case DaemonSnapshotView.Stopped stopped ->
                 stopped.snapshot().vitals().sweep();
         };
     }

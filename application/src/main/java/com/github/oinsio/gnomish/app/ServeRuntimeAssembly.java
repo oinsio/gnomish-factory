@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
+import com.github.oinsio.gnomish.app.serve.DaemonLoops;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink;
@@ -15,10 +16,7 @@ import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import com.github.oinsio.gnomish.serveobservability.SweepVital;
-import java.time.InstantSource;
 
 /**
  * Orchestrates the whole {@code serve} daemon runtime once the tracker is live, over the leaf
@@ -32,42 +30,47 @@ import java.time.InstantSource;
  * add-serve-observability. Implements FR8 of collapse-composition-roots. Implements FR9, FR10 of
  * add-project-registry: neither the serve directory nor the janitor's worktree folder is relayed
  * through here — both come from the registered clone {@link ServeAssembly} reads. Implements FR18
- * of supervise-daemon-loops-and-embed-dashboard: the heartbeat is built on the root's one time
- * source.
+ * of supervise-daemon-loops-and-embed-dashboard: it holds no time of its own — the heartbeat and the
+ * sweep tick log are built by {@link ServeAssembly} on the daemon's one time equipment, and the slot
+ * runs on its wiring's (task 3.9). Implements FR9, FR10 of supervise-daemon-loops-and-embed-dashboard:
+ * the embedded page comes from {@link ServeDashboard}, which holds the board reader's role
+ * interface — no secrets seam reaches this assembly.
  */
 final class ServeRuntimeAssembly {
 
     private final SlotWiringFactory slotWiringFactory;
     private final ServeAssembly builders;
     private final TaskGit git;
-    private final InstantSource clock;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final SandboxProperties sandboxProperties;
+    private final ServeDashboard serveDashboard;
 
     /**
      * @param slotWiringFactory builds the daemon's one slot wiring, the equipment {@code serve}
      *     shares with {@code take} (design D9 of collapse-composition-roots)
-     * @param builders the leaf builders over the daemon's properties and engine clock
+     * @param builders the leaf builders over the daemon's properties and its one time equipment
      * @param git the task-git port, decorated here with the remote-outage gate
-     * @param clock supplies "now" for the heartbeat, the sweep tick log and the observability wiring
      * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam; {@link SandboxLifecyclePass#NONE}
      *     on a host-only install
      * @param sandboxProperties supplies the sandbox reap age the sweep vital is measured against —
      *     the installation's one settings bean, the same the sweep-lifecycle pass is built from
+     * @param serveDashboard builds the embedded page over a board reader from the bound law, or
+     *     nothing when the switch is off (FR9, FR10 of supervise-daemon-loops-and-embed-dashboard);
+     *     the decision is its own, so this assembly stays straight-line
      */
     ServeRuntimeAssembly(
             SlotWiringFactory slotWiringFactory,
             ServeAssembly builders,
             TaskGit git,
-            InstantSource clock,
             SandboxLifecyclePass sandboxLifecyclePass,
-            SandboxProperties sandboxProperties) {
+            SandboxProperties sandboxProperties,
+            ServeDashboard serveDashboard) {
         this.slotWiringFactory = slotWiringFactory;
         this.builders = builders;
         this.git = git;
-        this.clock = clock;
         this.sandboxLifecyclePass = sandboxLifecyclePass;
         this.sandboxProperties = sandboxProperties;
+        this.serveDashboard = serveDashboard;
     }
 
     /**
@@ -75,8 +78,9 @@ final class ServeRuntimeAssembly {
      * tracker every downstream caller works with over it (design D8, amendment b, of
      * collapse-composition-roots), builds the one {@link TakeHeartbeat} whose {@code ClaimBeat}/{@code
      * ClaimLossFlag} every slot shares (FR13), then the {@link SlotLedger}, {@link TakeSlotRunner},
-     * {@link FeedAutomaton}, {@link ServeShutdown}, {@link WorktreeJanitor} and the {@link
-     * ObservabilityWiring}, and attaches the ledger writer to the slot runner.
+     * {@link FeedAutomaton}, {@link WorktreeJanitor}, the {@link ObservabilityWiring}, the {@link
+     * SandboxLifecycleTick}, then the {@link DaemonLoops} over the three serve-lifetime loops and the
+     * {@link ServeShutdown} that stops them, and attaches the ledger writer to the slot runner.
      */
     ServeRuntime assemble(ServeArguments serveArguments, BoundTracker bound, int effectiveSlots) {
         // FR8, D12: shared by every downstream caller (heartbeat, slot runner, feed automaton) — the
@@ -90,8 +94,7 @@ final class ServeRuntimeAssembly {
 
         // FR13: joins the assembly before TakeSlotRunner is built (reused for the daemon's lifetime).
         // FR7 (design D4): the heartbeat's state transitions wake the same writer.
-        TakeHeartbeat heartbeat = TakeHeartbeat.forRun(
-                served.tracker(), served.trackerConfig(), new ThreadSleeper(), dirtyNotifier::markDirty, clock);
+        TakeHeartbeat heartbeat = builders.heartbeat(served, dirtyNotifier);
 
         SlotLedger slotLedger = builders.slotLedger(effectiveSlots, dirtyNotifier);
         // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): ONE gate instance shared by the slot
@@ -102,8 +105,8 @@ final class ServeRuntimeAssembly {
         // ledger sink is a forwarding stand-in — same construction-order cycle ForwardingDirtyNotifier
         // already breaks for the snapshot writer, bound below once ObservabilityAssembly returns.
         ForwardingRemoteOutageLedgerSink remoteOutageLedgerSink = new ForwardingRemoteOutageLedgerSink();
-        RemoteOutageGate remoteOutageGate = builders.remoteOutageGate(
-                git.baseRefs(), serveArguments.dir(), dirtyNotifier::markDirty, remoteOutageLedgerSink);
+        RemoteOutageGate remoteOutageGate =
+                builders.remoteOutageGate(git.baseRefs(), serveArguments.dir(), dirtyNotifier, remoteOutageLedgerSink);
         // The serve side's one slot wiring (design "Where a SlotWiring is built" of
         // introduce-slot-wiring; built by the factory of design D9 of collapse-composition-roots):
         // built once per daemon, as soon as the heartbeat and the gate exist, and shared by every
@@ -123,7 +126,6 @@ final class ServeRuntimeAssembly {
                 slotRunner,
                 dirtyNotifier,
                 remoteOutageGate);
-        ServeShutdown shutdown = builders.shutdown(slotLedger, heartbeat.flag(), heartbeat.standingReaper());
         WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git);
         // NFR-O1 of add-serve-sandbox-lifecycle: built before the observability wiring, which reads
         // it for `vitals.sweep`, and before the tick, which writes it — the log, not the tick
@@ -131,13 +133,11 @@ final class ServeRuntimeAssembly {
         // threshold every kept environment's remaining margin is measured against comes from the
         // SAME SandboxProperties the sweep policy itself was built from, so the dashboard's
         // time-to-reap can never disagree with the reaper's own decision.
-        SweepTickLog sweepTickLog =
-                new SweepTickLog(sandboxProperties.keptReapAge(), clock, SweepVital.MAX_KEPT_INVENTORY);
+        SweepTickLog sweepTickLog = builders.sweepTickLog(sandboxProperties.keptReapAge());
         // FR1, FR4, FR7, FR9, FR12 of add-serve-observability (task 5.1, task 2.5).
         ObservabilityWiring observability = builders.observability(
                 served.instanceId(),
                 dirtyNotifier,
-                clock,
                 new SnapshotSources(
                         automaton,
                         slotLedger,
@@ -160,13 +160,20 @@ final class ServeRuntimeAssembly {
                 observability.sweepLedgerWriter(),
                 observability.sweepLedgerWriter());
         slotRunner.attachLedgerWriter(observability.taskOutcomeLedgerWriter());
+        // D9 of supervise-daemon-loops-and-embed-dashboard: the three serve-lifetime loops as one
+        // group, which the shutdown stops before its grace wait — built last, once the sweep tick
+        // (which needs the observability's ledger writers) exists.
+        DaemonLoops daemonLoops = new DaemonLoops(heartbeat.standingReaper(), worktreeJanitor, sandboxLifecycleTick);
+        ServeShutdown shutdown = builders.shutdown(slotLedger, heartbeat.flag(), daemonLoops);
+        // FR9, FR10, D11 of supervise-daemon-loops-and-embed-dashboard: the page's board reader is
+        // built from the binding as serve made it — never the health-wrapped tracker — so its
+        // failures stay out of the daemon's tracker health.
         return new ServeRuntime(
                 automaton,
                 slotRunner,
                 shutdown,
-                worktreeJanitor,
-                heartbeat.standingReaper(),
+                daemonLoops,
                 observability,
-                sandboxLifecycleTick);
+                serveDashboard.forRun(serveArguments, bound));
     }
 }

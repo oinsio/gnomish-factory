@@ -7,8 +7,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import java.time.InstantSource
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 
@@ -96,9 +96,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     def "judgeVoter binds the manifest-driven CLI judge in host mode"() {
         when:
         def voter = ExecutorAdapterSelector.judgeVoter(
-                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
-                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
-                testProperties(), InstantSource.system(), childEnv, law, null)
+                testProperties(), new VirtualClock(), childEnv, law, null)
 
         then:
         voter != null

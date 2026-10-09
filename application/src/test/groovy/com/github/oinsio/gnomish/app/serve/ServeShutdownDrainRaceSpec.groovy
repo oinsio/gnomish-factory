@@ -41,7 +41,7 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofMillis(300)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
         def released = new ConcurrentLinkedQueue<TaskRef>()
 
         and: "slot A's fake round checks the flag frequently and reacts as soon as it is set"
@@ -129,7 +129,7 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofSeconds(10)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
         def interruptedAfterShutdown = new AtomicInteger(-1)
         def shutdownReturned = new CountDownLatch(1)
 
