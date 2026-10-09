@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -50,16 +51,19 @@ import org.jspecify.annotations.Nullable;
  * local/origin pair fails closed with {@link
  * com.github.oinsio.gnomish.app.port.git.DivergedBranchException} rather than discarding the
  * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
- * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
+ * one closed set, with the same meaning per arm — except that a recorded {@code AwaitingApproval}
+ * position takes the {@code paused} arm whatever the outcome says (FR11 of
+ * make-checkpoint-gate-durable): {@code null} salvages the interrupted round and
  * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
  * resolves the {@code --decision} through the same {@link EscalationResume}, {@code paused}
- * continues without a prompt, {@code completed} reports without another engine run, and {@code
+ * lands the approval commit and continues without a prompt, {@code completed} reports without another engine run, and {@code
  * aborted} refuses with a usage error naming the kept working copy; both refuse a {@code
- * --decision} over a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
+ * --decision} over a gate or a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
  * write (FR9 of make-run-headless). Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
- * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow; FR9 of add-project-registry.
+ * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow; FR9 of add-project-registry;
+ * FR11 of make-checkpoint-gate-durable.
  */
 final class GitResumeRunner {
 
@@ -155,8 +159,15 @@ final class GitResumeRunner {
                 .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), bootstrap.worktreePath()));
 
         RecordedOutcome outcome = bootstrap.outcome();
-        ResumeDecisionGuard.requireEscalatedFor(bootstrap.taskId(), outcome, decision);
+        ResumeDecisionGuard.requireEscalatedFor(bootstrap.taskId(), outcome, finalState.position(), decision);
         var continuation = new GitResumeContinuation(assembly, git, taskRepository, cloneDir, bootstrap);
+        if (finalState.position() instanceof Position.AwaitingApproval) {
+            // FR11 of make-checkpoint-gate-durable: a gate is its own shape, whatever the outcome
+            // says (a lost park, a landed park) — it takes the checkpoint continuation, never the
+            // salvage-and-continue or decision arm.
+            continuation.resumePaused(order, finalState);
+            return;
+        }
         if (outcome == null) {
             continuation.resumeFromRecordedPosition(order, finalState);
             return;

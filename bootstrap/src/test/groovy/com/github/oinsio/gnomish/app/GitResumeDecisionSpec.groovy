@@ -74,7 +74,8 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
     // exhausts the same limit again. The re-park's task.json is byte for byte the one on the tip,
     // so recordOutcome makes no second lifecycle commit and the resume ends on RunParkedException
     // (exit 10) — not on git's "nothing to commit" surfaced as a GitTaskRepositoryException.
-    def "run() over an AttemptsExhausted park and no --decision reruns, re-parks identically and records the park once"() {
+    // FR7 of make-checkpoint-gate-durable: the reset lands as the one resumed commit before the round
+    def "run() over an AttemptsExhausted park and no --decision lands the resumed commit, reruns and re-parks identically"() {
         given: 'a task on a real origin, parked with its attempts exhausted, as a run park records it'
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
@@ -96,12 +97,18 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def stop = thrown(RunParkedException)
         (stop.outcome() as TaskOutcome.Escalated).report() == new EscalationReport.AttemptsExhausted(1)
 
-        and: 'the tip carries the identical document, with one escalation commit in its history, on both replicas'
+        and: 'the tip carries the identical document again, on both replicas'
         gitOutput(cloneDir, 'show', "${branch}:.gnomish-task/task.json") == parkedTaskJson
-        gitOutput(cloneDir, 'log', '--format=%s', branch).readLines().count {
-            it == 'gnomish: task escalated'
-        } == 1
         gitOutput(bare, 'rev-parse', "refs/heads/${branch}") == gitOutput(cloneDir, 'rev-parse', branch)
+
+        and: 'one resumed commit consumed the first park before the rerun round; the rerun parked anew'
+        def subjects = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', branch).readLines()
+        def first = subjects.indexOf('gnomish: task escalated')
+        subjects[first + 1] == 'gnomish: task resumed'
+        subjects.count('gnomish: task resumed') == 1
+        subjects[first + 2].startsWith('gnomish: round build#')
+        subjects.last() == 'gnomish: task escalated'
+        subjects.count('gnomish: task escalated') == 2
     }
 
     // FR4 of make-run-headless: a DecisionNeeded resumed without --decision is refused — the
@@ -133,16 +140,16 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         Files.isDirectory(expectedWorktree(taskId))
     }
 
-    // FR9 of make-run-headless: a --decision over a paused task is a usage error naming the
-    // conflict, raised before any branch write.
-    def "run() with --decision over a paused task is a usage error that writes nothing"() {
+    // FR9 of make-run-headless; FR4 of make-checkpoint-gate-durable: a --decision over a task paused
+    // at a gate is a usage error naming the conflict, raised before any branch write.
+    def "run() with --decision over a task paused at a gate is a usage error that writes nothing"() {
         given:
         def taskId = 'PROJ-15'
         def branch = TaskIdSanitizer.branchName(taskId)
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
-        persistOneRound(taskId, endState)
-        repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'), TrackerWrite.OWED)
+        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        persistOneRound(taskId, gateState)
+        repository().recordOutcome(taskId, new TaskOutcome.Paused(gateState, 'build'), TrackerWrite.OWED)
         def tipBefore = gitOutput(cloneDir, 'rev-parse', branch).trim()
 
         when:
@@ -153,7 +160,7 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def e = thrown(UsageException)
         e.message.contains('--decision')
         e.message.contains(taskId)
-        e.message.contains("paused")
+        e.message.contains("awaiting approval after stage 'build'")
 
         and:
         gitOutput(cloneDir, 'rev-parse', branch).trim() == tipBefore

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.untrustedtext.Provenance
@@ -94,7 +94,7 @@ class HttpExternalCheckClientCannotVerifySpec extends Specification implements H
     def "a workspace whose round recorded no attempt commit fails the check closed"() {
         given:
         def exchange = new ScriptedExchange(200, 'ok')
-        def workspace = new RecordedAttemptCommitWorkspace(new AttemptCommitRef())
+        def workspace = new RecordedAttemptCommitWorkspace(new CurrentRound())
 
         when:
         def status = new HttpExternalCheckClient(exchange, providing([:]))

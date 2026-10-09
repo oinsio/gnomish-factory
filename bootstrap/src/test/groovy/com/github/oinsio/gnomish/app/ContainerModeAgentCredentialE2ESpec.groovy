@@ -117,7 +117,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.CREDENTIAL_CAPTURING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -132,7 +132,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         then: 'the agent round held both credentials with their current factory values'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.CREDENTIAL_CAPTURE}")
         captured.readLines().collectEntries { line ->
             line.split('=', 2).with {

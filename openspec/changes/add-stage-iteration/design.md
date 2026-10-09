@@ -17,7 +17,8 @@ recorded as `PASSED` would silently erase item history.
 The iteration state (cursor, item snapshot, per-item attempt count,
 progress records) lands in `state.json` as a sibling of `position`,
 following the `egressCursor` precedent (additive under v1, absent = not
-iterating; old builds ignore it). `Position` stays `AtStage | PipelineEnd`.
+iterating; old builds ignore it). `Position` gains no variant for iteration (it is
+`AtStage | AwaitingApproval | PipelineEnd` since `make-checkpoint-gate-durable`).
 *Rationale:* the audit showed the sealed `Position` is mirrored in two wire
 DTO trees and gated by a version check — a new variant is a wire-breaking
 change; the additive-field precedent is established and tested.
@@ -122,6 +123,45 @@ external CI would multiply wall-clock and tracker writes by N; the
 cheap/expensive split follows the existing fail-fast ordering rule.
 *Alternative rejected:* full chain per item — economically dead for
 30–60-item plans.
+
+## Review note (make-checkpoint-gate-durable, D9)
+
+Added by `make-checkpoint-gate-durable` before this change is applied; it
+does not redesign the decisions above, it names the rule three of them must
+follow. The rule is `crash-consistency.md` item 12 — **no write implies an
+authorisation a later write grants**: for every durable step, a pickup that
+sees that step and nothing after it must not be allowed to continue past a
+gate, deliver, or run the next stage while a later write was meant to decide
+that. The gate belongs in the step's own record: **the position is the
+gate** (a `manual` pass records `AwaitingApproval(stage)`, owned by the
+`stage-engine` capability's advancement modes, and the `task-branch-contract`
+capability's `AwaitingApproval` shape), and **the stop rides the round
+record** (a decision request or a cannot-verify stop is a field of the round
+that raised it, re-raised by any pickup until consumed — `stage-engine`
+capability, "The stop rides the round record"). Three instances here:
+
+1. **D6 overflow decision request.** The decision request raised when
+   adoption would exceed `maxDiscoveredItems` is carried by the boundary
+   round's own record (its stop, with the pending items as payload), not by
+   a later park commit; the boundary commit that raises it adopts none of
+   the overflowing items and advances no cursor past the decision. A pickup
+   of that commit re-raises the request; it never continues the list.
+2. **The window "cursor exhausted, no stage verdict".** Not named so in this
+   design: it is the tip after the last item's pass commit (D2: cursor
+   exhausted, stage position held) and before stage-end verification's
+   verdict is recorded. That tip must read as "stage-end verification owed",
+   never as a passed stage: a pickup runs the stage-end chain, and only the
+   stage-end pass's own round commit records the position after the stage —
+   through the one owner of that decision, so a `manual` iterating stage
+   lands on `AwaitingApproval(stage)`, not the next stage.
+3. **D8 repair-item adoption after a stage-end failure.** The repair item is
+   adopted in the same commit as the failed stage-end round, so no tip
+   records the failure without the work it authorises; a repair-round cap
+   that is reached rides that round's record as its stop, not a follow-up
+   park.
+
+The kill-point rows for these three windows join the matrix this change
+already owes (`crash-consistency.md` item 10).
 
 ## Sync surfaces (mandatory)
 

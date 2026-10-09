@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -45,7 +46,7 @@ class StatusEventListenerSpec extends Specification {
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'))
         def listener = new StatusEventListener(holder)
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passingCheck()],
-        ExecutorUsage.none(), JudgeUsage.none(), [])
+        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
 
         when: 'an AttemptFinished event arrives'

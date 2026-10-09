@@ -6,13 +6,14 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink
 import com.github.oinsio.gnomish.sandbox.environment.BoxTiming
+import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentFactory
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
-import com.github.oinsio.gnomish.sandbox.environment.ObjectOwnership
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.charset.StandardCharsets
@@ -71,14 +72,16 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
 
     private ContainerEnvironments environments(String taskKey) {
         key = taskKey
-        ContainerEnvironments.forTask(
-                taskKey,
-                new BoxGitLink(cloneDir, new ContainerHarvestFetch(gitRunner, cloneDir)),
+        new ContainerEnvironmentFactory(
                 new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
                 new BoxTiming(new SystemClock(), new ThreadSleeper(), Duration.ofMinutes(5)),
-                ChildEnvAllowlist.none(),
                 tempDir.resolve('guard-config'),
-                new ObjectOwnership(OwnershipMode.MANUAL, 'test-project'))
+                OwnershipMode.MANUAL).forTask(
+                taskKey,
+                new BoxGitLink(cloneDir, new ContainerHarvestFetch(gitRunner, cloneDir)),
+                ChildEnvAllowlist.none(),
+                'test-project',
+                { -> DenialRestoration.none() })
     }
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a

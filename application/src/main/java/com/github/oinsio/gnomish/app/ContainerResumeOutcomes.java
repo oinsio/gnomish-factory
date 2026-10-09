@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
-import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.StatusReport;
@@ -20,26 +19,29 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Kept in sync with {@link GitResumeContinuation}: both implement the same four outcome arms
  * dispatched by {@link ContainerResumeRunner}/{@link GitResumeRunner} — {@code null} salvages the
- * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, both resolve
- * the escalation through {@link EscalationResume} and continue a pause without a prompt, and {@code
- * completed} builds and prints the same status report with no further engine run. The container
- * arm additionally disposes the kept box before any branch write or round (its clone is behind
- * the park commit); the host arm has none, since its worktree is the branch. Adding or re-meaning
- * an arm on one side alone is the divergence this pair guards against (UX2).
+ * interrupted round's leftovers (or honours {@code --discard-work}) before continuing; both resolve
+ * the escalation through {@link EscalationResume} and land its decision or resumed commit through
+ * {@link EscalationResume#land}; both open the gate through {@code TaskRepository.approveCheckpoint}
+ * (via {@link CheckpointApproval#continuePause}) before continuing; and {@code completed} prints
+ * the same status report with no further engine run. Every continuing arm but {@code null} lands
+ * exactly one lifecycle commit before the engine runs. The container arm additionally disposes the
+ * kept box before any branch write or round (its clone is behind the park commit); the host arm has
+ * none, since its worktree is the branch. Adding or re-meaning an arm on one side alone is the
+ * divergence this pair guards against (UX2).
  *
- * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR4, FR5 of make-run-headless.
+ * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR4, FR5 of make-run-headless; FR4,
+ * FR7, FR18 of make-checkpoint-gate-durable.
  */
 final class ContainerResumeOutcomes {
 
     private ContainerResumeOutcomes() {}
 
     /**
-     * Outcome {@code null}: an interrupted visit. A snapshot commit unrecorded in {@code
-     * state.json} is an interrupted verification (FR21) — no salvage runs, the round is complete
-     * on the branch. Otherwise the environment is reattached (start stopped box, recreate over a
-     * surviving volume, or fresh clone) and uncommitted leftovers are salvaged in-box; {@code
-     * --discard-work} instead disposes whatever survives so the next materialize seeds a fresh
-     * clone at the recorded tip.
+     * Outcome {@code null}: an interrupted visit. The box is prepared by {@link
+     * ContainerResumePreparation#prepare} — the one preparation {@code take} shares (FR18 of
+     * make-checkpoint-gate-durable): a pending snapshot is re-verified rather than salvaged over,
+     * {@code --discard-work} disposes whatever survives, otherwise the box is reattached and its
+     * leftovers salvaged — then the run is driven through {@link ContainerTerminalDrive}.
      */
     static void resumeFromRecordedPosition(
             ContainerResumeRunner runner,
@@ -47,17 +49,11 @@ final class ContainerResumeOutcomes {
             RunOrder order,
             TaskRecord taskJson,
             TaskState state) {
-        PendingVerification pending = support.pendingVerification().orElse(null);
-        if (order.discardWork()) {
-            support.disposeExistingEnvironment();
-        } else if (state.position() instanceof Position.AtStage(String stage)) {
-            // Reattach now (start stopped box / recreate over volume / fresh clone) so both the
-            // salvage below and same-box verification of a pending snapshot have a live box.
-            support.reattachFor(stage);
-            if (pending == null) {
-                support.salvageLeftovers(taskJson.context().taskId());
-            }
-        }
+        PendingVerification pending = ContainerResumePreparation.prepare(
+                support,
+                order.discardWork(),
+                state.position(),
+                taskJson.context().taskId());
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
@@ -72,7 +68,8 @@ final class ContainerResumeOutcomes {
      * Outcome {@code escalated}: resolved through {@link EscalationResume#decide} with the operator's
      * {@code --decision} (design D2, D7 of make-run-headless), the decision committed factory-side
      * over bare objects before any environment materializes (FR25, D19 of add-sandbox-core) so the
-     * in-box clone carries it from the start; no decision continues on the reset state alone (FR4).
+     * in-box clone carries it from the start; no decision lands the resumed commit instead (FR4; FR7
+     * of make-checkpoint-gate-durable), through {@link EscalationResume#land}.
      *
      * @throws DecisionRequiredException for a {@code DecisionNeeded} report and no decision: the
      *     question is restated, nothing is written, no box is touched (FR4 of make-run-headless)
@@ -100,14 +97,7 @@ final class ContainerResumeOutcomes {
         // of harden-task-branch-contract; the same disposal TakeContainerResumeRunner#appendDecision
         // makes). The next round's box is materialized from the tip that already holds both.
         support.disposeExistingEnvironment();
-        if (decision != null) {
-            // One commit carries the decision and the attempts reset (NFR-R1 of make-run-headless).
-            support.taskRepository()
-                    .appendDecision(
-                            taskJson.context().taskId(),
-                            resumption.context().decisions().getLast(),
-                            resumption.state());
-        }
+        EscalationResume.land(support.taskRepository(), taskJson.context().taskId(), resumption, decision);
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
@@ -119,8 +109,10 @@ final class ContainerResumeOutcomes {
     }
 
     /**
-     * Outcome {@code paused}: the resume is the confirmation — nothing printed, nothing reset, no
-     * decision appended (FR5 of make-run-headless) — on a box materialized from the tip.
+     * A gate (any outcome) or outcome {@code paused}: the resume is the approval — nothing printed,
+     * nothing reset, no decision appended (FR5 of make-run-headless). The approval commit lands
+     * factory-side first, then the engine continues from the approved state on a box materialized
+     * from the tip (FR4, design D2 of make-checkpoint-gate-durable).
      */
     static void resumePaused(
             ContainerResumeRunner runner,
@@ -128,15 +120,21 @@ final class ContainerResumeOutcomes {
             RunOrder order,
             TaskRecord taskJson,
             TaskState state) {
-        // As in resumeEscalated: the kept box's clone is behind the park's outcome commit, so the
-        // continuation materializes a fresh box from the tip rather than harvesting a divergent one.
-        support.disposeExistingEnvironment();
+        // As in resumeEscalated: the kept box's clone is behind the park's outcome commit and cannot
+        // learn of the approval, so it is disposed before the commit and the continuation
+        // materializes a fresh box from the tip rather than harvesting a divergent one.
+        TaskState approved = CheckpointApproval.continuePause(
+                support.taskRepository(),
+                taskJson.context().taskId(),
+                state,
+                order.definition(),
+                support::disposeExistingEnvironment);
         ContainerTerminalDrive.run(
                 runner.assembly,
                 support,
                 order,
                 taskJson.context(),
-                state,
+                approved,
                 ManualResumeLawBinding.of(order.cloneDir(), taskJson.pin(), taskJson.baseCommit()),
                 null);
     }

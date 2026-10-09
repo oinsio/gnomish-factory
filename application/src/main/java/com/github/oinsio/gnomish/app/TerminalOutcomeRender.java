@@ -62,15 +62,17 @@ public final class TerminalOutcomeRender {
 
     /**
      * The manual-checkpoint sentence, alone — what {@code take}'s park reports carry, beside a
-     * tracker return path of their own.
+     * tracker return path of their own. It names the gate the way {@code status} does, so a task
+     * waiting at a gate reads the same in the {@code run} stop render, the {@code take} park report
+     * and the status report.
      *
-     * <p>Implements FR8 of make-run-headless.
+     * <p>Implements FR8 of make-run-headless; UX1 of make-checkpoint-gate-durable.
      *
      * @param passedStage the stage whose pass reached the checkpoint; never null
-     * @return {@code Stage '<stage>' passed. Manual checkpoint reached.}
+     * @return {@code Stage '<stage>' passed. Awaiting approval.}
      */
     public static String checkpointLine(String passedStage) {
-        return "Stage '" + passedStage + "' passed. Manual checkpoint reached.";
+        return "Stage '" + passedStage + "' passed. Awaiting approval.";
     }
 
     /**

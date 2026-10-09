@@ -41,6 +41,7 @@ public final class BranchShapeDiagnosis {
             // defect rather than a branch state; the name is the whole diagnosis.
             case BranchShape.Created(),
                     BranchShape.InProgress(),
+                    BranchShape.AwaitingApproval(),
                     BranchShape.Parked(),
                     BranchShape.Answered(),
                     BranchShape.CompletedUncleaned(),

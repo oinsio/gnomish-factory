@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -7,12 +9,14 @@ import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
+import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -20,6 +24,7 @@ import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
+import com.github.oinsio.gnomish.gitobjects.TreeEdit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Clock;
 import java.time.Instant;
@@ -67,11 +72,18 @@ import org.slf4j.LoggerFactory;
  * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
  * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
  * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
- * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6).
+ * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6);
+ * and the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
+ * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
+ * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
+ * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
+ * make-checkpoint-gate-durable) — and remove the consumed requests under {@code decisions/} in that
+ * same commit, the removal owned by {@link ConsumedRequestRemoval} (a tree edit here, an index
+ * removal staged after the envelope there; FR14, design D7 of make-checkpoint-gate-durable).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
- * add-sandbox-core; FR10 of make-run-headless.
+ * add-sandbox-core; FR10 of make-run-headless; FR3, FR7, FR9, FR14 of make-checkpoint-gate-durable.
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
@@ -163,32 +175,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         String ref = refFor(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
-        TaskJsonDto currentDto =
-                writer.readCommitted(taskId, tip, TaskLifecycleEvent.RESUMED).dto();
-        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
-
-        List<Decision> decisions = new ArrayList<>(current.context().decisions());
-        decisions.add(decision);
-        TaskContext updated = new TaskContext(
-                current.context().taskId(),
-                current.context().title(),
-                current.context().body(),
-                decisions);
-
         // Appending the resume decision resets outcome to null in the same commit (FR5/D9 contract).
         // Both envelopes' denial cursors are carried forward unchanged (FR5 of
         // fix-denial-attribution-durability): a RESUMED rewrite is a lifecycle transition, not a
         // denial read, so it has no position of its own to record and must not erase the one the
         // tip carries — that erasure is what sent every resumed run back to a full log re-read.
-        TaskJsonDto dto = TaskJsonMapper.toDto(
-                        updated,
-                        current.baseCommit(),
-                        current.createdAt(),
-                        null,
-                        current.lastEscalation(),
-                        false,
-                        current.pin())
-                .withEgressCursor(currentDto.egressCursor());
+        TaskJsonDto dto = OutcomeClearingTaskJson.withDecision(
+                writer.readCommitted(taskId, tip, TaskLifecycleEvent.RESUMED).dto(), decision);
         // One transition, one commit (FR4): the decision and its attempt-counter reset are two
         // tree edits of a single bare-object commit, never two tips.
         writer.commit(
@@ -196,9 +189,64 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 ref,
                 false,
                 tip,
-                writer.putTaskAndState(
-                        taskId, dto, resetState, writer.tipStateCursor(taskId, tip), TaskLifecycleEvent.RESUMED),
+                consuming(writer.putTaskAndState(
+                        taskId, dto, resetState, writer.tipStateCursor(taskId, tip), TaskLifecycleEvent.RESUMED)),
                 TaskLifecycleEvent.RESUMED);
+    }
+
+    /**
+     * Opens the gate in one bare-object commit (FR3 of make-checkpoint-gate-durable), the twin of
+     * {@link GitTaskRepository#approveCheckpoint}: refused on the tip's recorded position before any
+     * object is built ({@link CheckpointApprovalCheck}), then {@code state.json} = {@code approved}
+     * — carrying the tip's committed denial cursor forward — and the outcome-cleared {@code
+     * task.json} are two tree edits of one commit.
+     */
+    @Override
+    public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
+        TaskLifecycleEvent event = TaskLifecycleEvent.APPROVED;
+        String ref = refFor(taskId);
+        var writer = writerFor();
+        ObjectId tip = writer.requireTip(taskId, ref, event);
+        StateJsonDto tipState = writer.readCommittedState(taskId, tip, event);
+        CheckpointApprovalCheck.requireAdmitted(
+                taskId, gate, StateJsonMapper.fromDto(tipState).position(), approved);
+        TaskJsonDto dto = OutcomeClearingTaskJson.of(
+                writer.readCommitted(taskId, tip, event).dto());
+        writer.commit(
+                taskId,
+                ref,
+                false,
+                tip,
+                consuming(writer.putTaskAndState(taskId, dto, approved, tipState.egressCursor(), event)),
+                event);
+        CheckpointApprovalCheck.approved(taskId, gate, approved);
+    }
+
+    /**
+     * Consumes the recorded outcome in one bare-object commit (FR7, design D4 of
+     * make-checkpoint-gate-durable), the twin of {@link GitTaskRepository#resumeFrom}: refused on
+     * the tip's {@code task.json} before any object is built ({@link ResumedWriteCheck}), then
+     * {@code state.json} = {@code reset} — carrying the tip's committed denial cursor forward, as
+     * the decision commit does — and the outcome-cleared {@code task.json} are two tree edits of
+     * one commit.
+     */
+    @Override
+    public void resumeFrom(String taskId, TaskState reset) {
+        TaskLifecycleEvent event = TaskLifecycleEvent.RESUMED;
+        String ref = refFor(taskId);
+        var writer = writerFor();
+        ObjectId tip = writer.requireTip(taskId, ref, event);
+        TaskJsonDto tipTask = writer.readCommitted(taskId, tip, event).dto();
+        RecordedOutcome consumed = ResumedWriteCheck.requireRecordedOutcome(taskId, TaskJsonMapper.fromDto(tipTask));
+        writer.commit(
+                taskId,
+                ref,
+                false,
+                tip,
+                consuming(writer.putTaskAndState(
+                        taskId, OutcomeClearingTaskJson.of(tipTask), reset, writer.tipStateCursor(taskId, tip), event)),
+                event);
+        ResumedWriteCheck.resumed(taskId, consumed, reset);
     }
 
     @Override
@@ -211,8 +259,11 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         TaskJsonDto currentDto = committed.dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
-        EscalationReport lastEscalation =
-                outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
+        // Only the report this write records can have drained denials (FR9 of
+        // make-checkpoint-gate-durable): a carried-over lastEscalation is display history, so a
+        // Paused/Completed/Aborted write asks the environment nothing and keeps the tip's cursor.
+        EscalationReport recorded = outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : null;
+        EscalationReport lastEscalation = recorded != null ? recorded : current.lastEscalation();
         // The durable "terminal write pending" marker, exactly as GitTaskRepository sets it (FR10,
         // D10 of add-claim-heartbeat; FR10 of harden-task-branch-contract): a terminal outcome whose
         // external effect is still owed carries it, and this commit is the durable intent the
@@ -228,7 +279,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                         lastEscalation,
                         pending,
                         current.pin())
-                .withEgressCursor(egressCursors.forEscalation(lastEscalation, currentDto.egressCursor()));
+                .withEgressCursor(egressCursors.forEscalation(recorded, currentDto.egressCursor()));
         String json = writer.serializeTaskJson(taskId, dto, event);
         // Idempotence (design D8 of make-run-headless; crash-consistency item 8), exactly as the host
         // twin decides it: a park re-recorded identically leaves the tip as it is.
@@ -265,6 +316,17 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void finishCleanup(String taskId) {
         GitObjectsTerminalCommits.cleanUp(gitObjects, writerFor(), taskId, refFor(taskId));
+    }
+
+    /**
+     * The edits of an outcome-clearing write: its envelope edits, then the removal of the requests
+     * it consumes ({@link ConsumedRequestRemoval}, FR14 of make-checkpoint-gate-durable) — one tree,
+     * one commit, so no tip shows the outcome cleared with the request still beside it.
+     */
+    private static List<TreeEdit> consuming(List<TreeEdit> envelope) {
+        List<TreeEdit> edits = new ArrayList<>(envelope);
+        edits.add(ConsumedRequestRemoval.treeEdit());
+        return List.copyOf(edits);
     }
 
     private TaskLifecycleCommitWriter writerFor() {

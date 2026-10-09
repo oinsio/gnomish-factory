@@ -26,8 +26,10 @@ import java.nio.file.Path;
  * warranted.
  *
  * <p>Overwrite semantics: each call writes a fresh file at the resolved
- * path, since every stage attempt gets its own {@code <round>} directory —
- * this is a new file per round, never appended to across rounds. An empty
+ * path, never appended to across rounds. The path names the round within one
+ * visit of a stage; a repeated visit restarts the round number, so its trace
+ * overwrites the earlier one at the tip, and git history keeps every version
+ * (proposal NG6 of make-checkpoint-gate-durable — no reader at the tip exists). An empty
  * {@code calls} list still produces a present, zero-line file: parent
  * directories are created and the file is written with empty content,
  * mirroring "an attempt need not have invoked any tool" ({@link

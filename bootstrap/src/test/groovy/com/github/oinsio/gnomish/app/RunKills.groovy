@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -8,8 +7,8 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.nio.file.Path
 
@@ -59,8 +58,20 @@ final class RunKills {
 
     /** Container: supports from {@code inner} that die at {@code point} of a park. */
     static ContainerSupportFactory killedAt(RunKillPoint point, ContainerSupportFactory inner) {
-        { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, PipelineDefinition definition, List<String> scrub ->
-            new KilledAtParkSupport(inner.create(cloneDir, taskId, segments, sandbox, factory, definition, scrub), cloneDir, point)
+        { Path cloneDir, String taskId, List<Segment> segments, PipelineDefinition definition, List<String> scrub ->
+            new KilledAtParkSupport(inner.create(cloneDir, taskId, segments, definition, scrub), cloneDir, point)
+        } as ContainerSupportFactory
+    }
+
+    /**
+     * Container: supports from {@code inner} that die right after the first round's state commit —
+     * the round is recorded, the next round never opens (FR17 of make-checkpoint-gate-durable,
+     * task 8.3). Not a park window, so not a {@link RunKillPoint}: the keep in the run's {@code
+     * finally} still stops the box, as for {@link RunKillPoint#BEFORE_PARK_COMMIT}.
+     */
+    static ContainerSupportFactory killedAfterFirstRoundRecord(ContainerSupportFactory inner) {
+        { Path cloneDir, String taskId, List<Segment> segments, PipelineDefinition definition, List<String> scrub ->
+            new KilledAfterRoundSupport(inner.create(cloneDir, taskId, segments, definition, scrub))
         } as ContainerSupportFactory
     }
 
@@ -158,6 +169,24 @@ final class RunKills {
                 throw new SimulatedKill('after the park push, before the box keep')
             }
             inner.keepStopped()
+        }
+    }
+
+    private static final class KilledAfterRoundSupport implements SandboxRunSupport {
+        @Delegate
+        private final SandboxRunSupport inner
+
+        KilledAfterRoundSupport(SandboxRunSupport inner) {
+            this.inner = inner
+        }
+
+        @Override
+        AttemptPersistence persistence() {
+            def recorded = inner.persistence()
+            return { taskId, state, trace ->
+                recorded.persist(taskId, state, trace)
+                throw new SimulatedKill('after the round state commit')
+            } as AttemptPersistence
         }
     }
 }

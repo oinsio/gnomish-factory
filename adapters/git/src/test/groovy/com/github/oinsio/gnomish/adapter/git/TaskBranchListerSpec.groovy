@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -85,7 +86,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         def worktree = worktreeFor(registeredClone, taskId)
         def state = TaskState.atStageStart(stage).recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), []))
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
     }
@@ -105,6 +106,21 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         rows.find { it.taskId() == 'PROJ-2' }.stage() == 'verify'
         rows.find { it.taskId() == 'PROJ-2' }.attemptsUsed() == 1
         rows.every { it.outcome() == null }
+    }
+
+    // FR1 of make-checkpoint-gate-durable: a task held at a gate lists under the stage that passed
+    def "FR13: a task held at a gate is listed with the stage that passed"() {
+        given:
+        createTaskAtHead(registeredClone, 'PROJ-1')
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        new GitAttemptPersistence(runner, worktreeFor(registeredClone, 'PROJ-1'), 'PROJ-1', ClaimEpochSource.NONE)
+                .persist('PROJ-1', state, new ToolTrace(new AttemptKey('PROJ-1', 'release', 0), []))
+
+        when:
+        def rows = lister.list(cloneDir)
+
+        then:
+        rows*.stage() == ['release']
     }
 
     def "FR13: remote-only tasks are listed once, and a task present both locally and on origin reads from its local tip"() {

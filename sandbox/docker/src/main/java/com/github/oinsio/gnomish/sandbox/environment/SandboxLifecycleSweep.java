@@ -44,7 +44,7 @@ public final class SandboxLifecycleSweep {
      * The production entry point for {@code application}/{@code bootstrap} code (task 4.x of
      * add-serve-sandbox-lifecycle): {@link DockerCli} and {@link ContainerEnvironmentDisposal} are
      * deliberately package-private (the same "app-layer names only the environment-facing types"
-     * discipline as {@link ContainerEnvironments#forTask}), so this static factory is the only way
+     * discipline as {@link ContainerEnvironmentFactory#forTask}), so this static factory is the only way
      * to obtain a usable evaluator from outside this package.
      *
      * @param listener the verdict sink; never null

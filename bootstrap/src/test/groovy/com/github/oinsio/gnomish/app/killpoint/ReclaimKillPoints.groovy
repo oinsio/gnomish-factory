@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -128,7 +129,7 @@ final class ReclaimKillPoints {
                     world.taskId,
                     TaskState.atStageStart('build').recordUnburnedRound(new AttemptRecord(
                             0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'), [],
-                            ExecutorUsage.none(), JudgeUsage.none(), [])),
+                            ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())),
                     new ToolTrace(
                             new AttemptKey(world.taskId, 'build', 0),
                             [

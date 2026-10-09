@@ -203,7 +203,9 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   table lives. Recovery owner and roll-forward/discard disposition per shape
   live in `docs/adr/0003-crash-consistency.md`. *Never:* `Escalated` for the
   `Parked` shape (that name belongs to a `TaskOutcome` variant), `Decision`
-  for the `Answered` shape (that name belongs to the human's answer record).
+  for the `Answered` shape (that name belongs to the human's answer record),
+  `Paused` for the `AwaitingApproval` shape (that name belongs to a
+  `TaskOutcome` variant).
 - **Tracker shape** — the same total classification applied to the tracker
   medium: state labels, claim footprint, and boundary markers mapped to
   exactly one name, `Foreign` included for out-of-protocol combinations.
@@ -240,6 +242,58 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   names the shape, the diagnosis, and the attempts consumed. *Not:* an
   escalation raised by the gnome's own work, which reports findings rather
   than a shape.
+- **Gate** — a stop that a durable write records and only a later durable
+  write may open: whatever the tip of a task branch records, a pickup may do
+  no more than that tip allows, so the gate lives in the record of the step
+  that reaches it, never in the step that follows. The `manual` checkpoint is
+  the gate this vocabulary was introduced for: its passing round commit already
+  records **awaiting approval**, and only the **approval** moves past it
+  (`.claude/rules/crash-consistency.md`, item 12; introduced by
+  `make-checkpoint-gate-durable`). *Not:* the park — the park reports a gate
+  to a human; the gate holds even when the park was never written.
+- **Awaiting approval** — the pipeline position a passing `manual` stage
+  leaves on the task branch, naming that stage: the round commit itself
+  records it, so a pickup that finds it pauses without running anything,
+  however many times it runs. Type: `Position.AwaitingApproval`; the branch
+  shape of such a tip is `BranchShape.AwaitingApproval` (introduced by
+  `make-checkpoint-gate-durable`). *Not:* the `Paused` task outcome, which is
+  the run's report that it stopped at the gate.
+- **Approval** — the pivot write that opens a gate: one commit that moves the
+  position from **awaiting approval** to the position following the gate stage
+  in the pinned pipeline definition and clears the recorded outcome together,
+  leaving the attempt history untouched. It is the only writer past a gate and
+  refuses, writing nothing, when the tip is not at the gate it names. Method:
+  `TaskRepository.approveCheckpoint`; refusal:
+  `CheckpointApprovalRefusedException` (introduced by
+  `make-checkpoint-gate-durable`). *Not:* the human's answer to a decision
+  request, which is recorded by `appendDecision`.
+- **Resumed write** — the one commit by which a continuation consumes a
+  recorded outcome without a human answer (a bare return after an exhausted
+  attempt budget, an infrastructure-class return, `run --resume` without a
+  decision): it records the reset state and clears the outcome together, so the
+  budget a return grants is granted once. Refuses when the tip records no
+  outcome. Method: `TaskRepository.resumeFrom`. Together with `appendDecision`
+  and the **approval** it is one of the only three writes that clear a
+  recorded outcome (introduced by `make-checkpoint-gate-durable`).
+- **Round token** — the identity of one container-mode **round**: the commit
+  the task branch's tip pointed to when the round opened. No later round of the
+  task repeats it, because every round lands at least its snapshot commit and
+  every reset rides a commit of its own. It names the round's decision request
+  (`decisions/<stage>-a<attempt>-<token>.json`, the only path read for that
+  round) and rides its snapshot commit's subject. A fresh round mints it from
+  the tip it opens on; a resumed round never mints — it reuses the token its
+  snapshot recorded. Type: `RoundToken`, parsed only by `RoundToken.of`
+  (introduced by `make-checkpoint-gate-durable`, D10). *Never:* "attempt" for
+  it — the attempt is the counted try, and its number repeats.
+- **Current round** — the per-run cell that holds the identity of the round in
+  flight, whole: open (its **round token**), then closed by its snapshot (the
+  token and the snapshot commit together). Filled either by the live round
+  opening or restored from the snapshot's record on the resume path — the same
+  two transitions in both cases. It exists only because the engine's ports
+  cannot carry a round identity without learning about commits. Types:
+  `CurrentRound`; a closed round is `ClosedRound` (introduced by
+  `make-checkpoint-gate-durable`, D10). *Never:* "ref" or "holder" for it in
+  docs.
 
 ## Pipeline execution
 
@@ -252,7 +306,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 - **Executor** — the mechanism that runs a stage: `api` (direct model calls)
   or `agent-cli` (an agent CLI as a subprocess).
 - **Attempt** — one counted try of a stage; only quality failures burn
-  attempts, and every attempt is committed to the task branch. *Never:* retry
+  attempts, and every attempt is committed to the task branch. Its number
+  counts within one visit of a stage and restarts at zero on every reset (an
+  answer, an advancement, a retry of a killed round), so the same stage and
+  attempt number repeat across visits — it identifies no round; the **round
+  token** does. *Never:* retry
   for this counted unit (a retry is the uncounted repeat of an infrastructure-
   failed check).
 - **Verify check** — one entry of a stage's ordered verification list:
@@ -478,6 +536,26 @@ trusted/task tier split, and the law-root rule.
   construction differing only in the **ownership mode** — plus a manual run's
   execution-mode plan. Type: `ContainerSupports`. *Not:* one run's container
   support (`ContainerRunSupport`), which it builds.
+- **Container environment factory** — the installation's box equipment, held
+  once per **ownership mode**: the operator sandbox settings, the **box
+  timing**, the guard config root and the ownership mode itself — what the
+  installation decides about every box before any task exists. Its one method
+  takes a task's inputs (the environment key, the **box git link**, the child
+  environment allowlist, the **project identity** and the read of the denial
+  position the branch tip records) and builds that task's environment seam.
+  Built by the **container supports**. Type: `ContainerEnvironmentFactory`
+  (introduced by `make-checkpoint-gate-durable`, D12). *Not:* the per-task
+  seam `ContainerEnvironments` it builds.
+- **Live box** — the one materialized **box** of a role (a round box per
+  segment, a judge box per attempt commit), kept while its key is unchanged
+  and rebuilt — the previous box disposed, a fresh one materialized — when the
+  key changes. Concurrent requests for the key being built join that one build;
+  a reader asking for the current box sees the last recorded one and never
+  waits on a build in flight. No blocking work runs under its lock
+  (`.claude/rules/lock-scope.md`). Type: `LiveBox` (introduced by
+  `make-checkpoint-gate-durable`, D13). *Never:* "lease" for it — **lease** is
+  the claim's liveness contract; the class name `EnvironmentLease` predates
+  this rule and is kept.
 - **Task container settings** — the operator configuration one task container
   is created with: the image, the runtime, the resource bounds and the
   disk-quota opt-in, read off the sandbox settings once and carried whole

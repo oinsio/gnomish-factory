@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
@@ -108,8 +108,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
 
     /** A workspace carrying a commit the stand-in's empty ls-remote answer never confirms. */
     private static RecordedAttemptCommitWorkspace workspace() {
-        def ref = new AttemptCommitRef()
-        ref.record('2222222222222222222222222222222222222222')
+        def ref = ClosedRounds.at('2222222222222222222222222222222222222222')
         new RecordedAttemptCommitWorkspace(ref)
     }
 }

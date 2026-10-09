@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
 /**
@@ -37,16 +38,27 @@ final class RequiredTaskJson {
      *     diagnosis of why
      */
     static CommittedTaskJson atTipOf(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
-        GitCommandResult result =
-                new GitShowTip(runner, worktree, GitObjects.HEAD).showAtTip(EnvelopePaths.TASK_JSON_PATH);
+        return CommittedTaskJson.parse(documentAtTip(runner, worktree, taskId, event, EnvelopePaths.TASK_JSON_PATH));
+    }
+
+    /**
+     * The required read itself, for either envelope file: {@link RequiredTaskState} reads {@code
+     * state.json} through it under the same rule.
+     *
+     * @param path the envelope file to read at {@code HEAD}
+     * @return the file's content as committed, still a carrier
+     * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
+     */
+    static UntrustedText documentAtTip(
+            GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event, String path) {
+        GitCommandResult result = new GitShowTip(runner, worktree, GitObjects.HEAD).showAtTip(path);
         if (result.exitCode() != 0) {
             throw new GitTaskRepositoryException(
                     taskId,
                     event,
-                    "reading " + EnvelopePaths.TASK_JSON_PATH + " at HEAD of " + worktree + ", git show exited "
-                            + result.exitCode(),
+                    "reading " + path + " at HEAD of " + worktree + ", git show exited " + result.exitCode(),
                     result.stderr());
         }
-        return CommittedTaskJson.parse(result.stdout());
+        return result.stdout();
     }
 }

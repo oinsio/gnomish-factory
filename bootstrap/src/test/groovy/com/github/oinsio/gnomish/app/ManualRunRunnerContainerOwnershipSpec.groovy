@@ -56,9 +56,9 @@ class ManualRunRunnerContainerOwnershipSpec extends Specification implements Bar
 
         when: 'each built factory is invoked exactly as its own runner invokes it'
         def runSupport = (ContainerRunSupport) supports.manualSupport()
-                .create(cloneDir, 'T-run', segments(), sandbox(), testProperties(), pipeline(), [])
+                .create(cloneDir, 'T-run', segments(), pipeline(), [])
         def takeSupport = (ContainerRunSupport) supports.takeSupport().containerSupportFactory()
-                .create(cloneDir, 'T-take', segments(), sandbox(), testProperties(), pipeline(), [])
+                .create(cloneDir, 'T-take', segments(), pipeline(), [])
 
         then: 'the label each bundle stamps on every object it creates'
         runSupport.environments.ownershipMode() == OwnershipMode.MANUAL

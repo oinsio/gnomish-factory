@@ -28,9 +28,9 @@ import spock.lang.TempDir
  * <p>The recovery owner of both windows is the resume bootstrap ({@code GitResumeRunner#bootstrap}):
  * its resume-start reconciliation pushes a local tip origin lacks, and a local line ahead of origin
  * continues from local. It runs here on its own, apart from the continuation that follows it, because
- * the continuation is the transition — a {@code --resume} over {@code AttemptsExhausted} resets the
- * attempts and runs a round, over {@code paused} it continues — and only the recovery is required to
- * be a no-op.
+ * the continuation is the transition — a {@code --resume} over {@code AttemptsExhausted} lands the
+ * resumed write and runs a round, over a gate it lands the approval and continues (FR4, FR7 of
+ * make-checkpoint-gate-durable) — and only the recovery is required to be a no-op.
  *
  * <p>Deliberately not specced: the window before the outcome commit for {@code paused}, {@code
  * DecisionNeeded} and {@code CannotVerify}, where the stop is lost — the round commit already
@@ -68,9 +68,9 @@ class RunParkKillPointSpec extends Specification implements BareGitRepoFixture, 
         when: 'the run dies with the park committed locally and its push never reaching origin'
         freshRunner(RunKillPoint.AFTER_PARK_COMMIT).run(order, context(taskId), TaskState.atStageStart('build'))
 
-        then: 'the frozen shape: parked locally, origin behind — on the line, without the outcome'
+        then: 'the frozen shape: parked locally (at a gate for a pause), origin behind — on the line, without the outcome'
         thrown(RunKills.SimulatedKill)
-        shape(cloneDir, taskId) == 'Parked'
+        shape(cloneDir, taskId) == parkedShape
         dto.isInstance(tipTask(cloneDir, taskId).outcome())
         originBehind(taskId)
         tipTask(origin, taskId).outcome() == null
@@ -90,21 +90,22 @@ class RunParkKillPointSpec extends Specification implements BareGitRepoFixture, 
         fingerprint(taskId) == afterFirst
 
         when: 'the transition itself: the operator resumes the parked task, without a --decision'
-        // Without a --decision the escalation's attempts reset lives in memory only, so the rerun
-        // exhausts the same limit and re-parks identically: recordOutcome then finds its document
-        // already on the tip and makes no commit (FR10, design D8 "Idempotence"; task 2.6).
+        // FR4, FR7 of make-checkpoint-gate-durable: the resume first lands its one lifecycle commit —
+        // the resumed write (attempts reset, outcome cleared) over the escalation, the approval over
+        // the gate — then runs: the escalation exhausts the same limit again, the pause passes the
+        // next manual stage and stops at its gate.
         resumeRunner().run(order, taskId, null)
 
         then: 'the resume finds a park of the recorded kind and ends on one, on both replicas'
         def stop = thrown(RunParkedException)
         reproduced(stop.outcome(), dto)
-        shape(cloneDir, taskId) == 'Parked'
+        shape(cloneDir, taskId) == parkedShape
         originTip(taskId) == localTip(taskId)
 
         where:
-        kind | pipeline | dto
-        'escalated' | ParkPipelines.escalating() | TaskOutcomeDto.Escalated
-        'paused' | ParkPipelines.pausing() | TaskOutcomeDto.Paused
+        kind | pipeline | dto | parkedShape
+        'escalated' | ParkPipelines.escalating() | TaskOutcomeDto.Escalated | 'Parked'
+        'paused' | ParkPipelines.pausing() | TaskOutcomeDto.Paused | 'AwaitingApproval'
     }
 
     def "NFR-R3: an AttemptsExhausted escalation killed before its outcome commit freezes the interrupted-run shape; the resume reproduces the park"() {

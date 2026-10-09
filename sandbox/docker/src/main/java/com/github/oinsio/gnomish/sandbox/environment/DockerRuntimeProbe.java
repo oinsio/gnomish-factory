@@ -23,7 +23,7 @@ public final class DockerRuntimeProbe {
      * PIT M4 documented exception: {@code @DoNotMutate} — this wrapper only binds
      * the probe to the real {@code docker} binary of the machine the test happens
      * to run on (an integration boundary, the same category as {@code
-     * ContainerEnvironments.forTask}'s production wiring): a unit test cannot
+     * ContainerEnvironmentFactory.forTask}'s production wiring): a unit test cannot
      * deterministically assert its boolean against a daemon it does not control.
      * The whole probe decision — ok-exit true, non-zero false, unreachable-runtime
      * false — lives in the package-private overload below and is fully covered by

@@ -61,6 +61,58 @@ flowchart LR
    sweep universe first, the label removing it last, truth markers between —
    so every kill window freezes a state the sweeper's own query enumerates.
 
+#### A recorded position never implies an authorisation not yet recorded
+
+For every durable step, the question is what a pickup that sees that step and
+nothing after it is allowed to do. If the answer is "continue past a gate",
+"deliver" or "run the next stage" while a later write was meant to decide that,
+the step is wrong: the decision belongs in the step's own record (provenance:
+`make-checkpoint-gate-durable`, which found a `manual` checkpoint skipped by a
+kill between the round commit, already advanced past the stage, and the park
+commit that was to stop it). Two consequences follow, and both are mechanism 1
+applied to a decision rather than to a field:
+
+- **Gates are positions.** The passing round of a `manual` stage records the
+  position *awaiting approval* of that stage, not the position after it. A run
+  that starts from a gate returns `Paused` and invokes no port, however many
+  times it is picked up. Only the *approval* — one commit that moves the
+  position past the gate and clears the recorded outcome — opens it, and a
+  `manual` last stage therefore never records the pipeline end itself.
+- **The verdict rides the round record.** A round that stops the stage — a
+  decision needed, a check that cannot verify — carries the stop (the question
+  and its options; the check, the reason and the details) on its attempt in
+  `state.json`. The next run re-raises the escalation from the record, exactly
+  as it re-raises an exhausted attempt budget from the counter, so the park
+  commit is pure tracker delivery and losing it loses nothing.
+
+The same rule closes the reverse window: a continuation that consumes a
+recorded outcome without an answer lands the *resumed write* — the outcome
+cleared and the attempt reset it implies, in one commit — so a kill never
+grants a second attempt budget.
+
+```mermaid
+stateDiagram-v2
+    AtStage: at stage s
+    Gate: awaiting approval of s
+    Next: at the stage after s, or pipeline end
+    AtStage --> Gate: manual pass (round commit)
+    Gate --> Gate: pickup returns Paused, no port
+    Gate --> Next: approval (one commit)
+```
+
+The canon states the rule as "log the intent before the action" (ARIES and
+write-ahead logging), Kleppmann's dual-write problem and Helland agree, and
+the saga pattern makes the go/no-go write a single pivot transaction guarded
+by a `*_PENDING` semantic lock. None of them allows a first write to imply what
+only a second write may grant.
+
+Comparable orchestrators keep the wait in the same write as the completion or
+make it a property of the next step: Temporal's `UpdateWorkflowExecution`,
+Argo's suspend node in the same resource update, GitLab's `manual` job with
+its derived `blocked` status, GitHub Actions environments gating the *next*
+job. None of them has a published post-mortem of a gate skipped after a
+restart; systems that record the gate this way do not produce the defect class.
+
 ### Consumed streams: the position rides the record
 
 A factory instance also reads *external append-only streams* it does not own —
@@ -95,6 +147,28 @@ Reading the position is best-effort — an unanswerable position falls back to a
 full re-read, which rule 2 makes cheap — while writing it inherits the
 atomicity of the commit it rides.
 
+**Corollary: a reader of a medium that keeps the past judges liveness by
+identity, never by presence.** The task branch and a box's working copy keep
+every file a commit carried, so "the file is there" cannot tell a message
+written for this round from one carried over from an earlier one. The writer's
+request carries an identity the orchestrator minted and no later step repeats —
+in container mode the *round token*, the branch tip the round opened on, in the
+decision file's name and in the snapshot subject — and the receiver reads
+exactly that identity and nothing else. Deleting a consumed request (the three
+outcome-clearing writes remove the decision files in their own commit) is
+hygiene; no reader relies on it, so a kill before the deletion is pushed
+changes nothing. A key that is reset by design, such as the attempt number, is
+not an identity. Provenance: `make-checkpoint-gate-durable`, after a stale
+decision file re-parked a task after every answer.
+
+The canon makes the receiver's identity match the single owner of "is this
+request live": AWS Step Functions mints one task token per wait, invalid after
+use; Enterprise Integration Patterns' Correlation Identifier matches a reply to
+its request; Kleppmann's fencing token rejects a write whose token has gone
+backwards. Amazon SQS is the hygiene precedent: the consumer deletes a message
+after processing, but an undeleted message becomes visible again, so the
+consumer must be idempotent rather than trust the deletion.
+
 ### Recovery disposition per branch shape
 
 Shape *meanings* are owned by the `task-branch-contract` capability spec, and
@@ -108,6 +182,7 @@ returns to a known-good tip.
 | `Bare`               | take routing (branch creation)                | roll forward: write the STARTED commit                                  |
 | `Created`            | take routing → stage engine                   | roll forward: run the first stage                                       |
 | `InProgress`         | stage engine                                  | roll forward: resume at the recorded position                           |
+| `AwaitingApproval`   | stage engine, then the human                  | roll forward: deliver a lost park; continue only after the approval write |
 | `Parked`             | terminal-transition component, then the human | roll forward: complete the pending tracker write; then wait             |
 | `Answered`           | stage engine                                  | roll forward: resume with the decision                                  |
 | `CompletedUncleaned` | completion-finish flow                        | roll forward: cleanup, push, tracker finish — never re-enter the engine |
@@ -120,6 +195,36 @@ Automatic recovery is budgeted by one persisted counter shared with the crash
 fuse; exhaustion quarantines with the failure history. The three
 non-recoverable shapes bypass the counter — one classification, one
 diagnosis, one park.
+
+`AwaitingApproval` is a shape of its own rather than `InProgress` refined by
+position because the recovery owners differ: the stage engine *runs* an
+`InProgress` tip and *pauses* a gate. A tip at a gate classifies to
+`AwaitingApproval` whatever its recorded outcome says; a gate whose park was
+lost is re-delivered, never continued.
+
+### Recovery rebuilds execution context from the record
+
+A pickup rebuilds in-memory execution context from the durable record through
+the same parse the live path uses — one code path, two input sources (the live
+tip, the recorded commit). A resumed container round never mints its round
+token: it reuses the token its snapshot recorded, through the one function that
+parses a commit id into a round identity, so the state commit it lands is
+checked against the recorded token exactly as the live round's would be. A
+guard that compares a recorded value with its own re-read is not a check.
+
+A per-run cell holding such context exists only as a named bridge at a port that
+cannot carry the type — here the engine's persistence port and the published
+check-workspace SPI, which by design know nothing of commits — and it holds a
+whole identity, never a fragment: a round with a snapshot and no token is not a
+value it can hold. Provenance: `make-checkpoint-gate-durable`, after the resume
+path filled one of two per-run cells and left the other empty.
+
+The canon: ARIES's analysis pass rebuilds the transaction table from the log
+alone, and Temporal replays the *same* workflow code against recorded history.
+Tekton keeps the spec beside the status, so a continuation reads the input
+that pinned the attempt rather than the current one. The anti-patterns are
+hidden temporal coupling — a cell filled by one step and read by another,
+with nothing to detect the wrong order — and Seemann's Ambient Context.
 
 ### Atomicity and durability per medium
 
@@ -223,7 +328,12 @@ accepted.
 ## See also
 
 - `.claude/rules/crash-consistency.md` — the checklist every new multi-step
-  transition passes.
+  transition passes; items 12–14 carry the gate rule, the
+  liveness-by-identity corollary and the recovery-through-the-live-parse
+  corollary.
 - `docs/glossary.md` — branch shape, tracker shape, sweep universe, recovery
-  owner, claim epoch, intent/receipt, quarantine.
+  owner, claim epoch, intent/receipt, quarantine, gate, awaiting approval,
+  approval, resumed write, round token.
+- The `stage-engine` capability — the advancement contract the gate changes;
+  the `task-branch-contract` capability — the `AwaitingApproval` shape.
 - ADR 0002 — the claim lease this contract fences with.

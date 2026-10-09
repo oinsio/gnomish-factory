@@ -107,6 +107,11 @@ class StageAttemptLoopSpec extends Specification {
         and: 'the engine classified the round explicitly as CANNOT_VERIFY (FR13, D5)'
         // FR13: a CannotVerify round records the CANNOT_VERIFY result classification.
         record.result() == AttemptRecord.Result.CANNOT_VERIFY
+
+        and: 'FR5 of make-checkpoint-gate-durable: the round carries its stop, the escalation content'
+        record.stop() == new Stop.CannotVerify(report.check(), report.reason(), report.details())
+        record.stop() == new Stop.CannotVerify(CheckRef.of(0, stageDef.verify()[0]),
+                UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
     }
 
     // FR13: the recorded round carries the executor's ExecutorUsage and the verification's
@@ -174,6 +179,10 @@ class StageAttemptLoopSpec extends Specification {
         record.startedAt() == begin
         clock.now() == begin.plus(Duration.ofMinutes(5))
 
+        and: 'FR5 of make-checkpoint-gate-durable: only the CannotVerify round carries a stop'
+        (record.stop() instanceof Stop.CannotVerify) == (expectedResult == AttemptRecord.Result.CANNOT_VERIFY)
+        (record.stop() == Stop.none()) == (expectedResult != AttemptRecord.Result.CANNOT_VERIFY)
+
         where:
         begin | verdict || expectedResult
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass() || AttemptRecord.Result.PASSED
@@ -201,6 +210,15 @@ class StageAttemptLoopSpec extends Specification {
         def record = outcome.finalState().attempts()[0]
         record.result() == AttemptRecord.Result.DECISION_NEEDED
         record.startedAt() == begin
+
+        and: 'FR5 of make-checkpoint-gate-durable: the round carries the question and options as its stop'
+        record.stop() == new Stop.DecisionNeeded(UntrustedText.agent('which db?'),
+                [
+                    UntrustedText.agent('pg'),
+                    UntrustedText.agent('mysql')
+                ])
+        def report = outcome.report() as EscalationReport.DecisionNeeded
+        record.stop() == new Stop.DecisionNeeded(report.question(), report.options())
     }
 
     // FR15: across multiple rounds of one stage, each round's startedAt is the Clock reading taken

@@ -18,8 +18,9 @@ import java.util.List;
  * {@link AttemptKey}. So there is intentionally no trace field here.
  *
  * <p>{@code round} is non-negative — it is the round's position within the current
- * stage, the same 0-based numbering the engine assigns; monotonicity and uniqueness
- * are the engine's concern and are not enforced here. {@code checkResults} is defensively
+ * visit of the stage, the same 0-based numbering the engine assigns (it restarts on a
+ * repeated visit; see {@link AttemptKey}); its ordering within a visit is the engine's
+ * concern and is not enforced here. {@code checkResults} is defensively
  * copied, unmodifiable, and MAY be empty: a {@code DecisionNeeded} round records
  * no checks, and a verdict-less execution records none either. {@code executorUsage}
  * and {@code judgeUsage} are required non-null; callers with nothing to report pass
@@ -48,8 +49,16 @@ import java.util.List;
  * entry: a passing attempt has nowhere else to put one. Defensively copied, unmodifiable, and
  * usually empty.
  *
+ * <p>{@code stop} is the escalation content the round raised, carried on the record so it is
+ * durable in the same round commit as the result (design D3 of make-checkpoint-gate-durable): a
+ * {@link Stop.DecisionNeeded} only on a {@code DECISION_NEEDED} round, a {@link Stop.CannotVerify}
+ * only on a {@code CANNOT_VERIFY} round, refused on any other result. {@link Stop.None} is valid
+ * for every result — a pass and a quality failure raise no stop, and a record read from a tip
+ * that predates the stop carries none (the wire field absent reads as {@code none}, FR10).
+ * Required non-null.
+ *
  * <p>Implements FR13 of add-stage-engine; FR15 of add-manual-run; FR2 of
- * fix-denial-report-attachment.
+ * fix-denial-report-attachment; FR5 of make-checkpoint-gate-durable.
  *
  * @param round the round's sequence number within the current stage; never negative
  * @param result the engine's explicit classification of how the round ended; never
@@ -63,6 +72,8 @@ import java.util.List;
  *     {@link JudgeUsage#none()} when no judge check ran
  * @param denials the egress denials the round's environment recorded; defensively copied,
  *     unmodifiable, possibly empty; never an input to any verdict
+ * @param stop the stop the round raised; never null, {@link Stop.None} when it raised none, and
+ *     otherwise of the kind its {@code result} names (FR5 of make-checkpoint-gate-durable)
  */
 public record AttemptRecord(
         int round,
@@ -71,7 +82,8 @@ public record AttemptRecord(
         List<CheckResult> checkResults,
         ExecutorUsage executorUsage,
         JudgeUsage judgeUsage,
-        List<Denial> denials) {
+        List<Denial> denials,
+        Stop stop) {
 
     /**
      * How a recorded round ended, set explicitly by the engine when it records the
@@ -94,6 +106,29 @@ public record AttemptRecord(
         startedAt = requireNonNull(startedAt, "startedAt");
         checkResults = List.copyOf(checkResults);
         denials = List.copyOf(denials);
+        stop = requireStopOfResult(result, stop);
+    }
+
+    /**
+     * Fails fast on a stop whose kind contradicts the round's {@code result} (FR5 of
+     * make-checkpoint-gate-durable, design D3): a {@link Stop.DecisionNeeded} belongs to a {@code
+     * DECISION_NEEDED} round only, a {@link Stop.CannotVerify} to a {@code CANNOT_VERIFY} round
+     * only; {@link Stop.None} is accepted for any result. Exhaustive switch, no {@code default}, so
+     * a new stop kind is a compile error here. Explicit static method for the same PIT
+     * record-constructor reason as {@link #requireNonNegative}.
+     */
+    private static Stop requireStopOfResult(Result result, Stop stop) {
+        Result owner =
+                switch (stop) {
+                    case Stop.None ignored -> result;
+                    case Stop.DecisionNeeded ignored -> Result.DECISION_NEEDED;
+                    case Stop.CannotVerify ignored -> Result.CANNOT_VERIFY;
+                };
+        if (owner != result) {
+            throw new IllegalArgumentException(
+                    "AttemptRecord.stop " + stop.getClass().getSimpleName() + " does not match result " + result);
+        }
+        return stop;
     }
 
     /**

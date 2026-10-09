@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * The JSON contract's per-attempt shape carried under {@code currentStage.attempts}:
- * {@code round}, {@code result}, {@code startedAt}, {@code checks}, {@code denials},
+ * {@code round}, {@code result}, {@code stop}, {@code startedAt}, {@code checks}, {@code denials},
  * {@code usage}, {@code judgeUsage} (spec.md).
  *
  * <p>{@code denials} carries the egress denials of the round, in the same finding
@@ -13,11 +13,17 @@ import java.util.List;
  * fix-denial-report-attachment). It is observability only and derives nothing:
  * {@code result} reads the same with or without it.
  *
- * <p>Implements FR11, M3 of add-manual-run; FR4 of fix-denial-report-attachment.
+ * <p>{@code stop} carries the stop the round raised — the content its escalation is built from
+ * — and is always present, {@code none} for a round that raised none (FR10 of
+ * make-checkpoint-gate-durable, a pre-release amendment of contract v1).
+ *
+ * <p>Implements FR11, M3 of add-manual-run; FR4 of fix-denial-report-attachment; FR10 of
+ * make-checkpoint-gate-durable.
  *
  * @param round the round's sequence number within the current stage
  * @param result the lowerCamel result classification ({@code passed} / {@code
  *     qualityFailure} / {@code cannotVerify} / {@code decisionNeeded})
+ * @param stop the stop the round raised; {@code none} when it raised none
  * @param startedAt ISO-8601 UTC instant the round began
  * @param checks the verify results produced this round; possibly empty
  * @param denials the egress denials recorded during this round; possibly empty
@@ -27,6 +33,7 @@ import java.util.List;
 public record AttemptDto(
         int round,
         String result,
+        StopDto stop,
         String startedAt,
         List<CheckDto> checks,
         List<FindingDto> denials,

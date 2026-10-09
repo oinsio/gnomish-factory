@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
@@ -53,7 +54,7 @@ class OptionalUsageSpec extends Specification {
                 Instant.parse("2026-07-16T14:35:10Z"),
                 [],
                 humanRound,
-                JudgeUsage.none(), [])
+                JudgeUsage.none(), [], Stop.none())
 
         and: "task totals fold from human-only rounds alone, per TaskState.recordUnburnedRound"
         def state = new TaskState(

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -40,11 +39,10 @@ import spock.lang.Specification
 class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes {
 
     private static ContainerTakeSupport containerTakeSupport(SandboxRunSupport support) {
-        ContainerSupportFactory factory = { cloneDir, taskId, segments, sandboxProps, factoryProps, definition, creds ->
+        ContainerSupportFactory factory = { cloneDir, taskId, segments, definition, creds ->
             support
         }
         new ContainerTakeSupport(
-                new FactoryProperties(null, null, null, null, null),
                 new BindingProperties(null, [:]),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),

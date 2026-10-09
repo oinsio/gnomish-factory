@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -84,6 +85,11 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
     }
 
+    /** At the gate of the one stage: a manual pass left it there (FR1 of make-checkpoint-gate-durable). */
+    protected static TaskState gateState() {
+        new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+    }
+
     protected List<Segment> segments() {
         [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -97,15 +103,14 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
      * operator's decision arrives as the {@code --decision} argument of {@link #resume}.
      */
     protected ContainerResumeRunner runner(PrintStream output) {
-        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
+        def factory = { Path c, String t, List<Segment> s, definition, List<String> creds ->
             def environments = docker.environments(
             TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         new ContainerResumeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), output, FakeAgentSupport.propertiesFor('plain-round')),
-                TaskGitFixture.real(), sandbox,
-                FakeAgentSupport.propertiesFor('plain-round'), 'taskId', factory)
+                TaskGitFixture.real(), 'taskId', factory)
     }
 
     /** Resumes {@code taskId} with the given {@code --decision} ({@code null} for none). */
@@ -138,6 +143,13 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
     }
 
+    /** Commits a state.json held at the gate of "build", as the round commit of a manual pass leaves it. */
+    protected void commitStateAtGate(String taskId) {
+        def bytes = TaskStateJson.mapper()
+                .writeValueAsString(StateJsonMapper.toDto(gateState())).getBytes('UTF-8')
+        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
+    }
+
     /**
      * Commits a state.json positioned at {@code stage} as the tip's message being the
      * snapshot-commit shape {@link ServiceCommitMessages#snapshot} — resume then classifies the
@@ -146,7 +158,10 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     protected void commitSnapshotStateAtStage(String taskId, String stage, int round) {
         def bytes = TaskStateJson.mapper()
                 .writeValueAsString(StateJsonMapper.toDto(TaskState.atStageStart(stage))).getBytes('UTF-8')
-        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round))
+        // The round opened on the current tip, so that tip is the token the subject names (design
+        // D10 of make-checkpoint-gate-durable).
+        def token = RoundToken.of(gitObjects.resolveRef('refs/heads/' + TaskIdSanitizer.branchName(taskId)).get().hex())
+        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round, token))
     }
 
     /** Hand-commits task.json (the crash-window shapes recordOutcome never leaves behind). */

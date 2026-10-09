@@ -29,18 +29,16 @@ sealed interface RoundOutcome permits RoundOutcome.Verified, RoundOutcome.NeedsD
     /**
      * A round whose executor asked a human instead of completing (FR6, design D6): no
      * verify chain ran. Carries the {@link AttemptKey}, the {@link AttemptRecord} (executor
-     * metrics, no check results — FR13), the executor's raw {@link ToolTrace}, and the
-     * {@code question}/{@code options} the engine escalates verbatim without interpreting.
+     * metrics, no check results — FR13; the question and options the engine escalates verbatim
+     * ride the record as its {@link Stop.DecisionNeeded}, FR5 of make-checkpoint-gate-durable)
+     * and the executor's raw {@link ToolTrace}.
      *
      * @param key the round's correlation key; never null
-     * @param record the round's recorded metrics, no check results; never null
+     * @param record the round's recorded metrics and its decision stop, no check results; never
+     *     null
      * @param trace the executor's raw tool trace for the round; never null
-     * @param question what the human must decide, carried verbatim; never null
-     * @param options the candidate answers, carried verbatim; never null, possibly empty
      */
-    record NeedsDecision(
-            AttemptKey key, AttemptRecord record, ToolTrace trace, UntrustedText question, List<UntrustedText> options)
-            implements RoundOutcome {}
+    record NeedsDecision(AttemptKey key, AttemptRecord record, ToolTrace trace) implements RoundOutcome {}
 
     /**
      * A round whose executor port threw — its own retries exhausted — so no round ran at

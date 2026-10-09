@@ -34,6 +34,7 @@ class BranchRepairActionSpec extends Specification {
             new BranchShape.Bare(),
             new BranchShape.Created(),
             new BranchShape.InProgress(),
+            new BranchShape.AwaitingApproval(),
             new BranchShape.Parked(),
             new BranchShape.Answered(),
             new BranchShape.CompletedUncleaned(),

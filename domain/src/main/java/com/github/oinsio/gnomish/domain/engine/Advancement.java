@@ -6,12 +6,16 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The pipeline-order lookups the {@link Engine} uses to advance a passing stage (FR8): given
- * the current stage, find the stage that follows it in the pipeline's declared order, and turn
- * that "next stage or none" into the {@link Position} a manual pause parks the task at. Kept
- * out of {@link Engine} so the driver loop stays small and under the file-size cap; a
- * stateless bag of static helpers, holding nothing.
+ * the current stage, find the stage that follows it in the pipeline's declared order, and decide
+ * the {@link Position} a pass of that stage leaves the task at. Kept out of {@link Engine} so the
+ * driver loop stays small and under the file-size cap; a stateless bag of static helpers, holding
+ * nothing.
  *
- * <p>Implements FR8 of add-stage-engine.
+ * <p>{@link #positionAfter} is the single owner of "what a pass leaves as position" (design D7 of
+ * make-checkpoint-gate-durable): the round commit records it, and the approval of a gate reaches
+ * its {@code AUTO} branch, {@link #afterGate}, only through {@link TaskState#approveGate}.
+ *
+ * <p>Implements FR8 of add-stage-engine; FR1, FR3 of make-checkpoint-gate-durable.
  */
 final class Advancement {
 
@@ -39,30 +43,41 @@ final class Advancement {
     }
 
     /**
-     * The {@link Position} a manual pause advances the task to: {@link Position.AtStage} the
-     * {@code next} stage when one follows, else the explicit {@link Position.PipelineEnd} — a
-     * pause on the last stage parks past the pipeline (FR8).
-     *
-     * @param next the stage that follows the paused one, or {@code null} when it was the last
-     * @return the position the paused task advances to; never null
-     */
-    static Position nextPosition(@Nullable StageDefinition next) {
-        return next == null ? new Position.PipelineEnd() : new Position.AtStage(next.name());
-    }
-
-    /**
-     * Where a pass of {@code stage} leaves the task: the stage declared after it, or the explicit
-     * {@link Position.PipelineEnd} past the last one (FR8). The advancement <em>mode</em> does not
-     * enter: {@code AUTO} and {@code MANUAL} move the position identically and differ only in
-     * whether the run continues or parks, which stays the {@link Engine}'s decision. The {@link
-     * StageAttemptLoop} asks this to decide what a passing round's own commit records (FR4 of
+     * Where a pass of {@code stage} leaves the task, decided by the stage's advancement mode. A
+     * {@code MANUAL} stage leaves the task <em>at the gate</em>, {@link Position.AwaitingApproval}
+     * naming the stage that passed, never past it: the position is the gate, so no tip ever says
+     * "continue" before the approval that allows it is recorded (FR1 of
+     * make-checkpoint-gate-durable, design D1, which reversed the earlier mode-blind rule). An
+     * {@code AUTO} stage leaves it at the following stage, or at the explicit {@link
+     * Position.PipelineEnd} past the last one ({@link #afterGate}). The {@link StageAttemptLoop}
+     * asks this to decide what a passing round's own commit records (FR4 of
      * harden-task-branch-contract).
      *
      * @param definition the pipeline whose declared order is walked; never null
      * @param stage the stage that just passed; never null
-     * @return the position the pass advances to; never null
+     * @return the position the pass leaves the task at; never null
      */
     static Position positionAfter(PipelineDefinition definition, StageDefinition stage) {
-        return nextPosition(nextStage(definition, stage));
+        return switch (stage.advancement()) {
+            case MANUAL -> new Position.AwaitingApproval(stage.name());
+            case AUTO -> afterGate(definition, stage);
+        };
+    }
+
+    /**
+     * The position that follows {@code stage} in the pipeline's declared order: {@link
+     * Position.AtStage} the next stage, or the explicit {@link Position.PipelineEnd} when {@code
+     * stage} is last (FR8). This is the {@code AUTO} branch of {@link #positionAfter} and the
+     * position an approved gate moves to; the approval reaches it only through {@link
+     * TaskState#approveGate} (design D2, D7 of make-checkpoint-gate-durable). The stage's own
+     * advancement mode does not enter here — that decision is {@link #positionAfter}'s.
+     *
+     * @param definition the pipeline whose declared order is walked; never null
+     * @param stage the stage the task moves past; never null
+     * @return the following position; never null and never a gate
+     */
+    static Position afterGate(PipelineDefinition definition, StageDefinition stage) {
+        var next = nextStage(definition, stage);
+        return next == null ? new Position.PipelineEnd() : new Position.AtStage(next.name());
     }
 }

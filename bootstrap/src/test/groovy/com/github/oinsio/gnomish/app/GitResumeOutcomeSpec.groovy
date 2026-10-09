@@ -102,15 +102,16 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         !Files.exists(worktree.resolve('half-done.txt'))
     }
 
-    // FR8, UX2; FR5 of make-run-headless: outcome paused continues from the already-advanced
-    // position with no checkpoint line and no prompt — the resume is the confirmation.
-    def "run() with outcome paused continues to completion without a checkpoint line"() {
-        given: 'a task paused after "build" passed — its recorded position already advanced to PipelineEnd'
+    // FR8, UX2; FR5 of make-run-headless: outcome paused continues with no checkpoint line and no
+    // prompt — the resume is the approval (FR4 of make-checkpoint-gate-durable): one approval commit
+    // opens the gate, then the engine continues from the approved state.
+    def "run() with outcome paused at a gate approves it in one commit and continues to completion without a checkpoint line"() {
+        given: 'a task paused after "build" passed — its recorded position the gate of "build"'
         def taskId = 'PROJ-12'
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
-        persistOneRound(taskId, endState)
-        repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'), TrackerWrite.OWED)
+        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        persistOneRound(taskId, gateState)
+        repository().recordOutcome(taskId, new TaskOutcome.Paused(gateState, 'build'), TrackerWrite.OWED)
 
         def out = new ByteArrayOutputStream()
 
@@ -120,12 +121,17 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
         then: 'nothing about the checkpoint was printed and nothing was asked'
         def printed = out.toString('UTF-8')
-        !printed.contains('Manual checkpoint reached')
+        !printed.contains('Awaiting approval')
         !printed.contains('Press Enter to continue')
 
-        and: 'the branch records a fresh Completed outcome (the engine reaches PipelineEnd immediately)'
+        and: 'the branch records a fresh Completed outcome (the approved state is PipelineEnd)'
         gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(expectedWorktree(taskId))
+
+        and: 'exactly one approval commit opened the gate, right after the park'
+        def subjects = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "gnomish/${taskId}").readLines()
+        subjects.count('gnomish: task approved') == 1
+        subjects[subjects.indexOf('gnomish: task approved') - 1] == 'gnomish: task paused'
     }
 
     // FR8: outcome completed reports and exits without touching the worktree or branch again — no

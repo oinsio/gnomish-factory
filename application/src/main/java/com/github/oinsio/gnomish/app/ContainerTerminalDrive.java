@@ -41,10 +41,6 @@ final class ContainerTerminalDrive {
         // Runner start prunes objects a dead instance left labelled (FR11, NFR-R2), keeping this
         // task's own environments so a reattaching resume is never swept; no daemon = a no-op.
         support.sweepOrphans();
-        // The guard container outlives the process that created it, so a resume onto a surviving
-        // one continues the denial delta from the position its last attempt committed instead of
-        // replaying the container's whole log onto this round (FR5 of fix-denial-report-attachment).
-        support.restoreDenials();
         PipelineDefinition definition = order.definition();
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(order, context, state, support.persistence(), List.of(), lawBinding);

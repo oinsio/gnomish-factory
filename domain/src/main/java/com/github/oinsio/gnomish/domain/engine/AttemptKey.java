@@ -10,9 +10,12 @@ package com.github.oinsio.gnomish.domain.engine;
  *
  * <p>The {@code taskId} and {@code stage} are non-blank because a key that does
  * not name its task and stage cannot correlate anything. The {@code attempt} is
- * non-negative; it corresponds to {@code AttemptRecord.round}, the monotonic
- * executed-round number the engine assigns within the current stage — monotonicity
- * is the engine's concern and is not validated here. Inert value data compared by
+ * non-negative; it corresponds to {@code AttemptRecord.round}, the executed-round
+ * number the engine assigns. The key is unique within one visit of a stage only:
+ * the number restarts when the stage is visited again (an answered decision, an
+ * advancement, a retry), so the round token, not this key, is the identity across
+ * visits (design D10 of make-checkpoint-gate-durable). Uniqueness within a visit is
+ * the engine's concern and is not validated here. Inert value data compared by
  * content.
  *
  * <p>Implements FR13 of add-stage-engine.

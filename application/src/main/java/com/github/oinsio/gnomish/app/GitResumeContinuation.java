@@ -26,14 +26,17 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Kept in sync with {@link ContainerResumeOutcomes}: both implement the same four outcome arms
  * dispatched by {@link GitResumeRunner}/{@link ContainerResumeRunner} — {@code null} salvages the
- * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, both resolve
- * the escalation through {@link EscalationResume} and continue a pause without a prompt, and {@code
- * completed} builds and prints the same status report with no further engine run. The container
- * arm additionally disposes the kept box before any branch write or round (its clone is behind
- * the park commit); the host arm has none, since its worktree is the branch. Adding or re-meaning
- * an arm on one side alone is the divergence this pair guards against (UX2).
+ * interrupted round's leftovers (or honours {@code --discard-work}) before continuing; both resolve
+ * the escalation through {@link EscalationResume} and land its decision or resumed commit through
+ * {@link EscalationResume#land}; both open the gate through {@code TaskRepository.approveCheckpoint}
+ * (via {@link CheckpointApproval#continuePause}) before continuing; and {@code completed} prints
+ * the same status report with no further engine run. Every continuing arm but {@code null} lands
+ * exactly one lifecycle commit before the engine runs. The container arm additionally disposes the
+ * kept box before any branch write or round (its clone is behind the park commit); the host arm has
+ * none, since its worktree is the branch. Adding or re-meaning an arm on one side alone is the
+ * divergence this pair guards against (UX2).
  *
- * <p>Implements FR5, FR8, UX2 of add-git-workflow.
+ * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR4, FR7 of make-checkpoint-gate-durable.
  */
 final class GitResumeContinuation {
 
@@ -82,19 +85,18 @@ final class GitResumeContinuation {
 
     /**
      * Outcome {@code escalated}: rebuilds the domain {@link TaskOutcome.Escalated} from {@code
-     * finalState} and {@link ResumeBootstrap#lastEscalation()}, then resolves it through {@link
+     * finalState} and {@link ResumeBootstrap#lastEscalation()}, resolves it through {@link
      * EscalationResume#decide} with the operator's {@code --decision} (design D2, D7 of
-     * make-run-headless). A decision is appended through {@link
-     * com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision}, which resets {@code outcome}
-     * and the attempts in the same commit (FR3, NFR-R1); no decision continues on the reset state
-     * alone, in memory until the next round commit lands it (FR4).
+     * make-run-headless), and lands the result through {@link EscalationResume#land} — the decision
+     * commit, or without a decision the resumed commit (FR7 of make-checkpoint-gate-durable).
      *
      * @throws InternalErrorException if {@code task.json} recorded outcome {@code escalated} with no
      *     {@code lastEscalation} — a state the recorder never produces, so a corrupted branch
      * @throws DecisionRequiredException for a {@code DecisionNeeded} report and no decision: the
      *     question is restated, nothing is written, the process exits 10 (FR4 of make-run-headless)
      *
-     * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR3, FR4 of make-run-headless.
+     * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR3, FR4 of make-run-headless; FR7 of
+     * make-checkpoint-gate-durable.
      */
     void resumeEscalated(RunOrder order, TaskState finalState, @Nullable String decision) {
         EscalationReport report = bootstrap.lastEscalation();
@@ -107,23 +109,23 @@ final class GitResumeContinuation {
         DialogConsole console = assembly.dialogConsole();
         var resumption = new EscalationResume(console, Clock.systemUTC(), returnPath())
                 .decide(bootstrap.context(), escalated, decision);
-        if (decision != null) {
-            // The decision and the attempts reset land in one commit (NFR-R1 of make-run-headless).
-            taskRepository.appendDecision(
-                    bootstrap.taskId(), resumption.context().decisions().getLast(), resumption.state());
-        }
+        EscalationResume.land(taskRepository, bootstrap.taskId(), resumption, decision);
         runToTerminalBoundary(order, resumption.context(), resumption.state());
     }
 
     /**
-     * Outcome {@code paused}: a manual checkpoint is not a question, so the resume is the
-     * confirmation — nothing printed, nothing reset, no decision appended (FR5 of
-     * make-run-headless); continues from {@code finalState}, already advanced past the paused stage.
+     * A gate (any outcome) or outcome {@code paused}: a manual checkpoint is not a question, so the
+     * resume is the approval — nothing printed, nothing reset, no decision appended (FR5 of
+     * make-run-headless). The approval commit lands first, then the engine continues from the
+     * approved state (FR4, design D2 of make-checkpoint-gate-durable).
      *
-     * <p>Implements FR8, UX2 of add-git-workflow; FR5 of make-run-headless.
+     * <p>Implements FR8, UX2 of add-git-workflow; FR5 of make-run-headless; FR4 of
+     * make-checkpoint-gate-durable.
      */
     void resumePaused(RunOrder order, TaskState finalState) {
-        runToTerminalBoundary(order, bootstrap.context(), finalState);
+        TaskState approved = CheckpointApproval.continuePause(
+                taskRepository, bootstrap.taskId(), finalState, order.definition(), () -> {});
+        runToTerminalBoundary(order, bootstrap.context(), approved);
     }
 
     /**

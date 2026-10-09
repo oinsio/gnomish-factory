@@ -93,14 +93,7 @@ final class TakeContainerFreshClaim {
                 TrackerTaskSynthesizer.synthesize(lawBound.trackerTask().snapshot(), taskDefinition);
         var support = containerTakeSupport
                 .containerSupportFactory()
-                .create(
-                        lawBound.run().cloneDir(),
-                        taskId,
-                        segments,
-                        containerTakeSupport.sandboxProperties(),
-                        containerTakeSupport.factoryProperties(),
-                        taskDefinition,
-                        wiring.credentialEnvVarsToScrub());
+                .create(lawBound.run().cloneDir(), taskId, segments, taskDefinition, wiring.credentialEnvVarsToScrub());
         // FR15, D12 of add-base-ref-resolution: the branch starts at the very commit the task's law
         // was peeled at — the refreshed base — and the resolved ref travels beside it as the pin.
         GitFreshTaskSupport.createTask(

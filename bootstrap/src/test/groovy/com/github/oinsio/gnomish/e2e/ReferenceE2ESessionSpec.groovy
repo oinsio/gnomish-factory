@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.e2e
 
 import static com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages.round
 import static com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages.taskEvent
+import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.APPROVED
 import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.COMPLETED
 import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.ESCALATED
 import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.PAUSED
@@ -40,13 +41,15 @@ import java.nio.file.Path
  *
  * <p>Each stop is also asserted on the durable medium: the task branch on the bare origin gains, per
  * process, exactly the commits that stop implies — the park before the exit, the two rounds of the
- * quality retry, and no round at all when the paused task completes.
+ * quality retry, and — when the paused task completes — the approval commit that moves it past the
+ * checkpoint (FR3, FR4 of make-checkpoint-gate-durable) and no round at all.
  *
  * <p>Git mode works in a worktree under the factory home, so the operator's clone must gain
  * nothing over the whole journey: no runner file and no gnome file leaks into it (NFR-S1 of
  * add-manual-run, restated for the mode that can resume).
  *
- * <p>Implements M3, FR1, FR2, FR3, FR5, FR7 of make-run-headless; M1, NFR-S1 of add-manual-run.
+ * <p>Implements M3, FR1, FR2, FR3, FR5, FR7 of make-run-headless; M1, NFR-S1 of add-manual-run;
+ * FR3, FR4 of make-checkpoint-gate-durable.
  */
 class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
 
@@ -103,14 +106,15 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         then: 'FR5: the pipeline completes with no confirmation asked, exit 0'
         third.exitCode() == 0
         third.stdout().contains('Stage: pipeline complete')
-        !third.stdout().contains('Manual checkpoint reached')
+        !third.stdout().contains(TerminalOutcomeRender.checkpointLine('work'))
         !third.stdout().contains(returnPath.line(false))
 
         and: 'FR3: the operator decision is on the task record'
         third.stdout().contains('use approach A (by operator) [stage: work]')
 
-        and: 'FR5: no round ran past the checkpoint — the task completed and cleaned up'
+        and: 'FR5 (make-run-headless), FR4 (make-checkpoint-gate-durable): no round ran past the checkpoint — the approval moved the task past it, then it completed and cleaned up'
         pushedSubjects(clone).drop(7) == [
+            taskEvent(APPROVED),
             taskEvent(COMPLETED),
             ServiceCommitMessages.cleanup()
         ]

@@ -22,8 +22,9 @@ import org.slf4j.MDC;
  * <p>Every {@link EngineEvent} variant carrying an {@link AttemptKey} — {@code AttemptStarted},
  * {@code ExecutionFinished}, {@code CheckStarted}, {@code CheckFinished}, {@code AttemptFinished}
  * — sets both keys from that key. {@code RunStarted} carries a {@link Position} rather than an
- * {@code AttemptKey}; when the resolved position is {@link Position.AtStage}, this listener sets
- * {@code stage} from it so the MDC already names the stage before the first attempt starts (e.g.
+ * {@code AttemptKey}; when the resolved position is {@link Position.AtStage}, or {@link
+ * Position.AwaitingApproval} (the gate's stage, FR1 of make-checkpoint-gate-durable), this listener
+ * sets {@code stage} from it so the MDC already names the stage before the first attempt starts (e.g.
  * a resume that logs before any attempt event fires) — {@code attempt} is left unset there since
  * {@code RunStarted} carries no attempt number ({@code attemptsUsed} counts burned attempts, not
  * the next attempt's index). {@code TaskFinished} clears both keys, preventing them from leaking
@@ -43,7 +44,7 @@ import org.slf4j.MDC;
  * handling — the same reasoning {@link StatusEventListener} documents for its own plain field
  * updates.
  *
- * <p>Implements NFR-O1, D9 of add-manual-run.
+ * <p>Implements NFR-O1, D9 of add-manual-run; FR1 of make-checkpoint-gate-durable.
  */
 public final class MdcEventListener implements EngineEventListener {
 
@@ -71,8 +72,13 @@ public final class MdcEventListener implements EngineEventListener {
     }
 
     private void onRunStarted(Position position) {
-        if (position instanceof Position.AtStage atStage) {
-            MDC.put(STAGE_KEY, atStage.name());
+        switch (position) {
+            case Position.AtStage atStage -> MDC.put(STAGE_KEY, atStage.name());
+            // FR1 of make-checkpoint-gate-durable: a run held at a gate logs under the gate's stage.
+            case Position.AwaitingApproval gate -> MDC.put(STAGE_KEY, gate.stage());
+            case Position.PipelineEnd ignored -> {
+                // Past the last stage there is no stage to name; the key stays as it was.
+            }
         }
     }
 

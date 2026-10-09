@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import java.nio.file.Path;
 import java.util.List;
@@ -30,13 +28,15 @@ interface ContainerSupportFactory {
      * add-plugin-architecture). The composition root's binding is what reads them out — through the
      * discovered registry, over params core never interprets — so this seam only has to carry the
      * pipeline that names them.
+     *
+     * <p>The installation's settings are not parameters: the realization holds them, fixed for the
+     * process, so a runner has no property set to pass (design D12 of
+     * make-checkpoint-gate-durable).
      */
     SandboxRunSupport create(
             Path cloneDir,
             String taskId,
             List<Segment> segments,
-            SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
             PipelineDefinition definition,
             List<String> credentialEnvVarsToScrub);
 }

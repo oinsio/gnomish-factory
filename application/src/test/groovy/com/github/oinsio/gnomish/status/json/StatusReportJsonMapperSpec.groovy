@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
@@ -91,6 +92,18 @@ class StatusReportJsonMapperSpec extends Specification {
         expect:
         mapper.toDto(report).position() == new PositionDto.PipelineEnd("pipelineEnd")
         mapper.toDto(report).currentStage() == null
+    }
+
+    // FR12 of make-checkpoint-gate-durable: a gate is its own position token, and currentStage
+    //     describes the stage that passed rather than being withdrawn as at pipelineEnd
+    def "position renders awaitingApproval with the gate's stage"() {
+        given:
+        def report = idleReport(new Position.AwaitingApproval("release"))
+
+        expect:
+        mapper.toDto(report).position() == new PositionDto.AwaitingApproval("awaitingApproval", "release")
+        mapper.toDto(report).currentStage() != null
+        mapper.serialize(report).contains('"type" : "awaitingApproval"')
     }
 
     // FR6 of make-run-headless: the live-only fields are withdrawn from contract v1 — no
@@ -306,7 +319,7 @@ class StatusReportJsonMapperSpec extends Specification {
         ])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage, [])
+                [], ExecutorUsage.none(), judgeUsage, [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
         def report = StatusReport.build(context, state, null, null)
 
@@ -328,7 +341,7 @@ class StatusReportJsonMapperSpec extends Specification {
         def judgeUsage = new JudgeUsage([[:]])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage, [])
+                [], ExecutorUsage.none(), judgeUsage, [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
         def report = StatusReport.build(context, state, null, null)
 
@@ -356,7 +369,7 @@ class StatusReportJsonMapperSpec extends Specification {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
-                [check], ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
+                [check], ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
 
         when:
         def dto = mapper.toDto(reportOf(attempt)).currentStage().attempts()[0]
@@ -376,7 +389,7 @@ class StatusReportJsonMapperSpec extends Specification {
         given:
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
-                [], ExecutorUsage.none(), JudgeUsage.none(), [])
+                [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
 
         expect:
         mapper.toDto(reportOf(attempt)).currentStage().attempts()[0].denials() == []

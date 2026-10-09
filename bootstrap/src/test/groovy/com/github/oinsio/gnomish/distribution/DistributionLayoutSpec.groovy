@@ -69,7 +69,11 @@ class DistributionLayoutSpec extends Specification {
     def "FR4: the repository holds no copy of the sandbox-image recipe outside docs/examples/"() {
         given:
         def root = RepoSourceTree.repoRoot()
-        def tracked = git(root, 'ls-files', '-z').split('\u0000').findAll { it }
+        // A tracked path already deleted in the working copy (a replaced baseline jar not yet
+        // committed) holds no copy of anything, and cannot be read.
+        def tracked = git(root, 'ls-files', '-z').split('\u0000').findAll {
+            it && Files.exists(root.resolve(it))
+        }
 
         expect: 'the scan really reached the repository'
         tracked.size() > 100

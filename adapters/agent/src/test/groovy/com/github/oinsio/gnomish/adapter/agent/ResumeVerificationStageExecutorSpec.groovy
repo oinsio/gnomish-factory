@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.ClosedRound
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -21,10 +23,24 @@ import spock.lang.Specification
 /**
  * FR21, D15 of add-sandbox-core (the integration pass): an interrupted
  * verification found on resume is consumed by the first matching round — the
- * pending attempt commit is recorded and the agent is never re-run; every
+ * interrupted round is restored into the run's cell and the agent is never re-run; every
  * other request delegates, and the pending state is consumed exactly once.
+ *
+ * <p>FR15, NFR-R4 of make-checkpoint-gate-durable (design D10): a pending verification carrying the
+ * request the snapshot's tree held re-raises it as DecisionNeeded through the shared tolerant
+ * reader, with the same empty telemetry, and still never runs the agent.
  */
 class ResumeVerificationStageExecutorSpec extends Specification {
+
+    /** The token the interrupted round's snapshot subject recorded. */
+    static final RoundToken RECORDED = RoundToken.of('0a1b2c3d')
+
+    /** A round a live run already holds in its cell before any request arrives. */
+    static final RoundToken LIVE = RoundToken.of('0f0f0f0f')
+
+    private static PendingVerification pending(Optional<String> request = Optional.empty()) {
+        new PendingVerification('abc123', 'work', 2, RECORDED, request)
+    }
 
     private static StageExecutor.Request request(String stageName, int attempt) {
         new StageExecutor.Request(
@@ -45,12 +61,12 @@ class ResumeVerificationStageExecutorSpec extends Specification {
                         new AttemptKey('T-1', 'work', 1), []), [])
     }
 
-    def "FR21: the matching round skips the agent, records the attempt commit, and completes with empty telemetry"() {
+    def "FR21, FR13: the matching round skips the agent, restores the recorded round, and completes with empty telemetry"() {
         given:
         def delegate = Mock(StageExecutor)
-        def ref = new AttemptCommitRef()
+        def ref = new CurrentRound()
         def executor = new ResumeVerificationStageExecutor(
-                delegate, ref, new PendingVerification('abc123', 'work', 2))
+                delegate, ref, pending())
 
         when:
         def result = executor.execute(request('work', 2))
@@ -58,15 +74,20 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         then: 'no delegation, the pending snapshot becomes the round result'
         0 * delegate.execute(_)
         result instanceof ExecutionResult.Completed
-        ref.required() == 'abc123'
-        (result as ExecutionResult.Completed).trace().calls().isEmpty()
+
+        and: "the cell holds the recorded round: the snapshot subject's token and the snapshot commit"
+        ref.closed() == new ClosedRound(RECORDED, 'abc123')
+        ref.opened() == RECORDED
+        (result as ExecutionResult.Completed).trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        (result as ExecutionResult.Completed).usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        (result as ExecutionResult.Completed).denials().isEmpty()
     }
 
     def "the pending verification is consumed exactly once — the next matching request delegates"() {
         given:
         def delegate = Mock(StageExecutor)
         def executor = new ResumeVerificationStageExecutor(
-                delegate, new AttemptCommitRef(), new PendingVerification('abc123', 'work', 2))
+                delegate, new CurrentRound(), pending())
         executor.execute(request('work', 2))
         def delegateResult = completed()
 
@@ -81,11 +102,12 @@ class ResumeVerificationStageExecutorSpec extends Specification {
     }
 
     def "a non-matching stage or attempt delegates untouched, returning the delegate's exact result"() {
-        given:
+        given: 'a cell holding the live round the delegate is about to run'
         def delegate = Mock(StageExecutor)
-        def ref = new AttemptCommitRef()
+        def ref = new CurrentRound()
+        ref.open(LIVE)
         def executor = new ResumeVerificationStageExecutor(
-                delegate, ref, new PendingVerification('abc123', 'work', 2))
+                delegate, ref, pending())
         def delegateResult = completed()
 
         when:
@@ -94,6 +116,15 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         then:
         1 * delegate.execute(_) >> delegateResult
         result.is(delegateResult)
+
+        and: 'FR13: the recorded round was not restored over the live one'
+        ref.opened() == LIVE
+
+        when: 'the live round has no snapshot, so it is not closed — no recorded snapshot leaked in'
+        ref.closed()
+
+        then:
+        thrown(IllegalStateException)
 
         where:
         stageName | attempt
@@ -104,7 +135,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
     def "a null pending verification is a pure pass-through, returning the delegate's exact result"() {
         given:
         def delegate = Mock(StageExecutor)
-        def executor = new ResumeVerificationStageExecutor(delegate, new AttemptCommitRef(), null)
+        def executor = new ResumeVerificationStageExecutor(delegate, new CurrentRound(), null)
         def delegateResult = completed()
 
         when:
@@ -113,5 +144,46 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         then:
         1 * delegate.execute(_) >> delegateResult
         result.is(delegateResult)
+    }
+
+    def "FR15: a pending verification carrying a request re-raises its question with empty telemetry, no agent round"() {
+        given:
+        def delegate = Mock(StageExecutor)
+        def ref = new CurrentRound()
+        def executor = new ResumeVerificationStageExecutor(delegate, ref, pending(
+                        Optional.of('{"question":"which db?","options":["pg","sqlite"]}')))
+
+        when:
+        def result = executor.execute(request('work', 2))
+
+        then: "the agent never runs, and the cell holds the recorded round"
+        0 * delegate.execute(_)
+        ref.closed() == new ClosedRound(RECORDED, 'abc123')
+
+        and: "the snapshot's question, mapped through the same reader a live round uses"
+        def needed = result as ExecutionResult.DecisionNeeded
+        needed.question() == UntrustedText.agent('which db?')
+        needed.options() == [
+            UntrustedText.agent('pg'),
+            UntrustedText.agent('sqlite')
+        ]
+
+        and: "the same empty telemetry as the Completed resume: the round's own died with its state commit"
+        needed.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        needed.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        needed.denials().isEmpty()
+    }
+
+    def "FR15: an unparseable request still re-raises, its raw content as the question"() {
+        given:
+        def executor = new ResumeVerificationStageExecutor(
+                Mock(StageExecutor), new CurrentRound(), pending(Optional.of('not json')))
+
+        when:
+        def result = executor.execute(request('work', 2))
+
+        then:
+        (result as ExecutionResult.DecisionNeeded).question() == UntrustedText.agent('not json')
+        (result as ExecutionResult.DecisionNeeded).options().isEmpty()
     }
 }

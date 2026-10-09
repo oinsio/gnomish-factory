@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.charset.StandardCharsets;
@@ -9,7 +10,7 @@ import java.util.Optional;
 /**
  * The in-branch decision-file protocol for git modes (FR23, design D17): the
  * decision request lives at {@code
- * .gnomish-task/decisions/<stage>-a<attempt>.json} <em>inside the working
+ * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} <em>inside the working
  * copy</em> — the single gnome-writable path under {@code .gnomish-task/}
  * ({@link HarvestedBoundaryCheck}'s carve-out names exactly this path) — instead
  * of the host temp directory of {@code DecisionFileTransport}, which the
@@ -21,12 +22,15 @@ import java.util.Optional;
  * <p>The {@code $GNOMISH_DECISION_FILE} value is the working-copy-relative
  * path: every adapter runs the agent with the working copy as its working
  * directory, and both adapters' file channels anchor relative paths there, so
- * no adapter-private absolute path leaks into the protocol. Stale files are
- * self-excluding (FR23): each round reads exactly its own
- * {@code <stage>-a<attempt>} name and nothing else. There is no eager removal —
- * the Completed cleanup commit strips {@code .gnomish-task/} from the tip.
+ * no adapter-private absolute path leaks into the protocol. A request is live
+ * only under its round's token (design D10 of make-checkpoint-gate-durable): a
+ * stage and attempt repeat across visits of a stage, so each round reads exactly
+ * the {@code <stage>-a<attempt>-<token>} name its token fixes and nothing else.
+ * The outcome-clearing commits remove {@code .gnomish-task/decisions/} as
+ * hygiene (FR14), but no read relies on that removal — the token match alone
+ * decides liveness.
  *
- * <p>Implements FR23 of add-sandbox-core.
+ * <p>Implements FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable.
  */
 public final class BranchDecisionFile {
 
@@ -45,11 +49,14 @@ public final class BranchDecisionFile {
      * Opens one round's in-branch decision transport over {@code environment}.
      *
      * @param environment the task's bound environment; the boundary-time read runs through it
-     * @param key the round's key; fixes the file name and excludes stale files
+     * @param key the round's key; with {@code token}, fixes the file name
+     * @param token the round's token (FR13 of make-checkpoint-gate-durable); the one path read is
+     *     named by it, so a file under any other token — carried over on the tip, left by a killed
+     *     round, or written beside the real one — is never read
      * @return the round's handle; never null
      */
-    public static Handle open(TaskExecutionEnvironment environment, AttemptKey key) {
-        return new Handle(environment, HarvestedBoundaryCheck.decisionPath(key));
+    public static Handle open(TaskExecutionEnvironment environment, AttemptKey key, RoundToken token) {
+        return new Handle(environment, HarvestedBoundaryCheck.decisionPath(key, token));
     }
 
     /** One round's in-branch decision transport: the path, its env fragment, and the boundary-time read. */
@@ -63,7 +70,7 @@ public final class BranchDecisionFile {
             this.relativePath = relativePath;
         }
 
-        /** The working-copy-relative decision path, e.g. {@code .gnomish-task/decisions/implement-a1.json}. */
+        /** The working-copy-relative decision path, e.g. {@code .gnomish-task/decisions/implement-a1-<token>.json}. */
         public String relativePath() {
             return relativePath;
         }

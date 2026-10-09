@@ -117,6 +117,16 @@ class ContainerE2eDocker {
         ]).trim() == 'true'
     }
 
+    /** The named container's full id — the identity a guard's denial cursor names as its source. */
+    static String containerId(String containerName) {
+        run([
+            'inspect',
+            '-f',
+            '{{.Id}}',
+            containerName
+        ]).trim()
+    }
+
     private static String run(List<String> args) {
         def process = new ProcessBuilder((['docker'] + args) as String[]).redirectErrorStream(true).start()
         String output = new String(process.inputStream.readAllBytes(), 'UTF-8')

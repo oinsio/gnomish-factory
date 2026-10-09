@@ -75,7 +75,7 @@ class TakePauseExitSpec extends Specification {
         1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
             report.contains('PROJ-1') &&
             report.contains(BRANCH) &&
-            report.toLowerCase().contains('checkpoint') &&
+            report.contains(TerminalOutcomeRender.checkpointLine('build')) &&
             report.toLowerCase().contains('ready')
         })
 

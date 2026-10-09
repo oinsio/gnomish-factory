@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageTotals
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import java.time.Duration
 import java.time.Instant
@@ -22,7 +23,7 @@ class UsageTextRendererSpec extends Specification {
 
     private static AttemptRecord attempt(int round, String result, Long wall, Map<String, TokenUsage> tokens) {
         new AttemptRecord(round, AttemptRecord.Result.valueOf(RESULTS[result]), Instant.parse('2026-07-18T09:00:00Z'), [],
-        new ExecutorUsage(wall == null ? null : Duration.ofMillis(wall), [], tokens), JudgeUsage.none(), [])
+        new ExecutorUsage(wall == null ? null : Duration.ofMillis(wall), [], tokens), JudgeUsage.none(), [], Stop.none())
     }
 
     private static final Map<String, String> RESULTS = [

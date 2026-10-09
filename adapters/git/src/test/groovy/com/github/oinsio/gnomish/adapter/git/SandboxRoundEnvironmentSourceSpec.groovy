@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -27,9 +29,11 @@ import spock.lang.TempDir
  * {@link RoundEnvironmentSource} opens a round in the task's leased container
  * environment, wires the in-branch decision transport (path and env
  * fragment), exposes the rate-limited mid-round harvest listener, and closes
- * the round with the snapshot-commit protocol.
+ * the round with the snapshot-commit protocol. FR13 of make-checkpoint-gate-durable (D10):
+ * the round's token is the tip it opened on, opened in the run's {@link CurrentRound}, and the
+ * snapshot closes that same round in it.
  */
-class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGitRepoFixture {
+class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGitRepoFixture, FailingSubcommandGitFixture {
 
     static final String TASK = 'SBX-1'
     static final String BRANCH = TaskIdSanitizer.branchName(TASK)
@@ -39,7 +43,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
     Path tempDir
 
     Path cloneDir
-    AttemptCommitRef attemptRef = new AttemptCommitRef()
+    CurrentRound rounds = new CurrentRound()
     EnvironmentLease lease
 
     def setup() {
@@ -76,7 +80,15 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
     }
 
     private SandboxRoundEnvironmentSource source() {
-        new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), cloneDir, TASK, attemptRef, new VirtualClock())
+        new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), cloneDir, TASK, rounds, new VirtualClock())
+    }
+
+    private String branchTip() {
+        gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
+    }
+
+    private String tokenPath(int attempt) {
+        '.gnomish-task/decisions/' + STAGE + '-a' + attempt + '-' + branchTip() + '.json'
     }
 
     def "FR4: openRound returns a non-null round with a real, materialized environment"() {
@@ -91,23 +103,48 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         ((LocalBoxEnvironment) round.environment()).workingCopy.toFile().isDirectory()
     }
 
-    def "FR23: decisionFilePath names this round's branch-relative decision path"() {
-        when:
-        def round = source().openRound(request(1))
-
-        then:
-        round.decisionFilePath() != null
-        round.decisionFilePath().toString() == '.gnomish-task/decisions/' + STAGE + '-a1.json'
-    }
-
-    def "FR23: decisionEnvFragment carries the decision path under the fixed env var name"() {
+    def "FR13, FR23: the decision path and its env fragment name this round's token path, branch-relative"() {
         when:
         def round = source().openRound(request(2))
 
         then:
-        def fragment = round.decisionEnvFragment()
-        !fragment.isEmpty()
-        fragment == [GNOMISH_DECISION_FILE: '.gnomish-task/decisions/' + STAGE + '-a2.json']
+        round.decisionFilePath().toString() == tokenPath(2)
+        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: tokenPath(2)]
+    }
+
+    def "FR13: each round records the tip it opened on as the run's token, so a repeated key names a new path"() {
+        given: 'a first round records the tip it opened on, then closes with its snapshot commit'
+        def openTip = branchTip()
+        def first = source().openRound(request(0))
+        assert rounds.opened() == RoundToken.of(openTip)
+        def firstPath = first.decisionFilePath().toString()
+        first.closeRound()
+
+        when: 'the same stage and attempt open again on the moved tip'
+        def second = source().openRound(request(0))
+
+        then: 'the token follows the tip, so the same key names a different file'
+        rounds.opened() == RoundToken.of(branchTip())
+        second.decisionFilePath().toString() == tokenPath(0)
+        second.decisionFilePath().toString() != firstPath
+    }
+
+    def "FR13: openRound refuses, recording no token, when the branch tip cannot be resolved"() {
+        given: 'the tip read fails while the environment still materializes'
+        def failing = new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString())
+
+        when:
+        new SandboxRoundEnvironmentSource(lease, failing, cloneDir, TASK, rounds, new VirtualClock())
+                .openRound(request(1))
+
+        then:
+        thrown(BranchTipUnavailableException)
+
+        when:
+        rounds.opened()
+
+        then:
+        thrown(IllegalStateException)
     }
 
     def "FR5: roundListener is the sandboxed mid-round harvest listener, not the default no-op"() {
@@ -132,7 +169,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def round = source().openRound(request(1))
         def decisionFile = new File(
                 ((LocalBoxEnvironment) round.environment()).workingCopy.toFile(),
-                '.gnomish-task/decisions/' + STAGE + '-a1.json')
+                tokenPath(1))
         decisionFile.parentFile.mkdirs()
         decisionFile.text = '{"question":"which db?"}'
 
@@ -146,15 +183,20 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
 
     def "FR21: closeRound snapshots the environment and records the harvested attempt commit"() {
         given:
+        def openTip = branchTip()
         def round = source().openRound(request(1))
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
         round.closeRound()
 
-        then: 'the attempt commit ref now carries the harvested snapshot commit'
-        def attempt = attemptRef.required()
-        gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot ' + STAGE + '#1'
+        then: 'the cell now holds the round closed by the harvested snapshot commit, under the token it opened with'
+        def closed = rounds.closed()
+        closed.token() == RoundToken.of(openTip)
+        def attempt = closed.attemptCommit()
+
+        and: 'FR15 of make-checkpoint-gate-durable: its subject names the token the round opened with'
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot ' + STAGE + '#1 ' + openTip
         gitOutput(cloneDir, 'show', attempt + ':work.txt') == 'gnome work'
     }
 }

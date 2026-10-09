@@ -15,6 +15,9 @@ plugins {
     // The adversarial global git configuration every Test and pitest task runs under
     // (own-git-transfer-argv, design D11); its own file, one thing per plugin.
     id 'adversarial-gitconfig-conventions'
+    // No inherited GNOMISH_* variable reaches a Test or pitest JVM (make-checkpoint-gate-durable,
+    // design D14).
+    id 'test-environment-hygiene-conventions'
 }
 
 def libs = extensions.getByType(VersionCatalogsExtension).named('libs')

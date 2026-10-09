@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
@@ -77,6 +78,22 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
         return CommittedTaskJson.parse(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
+    }
+
+    /**
+     * The tip's {@code state.json} as its raw wire DTO, for a write whose refusal rule rests on the
+     * recorded position (the approval, FR3 of make-checkpoint-gate-durable). Required, as {@link
+     * #readCommitted} is: a failed read refuses the write instead of deciding on nothing — unlike
+     * {@link #tipStateCursor}, whose degraded answer only costs a re-read.
+     */
+    StateJsonDto readCommittedState(String taskId, ObjectId tip, TaskLifecycleEvent event) {
+        byte[] bytes;
+        try {
+            bytes = gitObjects.readBlob(tip, EnvelopePaths.STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
+        } catch (RuntimeException e) {
+            throw new GitTaskRepositoryException(taskId, event, "reading state.json", e);
+        }
+        return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
     String serializeTaskJson(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {

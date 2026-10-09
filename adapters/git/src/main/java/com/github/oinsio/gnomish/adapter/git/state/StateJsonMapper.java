@@ -115,13 +115,25 @@ public final class StateJsonMapper {
     private static StatePositionDto toPosition(Position position) {
         return switch (position) {
             case Position.AtStage atStage -> new StatePositionDto.AtStage("atStage", atStage.name());
+            // FR10 of make-checkpoint-gate-durable (design D5): the gate is its own token, version 1.
+            case Position.AwaitingApproval gate ->
+                new StatePositionDto.AwaitingApproval("awaitingApproval", gate.stage());
             case Position.PipelineEnd ignored -> new StatePositionDto.PipelineEnd("pipelineEnd");
         };
     }
 
-    private static Position fromPosition(StatePositionDto dto) {
+    /**
+     * Maps a wire position to the domain's — the one reading of the token, shared with the branch
+     * classifier's facts (FR11 of make-checkpoint-gate-durable).
+     *
+     * @param dto the parsed {@code position} field; never null
+     * @return the domain position
+     * @throws IllegalArgumentException if a stage-naming position names a blank stage
+     */
+    public static Position fromPosition(StatePositionDto dto) {
         return switch (dto) {
             case StatePositionDto.AtStage atStage -> new Position.AtStage(atStage.stage());
+            case StatePositionDto.AwaitingApproval gate -> new Position.AwaitingApproval(gate.stage());
             case StatePositionDto.PipelineEnd ignored -> new Position.PipelineEnd();
         };
     }
@@ -134,7 +146,8 @@ public final class StateJsonMapper {
                 record.checkResults().stream().map(StateJsonMapper::toCheck).toList(),
                 StateDenialMapper.toDtos(record.denials()),
                 StateUsageMapper.toUsage(record.executorUsage()),
-                StateUsageMapper.toJudgeUsage(record.judgeUsage()));
+                StateUsageMapper.toJudgeUsage(record.judgeUsage()),
+                StateStopMapper.toDto(record.stop()));
     }
 
     /**
@@ -155,7 +168,8 @@ public final class StateJsonMapper {
                 dto.checks().stream().map(StateJsonMapper::fromCheck).toList(),
                 StateUsageMapper.fromUsage(dto.executorUsage()),
                 StateUsageMapper.fromJudgeUsage(dto.judgeUsage()),
-                StateDenialMapper.fromDtos(dto.denials()));
+                StateDenialMapper.fromDtos(dto.denials()),
+                StateStopMapper.fromDto(dto.stop()));
     }
 
     private static String toResult(AttemptRecord.Result result) {

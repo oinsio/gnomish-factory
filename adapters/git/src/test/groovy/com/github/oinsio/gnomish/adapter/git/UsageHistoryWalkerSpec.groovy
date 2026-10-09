@@ -91,6 +91,28 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         found.rows()[1].executorUsage().wallTime() == Duration.ofMillis(700)
     }
 
+    // FR1 of make-checkpoint-gate-durable: a manual stage's first round passes into the gate, so its
+    // commit's attempt list is a fresh one (not grown from the previous stage's) and the round is
+    // attributed to the position it is recorded at — the gate, which names the stage that ran it.
+    def "FR14: a manual stage's passing first round recorded at its gate is billed to that stage"() {
+        given: 'implement passes into release'
+        taskRepository().createTask(new TaskContext('PROJ-7', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def afterImplement = TaskState.atStageStart('implement')
+                .recordPassAndAdvance(round(0, AttemptRecord.Result.PASSED, 500, 50), new Position.AtStage('release'))
+        persistRound('PROJ-7', afterImplement, 'implement', 0)
+
+        and: 'release, a manual stage, passes its first round and holds the task at its gate'
+        def atGate = afterImplement.advanceTo(new Position.AtStage('release'))
+                .recordPassAndAdvance(round(0, AttemptRecord.Result.PASSED, 700, 70), new Position.AwaitingApproval('release'))
+        persistRound('PROJ-7', atGate, 'release', 0)
+
+        when:
+        def found = walker.walk(cloneDir, 'PROJ-7') as UsageHistoryResult.Found
+
+        then:
+        found.rows()*.stage() == ['implement', 'release']
+    }
+
     def "FR14: advancing to a new stage starts a fresh round history and still yields one row for the new stage's first round"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-2', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

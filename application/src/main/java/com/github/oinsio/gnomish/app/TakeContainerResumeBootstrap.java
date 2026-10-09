@@ -60,14 +60,7 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
 
         var support = containerTakeSupport
                 .containerSupportFactory()
-                .create(
-                        cloneDir,
-                        taskId,
-                        segments,
-                        containerTakeSupport.sandboxProperties(),
-                        containerTakeSupport.factoryProperties(),
-                        definition,
-                        List.of());
+                .create(cloneDir, taskId, segments, definition, List.of());
         TaskRecord content;
         try {
             content = support.readTaskJson();

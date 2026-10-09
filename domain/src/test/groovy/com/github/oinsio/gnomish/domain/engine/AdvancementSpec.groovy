@@ -25,12 +25,11 @@ import spock.lang.Specification
  * onward. After a stage's verification passes, {@code auto} advancement proceeds to the
  * next stage (or {@code Completed} with the position at the explicit pipeline end after
  * the last stage), resetting the attempt history for the fresh stage (FR14); {@code manual}
- * advancement returns {@code Paused} with the position already advanced past the paused
- * stage, naming the stage that just passed (FR8). A manual pause on the final stage parks
- * the position at the pipeline end, from which a subsequent run returns {@code Completed}
- * immediately without invoking the executor or persistence port.
+ * advancement returns {@code Paused} naming the stage that just passed, with the position
+ * held at its gate, {@code AwaitingApproval(stage)} — on the final stage too, never the
+ * pipeline end; only the approved state ({@code TaskState.approveGate}) moves past it.
  *
- * <p>Implements FR8, FR14 of add-stage-engine.
+ * <p>Implements FR8, FR14 of add-stage-engine; FR1, FR2 of make-checkpoint-gate-durable.
  */
 class AdvancementSpec extends Specification {
 
@@ -144,67 +143,79 @@ class AdvancementSpec extends Specification {
         ]
     }
 
-    // FR8: a manual first stage that passes returns Paused, naming the stage that passed,
-    //      with the position already advanced past it to the next stage; a subsequent run
-    //      with that returned state starts at the next stage
-    def "a manual stage that passes returns Paused advanced past it and a resume runs the next stage"() {
+    // FR1, FR2 of make-checkpoint-gate-durable: a manual first stage that passes returns Paused
+    //      at its gate; a run from the gate pauses again, and only the approved state runs the
+    //      next stage
+    def "a manual stage that passes returns Paused at its gate and only the approval runs the next stage"() {
         given: 'a two-stage pipeline whose first stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.MANUAL, [])
         def stage2 = stage('test', AdvancementMode.AUTO, [])
+        def definition = pipeline(stage1, stage2)
         executor.scripted << completed()
 
         when: 'the run is driven'
-        def outcome = new Engine().run(pipeline(stage1, stage2), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+        def outcome = new Engine().run(definition, CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
-        then: 'the outcome is Paused naming the stage that passed, positioned at the next stage'
+        then: 'the outcome is Paused naming the stage that passed, held at its gate'
         outcome instanceof TaskOutcome.Paused
         (outcome as TaskOutcome.Paused).passedStage() == 'build'
-        outcome.finalState().position() == new Position.AtStage('test')
+        outcome.finalState().position() == new Position.AwaitingApproval('build')
 
-        when: 'a subsequent run resumes from the returned paused state'
+        when: 'a run starts from the gate'
+        def gateExecutor = new ScriptedExecutor()
+        def again = new Engine().run(definition, CONTEXT, outcome.finalState(), WORKSPACE, freshPorts(gateExecutor))
+
+        then: 'it pauses again and runs nothing'
+        again instanceof TaskOutcome.Paused
+        gateExecutor.requests.isEmpty()
+
+        when: 'a run starts from the approved state'
         def secondExecutor = new ScriptedExecutor([completed()])
-        def resumePorts = new EnginePorts(secondExecutor, new ScriptedBuiltinCheckRunner(),
-                new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(),
-                new RecordingEventListener(), new InMemoryAttemptPersistence(), new VirtualClock(),
-                new VirtualSleeper(new VirtualClock()))
-        def resumed = new Engine().run(pipeline(stage1, stage2), CONTEXT, outcome.finalState(), WORKSPACE, resumePorts)
+        def resumed = new Engine().run(definition, CONTEXT, outcome.finalState().approveGate(definition),
+                WORKSPACE, freshPorts(secondExecutor))
 
-        then: 'the resume ran the next stage (test) and completed'
+        then: 'the approved run ran the next stage (test) at round zero and completed'
         resumed instanceof TaskOutcome.Completed
-        secondExecutor.requests.size() == 1
-        secondExecutor.requests[0].stage().name() == 'test'
+        secondExecutor.requests*.stage()*.name() == ['test']
+        secondExecutor.requests[0].attempt() == 0
     }
 
-    // FR8: a manual pause on the LAST stage parks the position at the pipeline end; a
-    //      subsequent run from that state returns Completed immediately, invoking neither
-    //      the executor nor the persistence port
-    def "a manual pause on the last stage parks at pipeline end and resumes to Completed with no ports touched"() {
+    // FR1 of make-checkpoint-gate-durable: a manual pause on the LAST stage holds the gate, never
+    //      the pipeline end; only the approved state is at the pipeline end, and a run from it
+    //      completes immediately, invoking neither the executor nor the persistence port
+    def "a manual pause on the last stage holds its gate and only the approval reaches the pipeline end"() {
         given: 'a two-stage pipeline whose final stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.AUTO, [])
         def stage2 = stage('test', AdvancementMode.MANUAL, [])
+        def definition = pipeline(stage1, stage2)
         executor.scripted << completed()
         executor.scripted << completed()
 
         when: 'the run is driven through to the manual pause on the last stage'
-        def outcome = new Engine().run(pipeline(stage1, stage2), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+        def outcome = new Engine().run(definition, CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
-        then: 'the outcome is Paused with the position parked at the pipeline end'
+        then: 'the outcome is Paused at the gate, not the pipeline end'
         outcome instanceof TaskOutcome.Paused
         (outcome as TaskOutcome.Paused).passedStage() == 'test'
-        outcome.finalState().position() instanceof Position.PipelineEnd
+        outcome.finalState().position() == new Position.AwaitingApproval('test')
 
-        when: 'a subsequent run resumes from the pipeline-end state'
+        when: 'a run starts from the approved state'
+        def approved = outcome.finalState().approveGate(definition)
         def resumeExecutor = new ScriptedExecutor()
         def resumePersistence = new InMemoryAttemptPersistence()
-        def resumePorts = new EnginePorts(resumeExecutor, new ScriptedBuiltinCheckRunner(),
-                new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(),
-                new RecordingEventListener(), resumePersistence, new VirtualClock(),
-                new VirtualSleeper(new VirtualClock()))
-        def resumed = new Engine().run(pipeline(stage1, stage2), CONTEXT, outcome.finalState(), WORKSPACE, resumePorts)
+        def resumed = new Engine().run(definition, CONTEXT, approved, WORKSPACE, freshPorts(resumeExecutor, resumePersistence))
 
-        then: 'the resume returns Completed immediately, touching neither the executor nor persistence'
+        then: 'the approved state is the pipeline end, and the run completes touching no port'
+        approved.position() == new Position.PipelineEnd()
         resumed instanceof TaskOutcome.Completed
         resumeExecutor.requests.isEmpty()
         resumePersistence.entries.isEmpty()
+    }
+
+    private static EnginePorts freshPorts(ScriptedExecutor executor,
+            InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
+        new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
+                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                persistence, new VirtualClock(), new VirtualSleeper(new VirtualClock()))
     }
 }

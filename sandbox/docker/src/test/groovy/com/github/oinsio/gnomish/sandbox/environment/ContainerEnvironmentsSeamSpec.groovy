@@ -1,13 +1,15 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import java.nio.file.Path
 import spock.lang.Specification
 
 /**
  * FR6, FR9 of add-sandbox-core: the seam methods of {@code ContainerEnvironments}
  * that the assemblies and end-of-task bookkeeping drive — the production
- * {@code forTask} construction, the credential-scrub probe, and the keep
+ * construction through {@code ContainerEnvironmentFactory.forTask} (FR19 of
+ * make-checkpoint-gate-durable), the credential-scrub probe, and the keep
  * semantics of {@code stopKeeping}.
  *
  * <p>New spec file for task 6.1 of split-into-modules: these lines were killed
@@ -19,16 +21,39 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
 
     static final String KEY = 'org-repo-9'
 
-    // The app-layer assemblies construct through forTask because DockerCli is package-private
-    def "forTask builds the per-task environment seam, never a null"() {
-        when: 'the production construction path runs'
-        def seam = ContainerEnvironments.forTask(
-                KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                timing, ChildEnvAllowlist.none(),
-                Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+    private ContainerEnvironments factoryBuilt(OwnershipMode mode, ChildEnvAllowlist allowlist) {
+        new ContainerEnvironmentFactory(sandbox, timing, Path.of('/factory/guard-config'), mode).forTask(
+                KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1',
+                { -> DenialRestoration.none() })
+    }
 
-        then: 'the seam is real and carries the round key it was built for'
+    // FR19 of make-checkpoint-gate-durable: the app-layer assemblies construct through the
+    // factory because DockerCli is package-private; the installation half (mode) comes from the
+    // factory's construction and the per-task half (key) from forTask
+    def "the factory builds the per-task seam for the key and mode it was given"() {
+        when: 'the production construction path runs'
+        def seam = factoryBuilt(mode, ChildEnvAllowlist.none())
+
+        then: 'the seam is real, carries the round key it was built for and the factory\'s mode'
         seam.baseKey() == KEY
+        seam.ownershipMode() == mode
+
+        where:
+        mode << [
+            OwnershipMode.TRACKED,
+            OwnershipMode.MANUAL
+        ]
+    }
+
+    // FR9 of add-sandbox-core, FR19 of make-checkpoint-gate-durable: the per-task allowlist
+    // handed to forTask is the one the built seam scrubs with
+    def "a factory-built seam scrubs exactly the credentials of the allowlist it was given"() {
+        expect:
+        factoryBuilt(OwnershipMode.TRACKED, ChildEnvAllowlist.of([], ['GNOMISH_PROBE_TOKEN']))
+        .scrubsCredential('GNOMISH_PROBE_TOKEN')
+
+        and:
+        !factoryBuilt(OwnershipMode.TRACKED, ChildEnvAllowlist.none()).scrubsCredential('GNOMISH_PROBE_TOKEN')
     }
 
     // FR2 of add-serve-sandbox-lifecycle: the seam reports the mode it was built with, not a
@@ -42,7 +67,8 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         new ContainerEnvironments(docker, KEY, new ContainerEnvironmentBuilder(
                         docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
                         timing, ChildEnvAllowlist.none(),
-                        Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')))
+                        Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')),
+                { -> DenialRestoration.none() })
                 .ownershipMode() == OwnershipMode.MANUAL
     }
 

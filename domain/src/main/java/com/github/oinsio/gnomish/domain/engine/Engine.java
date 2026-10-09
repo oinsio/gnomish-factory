@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The pure orchestrator that drives one task from its recorded {@link TaskState} to a
@@ -30,15 +29,17 @@ public final class Engine {
      * the pipeline {@code definition}, returning the terminal {@link TaskOutcome}. Emits
      * {@link EngineEvent.RunStarted} first, then resolves the pre-flight terminals that
      * reach no execution or persistence port: a {@link Position.PipelineEnd} completes
-     * immediately (FR8); an {@link Position.AtStage} name absent from the pipeline
-     * escalates as {@link EscalationReport.PipelineMismatch} (FR9); an {@code attemptsUsed}
-     * already at the stage's resolved attempt limit escalates as
-     * {@link EscalationReport.AttemptsExhausted} (FR5). Otherwise the stage attempt loop
-     * runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
+     * immediately (FR8); an {@link Position.AtStage} or {@link Position.AwaitingApproval}
+     * name absent from the pipeline escalates as {@link EscalationReport.PipelineMismatch}
+     * (FR9); a {@link Position.AwaitingApproval} gate pauses again as {@link
+     * TaskOutcome.Paused} (FR2 of make-checkpoint-gate-durable); a last recorded round carrying
+     * a {@link Stop} re-escalates from the record (FR6 of make-checkpoint-gate-durable); an
+     * {@code attemptsUsed} at the stage's attempt limit escalates as {@link
+     * EscalationReport.AttemptsExhausted} (FR5). Otherwise the stage attempt loop runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
      *
      * <p>Holds no state across the call, so concurrent runs stay isolated (NFR-R1).
      *
-     * <p>Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine.
+     * <p>Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable.
      *
      * @param definition the pipeline whose stages the run advances through; never null
      * @param context the task's identity and human decisions; never null
@@ -70,15 +71,11 @@ public final class Engine {
     /**
      * Resolves the run against its {@link Position} with an exhaustive switch — no
      * {@code default}, so a new variant fails to compile. {@link Position.PipelineEnd}
-     * completes immediately (FR8); {@link Position.AtStage} looks the stage up by name
-     * and either escalates as {@link EscalationReport.PipelineMismatch} when absent (FR9),
-     * escalates as {@link EscalationReport.AttemptsExhausted} when the resolved limit is
-     * already reached (FR5), or hands off to the stage attempt loop.
-     *
-     * <p>Threads the executor/persistence-bearing {@code context}, {@code workspace} and
-     * {@code ports} through to {@link #atStage}, which hands them to the stage attempt
-     * loop once the pre-flight terminals clear; the {@link Position.PipelineEnd} arm needs
-     * only the {@code state} to complete immediately (FR8).
+     * completes immediately (FR8); {@link Position.AwaitingApproval} escalates as {@link
+     * EscalationReport.PipelineMismatch} when the pipeline no longer declares the gate's stage
+     * (FR9) and otherwise pauses again at the gate (FR2 of make-checkpoint-gate-durable);
+     * {@link Position.AtStage} is resolved by {@link #atStage}, the only arm that threads the
+     * {@code context}, {@code workspace} and {@code ports} on to the stage attempt loop.
      */
     private TaskOutcome preflight(
             PipelineDefinition definition,
@@ -89,16 +86,22 @@ public final class Engine {
         return switch (state.position()) {
             case Position.PipelineEnd ignored -> new TaskOutcome.Completed(state);
             case Position.AtStage atStage -> atStage(definition, context, state, workspace, ports, atStage.name());
+            // FR2 of make-checkpoint-gate-durable: the position is the gate — the run pauses
+            // again, invoking no port, until the approval write moves the position past it. A
+            // stale gate name is a PipelineMismatch first (FR9), as for AtStage.
+            case Position.AwaitingApproval gate ->
+                definition.findStage(gate.stage()) == null
+                        ? mismatch(state, gate.stage())
+                        : new TaskOutcome.Paused(state, gate.stage());
         };
     }
 
     /**
      * Resolves an {@link Position.AtStage} run: a stage name absent from the pipeline is a
-     * {@link EscalationReport.PipelineMismatch} (FR9), an {@code attemptsUsed} at or above
-     * the resolved attempt limit is an {@link EscalationReport.AttemptsExhausted} (FR5) —
-     * both pre-flight, before any execution or persistence port is touched — otherwise the
-     * resolved stage and the run's collaborators are handed to the stage attempt loop
-     * through {@link #runStages}.
+     * {@link EscalationReport.PipelineMismatch} (FR9), a recorded stop re-escalates through the
+     * live loop's own {@link StopEscalation} mapping (FR6 of make-checkpoint-gate-durable), an
+     * {@code attemptsUsed} at the attempt limit is {@link EscalationReport.AttemptsExhausted}
+     * (FR5) — all before any port — otherwise the stage runs through {@link #runStages}.
      */
     private TaskOutcome atStage(
             PipelineDefinition definition,
@@ -107,13 +110,14 @@ public final class Engine {
             Workspace workspace,
             EnginePorts ports,
             String stageName) {
-        var stage = findStage(definition, stageName);
+        var stage = definition.findStage(stageName);
         if (stage == null) {
-            // The branch-document mint (design D3): the name came off a recorded position some
-            // instance wrote, and no stage in the current pipeline vouches for it — which is
-            // exactly what this report says.
-            return new TaskOutcome.Escalated(
-                    state, new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(stageName)));
+            return mismatch(state, stageName);
+        }
+        // FR6 of make-checkpoint-gate-durable: a stop whose park was lost re-raises from the record.
+        var recorded = StopEscalation.recorded(state);
+        if (recorded.isPresent()) {
+            return new TaskOutcome.Escalated(state, recorded.get());
         }
         int limit = stage.limits().attemptLimit();
         if (state.attemptsUsed() >= limit) {
@@ -123,13 +127,14 @@ public final class Engine {
     }
 
     /**
-     * Looks the stage named {@code stageName} up in the pipeline's declared order,
-     * returning it or {@code null} when the pipeline no longer declares it — the signal
-     * {@link #atStage} turns into a {@link EscalationReport.PipelineMismatch} (FR9).
+     * The {@link EscalationReport.PipelineMismatch} for a recorded position naming
+     * {@code stageName}, a stage the pipeline no longer declares (FR9). The branch-document mint
+     * (design D3): the name came off a recorded position some instance wrote, and no stage in the
+     * current pipeline vouches for it — which is exactly what this report says.
      */
-    @Nullable
-    private static StageDefinition findStage(PipelineDefinition definition, String stageName) {
-        return definition.findStage(stageName);
+    private static TaskOutcome mismatch(TaskState state, String stageName) {
+        return new TaskOutcome.Escalated(
+                state, new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(stageName)));
     }
 
     /**
@@ -142,13 +147,13 @@ public final class Engine {
      * its outcome; a {@link StageResult.Passed} applies the stage's {@link AdvancementMode}
      * exhaustively (no {@code default}). {@code AUTO} advances to the next stage — resetting the
      * attempt history (FR14) — or, past the last stage, completes at {@link Position.PipelineEnd}
-     * (design D4). {@code MANUAL} pauses with the position already advanced past the paused stage,
-     * naming the stage that just passed (FR8). The advanced state is the returned outcome — the
-     * passing round was already persisted by the loop — with this very position already recorded
-     * (FR4 of harden-task-branch-contract) — so no extra persist happens here and the advance
-     * below only resets the in-memory attempt history for the stage about to run.
+     * (design D4); the advance below only resets the in-memory attempt history for the stage about
+     * to run, its position already recorded by the round commit (FR4 of harden-task-branch-contract).
+     * {@code MANUAL} pauses, naming the stage that just passed (FR8), with exactly the state the
+     * round persisted — the position at the gate, {@link Position.AwaitingApproval} — and no
+     * further persist or advance (FR1 of make-checkpoint-gate-durable, design D1).
      *
-     * <p>Implements FR8, FR14 of add-stage-engine.
+     * <p>Implements FR8, FR14 of add-stage-engine; FR1 of make-checkpoint-gate-durable.
      */
     private static TaskOutcome runStages(
             PipelineDefinition definition,
@@ -183,8 +188,10 @@ public final class Engine {
                     currentStage = next;
                 }
                 case MANUAL -> {
-                    return new TaskOutcome.Paused(
-                            passed.state().advanceTo(Advancement.nextPosition(next)), currentStage.name());
+                    // FR1 of make-checkpoint-gate-durable: the round commit already recorded the
+                    // gate, AwaitingApproval(stage); the outcome carries exactly that persisted
+                    // state — no in-memory advance past a gate no approval has opened.
+                    return new TaskOutcome.Paused(passed.state(), currentStage.name());
                 }
             }
         }

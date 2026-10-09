@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
+import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -90,6 +91,25 @@ class EscalationResumeSpec extends Specification {
         appended = decision == null ? 'absent' : 'appended'
     }
 
+    // FR1 of make-checkpoint-gate-durable: the decision is scoped to the stage the position names —
+    //     at a gate the stage that passed — and to none past the pipeline's end
+    def "the decision is scoped to the stage #position names"() {
+        when:
+        def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(
+                        new TaskState(position, 0, [], ExecutorUsage.none()), ATTEMPTS_EXHAUSTED), 'go on')
+
+        then:
+        resumption.context().decisions() == [
+            new Decision('go on', stage, 'operator', NOW)
+        ]
+
+        where:
+        position | stage
+        new Position.AtStage('build') | 'build'
+        new Position.AwaitingApproval('release') | 'release'
+        new Position.PipelineEnd() | null
+    }
+
     def "FR4: a DecisionNeeded without a decision restates the question with the return path and refuses"() {
         given:
         def escalated = new TaskOutcome.Escalated(BURNED, DECISION_NEEDED)
@@ -122,5 +142,29 @@ class EscalationResumeSpec extends Specification {
 
         where:
         decision << ['anything', null]
+    }
+
+    // FR7, FR8 of make-checkpoint-gate-durable (design D4): what decide resolved lands as exactly one
+    //     lifecycle commit — the decision commit with a decision, the resumed commit without one —
+    //     carrying the reset state, never a reset held in memory alone
+    def "FR7: land writes the #write commit for decision #decision, once"() {
+        given:
+        def repository = Mock(TaskRepository)
+        def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(BURNED, ATTEMPTS_EXHAUSTED), decision)
+
+        when:
+        EscalationResume.land(repository, 'manual-1', resumption, decision)
+
+        then:
+        appends * repository.appendDecision('manual-1', new Decision('patch in place', 'build', 'operator', NOW), BURNED.resetAttempts())
+        resumes * repository.resumeFrom('manual-1', BURNED.resetAttempts())
+        0 * repository._
+
+        where:
+        decision | appends | resumes
+        'patch in place' | 1 | 0
+        null | 0 | 1
+
+        write = decision == null ? 'resumed' : 'decision'
     }
 }

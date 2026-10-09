@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -29,8 +29,7 @@ class FreshJudgeEnvironmentsSpec extends Specification {
     }
 
     private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
-        def ref = new AttemptCommitRef()
-        ref.record(sha)
+        def ref = ClosedRounds.at(sha)
         new RecordedAttemptCommitWorkspace(ref)
     }
 

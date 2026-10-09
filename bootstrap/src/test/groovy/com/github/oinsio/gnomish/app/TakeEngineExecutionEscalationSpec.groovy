@@ -105,7 +105,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
         then: 'the tracker was actually parked with CHECKPOINT and a checkpoint/return-path report'
         0 * tracker.finish(*_)
         1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
-            report.contains('build') && report.toLowerCase().contains('checkpoint') && report.toLowerCase().contains('ready')
+            report.contains(TerminalOutcomeRender.checkpointLine('build')) && report.toLowerCase().contains('ready')
         })
 
         and:

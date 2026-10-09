@@ -288,8 +288,6 @@ public class ManualRunConfiguration {
             ManualRunAssembly manualRunAssembly,
             TaskGit git,
             RegisteredClone registeredClone,
-            SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
             ContainerSupports containerSupports,
             SystemConsoleIO systemConsoleIO) {
         ManualRunAssembly assembly = manualRunAssembly.withRunSummary();
@@ -297,15 +295,8 @@ public class ManualRunConfiguration {
         return new ManualRunners(
                 new GitModeRunner(assembly, git, registeredClone, systemConsoleIO),
                 new GitResumeRunner(assembly, git, registeredClone, ManualRunRunner.TASK_ID_KEY),
-                new ContainerGitModeRunner(
-                        assembly, git, sandboxProperties, factoryProperties, containerSupport, systemConsoleIO),
-                new ContainerResumeRunner(
-                        assembly,
-                        git,
-                        sandboxProperties,
-                        factoryProperties,
-                        ManualRunRunner.TASK_ID_KEY,
-                        containerSupport),
+                new ContainerGitModeRunner(assembly, git, containerSupport, systemConsoleIO),
+                new ContainerResumeRunner(assembly, git, ManualRunRunner.TASK_ID_KEY, containerSupport),
                 containerSupports,
                 registeredClone);
     }

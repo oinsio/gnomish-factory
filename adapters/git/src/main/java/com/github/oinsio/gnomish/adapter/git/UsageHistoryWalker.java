@@ -253,6 +253,8 @@ public final class UsageHistoryWalker {
     private static String stageName(StatePositionDto position) {
         return switch (position) {
             case StatePositionDto.AtStage atStage -> atStage.stage();
+            // FR1 of make-checkpoint-gate-durable: a round recorded at a gate ran in the gate's stage.
+            case StatePositionDto.AwaitingApproval gate -> gate.stage();
             case StatePositionDto.PipelineEnd ignored -> "(pipeline end)";
         };
     }

@@ -53,6 +53,8 @@ class BranchRepairLogSpec extends Specification {
             new BranchShape.Created(),
             new BranchShape.InProgress(),
             new BranchShape.Answered(),
+            // FR11 of make-checkpoint-gate-durable: a gate is where a manual stage stops, not a repair.
+            new BranchShape.AwaitingApproval(),
             new BranchShape.Delivered()
         ]
     }

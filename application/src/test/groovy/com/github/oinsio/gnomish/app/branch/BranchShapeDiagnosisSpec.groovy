@@ -17,6 +17,7 @@ class BranchShapeDiagnosisSpec extends Specification {
         new BranchShape.Bare(),
         new BranchShape.Created(),
         new BranchShape.InProgress(),
+        new BranchShape.AwaitingApproval(),
         new BranchShape.Parked(),
         new BranchShape.Answered(),
         new BranchShape.CompletedUncleaned(),
@@ -45,6 +46,7 @@ class BranchShapeDiagnosisSpec extends Specification {
         shape << [
             new BranchShape.Created(),
             new BranchShape.InProgress(),
+            new BranchShape.AwaitingApproval(),
             new BranchShape.Parked(),
             new BranchShape.Answered(),
             new BranchShape.CompletedUncleaned(),
@@ -65,6 +67,7 @@ class BranchShapeDiagnosisSpec extends Specification {
         new BranchShape.Bare() || true
         new BranchShape.Created() || false
         new BranchShape.InProgress() || false
+        new BranchShape.AwaitingApproval() || false
         new BranchShape.Parked() || false
         new BranchShape.Answered() || false
         new BranchShape.CompletedUncleaned() || false

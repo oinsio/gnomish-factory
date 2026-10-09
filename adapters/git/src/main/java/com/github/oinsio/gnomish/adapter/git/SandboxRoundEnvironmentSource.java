@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
@@ -19,9 +20,11 @@ import java.util.Optional;
  * The sandboxed {@link RoundEnvironmentSource} (the integration pass of
  * add-sandbox-core): rounds run in the task's leased container environment
  * ({@link EnvironmentLease}, FR12), the decision file lives in the branch at
- * {@code .gnomish-task/decisions/<stage>-a<attempt>.json} ({@link
- * BranchDecisionFile}, FR23, D17), every round closes with the in-box snapshot
- * commit + harvest recording the attempt commit ({@link
+ * {@code .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} ({@link
+ * BranchDecisionFile}, FR23, D17) named by the round's {@link RoundToken} — the task branch's tip
+ * when the round opened, minted here for a fresh round ({@link RoundToken#of}) and opened in the
+ * run's {@link CurrentRound} (FR13 of make-checkpoint-gate-durable, design D10) — every round closes
+ * with the in-box snapshot commit + harvest recording the attempt commit into the same cell ({@link
  * EnvironmentRoundSnapshot}, FR21, D15), and a rate-limited {@link
  * MidRoundHarvestListener} mirrors mid-round gnome commits out best-effort
  * (FR5).
@@ -31,7 +34,7 @@ import java.util.Optional;
  * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
  * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21.
  *
- * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core.
+ * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core; FR13 of make-checkpoint-gate-durable.
  */
 public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSource {
 
@@ -43,7 +46,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     private final Path cloneDir;
     private final String taskId;
     private final String branch;
-    private final AttemptCommitRef attemptCommit;
+    private final CurrentRound rounds;
     private final Clock clock;
 
     /**
@@ -51,7 +54,8 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * @param runner the git subprocess runner for factory-side tip reads
      * @param cloneDir the factory clone harvest lands in
      * @param taskId the tracker's original taskId; sanitized into the task branch name
-     * @param attemptCommit the run's attempt-commit ref, recorded by each round's snapshot
+     * @param rounds the run's round cell: each {@link #openRound} opens the round in it, each
+     *     round's snapshot records the attempt commit that closed it
      * @param clock the mid-round poll rate-limit time source
      */
     public SandboxRoundEnvironmentSource(
@@ -59,14 +63,14 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
             GitProcessRunner runner,
             Path cloneDir,
             String taskId,
-            AttemptCommitRef attemptCommit,
+            CurrentRound rounds,
             Clock clock) {
         this.lease = lease;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.taskId = taskId;
         this.branch = TaskIdSanitizer.branchName(taskId);
-        this.attemptCommit = attemptCommit;
+        this.rounds = rounds;
         this.clock = clock;
     }
 
@@ -74,8 +78,8 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * Shared by every round of this task (FR4 of harden-logging-observability): the listener is
      * per-round, but an environment that cannot be harvested is one fault whether it spans polls
      * of one round or rounds of one task, and a per-round suppressor would re-announce it each
-     * time. Built here rather than injected — the constructor is already at the parameter limit,
-     * and this is the owner the round's {@link MidRoundPollContext} borrows it from.
+     * time. Built here rather than injected — this is the owner the round's {@link
+     * MidRoundPollContext} borrows it from.
      */
     private final RepeatSuppressor harvestSuppressor = RepeatSuppressor.system();
 
@@ -84,7 +88,9 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         String stage = request.stage().name();
         TaskExecutionEnvironment environment = lease.environmentFor(stage);
         AttemptKey key = new AttemptKey(taskId, stage, request.attempt());
-        BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key);
+        rounds.open(openTip());
+        // The handle reads the identity back from the cell, like every other consumer of it.
+        BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key, rounds.opened());
         var midRound = new MidRoundHarvestListener(
                 environment,
                 runner,
@@ -93,6 +99,17 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
                 MID_ROUND_MIN_INTERVAL,
                 new MidRoundPollContext(taskId, branch, harvestSuppressor));
         return new SandboxRound(environment, decision, midRound, key);
+    }
+
+    /**
+     * The one minting of a round's identity (design D10 of make-checkpoint-gate-durable): the task
+     * branch's tip in the factory clone as the round opens, verified before use ({@link
+     * VerifiedTip}) — a failed resolution fails the round's open rather than naming a decision
+     * path after nothing.
+     */
+    private RoundToken openTip() {
+        String revision = "refs/heads/" + branch;
+        return RoundToken.of(VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision)));
     }
 
     private final class SandboxRound implements Round {
@@ -137,7 +154,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
 
         @Override
         public void closeRound() {
-            new EnvironmentRoundSnapshot(environment, runner, cloneDir, taskId, attemptCommit)
+            new EnvironmentRoundSnapshot(environment, runner, cloneDir, taskId, rounds)
                     .snapshot(taskId, key.stage(), key.attempt());
         }
 

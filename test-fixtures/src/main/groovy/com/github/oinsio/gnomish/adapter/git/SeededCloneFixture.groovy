@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
@@ -72,6 +73,6 @@ trait SeededCloneFixture implements BareGitRepoFixture {
                 [] as List<CheckResult>,
                 new ExecutorUsage(Duration.ofMillis(wallMillis), [],
                 ['claude-x': new TokenUsage(inputTokens, 10, 0, 0)]),
-                JudgeUsage.none(), [])
+                JudgeUsage.none(), [], Stop.none())
     }
 }

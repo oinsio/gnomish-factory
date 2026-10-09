@@ -5,13 +5,15 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
  * FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract: the last place the {@code
  * .gnomish-task/} wire format is interpreted turns a tip into facts — and turns every content
- * failure into a fact rather than an exception.
+ * failure into a fact rather than an exception. FR11 of make-checkpoint-gate-durable: the recorded
+ * position is read off the same tip's {@code state.json}, so a gate classifies by it.
  */
 class BranchTipFactsReaderSpec extends Specification {
 
@@ -127,6 +129,60 @@ class BranchTipFactsReaderSpec extends Specification {
 
         then:
         classifier.classify(facts) == new BranchShape.Answered()
+    }
+
+    // FR11 of make-checkpoint-gate-durable: every position token is read into the facts.
+    def "a recorded #token position is read off state.json"() {
+        when:
+        def facts = reader.read(tip([('task.json'): taskJson(), ('state.json'): stateJson(position: wire)]))
+
+        then:
+        facts.recordedPosition() == Optional.of(expected)
+
+        where:
+        token | wire || expected
+        'atStage' | [type: 'atStage', stage: 'implement'] || new Position.AtStage('implement')
+        'awaitingApproval' | [type: 'awaitingApproval', stage: 'review'] || new Position.AwaitingApproval('review')
+        'pipelineEnd' | [type: 'pipelineEnd'] || new Position.PipelineEnd()
+    }
+
+    // FR11 of make-checkpoint-gate-durable: with no readable state.json there is no position.
+    def "a tip without state.json records no position"() {
+        expect:
+        reader.read(tip([('task.json'): taskJson()])).recordedPosition() == Optional.empty()
+    }
+
+    // FR11 of make-checkpoint-gate-durable: a gate classifies by its position whatever the outcome
+    // says — the park lost (no outcome) and the park landed (paused) read the same.
+    def "a tip at a gate reads as AwaitingApproval with #label"() {
+        when:
+        def facts = reader.read(tip([
+            ('task.json'): taskJson(outcomeField),
+            ('state.json'): stateJson(position: [type: 'awaitingApproval', stage: 'review'], attempts: [
+                [round: 1, result: 'passed', startedAt: '2026-07-18T09:00:00Z', checks: [], denials: []]
+            ])
+        ]))
+
+        then:
+        classifier.classify(facts) == new BranchShape.AwaitingApproval()
+
+        where:
+        label | outcomeField
+        'no outcome' | [:]
+        'the paused outcome' | [outcome: [type: 'paused', passedStage: 'review']]
+    }
+
+    // NFR-R2; FR11 of make-checkpoint-gate-durable: a position the domain refuses (a blank stage)
+    // makes the state envelope unreadable — a Corrupt shape, never a thrown exception.
+    def "a blank-stage position is an unreadable state envelope, not a throw"() {
+        when:
+        def facts = reader.read(tip([('task.json'): taskJson(),
+            ('state.json'): stateJson(position: [type: 'awaitingApproval', stage: ' '])]))
+
+        then:
+        facts.stateEnvelope() instanceof EnvelopeStatus.Unreadable
+        facts.recordedPosition() == Optional.empty()
+        classifier.classify(facts) instanceof BranchShape.Corrupt
     }
 
     // FR15, NFR-R2: an unsupported version is a fact carrying both versions, never a thrown refusal.

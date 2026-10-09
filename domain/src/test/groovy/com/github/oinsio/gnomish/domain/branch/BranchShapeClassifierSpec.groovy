@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.branch
 
+import com.github.oinsio.gnomish.domain.engine.Position
 import spock.lang.Specification
 
 /**
@@ -17,6 +18,7 @@ class BranchShapeClassifierSpec extends Specification {
             taskEnvelope: new EnvelopeStatus.Parsed(),
             stateEnvelope: new EnvelopeStatus.Parsed(),
             recordedOutcome: RecordedTerminal.NONE,
+            recordedPosition: Optional.empty(),
             roundsRecorded: false,
             decisionsRecorded: false,
             cleanupCommitInHistory: false
@@ -25,6 +27,7 @@ class BranchShapeClassifierSpec extends Specification {
                 base.taskEnvelope as EnvelopeStatus,
                 base.stateEnvelope as EnvelopeStatus,
                 base.recordedOutcome as RecordedTerminal,
+                base.recordedPosition as Optional<Position>,
                 base.roundsRecorded as boolean,
                 base.decisionsRecorded as boolean,
                 base.cleanupCommitInHistory as boolean)
@@ -138,5 +141,49 @@ class BranchShapeClassifierSpec extends Specification {
         outcome || expected
         RecordedTerminal.PARKED || new BranchShape.Parked()
         RecordedTerminal.COMPLETED || new BranchShape.CompletedUncleaned()
+    }
+
+    // FR11 of make-checkpoint-gate-durable: a tip at a gate classifies by its position, not by the
+    // park — a lost park (no outcome), a landed park (paused) and a stale earlier outcome all name
+    // the same owed step, and never InProgress or Parked.
+    def "a gate with #variant classifies as AwaitingApproval"() {
+        expect:
+        classifier.classify(facts(
+                        recordedPosition: Optional.of(new Position.AwaitingApproval('review')),
+                        roundsRecorded: true,
+                        recordedOutcome: outcome,
+                        decisionsRecorded: decisions)) == new BranchShape.AwaitingApproval()
+
+        where:
+        variant | outcome | decisions
+        'no outcome (park lost)' | RecordedTerminal.NONE | false
+        'the paused outcome (park landed)' | RecordedTerminal.PARKED | false
+        'a stale earlier outcome' | RecordedTerminal.COMPLETED | true
+    }
+
+    // FR11 of make-checkpoint-gate-durable: only the gate position reroutes — a tip at a stage or
+    // at the pipeline end keeps classifying by its outcome and rounds.
+    def "a non-gate position #position classifies by the content progression"() {
+        expect:
+        classifier.classify(facts(recordedPosition: Optional.of(position), roundsRecorded: true, recordedOutcome: outcome)) == expected
+
+        where:
+        position | outcome || expected
+        new Position.AtStage('implement') | RecordedTerminal.NONE || new BranchShape.InProgress()
+        new Position.AtStage('implement') | RecordedTerminal.PARKED || new BranchShape.Parked()
+        new Position.PipelineEnd() | RecordedTerminal.COMPLETED || new BranchShape.CompletedUncleaned()
+    }
+
+    // FR11 of make-checkpoint-gate-durable: the gate check runs after delivery and the envelope
+    // diagnoses — a delivered branch stays delivered, and a broken task envelope is still named.
+    def "delivery and envelope faults outrank the gate"() {
+        given:
+        def gate = Optional.of(new Position.AwaitingApproval('review'))
+
+        expect:
+        classifier.classify(facts(recordedPosition: gate, cleanupCommitInHistory: true)) == new BranchShape.Delivered()
+        classifier.classify(facts(recordedPosition: gate, taskEnvelope: new EnvelopeStatus.Unreadable('truncated'))) ==
+        new BranchShape.Corrupt('task.json: truncated')
+        classifier.classify(facts(recordedPosition: gate, taskEnvelope: new EnvelopeStatus.Absent())) instanceof BranchShape.Unknown
     }
 }
