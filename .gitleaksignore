@@ -15,3 +15,7 @@ c67a717c19fb3e770a0160baf3a0ea3af7e56fab:sandbox/docker/src/test/groovy/com/gith
 # Test fixture: a fabricated GitHub-token-shaped string the spec asserts is
 # stripped out of a normalized origin URL. It never was a real token.
 86e9b36f8f5d70e426cb1c8aa91dcfe1379cd65c:application/src/test/groovy/com/github/oinsio/gnomish/app/git/OriginUrlNormalizerSpec.groovy:generic-api-key:110
+
+# Spec example: a fabricated 40-hex commit SHA as the round token in a sample
+# status report (`roundToken` trips the generic rule by its key name). Not a secret.
+6420759a05258054131e8b607d23c17e17d9be92:openspec/changes/define-executor-contract/specs/status-report/spec.md:generic-api-key:26
