@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -30,10 +29,7 @@ class GitProcessRunnerShutdownReportSpec extends Specification {
     }
 
     private GitProcessRunner stallingRunner() {
-        Path bin = tempDir.resolve('stalling-git')
-        Files.writeString(bin, "#!/bin/sh\nsleep 600\n")
-        bin.toFile().setExecutable(true)
-        new GitProcessRunner(bin.toString())
+        new GitProcessRunner(new StallingGit().stallOnEverything().write(tempDir).toString())
     }
 
     def "FR9: outside the shutdown phase the interrupt is reported as an unexplained one"() {

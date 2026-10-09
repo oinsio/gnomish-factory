@@ -88,17 +88,13 @@ sleep ${STALL_SECONDS}
         result.stderr().forParsing().contains("could not read Password for 'https://***@github.com'")
     }
 
+    /** Stalls on the network four; every local command takes a second and then answers. */
     private Path stallingGit() {
-        def fakeGit = tempDir.resolve('stalling-git')
-        fakeGit.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-case "\$1" in
-  rev-parse) echo ".git"; exit 0 ;;
-  push|fetch|ls-remote|clone) sleep ${STALL_SECONDS} ;;
-  *) sleep 1; echo "local done"; exit 0 ;;
-esac
-"""
-        fakeGit.toFile().executable = true
-        return fakeGit
+        new StallingGit()
+                .stallOn('push', 'fetch', 'ls-remote', 'clone')
+                .answer('rev-parse', '.git', 0)
+                .answer('status', 'local done', 0)
+                .localDelay(Duration.ofSeconds(1))
+                .write(tempDir)
     }
 }

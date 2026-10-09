@@ -1,0 +1,79 @@
+import groovy.xml.XmlSlurper
+
+// What a PIT run cost: the mutants that needed the most test executions to die, written beside
+// the PIT report and named in one lifecycle line (FR3, FR4, NFR-O1, NFR-C1, UX1 of
+// kill-expensive-mutants; design D5). Report-only: it never fails the build (NG4) — the count is
+// load-dependent, since PIT orders covering tests by recorded timings, so a gate on it would flap.
+// A second responsibility beside the verdict, so it lives in its own file (D6). Applied by
+// `pitest-gate-conventions`; never applied directly by a module.
+plugins {
+    id 'info.solidsoft.pitest'
+    // The scope skip this report shares with `pitest` and the verdict (NFR-R3 of scope-pit-locally).
+    id 'pitest-scope-conventions'
+}
+
+// A mutant is "expensive" when PIT ran more than this many tests before one killed it. Proposal
+// Q1, fixed at implementation from the 2026-10-05 `:adapters:git` distribution: 13 mutants above
+// 100 (up to 675), 3 between 40 and 100, the rest far below — 100 separates the hotspots from the
+// tail without listing the ordinary cost of a well-covered class.
+def threshold = 100
+
+// Read at configuration time and captured as plain values, so the action the configuration cache
+// serializes holds data, not the project.
+def scopeSkip = extensions.extraProperties.get('mutationScopeSkip') as Spec<Task>
+def scopeSkipReason = extensions.extraProperties.get('mutationScopeSkipReason') as String
+def module = path
+
+// FR3, FR4: one parse of `mutations.xml`, one write of `expensive-mutants.txt`, one log line — no
+// subprocess, no network, no second read, and no declared input of `pitest`'s (NFR-C1). No
+// declared outputs either: the task always runs after a `pitest` that ran, so the line appears
+// once per module whose gate ran (M4).
+def costReport = tasks.register('pitestCostReport') {
+    description = "Lists the mutants PIT killed only after more than ${threshold} test executions."
+    group = 'verification'
+    def reportFile = layout.buildDirectory.file('reports/pitest/mutations.xml')
+    def costFile = layout.buildDirectory.file('reports/pitest/expensive-mutants.txt')
+    // Both predicates of `pitestVerifyAllKilled`, in its order: the scope skip first, so a
+    // `mutations.xml` an earlier run left in a skipped module is never described as this
+    // build's (D5; the stale-report hole scope-pit-locally closed), then "a report exists".
+    onlyIf(scopeSkipReason, scopeSkip)
+    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        def xml = new XmlSlurper().parse(reportFile.get().asFile)
+        def expensive = xml.mutation
+                .collect { m ->
+                    [cls        : m.mutatedClass.text(),
+                     method     : m.mutatedMethod.text(),
+                     line       : (m.lineNumber.text() ?: '0') as int,
+                     mutator    : m.mutator.text().tokenize('.').last(),
+                     count      : (m.@numberOfTestsRun.text() ?: '0') as int,
+                     killingTest: m.killingTest.text() ?: '-']
+                }
+                .findAll { it.count > threshold }
+                .sort { a, b -> b.count <=> a.count ?: a.cls <=> b.cls ?: a.method <=> b.method ?: a.line <=> b.line }
+        def target = costFile.get().asFile
+        def lines = ["# PIT mutation cost of ${module}: mutants killed only after more than ${threshold} test executions, most expensive first"]
+        if (expensive.isEmpty()) {
+            lines << "0 above threshold: no mutant needed more than ${threshold} test executions."
+        } else {
+            lines << ['class', 'method', 'line', 'mutator', 'count', 'killing test'].join('\t')
+            expensive.each { lines << [it.cls, it.method, it.line, it.mutator, it.count, it.killingTest].join('\t') }
+        }
+        target.text = lines.join('\n') + '\n'
+        // UX1: an invitation, not an error — what to look at, and where the full list is.
+        def head = "PIT mutation cost ${module}: ${expensive.size()} above threshold (${threshold} tests)"
+        if (expensive.isEmpty()) {
+            logger.lifecycle("${head} — ${target}")
+        } else {
+            def top = expensive.first()
+            logger.lifecycle("${head}; most expensive ${top.cls}.${top.method}:${top.line} (${top.mutator}) — ${top.count} tests — " +
+                    "a fast killing spec answers it; full list: ${target}")
+        }
+    }
+}
+
+// FR4: every run of `pitest` is followed by its cost report — `check` and `pitestAll` alike,
+// since both reach the module through its `pitest`.
+tasks.named('pitest') {
+    finalizedBy costReport
+}

@@ -4,6 +4,7 @@ import java.nio.file.Path
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
@@ -17,9 +18,44 @@ class CloneMutationLockSpec extends Specification {
 
     def lock = new CloneMutationLock()
 
+    def setupSpec() {
+        // Warm the virtual-thread machinery outside any feature: PIT orders a mutant's covering
+        // tests by their coverage-pass time, and a cold first virtual-thread start would be
+        // charged to whichever feature happens to run first.
+        Thread.startVirtualThread({}).join()
+    }
+
     def "runs the operation under lock and returns its result"() {
         expect:
         lock.runLocked(Path.of('/a-clone'), { 'result' }) == 'result'
+    }
+
+    def "FR1 of kill-expensive-mutants: once an operation on a clone key returns, an operation on the same key from another thread runs"() {
+        given:
+        def key = Path.of('/handed-off-clone')
+
+        when: 'one thread runs an operation on the key to completion'
+        def first = new FutureTask<String>({
+            lock.runLocked(key, {
+                'first'
+            })
+        } as Callable<String>)
+        Thread.startVirtualThread(first)
+        def firstResult = first.get(2, TimeUnit.SECONDS)
+
+        and: 'another thread then runs an operation on the same key'
+        // A different thread on purpose: the lock is reentrant, so a dropped unlock is invisible
+        // to the thread that took it and blocks only another one.
+        def second = new FutureTask<String>({
+            lock.runLocked(key, {
+                'second'
+            })
+        } as Callable<String>)
+        Thread.startVirtualThread(second)
+
+        then: 'the second completes promptly — the first released the lock on its way out'
+        firstResult == 'first'
+        second.get(2, TimeUnit.SECONDS) == 'second'
     }
 
     def "a second operation against the same clone key waits for the first to finish, never overlapping"() {

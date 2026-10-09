@@ -151,14 +151,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     }
 
     // Long enough that the 2s deadline is the only thing that can end this fetch, short enough
-    // that a mutant which drops the bound fails on the stand-in's own exit instead of hanging.
+    // that a mutant which drops the bound fails on the stand-in's own exit instead of hanging. Only
+    // the fetch stalls: the runner's clone-key resolution in front of it answers at once.
     private Path stallingGit() {
-        def script = tempDir.resolve('stalling-fetch-git.sh')
-        script.toFile().text = '''#!/bin/sh
-sleep 60
-'''
-        script.toFile().setExecutable(true)
-        script
+        new StallingGit().stallOn('fetch').stall(Duration.ofSeconds(60)).write(tempDir)
     }
 
     private int scriptCounter = 0
