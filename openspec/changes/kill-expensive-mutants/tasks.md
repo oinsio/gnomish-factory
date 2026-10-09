@@ -32,7 +32,7 @@ records timings where the task says so.
       argument (the longer prefix declared first wins), with an `answerWith` reading a file
       rewritten after `write` (the new content is answered), with `beforeStall` lines (run in
       order before the stall), and with `markOnStall` (marker present once the stall began).
-- [ ] 1.3 Rewire the six `:adapters:git` scripts to the builder per the D4 disposition table —
+- [x] 1.3 Rewire the six `:adapters:git` scripts to the builder per the D4 disposition table —
       `GitProcessRunnerBoundedNetworkSpec.stallingGit()` (with `localDelay(1 s)` and the
       `status` answer so "FR1, NG3: a local command … is not bounded" keeps its premise),
       `ContainerHarvestFetchSpec.stallingGit()`, `GitProcessRunnerShutdownReportSpec`,
@@ -41,7 +41,7 @@ records timings where the task says so.
       Verify: all six specs green with their assertions unchanged (NG3);
       `ContainerHarvestFetchSpec`'s FR7 feature ≤ 5 s (M3); the module `test` task's summed
       feature time is ≥ 60 s lower than baseline (compare XML totals).
-- [ ] 1.4 Make `StallingGitFixture` and `StallingReadGitFixture` build their scripts through the
+- [x] 1.4 Make `StallingGitFixture` and `StallingReadGitFixture` build their scripts through the
       builder per the D4 table (`StallingGitFixture`: `beforeStall` for the attempts line, the
       hook and the started marker; `answerWith` for `ls-remote`; the argv-qualified `rev-parse`
       rows), keeping their names, scenario files and `await*Started` loops; replace both
@@ -49,7 +49,7 @@ records timings where the task says so.
       mechanics. Verify: every spec implementing either trait green (`./gradlew check` — the
       fixtures change widens the scope to every module); `grep -rn "Kept in sync with"
       test-fixtures/src/main` no longer pairs the two.
-- [ ] 1.5 Add `StallingGitOwnerSpec` to `:bootstrap` (precedent `ClaimlessGitBoundarySpec`): scan
+- [x] 1.5 Add `StallingGitOwnerSpec` to `:bootstrap` (precedent `ClaimlessGitBoundarySpec`): scan
       every `*.groovy` under `adapters/git/src/test` and `test-fixtures/src/main` for a script
       literal containing `sleep`, allowlist `StallingGit` itself and the three exemptions by file
       name with their reasons (`GitProcessRunnerBoundedNetworkSpec` leaky-git,
@@ -60,7 +60,7 @@ records timings where the task says so.
 
 ## 2. Fast killers for `GitProcessRunner.execute` (D1; FR1, NFR-R1, NFR-R2; M2)
 
-- [ ] 2.1 Add a `RecordingGit` helper in `adapters/git/src/test` (same package as the specs),
+- [x] 2.1 Add a `RecordingGit` helper in `adapters/git/src/test` (same package as the specs),
       extracted from `GitProcessRunnerTransferSpec.recordingRunner()` (D1): a script that answers
       the subcommands the caller names before recording (the clone-key `rev-parse` → `.git`), then
       **appends** one block per invocation — the record lines the caller names, each a key and the

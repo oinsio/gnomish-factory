@@ -12,32 +12,23 @@ import java.nio.file.Path
  * {@code push}, this fixture is for specs exercising a read-side seam (tip lookups, ref
  * enumeration) where every invocation the seam makes must stall.
  *
- * <p>Kept in sync with {@link StallingGitFixture}: both must strip a leading {@code -c}
- * option pair, hold {@code STALL_SECONDS} long enough that only an interrupt (never the
- * stand-in itself) can end the stall, and expose an {@code await*Started} poll loop with the
- * same 20s deadline / 20ms interval shape so a spec can block until the stand-in is in flight
- * before it interrupts.
+ * <p>The stall mechanics — stripping the leading {@code -c} pairs, the stall set and its length —
+ * are owned by {@link StallingGit}; this trait states only its started marker.
+ * Implements FR2 of kill-expensive-mutants (design D4).
  */
 trait StallingReadGitFixture {
-
-    /** Long enough that a read can only end on an interrupt, never on itself. */
-    static final String STALL_SECONDS = '600'
 
     /** Appears once a read is in flight. */
     Path readStarted(Path dir) {
         dir.resolve('read-started')
     }
 
-    /** Writes the stand-in binary into {@code dir}, stalling on every subcommand it is asked. */
+    /**
+     * Writes the stand-in binary into {@code dir}, stalling on every subcommand it is asked for
+     * {@link StallingGit#DEFAULT_STALL}, so a read only ends on an interrupt.
+     */
     Path stallingGit(Path dir) {
-        Path fakeGit = dir.resolve('stalling-git')
-        fakeGit.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-touch ${readStarted(dir)}
-sleep ${STALL_SECONDS}
-"""
-        fakeGit.toFile().executable = true
-        return fakeGit
+        new StallingGit().stallOnEverything().markOnStall(readStarted(dir)).write(dir)
     }
 
     /** Blocks until a read is in flight, so an interrupt lands on the read and not before it. */

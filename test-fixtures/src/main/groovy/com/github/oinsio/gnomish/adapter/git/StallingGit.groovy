@@ -145,7 +145,8 @@ class StallingGit {
         String.format('%d.%03d', duration.toSeconds(), duration.toMillisPart())
     }
 
-    private static String quote(String text) {
+    /** {@code text} as one single-quoted shell word, for a {@link #beforeStall} or {@link #answerWith} line. */
+    static String quote(String text) {
         "'" + text.replace("'", "'\\''") + "'"
     }
 }

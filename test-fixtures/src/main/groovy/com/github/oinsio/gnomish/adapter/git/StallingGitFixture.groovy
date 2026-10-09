@@ -18,16 +18,11 @@ import java.nio.file.Path
  *
  * <p>Supports FR7, FR8 of bound-subprocess-commands.
  *
- * <p>Kept in sync with {@link StallingReadGitFixture}: both must strip a leading {@code -c}
- * option pair, hold {@code STALL_SECONDS} long enough that only an interrupt (never the
- * stand-in itself) can end the stall, and expose an {@code await*Started} poll loop with the
- * same 20s deadline / 20ms interval shape so a spec can block until the stand-in is in flight
- * before it interrupts.
+ * <p>The stall mechanics — stripping the leading {@code -c} pairs, the stall set, its length and
+ * the answer table — are owned by {@link StallingGit}; this trait states only its scenario files.
+ * Implements FR2 of kill-expensive-mutants (design D4).
  */
 trait StallingGitFixture {
-
-    /** Long enough that a push can only end on its deadline or an interrupt, never on itself. */
-    static final String STALL_SECONDS = '600'
 
     /** The commit the stand-in reports as every local tip; a spec compares remote answers to it. */
     static final String STALLED_TIP = '1111111111111111111111111111111111111111'
@@ -75,31 +70,30 @@ trait StallingGitFixture {
      * Writes the stand-in binary into {@code dir} and returns its path. It answers {@code remote
      * get-url}, {@code rev-parse} (both the branch tip and the clone key the mutation lock
      * resolves), {@code symbolic-ref} (the branch {@code HEAD} is on), {@code ls-remote}, and
-     * {@code merge-base --is-ancestor}, and stalls on
-     * {@code push}.
+     * {@code merge-base --is-ancestor}, and stalls on {@code push}; the file-backed answers are
+     * read when invoked, so a spec may rewrite the scenario files after this call. The stall
+     * lasts {@link StallingGit#DEFAULT_STALL}, so a push only ends on its deadline or an interrupt.
      */
     Path stallingGit(Path dir) {
-        Path fakeGit = dir.resolve('stalling-git')
-        fakeGit.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-case "\$1" in
-  remote) echo "https://example.invalid/repo.git"; exit 0 ;;
-  rev-parse)
-    if [ "\$2" = "--git-common-dir" ]; then echo ".git"; exit 0; fi
-    echo ${STALLED_TIP}; exit 0 ;;
-  ls-remote) cat ${lsRemoteOut(dir)}; exit "\$(cat ${lsRemoteExit(dir)})" ;;
-  symbolic-ref) cat ${headBranch(dir)}; exit 0 ;;
-  merge-base) exit 0 ;;
-  push)
-    echo attempt >> ${pushAttempts(dir)}
-    sh ${pushHook(dir)}
-    touch ${pushStarted(dir)}
-    sleep ${STALL_SECONDS} ;;
-esac
-exit 0
-"""
-        fakeGit.toFile().executable = true
-        return fakeGit
+        new StallingGit()
+                .stallOn('push')
+                .beforeStall("echo attempt >> ${quoted(pushAttempts(dir))}")
+                .beforeStall("sh ${quoted(pushHook(dir))}")
+                .markOnStall(pushStarted(dir))
+                .answer([
+                    'rev-parse',
+                    '--git-common-dir'
+                ], '.git', 0)
+                .answer('rev-parse', STALLED_TIP, 0)
+                .answer('remote', 'https://example.invalid/repo.git', 0)
+                .answerWith('ls-remote', "cat ${quoted(lsRemoteOut(dir))}; exit \"\$(cat ${quoted(lsRemoteExit(dir))})\"")
+                .answerWith('symbolic-ref', "cat ${quoted(headBranch(dir))}")
+                .answer('merge-base', '', 0)
+                .write(dir)
+    }
+
+    private String quoted(Path path) {
+        StallingGit.quote(path.toString())
     }
 
     private Path seed(Path dir, String name, String initial) {

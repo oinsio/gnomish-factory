@@ -203,18 +203,14 @@ class GitProcessRunnerTransferSpec extends Specification {
      * else — the argv and the environment it was handed — to the record file, then exits 0.
      */
     private GitProcessRunner recordingRunner() {
-        def script = tempDir.resolve('recording-git.sh')
-        script.toFile().text = """#!/bin/sh
-if [ "\$1" = "rev-parse" ]; then echo ".git"; exit 0; fi
-{
-  echo "argv=\$*"
-  echo "allow=[\${GIT_ALLOW_PROTOCOL-unset}]"
-  echo "count=[\${GIT_CONFIG_COUNT-unset}] key0=[\${GIT_CONFIG_KEY_0-unset}]"
-  echo "askpass=[\${GIT_ASKPASS-unset}] ssh=[\${SSH_ASKPASS-unset}]"
-  echo "global=[\${GIT_CONFIG_GLOBAL-unset}]"
-} >> "${record}"
-"""
-        script.toFile().executable = true
+        def script = new RecordingGit(record)
+                .answer('rev-parse', '.git')
+                .record('argv', '$*')
+                .record('allow', '[${GIT_ALLOW_PROTOCOL-unset}]')
+                .record('count', '[${GIT_CONFIG_COUNT-unset}] key0=[${GIT_CONFIG_KEY_0-unset}]')
+                .record('askpass', '[${GIT_ASKPASS-unset}] ssh=[${SSH_ASKPASS-unset}]')
+                .record('global', '[${GIT_CONFIG_GLOBAL-unset}]')
+                .write(tempDir)
         new GitProcessRunner(script.toString())
     }
 
