@@ -1,8 +1,0 @@
-{"seq":0,"tool":"Bash","start":"2026-10-09T06:55:28.576548Z","durationMillis":457}
-{"seq":1,"tool":"Glob","start":"2026-10-09T06:55:28.592709Z","durationMillis":464}
-{"seq":2,"tool":"Read","start":"2026-10-09T06:55:30.796724Z","durationMillis":16}
-{"seq":3,"tool":"Grep","start":"2026-10-09T06:55:31.587926Z","durationMillis":20}
-{"seq":4,"tool":"Grep","start":"2026-10-09T06:55:32.621399Z","durationMillis":16}
-{"seq":5,"tool":"Grep","start":"2026-10-09T06:55:35.881202Z","durationMillis":112}
-{"seq":6,"tool":"Grep","start":"2026-10-09T06:55:36.638076Z","durationMillis":14}
-{"seq":7,"tool":"Write","start":"2026-10-09T06:55:39.114500Z","durationMillis":1256}
