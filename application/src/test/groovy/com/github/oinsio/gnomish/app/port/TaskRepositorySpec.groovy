@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -43,6 +45,7 @@ class TaskRepositorySpec extends Specification {
         final Map<String, TaskOutcome> outcomes = [:]
         final Map<String, TaskState> initialStates = [:]
         final Map<String, TaskState> resetStates = [:]
+        final Map<String, TaskState> approvedStates = [:]
 
         @Override
         void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState) {
@@ -60,6 +63,23 @@ class TaskRepositorySpec extends Specification {
             outcomes.remove(taskId)
             // FR4 of harden-task-branch-contract: the attempt-counter reset rides the same write.
             resetStates[taskId] = resetState
+        }
+
+        @Override
+        void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
+            // FR3 of make-checkpoint-gate-durable: the approval clears the park with the position past the gate.
+            outcomes.remove(taskId)
+            approvedStates[taskId] = approved
+        }
+
+        @Override
+        void resumeFrom(String taskId, TaskState reset) {
+            // FR7 of make-checkpoint-gate-durable: the resumed write consumes the outcome with the reset.
+            if (!outcomes.containsKey(taskId)) {
+                throw new ResumedWriteRefusedException(taskId)
+            }
+            outcomes.remove(taskId)
+            resetStates[taskId] = reset
         }
 
         @Override
@@ -140,7 +160,7 @@ class TaskRepositorySpec extends Specification {
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def exhausted = TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), []))
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
 
         when: 'the human answer is appended'
         repository.appendDecision('TASK-1', new Decision('proceed', 'build', 'operator', null),

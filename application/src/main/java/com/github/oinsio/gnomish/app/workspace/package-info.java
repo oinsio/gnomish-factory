@@ -4,11 +4,11 @@
  * com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace} (host mode — the operator-supplied
  * {@code --dir} directory, exposing its root path) and {@link
  * com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace} (sandboxed mode — the
- * {@code AttemptCommitRef} naming the round's harvested attempt commit). The domain never
+ * {@code CurrentRound} whose closed round names the harvested attempt commit). The domain never
  * inspects a workspace (design D1); consumers downcast to the variant their mode implies.
  *
  * <p>Application layer, not adapters (task 4.4, D12(a) of split-into-modules): both are value
- * wrappers over a path and a ref respectively, with no external system behind them — the same
+ * wrappers over a path and a round cell respectively, with no external system behind them — the same
  * treatment task 4.2 gave {@code ThreadSleeper}. They live here rather than
  * in {@code :domain} because {@code DirectoryWorkspace} validates its root through {@code
  * java.nio.file}, which the domain-purity gate forbids.

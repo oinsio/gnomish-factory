@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -118,7 +119,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                 new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
-                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
         def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
         def memoryReport = StatusReport.build(context, state, null, null)

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -33,6 +34,7 @@ class ServiceCommitMessagesSpec extends Specification {
         event | expected
         TaskLifecycleEvent.STARTED | 'gnomish: task started'
         TaskLifecycleEvent.RESUMED | 'gnomish: task resumed'
+        TaskLifecycleEvent.APPROVED | 'gnomish: task approved'
         TaskLifecycleEvent.COMPLETED | 'gnomish: task completed'
         TaskLifecycleEvent.PAUSED | 'gnomish: task paused'
         TaskLifecycleEvent.ESCALATED | 'gnomish: task escalated'
@@ -45,6 +47,13 @@ class ServiceCommitMessagesSpec extends Specification {
             def message = ServiceCommitMessages.taskEvent(event)
             message.startsWith('gnomish: task ') && message.length() > 'gnomish: task '.length()
         }
+    }
+
+    // FR15 of make-checkpoint-gate-durable (design D10): the one parsed subject names the round's
+    // token after its stage and round, separated by one space — SnapshotTipCheck reads it back.
+    def "FR15: snapshot(stage, round, token) names the round token after stage#round"() {
+        expect:
+        ServiceCommitMessages.snapshot('work', 0, RoundToken.of('0a1b2c')) == 'gnomish: snapshot work#0 0a1b2c'
     }
 
     def "FR2: salvage() is the fixed constant string"() {

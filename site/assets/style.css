@@ -1,0 +1,475 @@
+/* Gnomish Factory landing page. One stylesheet, no build step, no JavaScript. */
+
+:root {
+    --bg: #fbf8f3;
+    --bg-soft: #f3eee6;
+    --fg: #241f1a;
+    --fg-muted: #6b6257;
+    --line: #e6dfd3;
+    --accent: #b45309;
+    --accent-ink: #ffffff;
+    --code-bg: #f3eee6;
+    --shadow: rgba(60, 40, 10, 0.25);
+    --radius: 12px;
+    --measure: 960px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d1117;
+        --bg-soft: #161b22;
+        --fg: #e6edf3;
+        --fg-muted: #9da7b3;
+        --line: #2b323c;
+        --accent: #f5b942;
+        --accent-ink: #0d1117;
+        --code-bg: #161b22;
+        --shadow: rgba(0, 0, 0, 0.45);
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover,
+a:focus-visible {
+    text-decoration: underline;
+}
+
+code,
+pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+}
+
+code {
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+}
+
+pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+h1,
+h2,
+h3 {
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.5em;
+}
+
+h2 {
+    font-size: 1.85rem;
+    margin-bottom: 1.2rem;
+}
+
+h3 {
+    font-size: 1.1rem;
+}
+
+p {
+    margin: 0 0 1em;
+}
+
+/* ---- Header ---- */
+
+.top {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding: 18px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.brand {
+    color: var(--fg);
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.top nav {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.top nav a {
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+}
+
+.top nav a:hover {
+    color: var(--fg);
+}
+
+/* ---- Layout ---- */
+
+main {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+.band {
+    padding: 56px 0;
+    border-top: 1px solid var(--line);
+}
+
+/* ---- Hero ---- */
+
+.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    align-items: center;
+    gap: 32px;
+    padding: 40px 0 56px;
+}
+
+.hero-text {
+    text-align: left;
+}
+
+.eyebrow {
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+
+.hero h1 {
+    font-size: clamp(2.2rem, 5.5vw, 3.4rem);
+    font-weight: 800;
+    margin: 0 0 0.6em;
+    max-width: 16ch;
+}
+
+.lede {
+    font-size: 1.2rem;
+    color: var(--fg-muted);
+    max-width: 44ch;
+    margin: 0 0 1.6rem;
+}
+
+.highlight {
+    border-left: 3px solid var(--accent);
+    padding: 6px 0 6px 14px;
+    margin: 0 0 1.6rem;
+    max-width: 52ch;
+    color: var(--fg);
+}
+
+.cta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 1.2rem;
+}
+
+.button {
+    display: inline-block;
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--fg);
+    font-weight: 600;
+}
+
+.button:hover,
+.button:focus-visible {
+    text-decoration: none;
+    border-color: var(--accent);
+}
+
+.button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.status {
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+    max-width: 52ch;
+    margin: 0;
+}
+
+.hero-art {
+    width: 100%;
+    max-width: 380px;
+    height: auto;
+    justify-self: center;
+    filter: drop-shadow(0 18px 30px var(--shadow));
+    order: -1;
+}
+
+@media (max-width: 720px) {
+    .hero {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .hero-text {
+        text-align: center;
+    }
+
+    .hero h1,
+    .lede,
+    .highlight,
+    .status {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .cta {
+        justify-content: center;
+    }
+
+    .highlight {
+        text-align: left;
+    }
+
+    .hero-art {
+        max-width: 260px;
+        order: -1;
+    }
+}
+
+/* ---- Illustrations ---- */
+
+.illus {
+    width: 150px;
+    height: auto;
+    display: block;
+    margin-bottom: 12px;
+}
+
+.columns .illus {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.how {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 32px;
+    align-items: center;
+    margin-bottom: 2.5rem;
+}
+
+.how-art {
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+    justify-self: center;
+}
+
+@media (max-width: 720px) {
+    .how {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---- Columns, steps, grid ---- */
+
+.columns {
+    display: grid;
+    gap: 28px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.columns p,
+.steps p,
+.grid p {
+    color: var(--fg-muted);
+    margin: 0;
+}
+
+.steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 24px;
+}
+
+.steps li {
+    counter-increment: step;
+}
+
+.steps li::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.diagram {
+    margin: 0;
+}
+
+.diagram picture {
+    display: block;
+}
+
+.diagram img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.diagram figcaption {
+    text-align: center;
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+    max-width: 60ch;
+    margin: 12px auto 0;
+}
+
+.grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.grid li.with-art .illus {
+    width: 110px;
+}
+
+.illus-right {
+    margin-left: auto;
+}
+
+.grid li {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+}
+
+/* ---- Install ---- */
+
+#install h3 {
+    margin-top: 1.8rem;
+}
+
+.intro {
+    color: var(--fg-muted);
+    max-width: 70ch;
+    margin: -0.4rem 0 1.4rem;
+}
+
+.checklist {
+    margin: 0 0 1.5rem;
+    padding-left: 1.2em;
+    color: var(--fg-muted);
+}
+
+.checklist li {
+    margin-bottom: 6px;
+}
+
+.small {
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+}
+
+/* ---- Footer ---- */
+
+footer {
+    border-top: 1px solid var(--line);
+    background: var(--bg-soft);
+    padding: 48px 16px 32px;
+}
+
+.foot-grid {
+    max-width: var(--measure);
+    margin: 0 auto;
+    display: grid;
+    gap: 32px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.foot-grid ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.foot-grid li {
+    margin-bottom: 6px;
+}
+
+.foot-grid p {
+    color: var(--fg-muted);
+}
+
+.legal {
+    max-width: var(--measure);
+    margin: 40px auto 0;
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+}
+
+.diagram {
+    overflow-x: auto;
+}
+
+.diagram img {
+    min-width: 640px;
+}

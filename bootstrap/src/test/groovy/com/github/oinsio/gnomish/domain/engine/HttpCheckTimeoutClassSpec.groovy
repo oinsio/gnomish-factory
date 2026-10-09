@@ -6,8 +6,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -65,8 +65,7 @@ class HttpCheckTimeoutClassSpec extends Specification {
                 //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
                 InstantSource.system(),
                 new ThreadSleeper())
-        def ref = new AttemptCommitRef()
-        ref.record(ThreeProviderPlatformFixture.GREEN_SHA)
+        def ref = ClosedRounds.at(ThreeProviderPlatformFixture.GREEN_SHA)
 
         when:
         def verdict = polling.poll(check, new RecordedAttemptCommitWorkspace(ref))

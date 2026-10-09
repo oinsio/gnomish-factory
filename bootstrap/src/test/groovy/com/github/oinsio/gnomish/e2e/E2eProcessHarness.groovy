@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.e2e
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.ProjectRegistry
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -85,7 +86,7 @@ final class E2eProcessHarness {
      *     after the script so a process that finishes early does not race a stdin close against
      *     its own exit
      * @param extraEnv variables merged into the spawned {@code gnomish run} process's environment
-     *     on top of the default inheritance — the seam the Ollama E2E layer (task 11.1) uses to
+     *     on top of the cleared test child baseline ({@link TestChildEnvironment}) — the seam the Ollama E2E layer (task 11.1) uses to
      *     forward {@code ANTHROPIC_BASE_URL}/auth-token/model env vars down to the real {@code
      *     claude} CLI the process itself spawns: the factory's agent adapters re-set exactly these
      *     seam names from their own (the spawned JVM's) environment as factory-set protocol
@@ -148,13 +149,17 @@ final class E2eProcessHarness {
 
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
-        builder.environment().put(FactoryHome.HOME_VARIABLE, HOME.root().toString())
+        // Nothing inherited (design D14 of make-checkpoint-gate-durable): the spawned factory sees
+        // the test child baseline, its own GNOMISH_HOME and the spec's extraEnv — never a GNOMISH_*
+        // variable of the test run.
+        Map<String, String> environment = TestChildEnvironment.cleared(builder)
+        environment.put(FactoryHome.HOME_VARIABLE, HOME.root().toString())
         extraArgs.findAll {
             it.startsWith('--dir=')
         }.each {
             register(Path.of(it.substring('--dir='.length())))
         }
-        builder.environment().putAll(extraEnv)
+        environment.putAll(extraEnv)
 
         Process process = builder.start()
         ExecutorService pumps = Executors.newFixedThreadPool(3)

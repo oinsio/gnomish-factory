@@ -84,13 +84,14 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
         docker.runs.isEmpty()
     }
 
-    // FR9 of make-run-headless: a --decision over a paused task is a usage error naming the
-    // conflict, raised after task.json is read and before any branch write or box.
-    def "a --decision over a paused task is a usage error that writes nothing"() {
+    // FR9 of make-run-headless; FR4 of make-checkpoint-gate-durable: a --decision over a task at a
+    // gate is a usage error naming the conflict, raised after task.json and state.json are read and
+    // before any branch write or box.
+    def "a --decision over a task paused at a gate is a usage error that writes nothing"() {
         given:
         repository.createTask(context('T-PAUSED-D'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        repository.recordOutcome('T-PAUSED-D', new TaskOutcome.Paused(pipelineEndState(), 'build'), TrackerWrite.OWED)
-        commitStateAtPipelineEnd('T-PAUSED-D')
+        commitStateAtGate('T-PAUSED-D')
+        repository.recordOutcome('T-PAUSED-D', new TaskOutcome.Paused(gateState(), 'build'), TrackerWrite.OWED)
         def tipBefore = tipOf('T-PAUSED-D')
 
         when:
@@ -100,7 +101,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
         def e = thrown(UsageException)
         e.message.contains('--decision')
         e.message.contains('T-PAUSED-D')
-        e.message.contains('paused')
+        e.message.contains("awaiting approval after stage 'build'")
 
         and:
         tipOf('T-PAUSED-D') == tipBefore

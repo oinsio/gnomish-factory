@@ -100,6 +100,8 @@ public final class HeartbeatProgress implements EngineEventListener {
     private static String stageOf(Position position) {
         return switch (position) {
             case Position.AtStage atStage -> atStage.name();
+            // FR1 of make-checkpoint-gate-durable: a task held at a gate is at the stage that passed.
+            case Position.AwaitingApproval gate -> gate.stage();
             case Position.PipelineEnd ignored -> PIPELINE_END_STAGE;
         };
     }

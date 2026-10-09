@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.branch;
 
+import com.github.oinsio.gnomish.domain.engine.Position;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -21,6 +22,9 @@ import org.jspecify.annotations.Nullable;
  *       re-parks a task that is done;
  *   <li>then the envelope diagnoses (version before parse failure, so a version diagnosis can name
  *       the version);
+ *   <li>then the gate — a recorded {@code AwaitingApproval} position classifies as {@link
+ *       BranchShape.AwaitingApproval} whatever the outcome says, so a lost park, a landed park and
+ *       a stale earlier outcome all name the same owed step (FR11 of make-checkpoint-gate-durable);
  *   <li>then the content progression.
  * </ol>
  *
@@ -29,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  * (fix-claim-epoch-fence FR1, FR2).
  *
  * <p>Implements FR1, FR2, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of
- * fix-claim-epoch-fence.
+ * fix-claim-epoch-fence; FR11 of make-checkpoint-gate-durable.
  */
 public final class BranchShapeClassifier {
 
@@ -64,6 +68,9 @@ public final class BranchShapeClassifier {
             return facts.stateEnvelope() instanceof EnvelopeStatus.Absent
                     ? new BranchShape.Bare()
                     : new BranchShape.Unknown(STATE_FILE + " present without " + TASK_FILE);
+        }
+        if (facts.recordedPosition().orElse(null) instanceof Position.AwaitingApproval) {
+            return new BranchShape.AwaitingApproval();
         }
         return progression(facts);
     }

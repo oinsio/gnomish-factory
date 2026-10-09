@@ -221,7 +221,10 @@ public enum OperatorEvent {
     // unreadable, malformed or without a version, so the factory reports itself as the
     // development version; the release workflow's identity check is where such a jar is stopped.
     FACTORY_VERSION_UNREADABLE("GF150"),
-    // GF151 is reserved by make-checkpoint-gate-durable (CHECKPOINT_APPROVAL_REFUSED).
+    // checkpoint approval (make-checkpoint-gate-durable, design D2, NFR-O1): the approval write was
+    // asked to open a gate the branch tip is not at — another gate, a stage, the pipeline end — or
+    // to move it onto another gate; it refuses, writing nothing, and names the tip's position.
+    CHECKPOINT_APPROVAL_REFUSED("GF151"),
     // supervised daemon loop (supervise-daemon-loops-and-embed-dashboard, design D6): the five
     // events of the one component that runs every long-lived daemon loop. The loop is named by the
     // `component` MDC key every line carries, not by the code, so each code has exactly one site.

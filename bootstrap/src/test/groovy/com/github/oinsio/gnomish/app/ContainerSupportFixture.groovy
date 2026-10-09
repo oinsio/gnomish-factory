@@ -27,9 +27,13 @@ final class ContainerSupportFixture {
      * It is a required argument for the reason the production bundle's is: a container run whose
      * commits stamp from one record while the claim fills another is exactly the assembly this
      * change makes unbuildable. On the {@code run} path the record is simply never filled.
+     *
+     * <p>{@code sandbox} and {@code factory} are the installation's settings the factory holds for
+     * every run it builds (design D12 of make-checkpoint-gate-durable) — the runners no longer
+     * carry them.
      */
-    static ContainerSupportFactory real(ClaimEpochSource epochs) {
-        forOwnership(OwnershipMode.MANUAL, epochs)
+    static ContainerSupportFactory real(ClaimEpochSource epochs, SandboxProperties sandbox, FactoryProperties factory) {
+        forOwnership(OwnershipMode.MANUAL, epochs, sandbox, factory)
     }
 
     /**
@@ -37,15 +41,17 @@ final class ContainerSupportFixture {
      * serve} dispatch of an already-claimed tracker task carries, as opposed to {@code run}'s
      * {@code manual} label.
      */
-    static ContainerSupportFactory tracked(ClaimEpochSource epochs) {
-        forOwnership(OwnershipMode.TRACKED, epochs)
+    static ContainerSupportFactory tracked(
+            ClaimEpochSource epochs, SandboxProperties sandbox, FactoryProperties factory) {
+        forOwnership(OwnershipMode.TRACKED, epochs, sandbox, factory)
     }
 
-    private static ContainerSupportFactory forOwnership(OwnershipMode ownershipMode, ClaimEpochSource epochs) {
+    private static ContainerSupportFactory forOwnership(
+            OwnershipMode ownershipMode, ClaimEpochSource epochs, SandboxProperties sandbox, FactoryProperties factory) {
         // The check providers' credential declarations are resolved by the composition root and
         // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
         // provider, so the declared set and the registry are empty.
-        new ContainerRunSupportFactory([], [:], ownershipMode, epochs)
+        new ContainerRunSupportFactory([], [:], ownershipMode, epochs, sandbox, factory)
     }
 
     /**
@@ -58,7 +64,7 @@ final class ContainerSupportFixture {
     static ContainerRunSupport direct(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
             FactoryProperties factory, OwnershipMode ownershipMode, ClaimEpochSource epochs,
             List<String> checkCredentialEnvVars = []) {
-        (ContainerRunSupport) new ContainerRunSupportFactory(checkCredentialEnvVars, [:], ownershipMode, epochs)
-        .create(cloneDir, taskId, segments, sandbox, factory, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
+        (ContainerRunSupport) new ContainerRunSupportFactory(checkCredentialEnvVars, [:], ownershipMode, epochs, sandbox, factory)
+        .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
     }
 }

@@ -126,7 +126,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
         then:
         io.printed == [
-            "Stage 'build' passed. Manual checkpoint reached." + ConsoleIO.LINE_END
+            "Stage 'build' passed. Awaiting approval." + ConsoleIO.LINE_END
         ]
     }
 
@@ -214,7 +214,8 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         executor.requests*.stage()*.name() == ['build']
         outcome instanceof TaskOutcome.Paused
         (outcome as TaskOutcome.Paused).passedStage() == 'build'
-        (outcome as TaskOutcome.Paused).finalState().position() == new Position.AtStage('deploy')
+        // FR1 of make-checkpoint-gate-durable: the pause holds the task at the gate, not past it.
+        (outcome as TaskOutcome.Paused).finalState().position() == new Position.AwaitingApproval('build')
     }
 
     def "run returns Completed when the pipeline reaches its end"() {

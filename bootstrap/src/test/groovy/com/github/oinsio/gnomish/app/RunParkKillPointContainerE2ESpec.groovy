@@ -24,7 +24,8 @@ import spock.lang.Timeout
  * <p>The recovery owners, as the design table names them. After the commit: the resume-start
  * reconciliation {@code ContainerResumeRunner#run} performs before anything else — locate the branch,
  * push what origin lacks — run here on its own because the continuation behind it is the transition
- * (a {@code --resume} over {@code AttemptsExhausted} runs a round, over {@code paused} it continues).
+ * (a {@code --resume} over {@code AttemptsExhausted} lands the resumed write and runs a round, over
+ * a gate it lands the approval and continues — FR4, FR7 of make-checkpoint-gate-durable).
  * After the push: the box keep itself, re-driven through the production {@code keepStopped} the next
  * terminal boundary runs — the startup sweep is age-governed and leaves a young box alone, and a
  * resume's reattach reuses a running box as it is, so the keep is what converges this window.
@@ -50,7 +51,7 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
 
         then: 'the frozen shape: parked locally, origin behind, the box never stopped'
         thrown(RunKills.SimulatedKill)
-        shape() == 'Parked'
+        shape() == parkedShape
         dto.isInstance(tipTask().outcome())
         originBehind()
         ContainerE2eDocker.containerRunning(boxName())
@@ -74,13 +75,13 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
         then: 'the resume finds the park and ends on one of the same kind, on both replicas'
         def stop = thrown(RunParkedException)
         reproduced(stop.outcome(), dto)
-        shape() == 'Parked'
+        shape() == parkedShape
         originTip() == localTip()
 
-        where:
-        kind | pipeline | dto
-        'escalated' | ParkPipelines.escalating('work') | TaskOutcomeDto.Escalated
-        'paused' | ParkPipelines.pausing('work', 'review') | TaskOutcomeDto.Paused
+        where: 'FR11 of make-checkpoint-gate-durable: a pause is held at its gate, whatever the outcome says'
+        kind | pipeline | dto | parkedShape
+        'escalated' | ParkPipelines.escalating('work') | TaskOutcomeDto.Escalated | 'Parked'
+        'paused' | ParkPipelines.pausing('work', 'review') | TaskOutcomeDto.Paused | 'AwaitingApproval'
     }
 
     def "NFR-R3: a #kind park killed after its push, before the box keep, is kept stopped by the next keep, twice over"() {
@@ -92,7 +93,7 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
 
         then: 'the frozen shape: parked on both replicas, the box running'
         thrown(RunKills.SimulatedKill)
-        shape() == 'Parked'
+        shape() == parkedShape
         dto.isInstance(tipTask().outcome())
         originTip() == localTip()
         ContainerE2eDocker.containerRunning(boxName())
@@ -118,13 +119,13 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
         then: 'the resume finds the park and ends on one of the same kind, on both replicas'
         def stop = thrown(RunParkedException)
         reproduced(stop.outcome(), dto)
-        shape() == 'Parked'
+        shape() == parkedShape
         originTip() == localTip()
 
-        where:
-        kind | pipeline | dto
-        'escalated' | ParkPipelines.escalating('work') | TaskOutcomeDto.Escalated
-        'paused' | ParkPipelines.pausing('work', 'review') | TaskOutcomeDto.Paused
+        where: 'FR11 of make-checkpoint-gate-durable: a pause is held at its gate, whatever the outcome says'
+        kind | pipeline | dto | parkedShape
+        'escalated' | ParkPipelines.escalating('work') | TaskOutcomeDto.Escalated | 'Parked'
+        'paused' | ParkPipelines.pausing('work', 'review') | TaskOutcomeDto.Paused | 'AwaitingApproval'
     }
 
     /** The three resume-start calls {@code ContainerResumeRunner#run} makes before it reads the branch. */

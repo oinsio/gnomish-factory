@@ -141,6 +141,54 @@ that quarantined every legitimate reclaim in production was invisible (`fix-clai
 - **A fixture that legitimately needs the claimless variant says so in its name**
   (`TaskGitFixture.realClaimless()`) and is listed in the scan with its reason.
 
+## Test processes never inherit the operator's environment
+
+A test gets a fixed environment and depends on no variable it did not set itself. The
+operator's shell is not part of that environment, and neither is the gnome round that may
+be running the build.
+
+The failure this exists for: a gnome's agent process holds `GNOMISH_DECISION_FILE` for its
+round. The Gradle build the gnome ran inherited it, Gradle's `Test` task hands the forked JVM
+the build's environment by default, and the fixture box (`LocalBoxEnvironment`) started the
+fake agent on that inherited environment. The fake agent copied a scenario's decision into
+the round's real decision file (introduced by `make-checkpoint-gate-durable`, design D14).
+The fixture box was laxer than the production host adapter it stands in for, which clears
+the environment and composes it through `ChildEnvAllowlist`. This is the shape the previous
+section forbids.
+
+Two layers, each at its owner:
+
+- **The build strips, subtractively.** `test-conventions` applies
+  `TestEnvironmentHygiene` (`build-logic`), next to `AdversarialGitConfig`, to every `Test`
+  task and to `pitest`. PIT's minions inherit the `pitest` JVM's environment. It removes
+  every inherited `GNOMISH_*` variable from the forked JVM. It is subtractive and not an
+  allowlist because the test JVM legitimately needs the machine's Docker, Gradle and
+  Testcontainers variables, and listing them would be a list of the operator's tooling to
+  maintain. A `GNOMISH_*` variable that a build script sets on purpose survives.
+  `TestEnvironmentHygieneFunctionalSpec` pins both directions.
+- **Every test spawner clears, then composes from an explicit list.** A test that starts a
+  child process clears the `ProcessBuilder`'s environment first. It then puts back only
+  what the child needs:
+  - Where a production allowlist exists, the composition goes through it. The fixture box
+    composes through `ChildEnvAllowlist` with the host base set, not a copy of it.
+  - Otherwise it goes through `TestChildEnvironment.cleared(builder)` in `:test-fixtures`.
+    That is the one spelling of the kept set: the host base set, the git test configuration,
+    `JAVA_HOME`, and the Docker and Testcontainers client variables.
+  - The spawner then adds the test-owned variables it sets itself (`GNOMISH_FAKE_*`,
+    `GNOMISH_HOME`, `GNOMISH_DECISION_FILE`).
+
+Gates, both in `:bootstrap`:
+
+- `TestEnvironmentHygieneSpec` asserts that the test JVM sees no `GNOMISH_*` key. It also
+  asserts that a fake-agent round run through the fixture box, with `GNOMISH_DECISION_FILE`
+  planted in the parent environment, leaves that file untouched.
+- `ProcessEnvironmentOwnerSpec` permits `environment().put(` and `environment().putAll(` in
+  test sources and `test-fixtures/src/main` only in files that clear first, or in its
+  exemption list, each with a reason. It asserts that the scan reached every listed file.
+
+A new spawner that needs a variable the kept set lacks adds it to `TestChildEnvironment`, not
+at the call site.
+
 ## Rules
 
 - Maximize automated verification in task plans — avoid manual testing steps

@@ -56,7 +56,7 @@ Flags use Spring's `--key=value` form (quote values with spaces):
 | `--discard-work`                  | no                 | `false`             | git mode only; requires `--resume`; discards the interrupted round instead of salvaging it                 |
 | `--decision="<text>"`             | no                 | —                   | git mode only; requires `--resume` of an escalated task; the operator's answer to the recorded escalation  |
 
-\* Exactly one of `--task`/`--task-file` is required unless `--resume` is given, in which case none of `--task`/`--task-file`/`--task-id`/`--from-stage` may be used. `--base`, `--resume`, `--discard-work`, and `--decision` are rejected together with `--mode=in-place` (exit code 2, usage error). `--decision` without `--resume`, with a blank value, or on a task whose recorded outcome is not an escalation is a usage error too (exit code 2), naming the conflict; the branch is left untouched.
+\* Exactly one of `--task`/`--task-file` is required unless `--resume` is given, in which case none of `--task`/`--task-file`/`--task-id`/`--from-stage` may be used. `--base`, `--resume`, `--discard-work`, and `--decision` are rejected together with `--mode=in-place` (exit code 2, usage error). `--decision` without `--resume`, with a blank value, on a task awaiting approval at a manual checkpoint, or on a task whose recorded outcome is not an escalation is a usage error too (exit code 2), naming the conflict; the branch is left untouched.
 
 A closed, empty, or absent standard input changes nothing — no path of `run` waits for input. To look at a task while it runs, use `gnomish status --dir=<dir> <task>` from another terminal (see [`operator-guide-inspect.md`](operator-guide-inspect.md)): it reads the last recorded round from the task branch and leaves the running process alone. After every attempt the run prints a one-line summary; a full report prints at the end. The runner writes nothing inside the project clone — logs, findings, and (in git mode) the task workspace all live outside it. The terminal carries the run's own output plus `WARN` and above; the full narrative goes to the project's rolling log file, `~/.gnomish/projects/<name>/logs/<instance>.log` — its location, the `GNOMISH_LOG_LEVEL` override, the `taskId=`/`stage=`/`attempt=` correlation keys and the `[GFnnn]` codes are described in [`operator-guide-observability.md` → *Reading the log*](operator-guide-observability.md#reading-the-log), which applies to every command, not only to `serve`.
 
@@ -86,8 +86,8 @@ reachable remote still works offline in both forms.
 `gnomish run --dir=<dir> --resume=<task>` locates the task branch — checking the local repo first, then a remote-tracking branch, then falling back to a narrow fetch of exactly `gnomish/<task>` — and continues from its recorded state:
 
 - **escalated**, with `--decision="<text>"` → appends the decision to the branch (author `operator`, the current stage, the current time) and resets the stage's attempts in the same commit, then continues at the same stage; the gnome sees the decision on its next round;
-- **escalated**, without `--decision` → resets the stage's attempts and continues with no decision appended — the retry after you fixed the environment or the stage configuration. The exception is an escalation that recorded a question (the gnome asked for a decision): without an answer there is nothing to continue with, so the run prints the question, its options and the line to continue again, runs no round, writes nothing to the branch, and exits 10;
-- **paused** (manual checkpoint) → continues from the position the checkpoint advanced to, with no confirmation;
+- **escalated**, without `--decision` → resets the stage's attempts and clears the recorded outcome in one commit (`gnomish: task resumed`), then continues with no decision appended — the retry after you fixed the environment or the stage configuration. Because the reset is on the branch before the first round, a process that dies mid-retry does not grant a second fresh attempt budget on the next resume. The exception is an escalation that recorded a question (the gnome asked for a decision): without an answer there is nothing to continue with, so the run prints the question, its options and the line to continue again, runs no round, writes nothing to the branch, and exits 10;
+- **awaiting approval** (a manual checkpoint) → the resume **is** the approval: one commit (`gnomish: task approved`) moves the position past the checkpoint stage and clears the recorded `paused` outcome, then the run starts the following stage. There is no prompt and no decision; `--decision` here is a usage error (exit 2). The same holds when the process died after the stage passed but before the `paused` outcome was recorded — the gate is part of the stage's round commit, so the resume approves and continues exactly as for a recorded pause;
 - **no recorded outcome** (the process died mid-round) → continues from the recorded position; any uncommitted work from the interrupted round is salvaged into a service commit by default, or discarded and the round replayed if `--discard-work` is given;
 - **completed** → reports the outcome and exits without further work;
 - **aborted** → refuses to resume (exit 2): the worktree is kept for inspection; start a new task instead.
@@ -110,10 +110,33 @@ the worktree (host) or the stopped box (container) is kept for the resume. `run`
 no tracker, so no tracker status changes; the branch is the only record, and any
 machine with the clone can resume from it.
 
+The stop itself does not depend on that park commit. A stage marked `manual` that
+passes records its position as **awaiting approval** in the same round commit that
+records the passing round — the position stays *at* the checkpoint, never past it.
+A gnome's question and a check that could not be verified ride their round commit
+the same way. So a process that dies between the round and the park loses nothing:
+the checkpoint is still on the branch and nothing moves past it until it is
+approved, and a recorded question or unverifiable check is raised again from the
+branch instead of re-running (and re-paying for) the round. `gnomish status` shows a checkpoint as
+`Stage: awaiting approval after '<stage>'` (`"position": { "type":
+"awaitingApproval", "stage": "<stage>" }` with `--json`), whether or not the park
+was recorded. Only an approval moves the task past it — in `run`, the next
+`--resume`:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    AwaitingApproval: awaiting approval after stage
+    NextStage: following stage runs
+    [*] --> AwaitingApproval: manual stage passes (round commit)
+    AwaitingApproval --> AwaitingApproval: kill, restart, status (nothing runs)
+    AwaitingApproval --> NextStage: approval commit (gnomish task approved)
+```
+
 The last lines of a stopped run are self-sufficient. An escalation prints its report
 by kind — the exhausted attempt limit, the gnome's question with its options, the
 check that could not be verified, or the executor failure — and a checkpoint prints
-`Stage '<stage>' passed. Manual checkpoint reached.`. In git mode a final line
+`Stage '<stage>' passed. Awaiting approval.`. In git mode a final line
 beginning `To continue:` names the resume command for this clone and task, with
 `--decision` shown as optional after an escalation:
 
@@ -130,7 +153,7 @@ pass a decision. The same line goes to the log at `INFO` with the task id.
 |-----------|-----------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0         | completed                                           | none — review the task branch (see [Merging a gnome's task branch](#merging-a-gnomes-task-branch))                                                         |
 | 10        | escalated; the report is on stdout                  | `gnomish run --dir=<dir> --resume=<task> --decision="<answer>"` to answer it, or `gnomish run --dir=<dir> --resume=<task>` to retry after fixing the cause |
-| 11        | paused at a manual checkpoint after the named stage | inspect the branch, then `gnomish run --dir=<dir> --resume=<task>`                                                                                         |
+| 11        | paused at a manual checkpoint after the named stage | inspect the branch, then `gnomish run --dir=<dir> --resume=<task>` — the resume approves the checkpoint                                                    |
 | 12        | aborted                                             | read the error output and the log; resuming refuses, so fix the cause and start a new task                                                                 |
 | 2         | usage error, named on stderr                        | correct the flags; nothing was written to the branch                                                                                                       |
 
@@ -142,7 +165,7 @@ In in-place mode, 10 and 11 are final: there is nothing to resume.
 
 A typical agent loop over one stage: run the task; on 10, read the report, edit the
 stage or form an answer, and resume with `--decision` if the report asked a question;
-on 11, inspect the branch and resume; repeat until 0.
+on 11, inspect the branch and resume, which approves the checkpoint; repeat until 0.
 
 ## Exit codes
 
@@ -159,7 +182,7 @@ The process exit code reports the outcome — anything `>= 10` means the engine 
 | 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch)                                                                                                              |
 | 7    | branch shape refused on pickup (`status` on a branch in a quarantine shape)                                                                                                      |
 | 10   | escalated (attempts exhausted / undecidable); parked on the branch in git mode                                                                                                   |
-| 11   | paused at a manual checkpoint; parked on the branch in git mode                                                                                                                  |
+| 11   | paused at a manual checkpoint, awaiting approval; parked on the branch in git mode                                                                                               |
 | 12   | aborted                                                                                                                                                                          |
 
 `take` and `serve` carry their own exit-code tables — see
@@ -171,7 +194,7 @@ The process exit code reports the outcome — anything `>= 10` means the engine 
 Pushing the task branch is the factory's job, never yours. Every commit the factory writes is followed by a best-effort push of `gnomish/<task>` to `origin`, under the exact refspec `gnomish/<task>:gnomish/<task>` and never with `--force`:
 
 - **round commits** — the state file and stage artifacts, after every attempt;
-- **lifecycle commits** — task started, a resume decision appended, the terminal outcome, the `Completed` cleanup commit, and the tracker-write-confirmed commit. The outcome and its cleanup commit travel together in one push, so a completed task's branch reaches the remote in its final form: cleanup at the tip, no `.gnomish-task/` files in the PR diff.
+- **lifecycle commits** — task started, a resume decision appended or a bare resume's attempt reset (`gnomish: task resumed`), a checkpoint's approval (`gnomish: task approved`), the terminal outcome, the `Completed` cleanup commit, and the tracker-write-confirmed commit. The outcome and its cleanup commit travel together in one push, so a completed task's branch reaches the remote in its final form: cleanup at the tip, no `.gnomish-task/` files in the PR diff.
 
 Push is best-effort by design: durability is the recorded branch state, so a failed push logs one WARN and the run continues. Two mechanisms close the gap a lost push leaves:
 

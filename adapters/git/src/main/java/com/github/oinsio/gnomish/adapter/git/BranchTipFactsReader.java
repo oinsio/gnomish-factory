@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchTipFacts;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus;
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Objects;
@@ -28,7 +29,8 @@ import org.jspecify.annotations.Nullable;
  * parsing happens — how a git invocation's outcome is classified as absence versus infrastructure
  * is the tip source's own concern.
  *
- * <p>Implements FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract.
+ * <p>Implements FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR11 of
+ * make-checkpoint-gate-durable (the recorded position, read from the same tip's {@code state.json}).
  */
 public final class BranchTipFactsReader {
 
@@ -61,6 +63,7 @@ public final class BranchTipFactsReader {
             Optional<UntrustedText> taskJson, Optional<UntrustedText> stateJson, boolean cleanupCommitInHistory) {
         Optional<TaskJsonDto> task = Optional.empty();
         Optional<StateJsonDto> state = Optional.empty();
+        Optional<Position> position = Optional.empty();
 
         EnvelopeStatus taskEnvelope;
         try {
@@ -73,6 +76,9 @@ public final class BranchTipFactsReader {
         EnvelopeStatus stateEnvelope;
         try {
             state = stateJson.map(StateJsonMapper::readDto);
+            // Mapped inside the guard: a position the domain refuses (a blank stage name) makes the
+            // envelope unreadable rather than a throw (NFR-R2). FR11 of make-checkpoint-gate-durable.
+            position = state.map(StateJsonDto::position).map(StateJsonMapper::fromPosition);
             stateEnvelope = statusOf(stateJson.isPresent());
         } catch (RuntimeException e) {
             stateEnvelope = faultOf(e);
@@ -84,6 +90,7 @@ public final class BranchTipFactsReader {
                 task.map(TaskJsonDto::outcome)
                         .map(BranchTipFactsReader::terminalOf)
                         .orElse(RecordedTerminal.NONE),
+                position,
                 state.map(dto -> isNotEmpty(dto.attempts())).orElse(false),
                 task.map(dto -> isNotEmpty(dto.decisions())).orElse(false),
                 cleanupCommitInHistory);

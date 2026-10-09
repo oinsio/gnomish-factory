@@ -21,11 +21,18 @@ final class ResumeDecisionCommit {
 
     /**
      * Builds the {@link Decision} for {@code text}, stamped with the park's stage, "tracker" and
-     * {@code at} — the instant the caller read from its own time source, never a clock of this
-     * class's (FR18 of supervise-daemon-loops-and-embed-dashboard).
+     * {@code at}: the stage named by the position — at a gate, the stage that passed (FR1 of
+     * make-checkpoint-gate-durable) — and none past the pipeline's end; {@code at} is the instant
+     * the caller read from its own time source, never a clock of this class's (FR18 of
+     * supervise-daemon-loops-and-embed-dashboard).
      */
     static Decision decisionFor(TaskState finalState, String text, Instant at) {
-        String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
+        String stage =
+                switch (finalState.position()) {
+                    case Position.AtStage(String name) -> name;
+                    case Position.AwaitingApproval(String gate) -> gate;
+                    case Position.PipelineEnd() -> null;
+                };
         return new Decision(text, stage, "tracker", at);
     }
 

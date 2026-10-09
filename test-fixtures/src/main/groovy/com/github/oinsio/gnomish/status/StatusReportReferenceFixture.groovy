@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
@@ -76,7 +77,7 @@ final class StatusReportReferenceFixture {
 
         def attempt = new AttemptRecord(
                 1, AttemptRecord.Result.QUALITY_FAILURE, Instant.parse('2026-07-16T14:35:10Z'),
-                [passCheck, failCheck], usage(183000, 1200, 5400, 410000), JudgeUsage.none(), [])
+                [passCheck, failCheck], usage(183000, 1200, 5400, 410000), JudgeUsage.none(), [], Stop.none())
 
         new TaskState(new Position.AtStage('implement'), 1, [attempt], usage(232000, 1450, 6100, 512000))
     }

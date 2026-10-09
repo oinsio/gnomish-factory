@@ -69,22 +69,6 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         1 * support.finishCleanup()
     }
 
-    // FR5 of fix-denial-report-attachment: the denial source outlives the process that created it,
-    // so the run hands its environments the position its last committed attempt recorded — BEFORE
-    // any environment materializes, since the first read of the first round is what it delimits.
-    // Without it that read replays every denial the surviving source still holds onto this round.
-    def "restores the committed denial cursor before the run materializes anything"() {
-        when:
-        drive()
-
-        then:
-        1 * support.restoreDenials()
-
-        then: 'only afterwards does the run assemble and drive the engine'
-        1 * support.completeAndDispose(_ as TaskState)
-        executor.requests.size() == 1
-    }
-
     // NFR-R2: an ABORTED run records the outcome and keeps the box stopped — never disposes. A
     // disposed box would take the evidence and the salvageable work with it.
     def "records the abort and keeps the box stopped, never disposing"() {

@@ -135,7 +135,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def worktree = worktreeFor('PROJ-1')
         def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), []))
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE).persist('PROJ-1', burned,
                 new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0), []))
         def before = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as Integer

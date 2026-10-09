@@ -2,9 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
-import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.nio.file.Path;
-import org.jspecify.annotations.Nullable;
+import java.util.function.Supplier;
 
 /**
  * The per-task construction seam for guarded container environments (the
@@ -25,63 +23,37 @@ import org.jspecify.annotations.Nullable;
  * was built with (FR2, FR8 of add-serve-sandbox-lifecycle) — the caller decides them once, at
  * construction, never per creation call.
  *
+ * <p>Built by {@link ContainerEnvironmentFactory#forTask}, the one production construction
+ * (design D12 of make-checkpoint-gate-durable).
+ *
  * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core; FR2, FR8 of
- * add-serve-sandbox-lifecycle.
+ * add-serve-sandbox-lifecycle; FR17, FR19 of make-checkpoint-gate-durable.
  */
 public final class ContainerEnvironments {
 
     private final DockerCli docker;
     private final String baseKey;
     private final ContainerEnvironmentBuilder builder;
-
-    /** What a previous lease recorded, offered to every environment built here; see {@link #restoreDenials}. */
-    private @Nullable DenialRestoration restoredDenials;
-
-    /**
-     * The production construction: a fresh docker subprocess seam per task, bounded by {@code
-     * timing.dockerCommandTimeout()} — the installation's {@code factory.docker-command-timeout},
-     * threaded from the composition root because {@link DockerCli} is not nameable outside this
-     * package (FR5, FR10, design D8 of bound-subprocess-commands). Exists because {@link DockerCli}
-     * is deliberately package-private — app-layer assemblies name only the environment-facing
-     * types (design D11 of add-parameter-count-gate for the parameter shape).
-     *
-     * @param baseKey the sanitized task identifier keying the round environment; never blank
-     * @param link the factory clone working copies are seeded from and the fetch behind {@code
-     *     harvest()} (D3, FR5 of add-sandbox-core); never null
-     * @param sandbox the operator sandbox config: image, runtime, limits, allowlist; never null
-     * @param timing the exec clock, the self-check pause and the docker command bound; never null
-     * @param allowlist the run's layered child-env allowlist (D6, FR9); never null
-     * @param guardConfigRoot the factory-private directory guard configs render under (per
-     *     environment key), never inside a working copy or scratch area; never null
-     * @param ownership the mode and project identity stamped on every object this task creates
-     *     (FR2, FR8 of add-serve-sandbox-lifecycle); never null
-     * @return the per-task environment seam; never null
-     */
-    public static ContainerEnvironments forTask(
-            String baseKey,
-            BoxGitLink link,
-            SandboxProperties sandbox,
-            BoxTiming timing,
-            ChildEnvAllowlist allowlist,
-            Path guardConfigRoot,
-            ObjectOwnership ownership) {
-        var docker = new DockerCli(timing.dockerCommandTimeout());
-        return new ContainerEnvironments(
-                docker,
-                baseKey,
-                new ContainerEnvironmentBuilder(docker, link, sandbox, timing, allowlist, guardConfigRoot, ownership));
-    }
+    private final Supplier<DenialRestoration> restoration;
 
     /**
      * @param docker the docker subprocess seam shared by every role; never null
      * @param baseKey the sanitized task identifier keying the round environment; never blank
      * @param builder the per-role assembly holding everything else a role's environment is built
      *     from — this seam can no longer build one itself; never null
+     * @param restoration what the task branch tip records about denials already reported, read
+     *     afresh each time a round environment is built (design D11 of
+     *     make-checkpoint-gate-durable); never null
      */
-    ContainerEnvironments(DockerCli docker, String baseKey, ContainerEnvironmentBuilder builder) {
+    ContainerEnvironments(
+            DockerCli docker,
+            String baseKey,
+            ContainerEnvironmentBuilder builder,
+            Supplier<DenialRestoration> restoration) {
         this.docker = docker;
         this.baseKey = baseKey;
         this.builder = builder;
+        this.restoration = restoration;
     }
 
     /**
@@ -99,15 +71,27 @@ public final class ContainerEnvironments {
 
     /**
      * The round-box environment for this task's key; self-checked on every materialize (FR8).
-     * The one role that carries a resume's restored denials (see {@link #restoreDenials}): its
-     * guard is the container the committed position was read from.
+     *
+     * <p>Every round environment is born carrying what the branch tip records about denials
+     * already reported (FR17, design D11 of make-checkpoint-gate-durable): the guard container
+     * outlives the process that created it, so a box reattaching to a surviving one continues the
+     * denial delta from the position its last attempt committed instead of replaying the
+     * container's whole log onto this round (FR5 of fix-denial-report-attachment), and merges a
+     * full re-read against the recorded identities when that position cannot be used (FR7 of
+     * fix-denial-attribution-durability). The offer is read as the box is built — first open,
+     * segment boundary and resume reattach alike — so there is no later step a caller could run
+     * out of order.
+     *
+     * <p>Offered to the round environment alone. The committed position and identities name the
+     * round box's guard container, and only the round box can ever reattach to it; a judge or
+     * verification box is a different key with a guard of its own, so the offer could never
+     * apply there — while consuming it would cost that box a rejection: an INFO line about a
+     * foreign source and, where the branch records denials, a synthetic "denials may be lost"
+     * marker in that box's own findings.
      */
     public SelfCheckedEnvironment roundEnvironment() {
         SelfCheckedEnvironment round = environment(baseKey);
-        DenialRestoration restoration = restoredDenials;
-        if (restoration != null) {
-            round.restoreDenials(restoration);
-        }
+        round.restoreDenials(restoration.get());
         return round;
     }
 
@@ -154,27 +138,6 @@ public final class ContainerEnvironments {
      */
     public void disposeExisting() {
         new ContainerEnvironmentDisposal(docker).dispose(baseKey);
-    }
-
-    /**
-     * Hands this run what the task branch already records about its denials (FR5 of
-     * fix-denial-report-attachment; FR7 of fix-denial-attribution-durability): the position
-     * committed with them, so a resume onto a surviving guard container reports only its own
-     * rounds' denials instead of replaying the container's whole log, and their identities, so
-     * a resume that cannot use the position merges its re-read instead of doubling the report.
-     *
-     * <p>Offered to the round environment alone. The committed position and identities name the
-     * round box's guard container, and only the round box can ever reattach to it; a judge or
-     * verification box is a different key with a guard of its own, so the offer could never
-     * apply there — while consuming it would cost that box a rejection: an INFO line about a
-     * foreign source and, where the branch records denials, a synthetic "denials may be lost"
-     * marker in that box's own findings. Neither role reads denials today, so the offer was
-     * inert rather than wrong; not making it is what keeps it that way.
-     *
-     * @param restoration what the branch tip records about denials already reported; never null
-     */
-    public void restoreDenials(DenialRestoration restoration) {
-        restoredDenials = restoration;
     }
 
     private SelfCheckedEnvironment environment(String key) {

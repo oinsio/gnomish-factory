@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -20,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * StatusLineFormatter}, split out to keep both files within the project's
  * file-size guidance.
  *
- * <p>Implements FR10, UX2, D7 of add-manual-run.
+ * <p>Implements FR10, UX2, D7 of add-manual-run; UX1 of make-checkpoint-gate-durable.
  */
 public final class StatusTextRenderer {
 
@@ -84,12 +85,19 @@ public final class StatusTextRenderer {
                 + StatusLineFormatter.checkHighlight(record) + ")";
     }
 
-    private void appendStage(StringBuilder out, StatusReport report) {
-        if (report.currentStage() == null) {
-            out.append("Stage: pipeline complete\n");
-            return;
-        }
-        out.append("Stage: ").append(report.currentStage()).append('\n');
+    /**
+     * The stage line, naming the position exhaustively: the stage at {@code atStage}, the gate at
+     * {@code awaitingApproval} — "awaiting approval after '&lt;stage&gt;'" (UX1 of
+     * make-checkpoint-gate-durable) — and "pipeline complete" at {@code pipelineEnd}.
+     */
+    private static void appendStage(StringBuilder out, StatusReport report) {
+        String line =
+                switch (report.position()) {
+                    case Position.AtStage(String name) -> name;
+                    case Position.AwaitingApproval(String stage) -> "awaiting approval after '" + stage + "'";
+                    case Position.PipelineEnd() -> "pipeline complete";
+                };
+        out.append("Stage: ").append(line).append('\n');
     }
 
     private void appendAttempts(StringBuilder out, StatusReport report) {

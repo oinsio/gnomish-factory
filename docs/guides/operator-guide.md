@@ -269,7 +269,42 @@ than guessing.
 Every escalation report names its own return path: reply and move to ready if
 a question is open; just move to ready if the fix was environmental (a
 `needs-human` from an infrastructure problem, or a manual pipeline checkpoint) —
-the human return itself is read as confirmation.
+the human return itself is read as confirmation. A bare return of an escalation
+without a question (an exhausted attempt limit, an infrastructure park) resets
+the stage's attempts and clears the recorded outcome in one branch commit
+(`gnomish: task resumed`) before any round runs, so a run killed after that
+point does not grant a second fresh attempt budget to the next claim.
+
+### Manual checkpoints: awaiting approval
+
+A stage marked `manual` that passes stops the task **at** that stage: the
+round commit that records the passing round also records the position
+*awaiting approval*, and nothing moves the task past it except an approval.
+The checkpoint park report on the issue carries the task's status, where the
+stage line reads `Stage: awaiting approval after '<stage>'`, then the branch
+and these two lines:
+
+```
+Stage '<stage>' passed. Awaiting approval.
+Review the work, then move the task back to ready to continue.
+```
+
+Moving the task back to `ready` **is** the approval. The next `take` (or
+`serve` slot) that claims it — any instance, not only the one that paused it —
+first lands one branch commit, `gnomish: task approved`, which moves the
+position past the checkpoint stage and clears the recorded `paused` outcome,
+and only then runs the following stage. No reply is needed, and none is read
+as an answer. A run killed after the approval commit continues from the
+approved position on the next claim; you are not asked to approve the same
+checkpoint twice.
+
+The gate does not depend on the park report. If the process died after the
+stage passed but before the task was parked, the next claim finds the branch
+awaiting approval, records the `paused` outcome, parks the task as a
+checkpoint, and exits without running a stage — so the task is never
+delivered past a checkpoint its pipeline asked for, even when the `manual`
+stage is the last one. `gnomish status` shows the same
+`awaiting approval after '<stage>'` line whether or not the park was recorded.
 
 ## Finished Tasks Are Terminal
 
@@ -727,7 +762,7 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 2    | usage error — including an unregistered `--dir` or a configuration violation, reported before any tracker call                                                                                                      |
 | 3    | pipeline load failure                                                                                                                                                                                               |
 | 10   | parked as escalation — a decision is needed                                                                                                                                                                         |
-| 11   | parked as a manual checkpoint                                                                                                                                                                                       |
+| 11   | parked as a manual checkpoint, awaiting approval — move the task back to ready to approve it                                                                                                                        |
 | 12   | infrastructure abort, below the abort threshold — task returned to `Ready`                                                                                                                                          |
 | 13   | parked as infra — abort threshold reached, or an infrastructure escalation                                                                                                                                          |
 | 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                                                                                                                                     |

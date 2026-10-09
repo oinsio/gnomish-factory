@@ -4,8 +4,8 @@ package com.github.oinsio.gnomish.domain.engine;
  * The sealed result the {@link StageAttemptLoop} hands back for one stage, so the
  * {@link Engine} — which alone knows the pipeline and can find the next stage — drives
  * stage-to-stage advancement (FR8). The loop resolves one stage to either a {@link Passed}
- * — the stage's verification passed and its passing round is already recorded and persisted,
- * the position still {@link Position.AtStage} the current stage — or a {@link Terminal} —
+ * — the stage's verification passed and its passing round is already recorded and persisted
+ * together with the position {@link Advancement#positionAfter} chose — or a {@link Terminal} —
  * any outcome that ends the run within the stage (an escalation or an abort), which the
  * engine returns verbatim.
  *
@@ -13,15 +13,19 @@ package com.github.oinsio.gnomish.domain.engine;
  * cross-stage, since it must look the next stage up in the pipeline — out of the loop, which
  * knows only one {@link com.github.oinsio.gnomish.domain.pipeline.StageDefinition} (design D4).
  *
- * <p>Implements FR8 of add-stage-engine.
+ * <p>Implements FR8 of add-stage-engine; FR1 of make-checkpoint-gate-durable.
  */
 sealed interface StageResult permits StageResult.Passed, StageResult.Terminal {
 
     /**
      * The stage's verification passed: {@code state} is the round-recorded, already-persisted
-     * state whose {@link Position} still names the current stage and whose history holds the
-     * passing round. The engine applies the stage's advancement mode to it — advancing to the
-     * next stage (history reset, FR14), completing at the pipeline end, or pausing (FR8).
+     * state whose history holds the passing round and whose {@link Position} is the one the pass
+     * committed (FR4 of harden-task-branch-contract): for an {@code auto} stage the next stage or
+     * {@link Position.PipelineEnd}, for a {@code manual} stage the gate, {@link
+     * Position.AwaitingApproval} naming this stage (FR1 of make-checkpoint-gate-durable). The
+     * engine applies the stage's advancement mode to it — advancing to the next stage (history
+     * reset, FR14), completing at the pipeline end, or pausing at the gate with this state
+     * unchanged (FR8).
      *
      * @param state the passing round's recorded and persisted state; never null
      */

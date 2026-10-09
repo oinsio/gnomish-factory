@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.TrackerWrite;
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.TakeResult;
@@ -19,7 +21,9 @@ import org.jspecify.annotations.Nullable;
  * add-serve-sandbox-lifecycle).
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR3 of
- * harden-task-branch-contract; FR9 of add-project-registry.
+ * harden-task-branch-contract; FR9 of add-project-registry; FR3, FR4, FR7 of make-checkpoint-gate-durable
+ * (the approval, the resumed write and a gate's owed park go through the worktree-rooted lifecycle
+ * repository).
  *
  * @param resumeRunner the worktree-backed resume machinery; never null
  * @param git the task-git capability set the store reads and marker write go through; never null
@@ -73,6 +77,31 @@ record HostResumeMechanics(
     @Override
     public TakeResult resumeWithoutDecision(TakeOrder order, ResumeBootstrap branch, TaskState finalState) {
         return resumeRunner.resumeWithoutDecision(order, branch, finalState);
+    }
+
+    @Override
+    public TaskState approveCheckpoint(TakeOrder order, ResumeBootstrap branch) {
+        return CheckpointApproval.approve(
+                git.store().taskRepository(registeredClone),
+                branch.taskId(),
+                readFinalState(branch),
+                order.run().definition(),
+                () -> {});
+    }
+
+    @Override
+    public void resumeFrom(TakeOrder order, ResumeBootstrap branch, TaskState reset) {
+        git.store().taskRepository(registeredClone).resumeFrom(branch.taskId(), reset);
+    }
+
+    @Override
+    public ParkDeliveryVerdict recordPark(TakeOrder order, ResumeBootstrap branch, TaskOutcome.Paused paused) {
+        // The same intent and fence a fresh park runs (TakeEngineExecution): the outcome commit
+        // with the pending marker, then the delivery fence before the tracker announces the park.
+        Path cloneDir = order.run().cloneDir();
+        GitOutcomeRecorder.recordIntent(
+                git, git.store().taskRepository(registeredClone), cloneDir, branch.taskId(), paused, TrackerWrite.OWED);
+        return git.branches().fenceParkDelivery(cloneDir, branch.taskId());
     }
 
     @Override

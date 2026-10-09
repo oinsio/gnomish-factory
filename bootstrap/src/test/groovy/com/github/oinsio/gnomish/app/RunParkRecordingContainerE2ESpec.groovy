@@ -87,7 +87,7 @@ class RunParkRecordingContainerE2ESpec extends ContainerParkSpecBase {
         assertParked(stop, TaskOutcomeDto.Escalated, 10)
     }
 
-    def "FR2, FR10: a container resume that reaches a checkpoint records the park, keeps the box stopped, exits 11"() {
+    def "FR4, FR10: a container resume over a gate whose park was lost approves it in one commit, runs the next stage, keeps the box stopped, exits 11"() {
         given: 'a run killed at its first checkpoint before the park was recorded'
         taskId = "PARK-RP-${System.nanoTime() % 100000}"
         when:
@@ -95,12 +95,18 @@ class RunParkRecordingContainerE2ESpec extends ContainerParkSpecBase {
         then:
         thrown(RunKills.SimulatedKill)
 
-        when: 'the resume continues from the recorded position and stops at the second checkpoint'
+        when: 'the resume finds the gate of the stage that passed with no park recorded'
+        def beforeResume = localTip()
         resume(ParkPipelines.pausing('work', 'review'))
 
-        then:
+        then: 'FR4 of make-checkpoint-gate-durable (manual-run, "Resume of a gate whose park was lost"): the resume is the approval, exactly as over a recorded park'
         def stop = thrown(RunParkedException)
         (stop.outcome() as TaskOutcome.Paused).passedStage() == 'review'
         assertParked(stop, TaskOutcomeDto.Paused, 11)
+
+        and: 'the first commit of the resume is the one approval commit, before the next stage\'s round'
+        def resumed = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "${beforeResume}..${branch()}").readLines()
+        resumed.first() == 'gnomish: task approved'
+        resumed.count('gnomish: task approved') == 1
     }
 }

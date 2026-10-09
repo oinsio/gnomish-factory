@@ -47,7 +47,7 @@ class E2eProcessHarnessSmokeSpec extends AbstractE2eProcessSpec {
         result.exitCode() == 11
 
         and: 'stdout carries the checkpoint the fake-agent rounds and the judge vote led to'
-        result.stdout().contains("Stage 'work' passed. Manual checkpoint reached.")
+        result.stdout().contains("Stage 'work' passed. Awaiting approval.")
 
         and: 'stderr carries no stack trace (UX3)'
         !result.stderr().contains('\tat ')

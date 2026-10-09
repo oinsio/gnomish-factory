@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.fake
 
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,15 +69,18 @@ class FakeAgentInvocation {
 
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
-        builder.environment().put('GNOMISH_FAKE_SCENARIO', scenario ?: '')
+        // Nothing inherited (design D14 of make-checkpoint-gate-durable): only the variables this
+        // invocation sets itself reach the fake, never a GNOMISH_DECISION_FILE of the test run.
+        Map<String, String> environment = TestChildEnvironment.cleared(builder)
+        environment.put('GNOMISH_FAKE_SCENARIO', scenario ?: '')
         if (judgeScenario != null) {
-            builder.environment().put('GNOMISH_FAKE_JUDGE_SCENARIO', judgeScenario)
+            environment.put('GNOMISH_FAKE_JUDGE_SCENARIO', judgeScenario)
         }
         if (judgeModel != null) {
-            builder.environment().put('GNOMISH_FAKE_JUDGE_MODEL', judgeModel)
+            environment.put('GNOMISH_FAKE_JUDGE_MODEL', judgeModel)
         }
         if (decisionFilePath != null) {
-            builder.environment().put('GNOMISH_DECISION_FILE', decisionFilePath.toAbsolutePath().toString())
+            environment.put('GNOMISH_DECISION_FILE', decisionFilePath.toAbsolutePath().toString())
         }
 
         Process process = builder.start()

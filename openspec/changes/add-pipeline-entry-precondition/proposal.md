@@ -186,7 +186,10 @@ BEFORE the first agent round, and route a red baseline to the project owner.
 - **Coordination**: `add-base-ref-resolution` (sequenced before this change: the
   probe runs after its fetch+resolve so it probes the refreshed base, and the
   baseline SHA is read from its structured pin `(ref, sha, rule)` through the
-  versioned task mapper — never as a flat `baseCommit`), `add-pipeline-routing` (the declaration is part of the pinned
+  versioned task mapper — never as a flat `baseCommit`), `make-checkpoint-gate-durable`
+  (sequenced before this change: both MODIFY `git-task-persistence`'s "State directory
+  with one writer per file"; this change's delta is layered on that one's — round-token
+  decision path, attempt `stop` field — and must sync after it), `add-pipeline-routing` (the declaration is part of the pinned
   per-pipeline definition and its content hash; `state.json`/`task.json` fields land
   in the same region), `add-stage-iteration` and `harden-task-branch-contract`
   (additive `state.json` fields under contract v1 — apply order decides version-gate

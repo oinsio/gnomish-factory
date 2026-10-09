@@ -290,7 +290,14 @@ sub-agent to discover.
       design time, plus the 24 `real-time-wiring` markers 3.1 placed in `:bootstrap`): fixtures that
       assemble the shipped composition (`AppAssemblyFixture`, `ServeRestartIntegrationSpec`, the
       end-to-end bases) carry the `real-time-wiring` marker with the reason, every other hit moves to
-      the virtual equipment. Verify: the boundary spec is green and a scratch `Instant.now()` in
+      the virtual equipment. The migration also covers the hits the merge of
+      `make-checkpoint-gate-durable` brought in after the design-time count, which today's
+      `.system(` check does not see: `Instant.now()` in `bootstrap/.../app/ContainerContinuationMedium`,
+      `app/RoundTokenIdentitySpec`, `app/killpoint/RequestSnapshotKillPoints` and
+      `app/killpoint/TakeKillPointWorlds`; `Clock.systemUTC()` in `app/KillPointTakeRoutes`; and
+      `Instant.now()` in `LocalBoxEnvironment`, which moved from the `adapters/git` test tree to
+      `test-fixtures/src/main` (re-run the grep before migrating, since the list may have grown).
+      Verify: the boundary spec is green and a scratch `Instant.now()` in
       `WorktreeJanitor`, a scratch `new ThreadSleeper()` in `FeedAssembly` (expected: does not
       compile — record that instead) and a scratch `InstantSource.system()` in `FinishedDecline` are
       each red naming the file (record the runs, then revert); `./gradlew checkTestTimeInjection` is

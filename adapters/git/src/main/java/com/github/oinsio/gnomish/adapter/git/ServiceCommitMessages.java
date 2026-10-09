@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 
 /**
@@ -7,7 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
  * commits, task-lifecycle commits, snapshot commit, salvage commit, cleanup commit, and
  * tracker-write-confirmed commit — the scheme fixed by design D14 and proposal Q1: {@code
  * gnomish: round <stage>#<n>}, {@code gnomish: task <event>}, {@code gnomish: snapshot
- * <stage>#<n>}, {@code gnomish: salvage}, {@code gnomish: cleanup}, {@code gnomish: task
+ * <stage>#<n> <token>}, {@code gnomish: salvage}, {@code gnomish: cleanup}, {@code gnomish: task
  * write-confirmed}. Except for the snapshot message (see {@link #snapshot}), these are a
  * human/audit-trail aid, not a parsing contract — {@code usage} reconstruction walks
  * {@code state.json} history instead (D14) — so this class only has to get the text
@@ -24,7 +25,7 @@ public final class ServiceCommitMessages {
     private static final String PREFIX = "gnomish: ";
 
     /**
-     * The snapshot subject's fixed prefix, ahead of {@code <stage>#<round>}. Package-visible so
+     * The snapshot subject's fixed prefix, ahead of {@code <stage>#<round> <token>}. Package-visible so
      * {@link SnapshotTipCheck} — the parsing side of this parsing contract — reads the same
      * literal this class writes, rather than repeating it (`.claude/rules/manual-sync-pairs.md`,
      * preference 1: shared definition over a hand-synced duplicate).
@@ -57,19 +58,22 @@ public final class ServiceCommitMessages {
     }
 
     /**
-     * The sandboxed snapshot commit message: {@code gnomish: snapshot <stage>#<round>} (FR21 of
-     * add-sandbox-core, design D15). Unlike every other message here, this one <em>is</em> a
-     * parsing contract: resume classifies a branch tip carrying it as
-     * "snapshot-without-state — died during verification" ({@link SnapshotTipCheck}), which is
-     * the only way to tell a factory snapshot from the gnome's own in-box commits (both carry
-     * the in-box identity).
+     * The sandboxed snapshot commit message: {@code gnomish: snapshot <stage>#<round> <token>} (FR21 of
+     * add-sandbox-core, design D15; FR15 of make-checkpoint-gate-durable, design D10). Unlike every
+     * other message here, this one <em>is</em> a parsing contract: resume classifies a branch tip
+     * carrying it as "snapshot-without-state — died during verification" ({@link SnapshotTipCheck}),
+     * which is the only way to tell a factory snapshot from the gnome's own in-box commits (both
+     * carry the in-box identity). The round token names the round that wrote the snapshot, so the
+     * resume reads the decision request — if any — at exactly that round's path in the snapshot's
+     * tree ({@link HarvestedBoundaryCheck#decisionPath}).
      *
      * @param stage the stage id the round belongs to
      * @param round the round's 1-based sequence number within the current stage visit
+     * @param token the round's token, from the run's {@link com.github.oinsio.gnomish.app.port.git.CurrentRound} — never re-read here
      * @return the formatted commit message
      */
-    public static String snapshot(String stage, int round) {
-        return SNAPSHOT_PREFIX + stage + "#" + round;
+    public static String snapshot(String stage, int round, RoundToken token) {
+        return SNAPSHOT_PREFIX + stage + "#" + round + " " + token.commit();
     }
 
     /**
@@ -105,6 +109,7 @@ public final class ServiceCommitMessages {
         return switch (event) {
             case STARTED -> "started";
             case RESUMED -> "resumed";
+            case APPROVED -> "approved";
             case COMPLETED -> "completed";
             case PAUSED -> "paused";
             case ESCALATED -> "escalated";

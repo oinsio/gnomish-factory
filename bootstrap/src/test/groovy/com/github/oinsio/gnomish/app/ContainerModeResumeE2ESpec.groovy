@@ -5,11 +5,17 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.EnvironmentRoundSnapshot
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.TaskStart
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
+import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -29,6 +35,7 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
 import spock.lang.IgnoreIf
@@ -135,7 +142,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def gitOne = TaskGitFixture.real()
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
-                sandboxProps, factoryProps, RunKills.killedBeforeParkRecord(ContainerSupportFixture.real(gitOne.epochs())),
+                RunKills.killedBeforeParkRecord(ContainerSupportFixture.real(gitOne.epochs(), sandboxProps, factoryProps)),
                 LiveConsoleIO.onStdout())
         instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
                 segments(), context, TaskState.atStageStart('work'))
@@ -149,9 +156,18 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         !ContainerE2eDocker.containerRunning(boxName)
 
         and: 'the pending decision request rode the snapshot commit into the branch (FR23)'
+        // FR13 of make-checkpoint-gate-durable (design D10, task 7.6): the request is named by the
+        //     round token its snapshot subject carries — matched by that token, never a spelled name
         def branch = "gnomish/${taskId}"
-        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
-                .contains(".gnomish-task/decisions/work-a0.json")
+        def snapshotSubject = gitOutput(cloneDir, 'log', branch, '-1', '--format=%s', '--grep',
+                '^gnomish: snapshot work#0 ')
+        def roundToken = snapshotSubject.substring('gnomish: snapshot work#0 '.length())
+        roundToken ==~ /[0-9a-f]{40,64}/
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch).readLines().findAll {
+            it.startsWith('.gnomish-task/decisions/')
+        } == [
+            ".gnomish-task/decisions/work-a0-${roundToken}.json".toString()
+        ]
 
         when: 'a leftover is planted in the kept box (the uncommitted tail of a dead round)'
         ContainerE2eDocker.start(boxName)
@@ -159,16 +175,35 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
 
         and: 'a second instance resumes from the branch alone'
         def resumeGit = TaskGitFixture.real()
-        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
-                ContainerSupportFixture.real(resumeGit.epochs()))
+        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, 'taskId',
+                ContainerSupportFixture.real(resumeGit.epochs(), sandboxProps, factoryProps))
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, null, segments())
 
-        then: 'the leftover was salvaged in-box and harvested (FR6)'
+        then: 'FR6, FR2 of make-checkpoint-gate-durable (design D3): the question the dead run never parked is re-raised from the round record and parked now'
+        def reparked = thrown(RunParkedException)
+        (reparked.outcome() as TaskOutcome.Escalated).report() instanceof EscalationReport.DecisionNeeded
+
+        and: 'the leftover was salvaged in-box and harvested before the engine re-raised it (FR6)'
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
                 '^gnomish: salvage$')
         salvageSha
         gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
+
+        when: 'the operator answers the re-raised question (the gnome, past its first attempt, plays a plain round)'
+        def answerGit = TaskGitFixture.real()
+        def parkTip = gitOutput(cloneDir, 'rev-parse', branch)
+        new ContainerResumeRunner(newAssembly(factoryProps), answerGit, 'taskId',
+                ContainerSupportFixture.real(answerGit.epochs(), sandboxProps, factoryProps))
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
+                taskId, 'use the default', segments())
+
+        then: 'FR7 of make-checkpoint-gate-durable: the continuation landed exactly one lifecycle commit — the decision — before its round'
+        def continued = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "${parkTip}..${branch}").readLines()
+        continued.first() == 'gnomish: task resumed'
+        continued.count {
+            it.startsWith('gnomish: task ') && it != 'gnomish: task completed'
+        } == 1
 
         and: 'the task completed: cleaned tip with the work present, environment disposed'
         def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
@@ -207,14 +242,20 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         ], [:], null, true))
         handle.output().readAllBytes()
         assert handle.waitForExit() == 0
-        new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, new AttemptCommitRef())
+        // The round opened on the current tip: that tip is the token its snapshot subject names
+        // (design D10 of make-checkpoint-gate-durable), opened as SandboxRoundEnvironmentSource
+        // would open it.
+        def rounds = new CurrentRound()
+        def openTip = gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()
+        rounds.open(RoundToken.of(openTip))
+        def snapshot = new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, rounds)
                 .snapshot(taskId, 'work', 0)
         support.keepStopped()
 
         when: 'a second instance resumes'
         def resumeGit = TaskGitFixture.real()
-        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
-                ContainerSupportFixture.real(resumeGit.epochs()))
+        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, 'taskId',
+                ContainerSupportFixture.real(resumeGit.epochs(), sandboxProps, factoryProps))
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, null, segments())
 
@@ -232,5 +273,79 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         stateShas.size() == 1
         gitOutput(cloneDir, 'log', branch, '--grep', '^gnomish: round work#1$', '--format=%H')
                 .isEmpty()
+
+        and: 'the resumed state commit sits on the snapshot whose recorded token the persistence judged it by'
+        // FR13, FR15 of make-checkpoint-gate-durable (task 7.4): the resumed round's carve-out and
+        //     diff base are the snapshot subject's token, restored into the cell, never a re-read tip
+        gitOutput(cloneDir, 'rev-parse', stateShas[0] + '^') == snapshot
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == 'gnomish: snapshot work#0 ' + openTip
+    }
+
+    // FR17 of make-checkpoint-gate-durable (design D11, task 8.3): the recorded denial position is
+    //     an input of building the box, so a box reattached on resume — whose guard survived the
+    //     dead run — reads its denial log from the committed cursor, never from the start. Every
+    //     materialize runs the self-check, whose denied-host probe is a real guard denial: round 0
+    //     records its own; the resumed round must not report it again.
+    def "resume onto a surviving guard with a recorded cursor reports no denial twice"() {
+        given: 'a gnome whose first round produces nothing (files_exist fails) and whose second completes'
+        taskId = "CTN-DEN-${System.nanoTime() % 100000}"
+        def sandboxProps = sandbox('law-tamper-then-plain')
+        def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
+        def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
+        def branch = "gnomish/${taskId}"
+
+        when: 'instance one plays round 0 and dies right after its state commit'
+        def gitOne = TaskGitFixture.real()
+        new ContainerGitModeRunner(
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
+                RunKills.killedAfterFirstRoundRecord(ContainerSupportFixture.real(gitOne.epochs(), sandboxProps, factoryProps)),
+                LiveConsoleIO.onStdout())
+                .run(new RunOrder(cloneDir, null, pipeline(), false), segments(), context, TaskState.atStageStart('work'))
+
+        then:
+        thrown(RunKills.SimulatedKill)
+        def guardName = "gnomish-guard-${taskId}"
+        def guardBefore = ContainerE2eDocker.containerId(guardName)
+
+        and: 'round 0\'s state commit recorded the guard\'s denial and the cursor standing after it'
+        def roundZero = roundState(branch, '--reverse')
+        def cursor = roundZero.egressCursor()
+        cursor?.source() == guardBefore
+        def reported = roundZero.attempts().last().denials()
+        !reported.isEmpty()
+        reported.every { it.identity() != null }
+
+        when: 'a second instance resumes the interrupted visit onto the kept box'
+        def resumeGit = TaskGitFixture.real()
+        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, 'taskId',
+                ContainerSupportFixture.real(resumeGit.epochs(), sandboxProps, factoryProps))
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null, segments())
+
+        then: 'the next round ran against the guard that survived — the cursor names a live source'
+        def roundOne = roundState(branch)
+        roundOne.attempts().size() == 2
+        roundOne.egressCursor().source() == guardBefore
+
+        and: 'its findings hold no denial from before the cursor, and none round 0 already reported'
+        def next = roundOne.attempts().last().denials()
+        !next.isEmpty()
+        next.every {
+            it.identity() != null && Instant.parse(it.identity().at()).isAfter(Instant.parse(cursor.position()))
+        }
+        next*.identity().disjoint(reported*.identity())
+    }
+
+    /** The {@code state.json} of the newest round commit on {@code branch} — or the oldest, given {@code --reverse}. */
+    private StateJsonDto roundState(String branch, String... order) {
+        def args = [
+            'log',
+            *order,
+            branch,
+            '--format=%H',
+            '--grep',
+            '^gnomish: round work#'
+        ] as String[]
+        def sha = gitOutput(cloneDir, args).readLines().first()
+        StateJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(cloneDir, 'show', "${sha}:.gnomish-task/state.json")))
     }
 }

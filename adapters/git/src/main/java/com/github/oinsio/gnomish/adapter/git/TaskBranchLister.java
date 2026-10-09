@@ -148,6 +148,8 @@ public final class TaskBranchLister {
     private static @Nullable String stageName(TaskState state) {
         return switch (state.position()) {
             case Position.AtStage atStage -> atStage.name();
+            // FR1 of make-checkpoint-gate-durable: a task held at a gate lists under the stage that passed.
+            case Position.AwaitingApproval gate -> gate.stage();
             case Position.PipelineEnd ignored -> null;
         };
     }

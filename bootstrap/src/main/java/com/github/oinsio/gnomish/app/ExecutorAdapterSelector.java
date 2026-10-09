@@ -58,7 +58,7 @@ final class ExecutorAdapterSelector {
                 new LoggingAgentProgressListener(),
                 law,
                 sandbox.executorRounds());
-        return new ResumeVerificationStageExecutor(cli, sandbox.attemptCommit(), sandbox.pendingVerification());
+        return new ResumeVerificationStageExecutor(cli, sandbox.rounds(), sandbox.pendingVerification());
     }
 
     /**

@@ -68,6 +68,26 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
         failed.message.contains('PROJ-1')
     }
 
+    // FR11 of make-checkpoint-gate-durable: a gate loads the branch like any resumable shape — the
+    // loaded routes decide approve-and-continue versus re-delivering a lost park (task 4.2) — and,
+    // being clean, a failure there is not renamed a failed recovery.
+    def "an AwaitingApproval shape loads the branch through the loaded routes"() {
+        given:
+        def mechanics = Mock(ResumeMechanics)
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
+
+        when:
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+                .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), new BranchShape.AwaitingApproval())
+
+        then:
+        1 * mechanics.loadBranch(_, 'PROJ-1') >> {
+            throw new IllegalStateException('loaded')
+        }
+        def loaded = thrown(IllegalStateException)
+        loaded.message == 'loaded'
+    }
+
     // Bare is the fresh-claim route's shape and is decided before resume is ever reached, so
     // arriving here with it is a routing defect — the table says so instead of failing later on a
     // branch with nothing on it.

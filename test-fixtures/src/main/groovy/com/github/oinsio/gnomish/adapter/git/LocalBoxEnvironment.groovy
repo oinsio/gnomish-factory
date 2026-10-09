@@ -1,0 +1,149 @@
+package com.github.oinsio.gnomish.adapter.git
+
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRead
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.ExecCommand
+import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.HostExecHandle
+import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Instant
+import org.jspecify.annotations.Nullable
+
+/**
+ * A daemon-free {@link TaskExecutionEnvironment} test double with container
+ * semantics over local directories: materialize is a real {@code git clone
+ * --no-hardlinks} from the factory clone, exec runs a local subprocess in the
+ * box working copy, the file channel is plain files, and harvest is a real
+ * fast-forward-only fetch from the box back into the factory clone — the same
+ * git transport contract as the container adapter, minus Docker. Lets the
+ * snapshot-first round protocol (FR21/FR22) and the boundary checks run as
+ * fast local-bare-repo specs (task 5.5/5.6) with the identical git mechanics
+ * the Docker-gated suite proves end-to-end.
+ *
+ * <p>Shared from {@code :test-fixtures} since task 7.7 of make-checkpoint-gate-durable: {@code
+ * :bootstrap}'s {@code RoundTokenIdentitySpec} drives a whole round — agent, in-box snapshot,
+ * harvest, state commit — through the same box the {@code adapters/git} protocol specs use.
+ */
+class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixture {
+
+    private final GitProcessRunner runner = new GitProcessRunner()
+    private final Path cloneDir
+    private final Path boxRoot
+
+    Path workingCopy
+    /** The denial cursor this box reports, if a spec scripted one. */
+    DenialCursor denialCursor
+    private Path scratch
+    private String branch
+
+    LocalBoxEnvironment(Path cloneDir, Path boxRoot) {
+        this.cloneDir = cloneDir
+        this.boxRoot = boxRoot
+    }
+
+    @Override
+    void materialize(String branch, @Nullable String commitPin) {
+        this.branch = branch
+        workingCopy = boxRoot.resolve('work')
+        seedClone(boxRoot, cloneDir.toString(), workingCopy, '--no-hardlinks', '--single-branch', '--branch', branch)
+        runner.run(workingCopy, 'remote', 'remove', 'origin')
+        runner.run(workingCopy, 'config', 'user.name', 'gnome')
+        runner.run(workingCopy, 'config', 'user.email', 'gnome@sandbox.local')
+        runner.run(workingCopy, 'config', 'gc.auto', '0')
+        if (commitPin != null) {
+            runner.run(workingCopy, 'reset', '--hard', commitPin)
+        }
+        scratch = Files.createDirectories(boxRoot.resolve('scratch'))
+    }
+
+    @Override
+    ExecHandle exec(ExecCommand command) {
+        def builder = new ProcessBuilder(command.command())
+        builder.directory(workingCopy.toFile())
+        builder.redirectErrorStream(command.mergeStderr())
+        // The production host adapter's composition, not a copy of it (design D14 of
+        // make-checkpoint-gate-durable): nothing of the test JVM's environment is inherited — a
+        // GNOMISH_DECISION_FILE the test run was handed never reaches the fake agent.
+        builder.environment().clear()
+        builder.environment().putAll(ChildEnvAllowlist.none().compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES, command.env()))
+        def process = builder.start()
+        if (command.stdin() != null) {
+            process.outputStream.withStream {
+                it.write(command.stdin().getBytes(StandardCharsets.UTF_8))
+            }
+        } else {
+            process.outputStream.close()
+        }
+        new HostExecHandle(process, Instant.now())
+    }
+
+    @Override
+    void putFile(String path, byte[] content) {
+        def resolved = workingCopy.resolve(path)
+        Files.createDirectories(resolved.parent)
+        Files.write(resolved, content)
+    }
+
+    @Override
+    Optional<byte[]> readFile(String path, long sizeCap) {
+        def resolved = workingCopy.resolve(path)
+        Files.isRegularFile(resolved) ? Optional.of(Files.readAllBytes(resolved)) : Optional.<byte[]> empty()
+    }
+
+    @Override
+    void harvest() {
+        def fetch = seedFetch(cloneDir, workingCopy.toString(), branch + ':' + branch, '--no-recurse-submodules')
+        if (fetch.exitCode() != 0) {
+            if (fetch.stderr().forParsing().contains('non-fast-forward')) {
+                throw new HarvestRefusedException(branch, fetch.stderr())
+            }
+            throw new HarvestFailedException(branch, fetch.stderr())
+        }
+    }
+
+    @Override
+    void dispose() {}
+
+    @Override
+    String scratchRoot() {
+        scratch.toString()
+    }
+
+    @Override
+    CapabilityPassport passport() {
+        CapabilityPassport.container()
+    }
+
+    /** Whatever a spec scripted as this box's denial read position (FR5 of fix-denial-report-attachment). */
+    @Override
+    Optional<DenialCursor> denialCursor() {
+        Optional.ofNullable(denialCursor)
+    }
+
+    /**
+     * Positions this box's denial source at the offered cursor, the way a live guard does when the
+     * offer names its own source — so a spec can observe a restore that actually landed, rather
+     * than only that a call was made (FR6 of fix-denial-attribution-durability).
+     */
+    @Override
+    void restoreDenials(DenialRestoration restoration) {
+        restoration.position().ifPresent { denialCursor = it }
+    }
+
+    /**
+     * This box's denial read, paired with whatever position a spec scripted (design D7 of
+     * fix-denial-attribution-durability): a local box has no egress guard, so the findings are
+     * always empty while the position is the one under test.
+     */
+    @Override
+    DenialRead readDenials() {
+        new DenialRead(List.of(), denialCursor())
+    }
+}

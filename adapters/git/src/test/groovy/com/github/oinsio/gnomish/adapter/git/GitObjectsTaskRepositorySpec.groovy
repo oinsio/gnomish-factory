@@ -23,6 +23,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -215,7 +216,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def before = gitOutput(bareDir, 'rev-list', '--count', refFor('PROJ-1')) as Integer
         def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), []))
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
 
         when: 'the human answer is appended with the reset it implies'
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', Instant.EPOCH),

@@ -71,6 +71,18 @@ change's `design.md` or spec:
     (item 3). A key that is reset by design — the attempt number restarts on
     an answer, an advancement, a retry — is not an identity. Introduced by
     `make-checkpoint-gate-durable` (design D10).
+14. **Recovery rebuilds context from the record through the live path's parse.**
+    An identity a run holds in memory (the round token, the attempt commit, the
+    claim epoch) has a named producer on the live path and a named producer on
+    every recovery path, and both go through the same parse function — recovery
+    never derives the value by a second route (a fresh `rev-parse`, a listing,
+    a presence check). A per-run holder for such a value is justified by the
+    port that forces it, holds whole identities only (never a half the other
+    half can drift from), and is named in the design's single-owner table with
+    its writers. A guard that compares a recorded value with its own re-read
+    of the same medium is a defect, not a check: it cannot fire while the
+    record is right, and when the record is wrong it has nothing to compare
+    against. Introduced by `make-checkpoint-gate-durable` (D10 as amended).
 
 ## Referencing
 

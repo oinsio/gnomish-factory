@@ -19,15 +19,20 @@ import org.jspecify.annotations.Nullable;
  * dialog (design D12).
  *
  * <p>Two resume entry points mirror the two shapes a park can be resumed from (design D3): {@link
- * #resumeWithoutDecision} for a {@code null}/{@code CHECKPOINT}/{@code INFRA} return, no decision
- * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context the caller's
+ * #resumeWithoutDecision} for a tip whose outcome is {@code null} — never recorded, or consumed by
+ * the approval or the resumed write that preceded the call — no decision involved; {@link
+ * #resumeDecided} for an {@code ESCALATION} return, from a context the caller's
  * {@link #appendDecision} has already committed when there was a reply to commit — mirroring {@link
  * EscalationResume#decide}'s exact reset formula.
  *
  * <p>Kept in sync with {@link TakeContainerResumeRunner}: both resolve the resumed law binding
  * through {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution
  * tail — the current tip of the pinned base ref, narrow-fetched or read locally, parking or
- * releasing the claim exactly alike on the two failure branches.
+ * releasing the claim exactly alike on the two failure branches. The two outcome-clearing writes a
+ * reply-less continuation needs — the approval of a gate and the resumed write — are not part of
+ * this pair: they live in the shared seam, {@link ResumeMechanics#approveCheckpoint} and {@link
+ * ResumeMechanics#resumeFrom}, implemented once per medium by {@link HostResumeMechanics} and
+ * {@link ContainerResumeMechanics} (design D6 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution; FR9 of
  * add-project-registry.
@@ -81,8 +86,9 @@ final class TakeResumeRunner {
     }
 
     /**
-     * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park —
-     * none needs the attempt-counter reset, since none burned an attempt. Salvages (default) or
+     * Resumes a tip whose outcome is {@code null}: a process that died mid-visit, or a {@code
+     * CHECKPOINT}/{@code INFRA} return whose approval or resumed write already landed — so {@code
+     * finalState} is exactly what the tip records (FR4, FR7 of make-checkpoint-gate-durable). Salvages (default) or
      * discards ({@code --discard-work}) the interrupted round's leftovers exactly as {@link
      * GitResumeContinuation#resumeFromRecordedPosition} does, then runs the engine once.
      *
@@ -93,7 +99,7 @@ final class TakeResumeRunner {
      *     interrupted leftovers instead of salvaging them), and the tracker, task identity and
      *     instance identity for the revocation check wrapped around persistence
      * @param bootstrap the located/materialized bundle from {@link #bootstrap}
-     * @param finalState the state to resume from, unchanged from the park
+     * @param finalState the state to resume from, as the tip records it
      * @return the mapped {@link TakeResult} for the engine run
      */
     public TakeResult resumeWithoutDecision(TakeOrder order, ResumeBootstrap bootstrap, TaskState finalState) {

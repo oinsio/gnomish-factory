@@ -107,6 +107,8 @@ public final class SummaryAccumulatorListener implements EngineEventListener {
     private static @Nullable String stageOf(Position position) {
         return switch (position) {
             case Position.AtStage atStage -> atStage.name();
+            // FR1 of make-checkpoint-gate-durable: a checkpoint names the gate — the stage that passed.
+            case Position.AwaitingApproval gate -> gate.stage();
             case Position.PipelineEnd _ -> null;
         };
     }

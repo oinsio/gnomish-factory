@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -33,14 +34,14 @@ class StatusTextRendererSpec extends Specification {
 
     private static AttemptRecord passedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
+        new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
     }
 
     private static AttemptRecord failedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
-        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [])
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [], Stop.none())
     }
 
     // FR10, UX2: renderAttemptSummary is genuinely one line and mentions the round and result
@@ -112,6 +113,20 @@ class StatusTextRendererSpec extends Specification {
 
         then:
         text.contains('pipeline complete')
+    }
+
+    // UX1, FR12 of make-checkpoint-gate-durable: a gate renders as awaiting approval after its stage
+    def "renderFull renders a gate as awaiting approval after the stage that passed"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        def report = StatusReport.build(context(), state, null, null)
+
+        when:
+        def text = renderer.renderFull(report)
+
+        then:
+        text.contains("Stage: awaiting approval after 'release'\n")
     }
 
     // FR10, UX2: renderFull omits optional sections that are absent
@@ -188,7 +203,7 @@ class StatusTextRendererSpec extends Specification {
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
+        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
@@ -214,7 +229,7 @@ class StatusTextRendererSpec extends Specification {
                 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
+        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
@@ -315,7 +330,7 @@ class StatusTextRendererSpec extends Specification {
                         'loss window: after the guard container\'s start'))
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [denial, marker])
+        ExecutorUsage.none(), JudgeUsage.none(), [denial, marker], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:

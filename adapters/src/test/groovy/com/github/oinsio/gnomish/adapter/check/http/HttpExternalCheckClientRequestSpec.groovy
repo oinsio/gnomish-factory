@@ -1,8 +1,9 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
 import com.github.oinsio.gnomish.app.CheckRunContext
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import spock.lang.Specification
 
@@ -81,9 +82,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         status.runUrl() == 'https://ci.example.invalid/api?branch=gnomish/PROJ-42&rev=c0ffee'
     }
 
-    private static AttemptCommitRef commitRef(String sha) {
-        def ref = new AttemptCommitRef()
-        ref.record(sha)
-        ref
+    private static CurrentRound commitRef(String sha) {
+        ClosedRounds.at(sha)
     }
 }

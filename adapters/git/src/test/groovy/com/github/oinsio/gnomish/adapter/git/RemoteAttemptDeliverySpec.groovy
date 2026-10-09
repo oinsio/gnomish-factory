@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import java.nio.file.Files
 import java.nio.file.Path
@@ -43,8 +43,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     }
 
     private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
-        def ref = new AttemptCommitRef()
-        ref.record(sha)
+        def ref = ClosedRounds.at(sha)
         new RecordedAttemptCommitWorkspace(ref)
     }
 

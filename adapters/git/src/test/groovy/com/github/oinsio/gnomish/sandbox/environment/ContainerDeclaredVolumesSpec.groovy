@@ -21,8 +21,12 @@ import spock.lang.TempDir
  * declares minus the explicit mounts" — asserted end to end on the real daemon, which is
  * the only medium where an anonymous volume can actually come into existence. The unit
  * specs prove each link (the resolver reads, the builders render); only this one proves
- * the links are joined and that the daemon's anonymous-volume set really is unchanged by
- * a full materialize → round → dispose.
+ * the links are joined and that no anonymous volume comes into existence across a full
+ * materialize → round → dispose.
+ *
+ * <p>Attributed to this spec's own containers, never the daemon-wide volume list, which
+ * concurrent suites change: an anonymous volume shows in its container's {@code volume}
+ * mounts by a hex name, so the box may mount only the factory volume and the guard none.
  *
  * <p>Two media, both of which leaked before the change: a task image declaring a
  * {@code VOLUME} ({@link DeclaredVolumeSandboxImage}, two paths — one outside the factory's
@@ -58,9 +62,6 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
     }
 
     def "FR5: an image-declared path is an ephemeral override and leaves no anonymous volume"() {
-        given: 'the daemon volume set before anything of this environment exists'
-        def before = volumeNames()
-
         when: 'an environment is materialized from an image declaring /cache and the working copy'
         materialize(DeclaredVolumeSandboxImage.ensureBuilt())
 
@@ -71,6 +72,10 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         !mountLine(ContainerTaskExecutionEnvironment.WORKING_COPY).contains('tmpfs')
         containerMounts().contains('volume:' + FactoryDockerLabels.volumeName(key) + ':'
                 + ContainerTaskExecutionEnvironment.WORKING_COPY)
+
+        and: 'the box mounts no volume but the factory one — no anonymous volume was created with it'
+        def boxVolumes = volumeMounts(FactoryDockerLabels.containerName(key))
+        boxVolumes == Set.of(FactoryDockerLabels.volumeName(key))
 
         and: 'image content under the declared path is not visible in the box (design D1, UX2)'
         exitOf('test -e ' + DeclaredVolumeSandboxImage.BAKED_FILE) != 0
@@ -95,8 +100,8 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         env.dispose()
         env = null
 
-        then: 'the daemon\'s volume set is exactly what it was — no anonymous volume was ever created'
-        volumeNames() == before
+        then: 'no volume the box had, and none of this environment, is left behind'
+        leftOver(boxVolumes).isEmpty()
     }
 
     @IgnoreIf({
@@ -104,7 +109,6 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
     })
     def "FR5: creating and disposing a guard from the default guard image leaves no anonymous volume"() {
         given: 'a materialized environment, so the guard has its task network to join'
-        def before = volumeNames()
         materialize(GitSandboxImage.ensureBuilt())
         // GuardImageAvailability.IMAGE mirrors SandboxProperties.DEFAULT_GUARD_IMAGE, which is
         // package-private to :sandbox:core; the fixture is the published spelling of that default.
@@ -117,12 +121,17 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         then: 'it is running'
         docker.run(GuardCommands.inspectGuardRunning(key)).stdout().forParsing().strip() == 'true'
 
+        and: 'its declared confdir got no anonymous volume — the guard mounts no volume at all'
+        def guardVolumes = volumeMounts(FactoryDockerLabels.guardName(key))
+        guardVolumes.isEmpty()
+        def boxVolumes = volumeMounts(FactoryDockerLabels.containerName(key))
+
         when: 'the environment (and with it the guard) is disposed'
         env.dispose()
         env = null
 
         then: 'the regression this change was opened for is gone: no volume was left behind'
-        volumeNames() == before
+        leftOver(guardVolumes + boxVolumes).isEmpty()
     }
 
     private void materialize(String image) {
@@ -140,9 +149,20 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         env.materialize('task/declared-volumes', null)
     }
 
-    /** Every volume name the daemon knows, as a set — anonymous ones included, by their hex names. */
-    private Set<String> volumeNames() {
-        def result = docker.run(['volume', 'ls', '-q'])
+    /** The names of one container's {@code volume} mounts — an anonymous volume shows here by its hex name. */
+    private Set<String> volumeMounts(String container) {
+        inspect(container, '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}')
+                .split(/\s+/).findAll { it }.toSet()
+    }
+
+    /** Of {@code seen}, and of the volumes labelled with this environment's key, those the daemon still has. */
+    private Set<String> leftOver(Set<String> seen) {
+        def ownLabel = 'label=' + FactoryDockerLabels.taskLabelAssignment(key)
+        volumeList([]).intersect(seen) + volumeList(['--filter', ownLabel])
+    }
+
+    private Set<String> volumeList(List<String> filter) {
+        def result = docker.run(['volume', 'ls', '-q'] + filter)
         assert result.ok(): "docker volume ls failed: ${result.stderr()}"
         result.stdout().forParsing().readLines()*.strip().findAll { it }.toSet()
     }
@@ -154,14 +174,13 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
 
     /** The daemon's view of the container's mounts, as {@code <type>:<name>:<destination>} entries. */
     private String containerMounts() {
-        def result = docker.run([
-            'inspect',
-            '-f',
-            '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}} {{end}}',
-            FactoryDockerLabels.containerName(key)
-        ])
+        inspect(FactoryDockerLabels.containerName(key), '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}} {{end}}')
+    }
+
+    private String inspect(String container, String format) {
+        def result = docker.run(['inspect', '-f', format] << container)
         assert result.ok(): "docker inspect failed: ${result.stderr()}"
-        result.stdout()
+        result.stdout().forParsing()
     }
 
     private String output(String script) {

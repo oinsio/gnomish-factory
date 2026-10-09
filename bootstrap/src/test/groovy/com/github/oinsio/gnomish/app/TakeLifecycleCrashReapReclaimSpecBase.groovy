@@ -175,7 +175,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
                 TASK_ID,
                 TaskState.atStageStart('build').recordUnburnedRound(new AttemptRecord(
                         0, AttemptRecord.Result.CANNOT_VERIFY, Instant.parse('2026-07-18T09:00:00Z'), [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [])),
+                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())),
                 new ToolTrace(
                         new AttemptKey(TASK_ID, 'build', 0),
                         [

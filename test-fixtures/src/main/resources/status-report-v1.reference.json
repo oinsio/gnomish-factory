@@ -14,6 +14,9 @@
     "attempts" : [ {
       "round" : 1,
       "result" : "qualityFailure",
+      "stop" : {
+        "type" : "none"
+      },
       "startedAt" : "2026-07-16T14:35:10Z",
       "checks" : [ {
         "ref" : "builtin:files_exist",

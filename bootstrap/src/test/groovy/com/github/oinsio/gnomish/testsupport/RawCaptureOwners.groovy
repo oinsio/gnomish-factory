@@ -141,6 +141,10 @@ class RawCaptureOwners {
             'no mint owed: test-time only — drains a fixture git subprocess and answers its stdout to the calling spec, with the same text in the assertion message on a nonzero exit. It is not on any runtime path, and the scan sees it because RepoSourceTree walks every src/main in the build, :test-fixtures included',
         ],
         [
+            'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/LocalBoxEnvironment.groovy',
+            'no mint owed: test-time only — a daemon-free box double whose file channel answers bytes, as its production twin ContainerFileChannel does, and whose exec hands the started process to HostExecHandle, which is the mint. It is not on any runtime path; it moved into :test-fixtures so :bootstrap\'s RoundTokenIdentitySpec can drive a whole round through it (task 7.7 of make-checkpoint-gate-durable)',
+        ],
+        [
             'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeedTransferFixture.groovy',
             'mints subprocess: test-time only — drains a spec\'s own seeding transfer (a clone or a fetch that is test scaffolding, not a factory transfer, run outside the runner because the runner refuses every transfer the owner did not build — FR8 of own-git-transfer-argv) and hands both streams to GitCommandResult.of, the same mint and scrub the runner uses',
         ],

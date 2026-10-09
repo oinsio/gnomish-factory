@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.CommitRequest
@@ -43,8 +43,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
     }
 
     private RecordedAttemptCommitWorkspace workspace() {
-        def ref = new AttemptCommitRef()
-        ref.record(attempt.hex())
+        def ref = ClosedRounds.at(attempt.hex())
         new RecordedAttemptCommitWorkspace(ref)
     }
 

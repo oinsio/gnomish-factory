@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
@@ -23,7 +24,8 @@ import org.jspecify.annotations.Nullable;
  * parser's input, so the tracker's own words go into it byte for byte — rendering them here
  * would corrupt the document {@code ConsoleIO.printMachine} exists to keep verbatim.
  *
- * <p>Implements FR11, M3 of add-manual-run; FR3 of type-untrusted-text.
+ * <p>Implements FR11, M3 of add-manual-run; FR3 of type-untrusted-text; FR12 of
+ * make-checkpoint-gate-durable.
  */
 @UntrustedExit
 public final class StatusReportJsonMapper {
@@ -71,9 +73,12 @@ public final class StatusReportJsonMapper {
     }
 
     private static PositionDto toPosition(StatusReport report) {
-        return report.currentStage() == null
-                ? new PositionDto.PipelineEnd("pipelineEnd")
-                : new PositionDto.AtStage("atStage", report.currentStage());
+        return switch (report.position()) {
+            case Position.AtStage(String name) -> new PositionDto.AtStage("atStage", name);
+            // FR12 of make-checkpoint-gate-durable: a gate is its own token, never "atStage".
+            case Position.AwaitingApproval(String stage) -> new PositionDto.AwaitingApproval("awaitingApproval", stage);
+            case Position.PipelineEnd() -> new PositionDto.PipelineEnd("pipelineEnd");
+        };
     }
 
     private static @Nullable OutcomeDto toOutcome(@Nullable Outcome outcome) {

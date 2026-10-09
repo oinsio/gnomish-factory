@@ -20,7 +20,6 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
-import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -129,12 +128,12 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
     }
 
-    // Unlike ContainerSupportFixture.real() (deliberately OwnershipMode.MANUAL, for run-mode
+    // Unlike ContainerSupportFixture.real() (deliberately manual-owned, for run-mode
     // specs), this spec's zombie must be `tracked` — the mode a liveness-verdict-driven sweep
     // actually governs — mirroring the composition root's own take/serve support
     // (ContainerSupports.takeSupport()).
-    private static ContainerSupportFactory trackedContainerSupport() {
-        new ContainerRunSupportFactory([], [:], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+    private static ContainerSupportFactory trackedContainerSupport(SandboxProperties sandbox, FactoryProperties factory) {
+        ContainerSupportFixture.tracked(ClaimEpochSource.NONE, sandbox, factory)
     }
 
     def "sweep stops a zombie box (never disposes it), and a later resume salvages the surviving volume"() {
@@ -144,7 +143,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), TaskGitFixture.real(),
-                sandboxProps, factoryProps, RunKills.killedBeforeParkRecord(trackedContainerSupport()), LiveConsoleIO.onStdout())
+                RunKills.killedBeforeParkRecord(trackedContainerSupport(sandboxProps, factoryProps)), LiveConsoleIO.onStdout())
 
         when:
         instanceOne.run(new RunOrder(cloneDir, null, pipeline(), false),
@@ -179,16 +178,28 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         ContainerE2eDocker.taskObjects(taskId).size() == 3 // box + volume + network, all still present
 
         when: 'a later resume runs from the branch alone'
-        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
-                trackedContainerSupport())
+        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), 'taskId',
+                trackedContainerSupport(sandboxProps, factoryProps))
                 .run(new RunOrder(cloneDir, null, pipeline(), false),
                 taskId, null, segments())
 
-        then: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
+        then: 'FR2 of make-checkpoint-gate-durable (design D3): the question the dead run never parked is re-raised from the round record'
+        thrown(RunParkedException)
+
+        and: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
         def branch = "gnomish/${taskId}"
         def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep', '^gnomish: salvage$')
         salvageSha
         gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
+
+        when: 'the operator answers it (the gnome, past its first attempt, plays a plain round)'
+        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), 'taskId',
+                trackedContainerSupport(sandboxProps, factoryProps))
+                .run(new RunOrder(cloneDir, null, pipeline(), false),
+                taskId, 'use the default', segments())
+
+        then: 'no further stop'
+        noExceptionThrown()
 
         and: 'the task completed and the environment is fully disposed'
         def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)

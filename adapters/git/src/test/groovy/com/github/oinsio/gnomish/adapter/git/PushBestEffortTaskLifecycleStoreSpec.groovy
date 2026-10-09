@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -73,7 +74,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         events[0].formattedMessage.contains('event=TRACKER_WRITE_CONFIRMED')
     }
 
-    def "the three base lifecycle writes push exactly as the narrower port's decorator does"() {
+    def "the base lifecycle writes push exactly as the narrower port's decorator does"() {
         given:
         def delegate = Mock(TaskLifecycleStore)
         def store = decorated(delegate)
@@ -82,10 +83,10 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         when:
         write.call(store)
 
-        then: 'the write reached THAT delegate method — named per row, not one of three'
+        then: 'the write reached THAT delegate method — named per row, not one of four'
         // `*_` rather than a fixed arity: createTask takes four arguments (context, the start
         // commit, the base pin and the initial state the STARTED commit carries, FR3), the other
-        // two take three.
+        // others take three.
         1 * delegate."$delegated"(*_) >> {
             recorded = commitOnTaskBranch(label)
         }
@@ -98,6 +99,12 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         }
         'resumed' | 'appendDecision' | { TaskLifecycleStore s ->
             s.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH), TaskState.atStageStart('work'))
+        }
+        'approved' | 'approveCheckpoint' | { TaskLifecycleStore s ->
+            s.approveCheckpoint(TASK_ID, new Position.AwaitingApproval('work'), TaskState.atStageStart('next'))
+        }
+        'resumed write' | 'resumeFrom' | { TaskLifecycleStore s ->
+            s.resumeFrom(TASK_ID, TaskState.atStageStart('work'))
         }
         'paused' | 'recordOutcome' | { TaskLifecycleStore s ->
             s.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('work'), 'work'), TrackerWrite.OWED)

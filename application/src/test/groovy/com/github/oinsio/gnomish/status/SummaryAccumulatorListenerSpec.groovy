@@ -121,6 +121,19 @@ class SummaryAccumulatorListenerSpec extends Specification {
         capture.list[0].formattedMessage.contains('stage=pipelineEnd')
     }
 
+    // FR1 of make-checkpoint-gate-durable: a checkpoint holds the task at the gate, so the summary
+    //     names the stage that passed — not the next stage, not a bare end of pipeline.
+    def "a checkpoint at a gate renders the stage that passed"() {
+        given:
+        def listener = new SummaryAccumulatorListener()
+
+        when:
+        run(listener, new TaskOutcome.Paused(state(0, new Position.AwaitingApproval('release')), 'release'))
+
+        then:
+        capture.list[0].formattedMessage.contains('stage=release')
+    }
+
     // The listener's other five events are not its business: a run that emitted attempts and
     // checks along the way still ends with exactly one line, not one per event.
     def "no event other than the run bookends produces a line"() {

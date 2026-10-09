@@ -85,6 +85,25 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
                 new TakeResult.Aborted(state(), UntrustedText.subprocess('push failed'))
     }
 
+    // FR1 of make-checkpoint-gate-durable: a checkpoint at a gate names the stage that passed on
+    //     both ends, not on one.
+    def "both assemblers name the gate's stage for a checkpoint park"() {
+        given:
+        def listener = new SummaryAccumulatorListener()
+        def gate = state(new Position.AwaitingApproval('release'))
+
+        when:
+        listener.onEvent(new EngineEvent.RunStarted(TASK_ID, gate.position(), 0))
+        listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Paused(gate, 'release')))
+        AnchorLog.taskSummary(TaskSummaryAssembler.assemble(
+                        new TakeResult.AwaitingHuman(gate, ParkReason.CHECKPOINT, 'paused at a checkpoint'), Duration.ofSeconds(9)))
+
+        then:
+        capture.list.size() == 2
+        withoutWall(capture.list[0].formattedMessage) == withoutWall(capture.list[1].formattedMessage)
+        capture.list[0].formattedMessage.contains('stage=release')
+    }
+
     // D8: the pair's shape invariant, not just its wording — a task that finished the pipeline
     // must lose its stage on both ends, not on one.
     def "both assemblers render a finished pipeline the same way"() {

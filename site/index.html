@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gnomish Factory — an autonomous AI software factory</title>
+    <meta name="description" content="Gnomish Factory: AI coding agents take tasks from your tracker and drive them through a pipeline of verifiable stages. Humans handle only escalations.">
+    <meta name="color-scheme" content="light dark">
+    <meta property="og:title" content="Gnomish Factory">
+    <meta property="og:description" content="An autonomous AI software factory: gnomes take tasks from your tracker and drive them through verifiable pipeline stages. Humans handle only escalations.">
+    <meta property="og:image" content="https://oinsio.github.io/gnomish-factory/assets/gnome-blueprint.webp">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+    <header class="top">
+        <a class="brand" href="#">Gnomish Factory</a>
+        <nav aria-label="Page sections">
+            <a href="#how">How it works</a>
+            <a href="#safety">Safety</a>
+            <a href="#install">Install</a>
+            <a href="https://github.com/oinsio/gnomish-factory/tree/main/docs">Docs</a>
+            <a href="https://github.com/oinsio/gnomish-factory">GitHub</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+          <div class="hero-text">
+            <p class="eyebrow">Open source · Apache 2.0 · Java 25</p>
+            <h1>An autonomous AI software factory</h1>
+            <p class="lede">
+                Gnomes — AI coding agents — take tasks from your tracker and drive them through a
+                pipeline of verifiable stages. Humans handle only escalations.
+            </p>
+            <p class="highlight"><strong>Zero-token orchestration.</strong> Model tokens pay for the gnome's work
+                and the judge's verdict, never for taking tasks, starting boxes, running checks, or escalating.</p>
+            <p class="cta">
+                <a class="button primary" href="#install">Install v0.1.0</a>
+                <a class="button" href="https://github.com/oinsio/gnomish-factory">View on GitHub</a>
+            </p>
+            <p class="status">
+                <strong>Status:</strong> runs end to end and feeds itself from the tracker, but is not
+                feature-complete yet. The <code>api</code> executor is not built.
+            </p>
+          </div>
+            <img class="hero-art" src="assets/gnome-blueprint.webp" width="719" height="720"
+                 alt="A gnome in goggles studies a glowing blueprint of a task cube." fetchpriority="high">
+        </section>
+
+        <section id="why" class="band">
+            <h2>Humans as exception handlers, not participants</h2>
+            <div class="columns">
+                <div>
+                    <img class="illus" src="assets/gnome-tracker.webp" width="399" height="400" alt="A gnome moves a task card into a tracker cabinet." loading="lazy">
+                    <h3>Zero-token orchestration</h3>
+                    <p>Claiming tasks, starting container boxes, running checks, committing attempts and escalating
+                        are plain code. The model is called only when a gnome works or a judge grades, so the
+                        token budget goes to the work, not to the management.</p>
+                </div>
+                <div>
+                    <img class="illus" src="assets/gnome-parallel.webp" width="400" height="400" alt="Two gnomes work in parallel, each in its own glass bell." loading="lazy">
+                    <h3>Stateless instances</h3>
+                    <p>Several factory instances serve one project at once. Everything they need lives in two
+                        shared places: the task tracker and the task's git branch.</p>
+                </div>
+                <div>
+                    <img class="illus" src="assets/gnome-arbiter.webp" width="400" height="400" alt="A gnome pauses over a blueprint, waiting for a decision." loading="lazy">
+                    <h3>Escalate, never wait</h3>
+                    <p>When a task is blocked or a choice is undecidable, the factory files a report, moves on
+                        to other tasks, and any instance resumes once a human has decided.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="how" class="band">
+            <h2>How it works</h2>
+            <div class="how">
+            <ol class="steps">
+                <li>
+                    <h3>Take a task</h3>
+                    <p>A task labeled <code>gnomish:ready</code> in the tracker is claimed under a heartbeat lease.
+                        The factory opens a task branch and an isolated working copy for it, by default inside a
+                        container box.</p>
+                </li>
+                <li>
+                    <h3>Run the pipeline</h3>
+                    <p>Stages are declared in the target repository under <code>.gnomish/</code>. A gnome
+                        performs each stage, an ordered check list verifies it, and a failed check feeds its
+                        findings back into a re-run.</p>
+                </li>
+                <li>
+                    <h3>Deliver or escalate</h3>
+                    <p>When every check passes the task advances. When attempts run out or a choice is
+                        undecidable, the task is parked as <code>gnomish:needs-human</code> with the full findings
+                        history. A human replies in a comment and moves it back to ready.</p>
+                </li>
+            </ol>
+            <img class="how-art" src="assets/gnome-pipeline.webp" width="560" height="559"
+                 alt="A gnome inspects task cubes travelling along a conveyor under glass bells." loading="lazy">
+            </div>
+            <figure class="diagram">
+                <picture>
+                    <source srcset="assets/idef0-stage-diagram-dark.svg" media="(prefers-color-scheme: dark)">
+                    <img src="assets/idef0-stage-diagram.svg" width="980" height="560"
+                         alt="IDEF0 diagram: Input transformed into Output by a Stage, with Control from above, Mechanism from below, and a Quality Control loop.">
+                </picture>
+                <figcaption>Every stage is an IDEF0/ICOM box with a Quality Control loop. Input, Output, Control,
+                    Mechanism and Verification are all machine-verifiable.</figcaption>
+            </figure>
+        </section>
+
+        <section id="safety" class="band">
+            <h2>What makes autonomous runs safe</h2>
+            <p class="intro">The <code>gnomish:ready</code> label is a code-execution grant: whoever may set it may
+                run code in your factory. The <a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide-autonomy-gate.md">autonomy gate guide</a>
+                explains who should hold it.</p>
+            <ul class="grid">
+                <li>
+                    <h3>Declarative stages</h3>
+                    <p>The pipeline is configuration in the target repository. Adding or splitting a stage is a
+                        config change, not a factory release.</p>
+                </li>
+                <li>
+                    <h3>Machine-verifiable checks</h3>
+                    <p>Built-in file and schema checks, any executable via <code>command</code>, asynchronous
+                        <code>external</code> checks such as CI, and an LLM <code>judge</code> graded against written
+                        acceptance criteria. Checks run in the order the stage declares, and the first failure stops
+                        the chain: put cheap deterministic checks first and the judge last, so a red test never
+                        costs a model call.</p>
+                </li>
+                <li class="with-art">
+                    <img class="illus illus-right" src="assets/gnome-sandbox.webp" width="395" height="400" alt="A gnome works at a bench inside a sealed glass dome." loading="lazy">
+                    <h3>Container sandbox</h3>
+                    <p>Each task runs in an ephemeral container box with a default-deny egress allowlist. The
+                        tracker and CI tokens never reach the gnome; only the model credential and the variables
+                        you pass through do. Host execution is the opt-in legacy mode.</p>
+                </li>
+                <li class="with-art">
+                    <img class="illus" src="assets/gnome-save.webp" width="400" height="383" alt="A gnome files task cubes and scrolls into a drawer." loading="lazy">
+                    <h3>Resumable by design</h3>
+                    <p>Every attempt, failed ones included, is committed to the task branch with a state file.
+                        Any instance can resume mid-retry.</p>
+                </li>
+                <li>
+                    <h3>Multi-instance safety</h3>
+                    <p>Claim leases with heartbeats, a reaper for dead claims, takeover of stuck tasks, and
+                        fencing that stops a zombie's writes.</p>
+                </li>
+                <li>
+                    <h3>Observable</h3>
+                    <p>Read-only <code>status</code> and <code>usage</code> straight from the branch, a tracker
+                        board, an HTML dashboard, and a ledger for monitoring an unattended daemon.</p>
+                </li>
+            </ul>
+        </section>
+
+        <section id="install" class="band">
+            <h2>Install</h2>
+            <p>Prerequisites: Java 25 or newer, git, and Docker for the default container mode (host mode is
+                the opt-in alternative). Runs on macOS and Linux; Windows through WSL2.</p>
+<pre><code>VERSION=0.1.0
+BASE=https://github.com/oinsio/gnomish-factory/releases/download/v$VERSION
+curl -fL -O "$BASE/gnomish-$VERSION.tar.gz" -O "$BASE/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS   # macOS: shasum -a 256 -c --ignore-missing SHA256SUMS
+tar -xzf "gnomish-$VERSION.tar.gz"
+export PATH="$PWD/gnomish-$VERSION/bin:$PATH"
+gnomish --version</code></pre>
+            <h3>Before the first run</h3>
+            <ul class="checklist">
+                <li>The target repository carries a <code>.gnomish/</code> pipeline, committed and pushed. Start from a
+                    <a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/reference-pipelines.md">reference pipeline</a>.</li>
+                <li>A sandbox image is built from the shipped recipe and named in the project's <code>project.yaml</code>.</li>
+                <li>The agent credential is in the factory's environment and the model's host is on the egress allowlist.</li>
+                <li>Add a <code>tracker</code> section in <code>.gnomish/config.yaml</code>,
+                    prepare a <code>GNOMISH_GITHUB_TOKEN</code> secret file, and label an issue <code>gnomish:ready</code>.</li>
+            </ul>
+            <h3>First run</h3>
+<pre><code># register a clone of your project once
+gnomish project add your-project-name --dir=/path/to/target-repo
+
+# one ad-hoc task, no tracker: task branch, isolated working copy, resume
+gnomish --task="fix the flaky login spec" --dir=/path/to/target-repo
+
+# tracker-driven: claim the head of the ready queue, work it, exit
+gnomish take --dir=/path/to/target-repo
+
+# autonomous daemon under a WIP-bounded scheduler
+gnomish serve --dir=/path/to/target-repo</code></pre>
+            <p class="small">Releases and checksums: <a href="https://github.com/oinsio/gnomish-factory/releases">github.com/oinsio/gnomish-factory/releases</a>.
+                The full command reference lives in the <a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide.md">operator guide</a>.</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="foot-grid">
+            <div>
+                <h3>Read next</h3>
+                <ul>
+                    <li><a href="https://github.com/oinsio/gnomish-factory#readme">README</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide-run.md">Operator guide: run</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide-serve.md">Operator guide: serve</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide-sandbox.md">Sandbox configuration</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/developer-guide.md">Developer guide</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/glossary.md">Glossary</a></li>
+                    <li><a href="https://github.com/oinsio/gnomish-factory/tree/main/docs/adr">Architecture decisions</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3>Built with</h3>
+                <p>Java 25, Gradle, minimal Spring Boot. Ports and adapters: tracker, AI
+                    provider, executor. Spock, WireMock, Testcontainers; a 100% mutation gate with PIT.</p>
+                <p>The project itself is developed AI-first with OpenSpec.</p>
+            </div>
+        </div>
+        <p class="legal">Apache License 2.0 · <a href="https://github.com/oinsio/gnomish-factory">oinsio/gnomish-factory</a></p>
+    </footer>
+</body>
+</html>

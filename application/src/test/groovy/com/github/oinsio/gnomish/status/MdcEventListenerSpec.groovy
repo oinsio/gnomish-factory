@@ -113,6 +113,19 @@ class MdcEventListenerSpec extends Specification {
         MDC.get('attempt') == null
     }
 
+    // FR1 of make-checkpoint-gate-durable: a run held at a gate logs under the gate's stage
+    def "RunStarted at a gate sets stage to the stage that passed and leaves attempt unset"() {
+        given:
+        def listener = new MdcEventListener()
+
+        when:
+        listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AwaitingApproval('release'), 0))
+
+        then:
+        MDC.get('stage') == 'release'
+        MDC.get('attempt') == null
+    }
+
     // NFR-O1, D9: RunStarted at PipelineEnd leaves stage and attempt unset
     def "RunStarted at PipelineEnd leaves stage and attempt unset"() {
         given:

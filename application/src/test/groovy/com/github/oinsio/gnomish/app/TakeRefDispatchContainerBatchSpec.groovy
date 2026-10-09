@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.TaskRepository
@@ -68,10 +67,10 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         def registry = AdapterBindingRegistry.ratified([containerProvider()], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(null, [:])
         def sandbox = new SandboxProperties('an-image', null, null, null, [], [], false, null, null, null, null)
-        ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
+        ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, PipelineDefinition definition, List<String> creds ->
             stubSupport(repositories[id])
         }
-        new ContainerTakeSupport(testProperties(), bindings, sandbox, registry, {
+        new ContainerTakeSupport(bindings, sandbox, registry, {
             true
         }, containerSupport)
     }

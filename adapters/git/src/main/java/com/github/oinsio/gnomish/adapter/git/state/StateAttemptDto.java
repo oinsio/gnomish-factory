@@ -18,7 +18,13 @@ import java.util.List;
  * carries the identity its denial source assigned it, itself additive and absent
  * on entries written before it existed (FR7 of fix-denial-attribution-durability).
  *
- * <p>Implements FR3, FR4 of add-git-workflow; FR4 of fix-denial-report-attachment.
+ * <p>{@code stop} is the stop the round raised ({@link StateStopDto}), written on every attempt
+ * and additive under contract v1 (design D5 of make-checkpoint-gate-durable): a state file written
+ * before the field existed binds it to null, which the canonical constructor normalizes to {@code
+ * none}.
+ *
+ * <p>Implements FR3, FR4 of add-git-workflow; FR4 of fix-denial-report-attachment; FR10 of
+ * make-checkpoint-gate-durable.
  *
  * @param round the round's sequence number within the current stage
  * @param result the lowerCamel result classification ({@code passed} / {@code
@@ -29,6 +35,8 @@ import java.util.List;
  *     and absent in documents written before the field existed
  * @param executorUsage the round's aggregate executor usage
  * @param judgeUsage the round's per-vote judge token usage
+ * @param stop the stop the round raised; {@code none} when it raised none or the document
+ *     predates the field
  */
 public record StateAttemptDto(
         int round,
@@ -37,9 +45,11 @@ public record StateAttemptDto(
         List<StateCheckDto> checks,
         List<StateDenialDto> denials,
         StateUsageDto executorUsage,
-        StateJudgeUsageDto judgeUsage) {
+        StateJudgeUsageDto judgeUsage,
+        StateStopDto stop) {
 
     public StateAttemptDto {
         denials = StateDenialMapper.absentAsEmpty(denials);
+        stop = StateStopMapper.absentAsNone(stop);
     }
 }

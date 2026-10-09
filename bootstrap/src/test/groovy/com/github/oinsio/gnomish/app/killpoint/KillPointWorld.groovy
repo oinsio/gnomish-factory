@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -67,6 +68,13 @@ class KillPointWorld implements BareGitRepoFixture {
      */
     GitProcessRunner runner = new GitProcessRunner()
 
+    /**
+     * {@code (TaskState expected) -> void}: lands one round commit through this medium's own round
+     * writer, leaving the tip at {@code expected}'s position with its last round's stop (design D8 of
+     * make-checkpoint-gate-durable, step 1). Null in a world whose rows record no round.
+     */
+    Closure roundWriter
+
     String taskId
 
     TaskRef ref
@@ -105,6 +113,17 @@ class KillPointWorld implements BareGitRepoFixture {
      */
     ClaimEpoch tipEpoch() {
         stampOf(repoDir, "gnomish/${taskId}")
+    }
+
+    /** The round commit of {@link #roundWriter}: the round a manual pass or an asking gnome records. */
+    void roundCommit(TaskState expected) {
+        roundWriter.call(expected)
+    }
+
+    /** The tip's {@code state.json} verbatim, or {@code null} once the cleanup commit removed it. */
+    String tipStateJson() {
+        String blob = "gnomish/${taskId}:.gnomish-task/state.json"
+        gitExitCode(repoDir, 'cat-file', '-e', blob) == 0 ? gitOutput(repoDir, 'show', blob) : null
     }
 
     /** The tip's {@code task.json}, or {@code null} once the cleanup commit removed the envelope. */

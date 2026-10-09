@@ -48,6 +48,15 @@ class HeartbeatProgressSpec extends Specification {
         progress.progressFor(TASK) == new HeartbeatProgress.Progress('plan', 2)
     }
 
+    // FR1 of make-checkpoint-gate-durable: a task held at a gate beats under the stage that passed.
+    def "RunStarted at a gate records the gate's stage"() {
+        when:
+        progress.onEvent(new EngineEvent.RunStarted(TASK, new Position.AwaitingApproval('release'), 1))
+
+        then:
+        progress.progressFor(TASK) == new HeartbeatProgress.Progress('release', 1)
+    }
+
     // FR1: RunStarted at PipelineEnd records the explicit end marker as the stage.
     def "RunStarted at PipelineEnd records the end marker"() {
         when:

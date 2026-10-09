@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
 import com.github.oinsio.gnomish.sandbox.BindingNames;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
@@ -20,7 +19,12 @@ import java.util.function.BooleanSupplier;
  * factory itself (as opposed to {@code run}'s {@code manual}-labelling one — the two lambdas
  * differ only in the {@code OwnershipMode} they close over). Bundled as one object so the
  * plumbing from {@code ManualRunRunner} down through {@code take}/{@code serve}'s dispatch chain
- * carries one parameter instead of six.
+ * carries one parameter instead of five.
+ *
+ * <p>The sandbox config is a member because {@code TakeWorkRouter} reads it for its own decision
+ * — the execution plan {@link SandboxModeSelector#plan} resolves — not to relay it: the support
+ * factory already holds the installation's settings, so no property set travels to its {@code
+ * create} (FR20 of make-checkpoint-gate-durable).
  *
  * <p>Public so {@code app.serve.TakeSlotRunner} — a different package — can forward one opaquely
  * from {@code serve}'s own wiring down into {@link TakeClaimAndWorkFactory#forSlot}, mirroring
@@ -29,7 +33,6 @@ import java.util.function.BooleanSupplier;
  * <p>Implements FR1, FR2, FR8 of add-serve-sandbox-lifecycle.
  */
 public record ContainerTakeSupport(
-        FactoryProperties factoryProperties,
         BindingProperties bindingProperties,
         SandboxProperties sandboxProperties,
         AdapterBindingRegistry bindingRegistry,
@@ -44,19 +47,13 @@ public record ContainerTakeSupport(
      * actually invoked.
      */
     static ContainerTakeSupport hostOnly() {
-        return hostOnly(new FactoryProperties(null, null, null, null, null));
-    }
-
-    /** As {@link #hostOnly()}, over a caller-supplied {@code factoryProperties}. */
-    static ContainerTakeSupport hostOnly(FactoryProperties factoryProperties) {
         var registry =
                 AdapterBindingRegistry.ratified(List.of(new HostBindingProvider()), BindingTrustTable.firstParty());
         var bindings = new BindingProperties(BindingNames.HOST, Map.of());
         var sandboxProperties =
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null);
-        return new ContainerTakeSupport(
-                factoryProperties, bindings, sandboxProperties, registry, () -> false, (_, _, _, _, _, _, _) -> {
-                    throw new IllegalStateException("host-only ContainerTakeSupport never builds container support");
-                });
+        return new ContainerTakeSupport(bindings, sandboxProperties, registry, () -> false, (_, _, _, _, _) -> {
+            throw new IllegalStateException("host-only ContainerTakeSupport never builds container support");
+        });
     }
 }

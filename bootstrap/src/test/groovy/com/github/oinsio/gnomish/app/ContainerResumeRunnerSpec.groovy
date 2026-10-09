@@ -37,23 +37,29 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     }
 
     // FR6, UX2; FR5 of make-run-headless: a paused task resumes without a checkpoint line or a
-    // prompt — the resume is the confirmation — and drives to Completed.
-    def "resuming a paused task continues without a checkpoint line and completes"() {
+    // prompt — the resume is the approval (FR4 of make-checkpoint-gate-durable): one approval commit
+    // over bare objects opens the gate, then the drive reaches Completed.
+    def "resuming a task paused at a gate approves it in one commit without a checkpoint line and completes"() {
         given:
         repository.createTask(context('T-PAUSED'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        repository.recordOutcome('T-PAUSED', new TaskOutcome.Paused(pipelineEndState(), 'build'), TrackerWrite.OWED)
-        commitStateAtPipelineEnd('T-PAUSED')
+        commitStateAtGate('T-PAUSED')
+        repository.recordOutcome('T-PAUSED', new TaskOutcome.Paused(gateState(), 'build'), TrackerWrite.OWED)
         def consoleOut = new ByteArrayOutputStream()
 
         when:
         resume('T-PAUSED', null, new PrintStream(consoleOut, true, 'UTF-8'))
 
         then: 'no checkpoint sentence and no prompt reached the console'
-        !consoleOut.toString('UTF-8').contains('Manual checkpoint reached')
+        !consoleOut.toString('UTF-8').contains('Awaiting approval')
         !consoleOut.toString('UTF-8').contains('Press Enter')
 
         and: 'the continuation drove to the completed outcome'
         taskJsonBelowTip('T-PAUSED').contains('"completed"')
+
+        and: 'exactly one approval commit opened the gate, right after the park'
+        def subjects = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', TaskIdSanitizer.branchName('T-PAUSED')).readLines()
+        subjects.count('gnomish: task approved') == 1
+        subjects[subjects.indexOf('gnomish: task approved') - 1] == 'gnomish: task paused'
     }
 
     // FR6: --discard-work on an interrupted task disposes the surviving environment (container,

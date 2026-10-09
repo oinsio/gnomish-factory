@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import java.nio.file.Files
 import java.nio.file.Path
@@ -87,13 +88,16 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
      * to raise {@link AbortedException}, that abort itself proving {@code run()} reached the loop.
      */
     private void run(String taskId, String base, PrintStream output, InputStream input = lines()) {
-        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
-            def environments = docker.environments(TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
-            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
+        def factory = { Path c, String t, List<Segment> s, definition, List<String> creds ->
+            def gitRunner = new GitProcessRunner()
+            // The production restoration supplier, as ContainerRunSupportFactory.create wires it (FR17).
+            def environments = docker.environments(
+                    TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'), OwnershipMode.MANUAL,
+                    'test-project', ContainerTipReader.restorations(gitRunner, c, TaskIdSanitizer.branchName(t)))
+            new ContainerRunSupport(gitRunner, c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         def runner = new ContainerGitModeRunner(
-                newAssembly(input, output, FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), sandbox,
-                FakeAgentSupport.propertiesFor('plain-round'), factory,
+                newAssembly(input, output, FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), factory,
                 LiveConsoleIO.onStdout())
         runner.run(new RunOrder(cloneDir, base, pipeline(), false),
                 segments(), context(taskId), TaskState.atStageStart('build'))

@@ -50,6 +50,15 @@ class KillPointTransition {
      */
     Closure invariant
 
+    /**
+     * {@code (world) -> void}: optional assertions about what follows the settled recovery, run once
+     * per kill window after the second pickup proved a no-op — the next transition a converged
+     * state admits, driven through its own production owner. Null for a row whose claim ends at
+     * convergence; the round-token row states here that the answer which consumes the re-raised
+     * request leaves the next round nothing to read (FR13, NFR-R4 of make-checkpoint-gate-durable).
+     */
+    Closure epilogue
+
     /** The expected frozen shape per kill point; one entry per step, in step order. */
     List<String> frozenShapes
 

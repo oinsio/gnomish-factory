@@ -76,12 +76,13 @@ public final class BranchRepairLog {
             case BranchShape.Unknown(String reason) -> name + "(" + reason + ")";
             case BranchShape.UnsupportedVersion(String file, int observed, int supported) ->
                 name + "(" + file + ": " + observed + ", supported " + supported + ")";
-            // The four clean shapes are listed first on purpose: only a non-clean shape is logged
+            // The five clean shapes are listed first on purpose: only a non-clean shape is logged
             // at all (see classified), so the arm's last label has to be one that can really
             // arrive here — otherwise its type test is unreachable code.
             case BranchShape.Created(),
                     BranchShape.InProgress(),
                     BranchShape.Answered(),
+                    BranchShape.AwaitingApproval(),
                     BranchShape.Delivered(),
                     BranchShape.Bare(),
                     BranchShape.Parked(),

@@ -33,7 +33,7 @@ class AttemptRecordSpec extends Specification {
         def judgeUsage = new JudgeUsage([])
 
         when: 'a record is created'
-        def record = new AttemptRecord(2, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [])
+        def record = new AttemptRecord(2, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none())
 
         then: 'each component is exposed exactly as constructed'
         record.round() == 2
@@ -58,7 +58,7 @@ class AttemptRecordSpec extends Specification {
     // FR13, D5: the result is exposed exactly as constructed, for each classification
     def "exposes the constructed result classification"() {
         expect: 'the accessor returns the exact classification it was built with'
-        new AttemptRecord(0, result, STARTED, [passResult()], ExecutorUsage.none(), JudgeUsage.none(), []).result() ==
+        new AttemptRecord(0, result, STARTED, [passResult()], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()).result() ==
         result
 
         where:
@@ -69,7 +69,7 @@ class AttemptRecordSpec extends Specification {
     def "exposes the constructed startedAt instant"() {
         expect: 'the accessor returns the exact begin instant it was built with'
         new AttemptRecord(0, AttemptRecord.Result.PASSED, instant, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), []).startedAt() == instant
+        JudgeUsage.none(), [], Stop.none()).startedAt() == instant
 
         where:
         instant << [
@@ -83,7 +83,7 @@ class AttemptRecordSpec extends Specification {
     def "rejects a null startedAt with the component named"() {
         when: 'a record is created with no begin instant'
         new AttemptRecord(0, AttemptRecord.Result.PASSED, null, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         then: 'construction fails and the message names the startedAt component'
         def failure = thrown(IllegalArgumentException)
@@ -95,14 +95,14 @@ class AttemptRecordSpec extends Specification {
     def "a validated round round-trips the constructed literal"() {
         expect: 'the accessor returns the exact non-zero round it was built with'
         new AttemptRecord(6, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), []).round() == 6
+        JudgeUsage.none(), [], Stop.none()).round() == 6
     }
 
     // FR13: round is a round sequence number — the base round zero is accepted
     def "accepts round zero"() {
         when: 'a record is created at the base round'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         then: 'the zero round is exposed as constructed'
         record.round() == 0
@@ -112,7 +112,7 @@ class AttemptRecordSpec extends Specification {
     def "rejects a negative round with the component named"() {
         when: 'a record is created with a negative round'
         new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         then: 'construction fails and the message names the round component'
         def failure = thrown(IllegalArgumentException)
@@ -126,7 +126,7 @@ class AttemptRecordSpec extends Specification {
     def "accepts an empty checkResults list"() {
         when: 'a record is created with no check results'
         def record = new AttemptRecord(1, AttemptRecord.Result.DECISION_NEEDED, STARTED, [], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         then: 'the empty list is exposed'
         record.checkResults().isEmpty()
@@ -139,7 +139,7 @@ class AttemptRecordSpec extends Specification {
 
         when: 'a record is created and the source is then mutated'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, source, ExecutorUsage.none(),
-                JudgeUsage.none(), [])
+                JudgeUsage.none(), [], Stop.none())
         source.add(passResult())
 
         then: 'the record keeps the snapshot taken at construction'
@@ -150,7 +150,7 @@ class AttemptRecordSpec extends Specification {
     def "exposes checkResults as unmodifiable"() {
         given: 'a record'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         when: 'a caller tries to mutate the exposed list'
         record.checkResults().add(passResult())
@@ -169,7 +169,7 @@ class AttemptRecordSpec extends Specification {
 
         when: 'a record is created and the source is then mutated'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), source)
+        JudgeUsage.none(), source, Stop.none())
         source.add(denial())
 
         then: 'the record keeps the snapshot taken at construction'
@@ -180,7 +180,7 @@ class AttemptRecordSpec extends Specification {
     def "exposes denials as unmodifiable"() {
         given: 'a record carrying one denial'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [denial()])
+        JudgeUsage.none(), [denial()], Stop.none())
 
         when: 'a caller tries to mutate the exposed list'
         record.denials().add(denial())
@@ -193,7 +193,7 @@ class AttemptRecordSpec extends Specification {
     def "accepts ExecutorUsage.none and JudgeUsage.none"() {
         when: 'a record is created with the empty usage sentinels'
         def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passResult()], ExecutorUsage.none(),
-        JudgeUsage.none(), [])
+        JudgeUsage.none(), [], Stop.none())
 
         then: 'the sentinel usages are exposed'
         record.executorUsage() == ExecutorUsage.none()
@@ -208,19 +208,19 @@ class AttemptRecordSpec extends Specification {
         def judgeUsage = JudgeUsage.none()
 
         expect: 'two records built from equal components are equal'
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, []) ==
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [])
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none()) ==
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none())
 
         and: 'a differing round makes them unequal'
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, []) !=
-        new AttemptRecord(2, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [])
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none()) !=
+        new AttemptRecord(2, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none())
 
         and: 'a differing result classification makes them unequal (result is part of value identity)'
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, []) !=
-        new AttemptRecord(1, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check], executorUsage, judgeUsage, [])
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none()) !=
+        new AttemptRecord(1, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check], executorUsage, judgeUsage, [], Stop.none())
 
         and: 'a differing startedAt makes them unequal (the begin instant is part of value identity)'
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, []) !=
-        new AttemptRecord(1, AttemptRecord.Result.PASSED, Instant.EPOCH, [check], executorUsage, judgeUsage, [])
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, STARTED, [check], executorUsage, judgeUsage, [], Stop.none()) !=
+        new AttemptRecord(1, AttemptRecord.Result.PASSED, Instant.EPOCH, [check], executorUsage, judgeUsage, [], Stop.none())
     }
 }

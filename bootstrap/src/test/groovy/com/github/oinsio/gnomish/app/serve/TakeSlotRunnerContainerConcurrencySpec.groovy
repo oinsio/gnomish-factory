@@ -145,8 +145,8 @@ autonomy:
         // `tracked` ownership, since these are dispatched as already-claimed tracker tasks.
         def git = TaskGitFixture.real()
         def containerTakeSupport = new ContainerTakeSupport(
-                properties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
-                ContainerSupportFixture.tracked(git.epochs()))
+                bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                ContainerSupportFixture.tracked(git.epochs(), sandbox, properties))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def wiring = new SlotWiring(
                 newAssembly(properties), git, registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],

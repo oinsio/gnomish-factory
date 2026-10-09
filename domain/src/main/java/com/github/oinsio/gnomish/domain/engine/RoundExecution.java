@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
  * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability;
- * FR5 of split-logtext-leaves.
+ * FR5 of split-logtext-leaves; FR5 of make-checkpoint-gate-durable.
  */
 final class RoundExecution {
 
@@ -151,6 +151,11 @@ final class RoundExecution {
             ExecutionResult.Completed completed) {
         var verification = verifyOrchestrator.verify(stage.verify(), context, workspace, key);
         var verdict = overallVerdict(verification);
+        // FR5 of make-checkpoint-gate-durable: a CannotVerify round carries its stop — the check
+        // that broke the chain (its last result) with the verdict's reason and details.
+        var stop = verdict instanceof Verdict.CannotVerify cv
+                ? new Stop.CannotVerify(verification.results().getLast().checkRef(), cv.reason(), cv.details())
+                : Stop.none();
         var record = new AttemptRecord(
                 number,
                 resultOf(verdict),
@@ -158,14 +163,17 @@ final class RoundExecution {
                 verification.results(),
                 completed.usage(),
                 verification.judgeUsage(),
-                completed.denials());
+                completed.denials(),
+                stop);
         return new RoundOutcome.Verified(key, record, verdict, completed.trace());
     }
 
     /**
      * Records a {@link ExecutionResult.DecisionNeeded} round WITHOUT verifying (FR6): its executor
      * usage, no check results, and an explicit {@link AttemptRecord.Result#DECISION_NEEDED}
-     * classification (FR13, design D5), the {@code question}/{@code options} carried verbatim.
+     * classification (FR13, design D5), the {@code question}/{@code options} carried verbatim —
+     * on the outcome and, as the record's {@link Stop.DecisionNeeded}, on the round record itself
+     * (FR5 of make-checkpoint-gate-durable, design D3).
      */
     private static RoundOutcome.NeedsDecision needsDecision(
             AttemptKey key, int number, Instant startedAt, ExecutionResult.DecisionNeeded decision) {
@@ -176,8 +184,9 @@ final class RoundExecution {
                 List.of(),
                 decision.usage(),
                 JudgeUsage.none(),
-                decision.denials());
-        return new RoundOutcome.NeedsDecision(key, record, decision.trace(), decision.question(), decision.options());
+                decision.denials(),
+                new Stop.DecisionNeeded(decision.question(), decision.options()));
+        return new RoundOutcome.NeedsDecision(key, record, decision.trace());
     }
 
     /**

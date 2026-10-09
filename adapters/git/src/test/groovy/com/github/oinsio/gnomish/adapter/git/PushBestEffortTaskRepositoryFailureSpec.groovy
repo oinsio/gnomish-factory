@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException
+import com.github.oinsio.gnomish.app.port.ResumedWriteRefusedException
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -93,6 +96,64 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
                 new EscalationReport.AttemptsExhausted(3))
         'ABORTED' | new TaskOutcome.Aborted(TaskState.atStageStart('work'),
                 new AttemptKey('T-1', 'work', 0), UntrustedText.subprocess('violation'))
+    }
+
+    // FR3, NFR-O1 of make-checkpoint-gate-durable: a lost approval push names the approval event.
+    def "a failed approval push names the APPROVED event in its single WARN"() {
+        given:
+        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        def delegate = Mock(TaskRepository)
+        def repository = decorated(delegate)
+
+        when:
+        def events = capture {
+            repository.approveCheckpoint(TASK_ID, new Position.AwaitingApproval('work'), TaskState.atStageStart('next'))
+        }
+
+        then:
+        1 * delegate.approveCheckpoint(TASK_ID, _, _) >> {
+            commitOnTaskBranch('approved')
+        }
+        events.size() == 1
+        events[0].formattedMessage.contains('event=APPROVED')
+    }
+
+    // NFR-R2 of make-checkpoint-gate-durable: a refused approval wrote nothing, so nothing is pushed.
+    def "a refused approval propagates and pushes nothing"() {
+        given:
+        commitOnTaskBranch('pre-existing')
+        def delegate = Mock(TaskRepository)
+        def repository = decorated(delegate)
+        def gate = new Position.AwaitingApproval('work')
+
+        when:
+        repository.approveCheckpoint(TASK_ID, gate, TaskState.atStageStart('next'))
+
+        then:
+        1 * delegate.approveCheckpoint(TASK_ID, gate, _) >> {
+            throw new CheckpointApprovalRefusedException(TASK_ID, gate, new Position.PipelineEnd())
+        }
+        thrown(CheckpointApprovalRefusedException)
+        remoteTip() == Optional.empty()
+    }
+
+    // FR7, NFR-R2 of make-checkpoint-gate-durable: a refused resumed write wrote nothing, so
+    //     nothing is pushed.
+    def "a refused resumed write propagates and pushes nothing"() {
+        given:
+        commitOnTaskBranch('pre-existing')
+        def delegate = Mock(TaskRepository)
+        def repository = decorated(delegate)
+
+        when:
+        repository.resumeFrom(TASK_ID, TaskState.atStageStart('work'))
+
+        then:
+        1 * delegate.resumeFrom(TASK_ID, _) >> {
+            throw new ResumedWriteRefusedException(TASK_ID)
+        }
+        thrown(ResumedWriteRefusedException)
+        remoteTip() == Optional.empty()
     }
 
     def "a clone with no origin attempts no push and stays silent"() {

@@ -121,8 +121,8 @@ tracker:
         ], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
         new ContainerTakeSupport(
-                factoryProperties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
-                ContainerSupportFixture.tracked(epochs))
+                bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                ContainerSupportFixture.tracked(epochs, sandbox, factoryProperties))
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties, TrackerAdapterFactory trackerFactory) {

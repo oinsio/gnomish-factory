@@ -36,7 +36,7 @@ import spock.lang.Specification
  *   <li><b>a quality-failure retry with feedback</b> — the build stage fails its command
  *       check once, then the retry request carries that failure's findings forward and passes;</li>
  *   <li><b>a manual pause</b> — the final review stage is a {@code manual} checkpoint, so the
- *       run ends {@code Paused} at the pipeline end.</li>
+ *       run ends {@code Paused} held at its gate, {@code AwaitingApproval(review)}.</li>
  * </ul>
  *
  * <p>The narrative mirrors real use (proposal U1/U4): a run yields control on the decision
@@ -168,13 +168,16 @@ class ReferenceRunSpec extends Specification {
         def ports2 = new EnginePorts(exec2, builtin2, command2, external2, judge2,
                 new RecordingEventListener(), persistence2, clock2, sleeper2)
 
-        and: 'run 2 resumes from the recorded design state'
-        def outcome2 = new Engine().run(pipeline, context1, outcome1.finalState(), WORKSPACE, ports2)
+        and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
+        // as every production decision resume does (EscalationResume, TakeDecisionResume): an
+        // un-reset state still carries the recorded stop and would re-escalate (FR6 of
+        // make-checkpoint-gate-durable)
+        def outcome2 = new Engine().run(pipeline, context1, outcome1.finalState().resetAttempts(), WORKSPACE, ports2)
 
-        then: 'the run ends Paused at the manual review checkpoint, parked at the pipeline end'
+        then: 'the run ends Paused held at the manual review gate, not the pipeline end (FR1 of make-checkpoint-gate-durable)'
         outcome2 instanceof TaskOutcome.Paused
         (outcome2 as TaskOutcome.Paused).passedStage() == 'review'
-        outcome2.finalState().position() instanceof Position.PipelineEnd
+        outcome2.finalState().position() == new Position.AwaitingApproval('review')
 
         and: 'the human decision reached the design executor request verbatim (decision-carrying resume)'
         def designRequests = exec2.requests.findAll {

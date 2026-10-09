@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
@@ -20,34 +20,44 @@ import org.slf4j.LoggerFactory;
  * ({@link PendingVerification}), the factory died between
  * the snapshot and the state commit — the gnome's round completed, only its
  * verification was lost. The first {@link #execute} matching that snapshot's
- * stage and round therefore skips the agent entirely: it records the pending
- * attempt commit and returns {@link ExecutionResult.Completed} with empty
- * telemetry (the original round's trace died with the unrecorded state
- * commit), so the engine proceeds straight to verification of exactly the
+ * stage and round therefore skips the agent entirely: it restores the interrupted
+ * round into the run's {@link CurrentRound} — the token its snapshot recorded and the
+ * snapshot itself, through the same two transitions a live round runs (design D10 of
+ * make-checkpoint-gate-durable, as amended 2026-10-07) — and returns {@link
+ * ExecutionResult.Completed} with empty telemetry (the original round's trace died
+ * with the unrecorded state commit), so the engine proceeds straight to verification of exactly the
  * harvested attempt commit — no agent re-run, no attempt burned. Every other
  * request delegates unchanged; the engine stays untouched (D15).
  *
- * <p>Implements FR21 of add-sandbox-core.
+ * <p>A round that asked for a decision before the death left its request in the snapshot's tree,
+ * and the pending verification carries it: the matching round then maps it through the same
+ * tolerant {@link DecisionFileReader} a live round uses and returns {@link
+ * ExecutionResult.DecisionNeeded} with the same empty telemetry — the question is re-raised, the
+ * round is not replayed, no attempt is burned (FR15, NFR-R4 of make-checkpoint-gate-durable, design
+ * D10). A pending verification without a request resumes as {@code Completed}, as before.
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR13, FR15 of make-checkpoint-gate-durable.
  */
 public final class ResumeVerificationStageExecutor implements StageExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ResumeVerificationStageExecutor.class);
 
     private final StageExecutor delegate;
-    private final AttemptCommitRef attemptCommit;
+    private final CurrentRound rounds;
+    private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     private @Nullable PendingVerification pending;
 
     /**
      * @param delegate the real executor every non-matching round runs through; never null
-     * @param attemptCommit the run's attempt-commit ref the pending snapshot is recorded into
+     * @param rounds the run's round cell the pending round is restored into
      * @param pending the interrupted verification found at the branch tip, or null for none —
      *     consumed by the first matching round
      */
     public ResumeVerificationStageExecutor(
-            StageExecutor delegate, AttemptCommitRef attemptCommit, @Nullable PendingVerification pending) {
+            StageExecutor delegate, CurrentRound rounds, @Nullable PendingVerification pending) {
         this.delegate = delegate;
-        this.attemptCommit = attemptCommit;
+        this.rounds = rounds;
         this.pending = pending;
     }
 
@@ -56,7 +66,7 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
         PendingVerification p = pending;
         if (p != null && p.stage().equals(request.stage().name()) && p.round() == request.attempt()) {
             pending = null;
-            attemptCommit.record(p.attemptCommit());
+            rounds.restore(p);
             log.info(
                     "resuming interrupted verification of {} round {} at attempt commit {} — no agent re-run,"
                             + " no attempt burned (FR21)",
@@ -67,8 +77,13 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
                     new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
             // No denials either, for the same reason the telemetry is empty: this round's
             // environment is long gone, and its guard log died with the unrecorded state commit.
-            return new ExecutionResult.Completed(
-                    new ExecutorUsage(Duration.ZERO, List.of(), Map.of()), new ToolTrace(key, List.of()), List.of());
+            var usage = new ExecutorUsage(Duration.ZERO, List.of(), Map.of());
+            var trace = new ToolTrace(key, List.of());
+            return decisionFileReader
+                    .read(p.request())
+                    .map(d -> (ExecutionResult)
+                            new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace, List.of()))
+                    .orElseGet(() -> new ExecutionResult.Completed(usage, trace, List.of()));
         }
         return delegate.execute(request);
     }

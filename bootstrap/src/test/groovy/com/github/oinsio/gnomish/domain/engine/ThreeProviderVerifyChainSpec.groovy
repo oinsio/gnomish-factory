@@ -12,8 +12,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.TempDirCheckEnvironments
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
@@ -171,8 +171,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
                 new JudgeVoting(new ScriptedJudgeVoter()),
                 clock,
                 listener)
-        def ref = new AttemptCommitRef()
-        ref.record(sha)
+        def ref = ClosedRounds.at(sha)
         orchestrator.verify(checks, CONTEXT, new RecordedAttemptCommitWorkspace(ref), KEY)
     }
 

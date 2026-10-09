@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.UsageTotals
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import java.time.Duration
 import java.time.Instant
@@ -30,7 +31,7 @@ class UsageReportExecutorWallTimeSpec extends Specification {
     private static UsageRow row(Duration wallTime) {
         def executorUsage = new ExecutorUsage(wallTime, [], ['claude-x': new TokenUsage(1, 1, 0, 0)])
         def attempt = new AttemptRecord(0, AttemptRecord.Result.PASSED,
-                Instant.parse('2026-07-18T09:00:00Z'), [], executorUsage, new JudgeUsage([]), [])
+                Instant.parse('2026-07-18T09:00:00Z'), [], executorUsage, new JudgeUsage([]), [], Stop.none())
         new UsageRow('implement', attempt)
     }
 

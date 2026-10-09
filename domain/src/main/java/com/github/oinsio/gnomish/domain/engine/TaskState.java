@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,8 +21,8 @@ import java.util.List;
  * <p>Transition factories build a fresh state and never mutate {@code this}: each appends
  * to a copy of {@code attempts} and returns a new record. The engine assigns each
  * {@link AttemptRecord#round()} (0-based, matching {@link AttemptKey#attempt()}); these
- * factories append mechanically and neither interpret nor renumber rounds, so
- * {@code TaskState} stays pipeline-agnostic — it holds no knowledge of stage order.
+ * factories append mechanically and neither interpret nor renumber rounds, so {@code TaskState}
+ * holds no knowledge of stage order ({@link #approveGate} asks {@link Advancement}).
  *
  * <p>Unlike {@code attempts} — which covers only the current stage and resets on
  * advancement — {@code totals} is a cumulative executor-usage aggregate for the whole
@@ -130,12 +131,20 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      * arrives from the branch instead of from memory, which is why it is idempotent and a no-op for
      * every state whose last recorded round did not pass.
      *
-     * <p>Implements FR4, NFR-C1 of harden-task-branch-contract.
+     * <p>A state at a gate, {@link Position.AwaitingApproval}, is returned unchanged: its passing
+     * round belongs to the very stage the position names — the pass did not move the position past
+     * it — so the history is the gate's own, and a pickup that pauses again carries it, as {@code
+     * status} renders it (FR1, FR12 of make-checkpoint-gate-durable). The approval moves the
+     * position past the gate, after which this drops the round as for any advance.
+     *
+     * <p>Implements FR4, NFR-C1 of harden-task-branch-contract; FR1 of make-checkpoint-gate-durable.
      *
      * @return this state with a finished stage's attempts dropped; never null
      */
     public TaskState startOfStage() {
-        if (attempts.isEmpty() || attempts.getLast().result() != AttemptRecord.Result.PASSED) {
+        if (position instanceof Position.AwaitingApproval
+                || attempts.isEmpty()
+                || attempts.getLast().result() != AttemptRecord.Result.PASSED) {
             return this;
         }
         return advanceTo(position);
@@ -155,6 +164,26 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      */
     public TaskState resetAttempts() {
         return new TaskState(position, 0, List.of(), totals);
+    }
+
+    /**
+     * The state the approval of this gate writes: the position after the {@code manual} stage, via
+     * {@link Advancement#afterGate} (the one owner of "what follows a stage"), attempt history
+     * untouched — a checkpoint resets nothing (FR3 of make-checkpoint-gate-durable, D2, D7).
+     *
+     * @param definition the pinned pipeline the gate's stage is resolved against; never null
+     * @return this state moved past the gate; never null and never itself a gate
+     * @throws IllegalStateException when not at a gate, or the gate's stage is not declared
+     */
+    public TaskState approveGate(PipelineDefinition definition) {
+        if (!(position instanceof Position.AwaitingApproval(var gate))) {
+            throw new IllegalStateException("TaskState.approveGate: the position is not a gate");
+        }
+        var stage = definition.findStage(gate);
+        if (stage == null) {
+            throw new IllegalStateException("TaskState.approveGate: the gate's stage is not declared");
+        }
+        return new TaskState(Advancement.afterGate(definition, stage), attemptsUsed, attempts, totals);
     }
 
     private List<AttemptRecord> append(AttemptRecord round) {

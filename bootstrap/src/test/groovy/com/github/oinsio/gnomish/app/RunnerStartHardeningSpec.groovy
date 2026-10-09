@@ -107,7 +107,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         gitOutput(clone, 'branch', 'gnomish/C-1', 'HEAD')
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round'), ContainerSupportFixture.real(git.epochs()),
+                newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, ContainerSupportFixture.real(git.epochs(), sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round')),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -127,8 +127,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given: 'no branch for the resumed task, refusing the resume right after hardening'
         Path clone = freshClone('container-resume')
         def git = TaskGitFixture.real()
-        def runner = new ContainerResumeRunner(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round'), 'taskId',
-                ContainerSupportFixture.real(git.epochs()))
+        def runner = new ContainerResumeRunner(newAssembly(FakeAgentSupport.propertiesFor('plain-round')), git, 'taskId',
+                ContainerSupportFixture.real(git.epochs(), sandboxProperties(), FakeAgentSupport.propertiesFor('plain-round')))
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]

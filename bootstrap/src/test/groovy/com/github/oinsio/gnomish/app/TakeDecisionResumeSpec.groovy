@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -24,7 +25,8 @@ import java.time.Instant
  * decisions at resume claim (FR12), acks the freshest pending reply before acting
  * (ack-before-acting, FR12), and re-parks a {@code DecisionNeeded} with no pending reply,
  * restating the question (FR13, design D12). {@code AttemptsExhausted} resumes on the return
- * alone when no reply is pending (design D12).
+ * alone when no reply is pending (design D12), its reset landing first through the resumed write
+ * (FR7 of make-checkpoint-gate-durable).
  */
 class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
@@ -171,6 +173,17 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         0 * tracker.acknowledgeDecision(*_)
         0 * tracker.park(*_)
         result instanceof TakeResult.Delivered
+
+        and: 'FR7 of make-checkpoint-gate-durable: the reset landed as ONE resumed commit before the run'
+        def subjects = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "gnomish/${taskId}").readLines()
+        subjects.count('gnomish: task resumed') == 1
+        subjects.indexOf('gnomish: task resumed') == subjects.indexOf('gnomish: task escalated') + 1
+        subjects[subjects.indexOf('gnomish: task resumed') + 1].startsWith('gnomish: round build#')
+        def resumed = gitOutput(cloneDir, 'log', '--format=%H %s', "gnomish/${taskId}").readLines()
+                .find { it.endsWith(' gnomish: task resumed') }.split(' ')[0]
+        def json = new ObjectMapper()
+        json.readTree(gitOutput(cloneDir, 'show', "${resumed}:.gnomish-task/task.json")).path('outcome').isNull()
+        json.readTree(gitOutput(cloneDir, 'show', "${resumed}:.gnomish-task/state.json")).path('attemptsUsed').asInt() == 0
     }
 
     // D12: AttemptsExhausted with a pending reply still acks and appends it — meaningful context

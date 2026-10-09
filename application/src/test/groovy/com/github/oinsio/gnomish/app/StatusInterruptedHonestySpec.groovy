@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -46,7 +47,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
      * only the "unburned round" state shape is specific to this spec's crash scenario. */
     private void recordInterruptedRound(String taskId, String stage = 'implement', int round = 0) {
         def attempt = new AttemptRecord(round, AttemptRecord.Result.PASSED,
-                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [])
+                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
         persistRound(taskId, TaskState.atStageStart(stage).recordUnburnedRound(attempt), stage, round)
     }
 

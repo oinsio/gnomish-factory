@@ -127,7 +127,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -141,7 +141,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         then: 'the snapshot-first protocol is on the branch: snapshot commit, then the state commit on top'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         snapshotSha
         def stateSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
                 '^gnomish: round work#0$')
@@ -177,7 +177,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.ARGV_CHECKING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()),
+                newAssembly(factoryProps), git, ContainerSupportFixture.real(git.epochs(), sandbox, factoryProps),
                 LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [judgedStage()])
@@ -192,7 +192,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         then: 'the executor round captured exactly one argv, harvested with the snapshot — never an empty file'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: snapshot work#0$')
+                '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.EXECUTOR_ARGV_CAPTURE}")
                 .readLines()
         captured.count('---') == 1

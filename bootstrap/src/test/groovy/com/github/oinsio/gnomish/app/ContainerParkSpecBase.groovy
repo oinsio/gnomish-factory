@@ -83,8 +83,8 @@ abstract class ContainerParkSpecBase extends Specification implements BareGitRep
     void freshRun(PipelineDefinition pipeline, RunKillPoint killPoint = null) {
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
-        def support = ContainerSupportFixture.real(git.epochs())
-        new ContainerGitModeRunner(newAssembly(factoryProps), git, sandbox(), factoryProps,
+        def support = ContainerSupportFixture.real(git.epochs(), sandbox(), factoryProps)
+        new ContainerGitModeRunner(newAssembly(factoryProps), git,
                 killPoint == null ? support : RunKills.killedAt(killPoint, support), LiveConsoleIO.onStdout())
                 .run(new RunOrder(cloneDir, null, pipeline, false), segments(pipeline),
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
@@ -95,8 +95,8 @@ abstract class ContainerParkSpecBase extends Specification implements BareGitRep
     void resume(PipelineDefinition pipeline) {
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
-        new ContainerResumeRunner(newAssembly(factoryProps), git, sandbox(), factoryProps, 'taskId',
-                ContainerSupportFixture.real(git.epochs()))
+        new ContainerResumeRunner(newAssembly(factoryProps), git, 'taskId',
+                ContainerSupportFixture.real(git.epochs(), sandbox(), factoryProps))
                 .run(new RunOrder(cloneDir, null, pipeline, false), taskId, null, segments(pipeline))
     }
 

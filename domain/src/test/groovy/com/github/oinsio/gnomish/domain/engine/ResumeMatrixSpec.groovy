@@ -12,9 +12,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * attempt-boundary granularity from any valid recorded {@code TaskState}. This spec covers
  * the resume shapes that start from a valid recorded state — mid-pipeline (FR9), mid-retry
  * continuing the attempt counter and feedback (FR9, FR4), post-pause starting at the next
- * stage (FR9, FR8), and a resume after a non-burning {@code CannotVerify} round whose result
- * still flows into the next feedback (FR9, FR4) — each, where practical, obtained from a REAL
- * prior run's persisted state rather than hand-built. Implements FR9, FR4 of add-stage-engine.
+ * stage (FR9, FR8), and a resume after a non-burning {@code CannotVerify} round, which
+ * re-escalates from the record until a continuation resets the history (FR6 of
+ * make-checkpoint-gate-durable) — each, where practical, obtained from a REAL prior run's
+ * persisted state rather than hand-built. Implements FR9, FR4 of add-stage-engine.
  */
 class ResumeMatrixSpec extends ResumeMatrixSpecBase {
 
@@ -93,39 +94,54 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         resumed instanceof TaskOutcome.Completed
     }
 
-    // FR9/FR8 (post-pause resume): a two-stage pipeline whose first stage is MANUAL pauses
-    //     with the position already advanced to stage2; a SECOND run from that Paused final
-    //     state starts at stage2 (never re-running stage1) and completes.
+    // FR9/FR8 (post-pause resume); M3, FR2, FR3 of make-checkpoint-gate-durable: a two-stage
+    //     pipeline whose first stage is MANUAL pauses at its gate; a run from the gate pauses
+    //     again and runs nothing; a run from the state approveGate yields starts stage2 at round
+    //     zero (never re-running stage1) and completes.
     def "a post-pause resume starts at the next stage"() {
         given: 'a two-stage pipeline whose first stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.MANUAL, 3, [])
         def stage2 = stage('test', AdvancementMode.AUTO, 3, [])
+        def definition = pipeline(stage1, stage2)
 
-        and: 'a first run pauses on the manual stage with the position advanced to stage2'
-        def paused = new Engine().run(pipeline(stage1, stage2), CONTEXT, TaskState.atStageStart('build'), WORKSPACE,
+        and: 'a first run pauses on the manual stage, held at its gate'
+        def paused = new Engine().run(definition, CONTEXT, TaskState.atStageStart('build'), WORKSPACE,
                 freshPorts(new ScriptedExecutor([completed()]), new ScriptedBuiltinCheckRunner(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
         paused instanceof TaskOutcome.Paused
-        paused.finalState().position() == new Position.AtStage('test')
+        paused.finalState().position() == new Position.AwaitingApproval('build')
 
-        when: 'a SECOND run resumes from the paused final state'
+        when: 'a SECOND run starts from the gate'
+        def gateExecutor = new ScriptedExecutor()
+        def gatePersistence = new InMemoryAttemptPersistence()
+        def again = new Engine().run(definition, CONTEXT, paused.finalState(), WORKSPACE,
+                freshPorts(gateExecutor, new ScriptedBuiltinCheckRunner(),
+                gatePersistence, new RecordingEventListener()))
+
+        then: 'it pauses again at the same gate, state unchanged, and invokes no port'
+        again == new TaskOutcome.Paused(paused.finalState(), 'build')
+        gateExecutor.requests.isEmpty()
+        gatePersistence.entries.isEmpty()
+
+        when: 'a THIRD run resumes from the approved state'
         def resumeExecutor = new ScriptedExecutor([completed()])
-        def resumed = new Engine().run(pipeline(stage1, stage2), CONTEXT, paused.finalState(), WORKSPACE,
+        def resumed = new Engine().run(definition, CONTEXT, paused.finalState().approveGate(definition), WORKSPACE,
                 freshPorts(resumeExecutor, new ScriptedBuiltinCheckRunner(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
-        then: 'the resume ran only stage2 and completed — stage1 was never re-executed'
+        then: 'the resume ran only stage2, from round zero, and completed — stage1 never re-executed'
         resumed instanceof TaskOutcome.Completed
         resumeExecutor.requests.collect { it.stage().name() } == ['test']
+        resumeExecutor.requests[0].attempt() == 0
+        resumeExecutor.requests[0].feedback().isEmpty()
     }
 
-    // FR4 (feedback carries every non-Pass result of prior attempts, INCLUDING CannotVerify):
-    //     a CannotVerify round is recorded unburned and escalates immediately, so its result can
-    //     only reach a later executor request across a resume. A prior run leaves a persisted
-    //     CannotVerify round (attemptsUsed unchanged); a resume from that state feeds that
-    //     CannotVerify check result into the first executor request — proving the "including
-    //     CannotVerify" clause of FR4, which no single-run feedback test can reach.
-    def "a resume after a CannotVerify round carries that result into the next feedback"() {
+    // FR6 of make-checkpoint-gate-durable (supersedes the add-stage-engine expectation that a
+    //     resume from a recorded CannotVerify round runs the stage again): the CannotVerify round
+    //     is recorded unburned and carries its stop, so a resume from that persisted state
+    //     re-escalates from the record; only the reset history a continuation writes runs the
+    //     stage, from round zero with no feedback.
+    def "a resume after a CannotVerify round re-escalates until the history is reset"() {
         given: 'a stage whose first round cannot verify — recorded unburned, then escalated'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
         def cannotVerify = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
@@ -143,19 +159,25 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         resumeState.attemptsUsed() == 0
         resumeState.attempts().size() == 1
 
-        when: 'a NEW run resumes from that persisted state and its check now passes'
+        when: 'a NEW run resumes from that persisted state as it stands'
+        def unresetExecutor = new ScriptedExecutor([completed()])
+        def unreset = new Engine().run(pipeline(stageDef), CONTEXT, resumeState, WORKSPACE,
+                freshPorts(unresetExecutor, new ScriptedBuiltinCheckRunner(), new InMemoryAttemptPersistence(), new RecordingEventListener()))
+
+        then: 'it re-escalates the very CannotVerify report from the record, running no executor'
+        unreset == new TaskOutcome.Escalated(resumeState, prior.report())
+        unresetExecutor.requests.isEmpty()
+
+        when: 'a NEW run resumes from the history a continuation reset, and its check now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
         def resumeBuiltin = new ScriptedBuiltinCheckRunner()
         resumeBuiltin.scripted << new Verdict.Pass()
-        def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState, WORKSPACE,
+        def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState.resetAttempts(), WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
-        then: 'the first resumed request carries the prior CannotVerify check result as feedback'
-        def feedback = resumeExecutor.requests[0].feedback()
-        feedback.size() == 1
-        feedback[0].verdict().is(cannotVerify)
-
-        and: 'the now-passing round advances the pipeline to completion'
+        then: 'the stage runs from round zero with no feedback and advances the pipeline to completion'
+        resumeExecutor.requests[0].attempt() == 0
+        resumeExecutor.requests[0].feedback().isEmpty()
         resumed instanceof TaskOutcome.Completed
     }
 }
