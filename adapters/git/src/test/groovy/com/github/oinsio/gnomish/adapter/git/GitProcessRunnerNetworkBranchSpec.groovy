@@ -17,8 +17,8 @@ import spock.lang.TempDir
  * by what it hands the child — argv, environment, deadline — rather than by re-running a real
  * stall. A local command ({@code version}) and a non-mutating network one ({@code ls-remote},
  * which takes no clone lock and resolves no clone key) go through a {@link RecordingGit} that
- * prints its argv and {@code GIT_SSH_COMMAND} into a record file; the only wait is a 50 ms
- * deadline, and the only timing assertion has a margin of three orders of magnitude.
+ * prints its argv and {@code GIT_SSH_COMMAND} into a record file; the only waits are a 50 ms
+ * and a zero deadline, and the only timing assertion has a margin of three orders of magnitude.
  *
  * <p>The behaviour itself is that of FR1, FR4, NFR-O1, NFR-S1 of bound-subprocess-commands; this
  * spec exists so that each mutant of the branch has a sub-second first killer.
@@ -43,6 +43,18 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
     static final Duration NETWORK_TIMEOUT = Duration.ofMillis(50)
 
     static final Duration SLOW_CHILD = Duration.ofMillis(150)
+
+    /**
+     * The deadline of the WARN feature, which is the first killer of the deadline and elapsed
+     * mutants (FR1, M2). PIT tries the covering tests fastest first, by whole milliseconds of their
+     * coverage-pass time, and every git command in the module covers these lines: under the 50 ms
+     * deadline the feature ran after 136 faster covering tests, under 1 ms after 24 (measured, scoped
+     * runs of 2026-10-09). A zero deadline cuts the child off as soon as it is launched — some 2 ms,
+     * where a stand-in that runs to its exit takes some 4 — so the feature costs one launch and one
+     * kill. The outcome cannot race: the child sleeps 150 ms, so it is still running when the zero
+     * deadline is checked.
+     */
+    static final Duration CUT_OFF_TIMEOUT = Duration.ZERO
 
     /**
      * The deadline of the features that observe argv and environment: never reached, since their
@@ -70,6 +82,11 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         // The first launch of each fresh executable, paid here rather than inside a feature.
         new GitProcessRunner(instantGit.toString(), UNREACHED_TIMEOUT).run(tempDir, 'version')
         new GitProcessRunner(slowGit.toString(), UNREACHED_TIMEOUT).run(tempDir, 'version')
+        // The first cut-off in the JVM, paid here too: the kill path, the log capture and the
+        // elapsed parse each cost a one-time warm-up several times the cut-off itself. Nothing
+        // here is asserted, so a mutant that loses the WARN fails the feature, not the spec.
+        cutOffWarnings()
+        elapsedIn(['elapsed=PT0S, deadline=PT0S'])
     }
 
     def setup() {
@@ -98,6 +115,25 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         recorded().ssh == "[${parentSshCommand() ?: DEFAULT_SSH_COMMAND}]"
     }
 
+    // Declared right after a feature that launches a process, not after the 50 ms one: a launch that
+    // follows some 200 ms of waiting measured twice as slow (5 ms against 3 ms in the coverage pass),
+    // enough to put this feature behind the instant-exit features it must precede (M2).
+    def "NFR-O1: the timeout WARN reports the time the command actually ran"() {
+        when:
+        def warnings = cutOffWarnings()
+
+        then:
+        warnings.size() == 1
+        warnings[0].startsWith(OperatorEvent.GIT_NETWORK_COMMAND_TIMED_OUT.head())
+        warnings[0].contains('subcommand=ls-remote')
+        warnings[0].contains('deadline=PT0S')
+
+        and: 'at least the deadline, and nowhere near a minute — a sum of clock readings reports decades'
+        def elapsed = elapsedIn(warnings)
+        elapsed >= CUT_OFF_TIMEOUT
+        elapsed <Duration.ofMinutes(1)
+    }
+
     def "FR1, NG3: under a 50 ms network deadline a slow local command exits and a slow network one is cut off"() {
         given:
         def runner = slowRunner()
@@ -120,25 +156,6 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         events.count { it.level == Level.WARN } == 1
     }
 
-    def "NFR-O1: the timeout WARN reports the time the command actually ran"() {
-        when:
-        def events = LogCaptureSupport.capture(GitProcessRunner, Level.INFO) {
-            slowRunner().run(tempDir, 'ls-remote', 'origin')
-        }
-
-        then:
-        def warnings = events.findAll { it.level == Level.WARN }
-        warnings.size() == 1
-        warnings[0].formattedMessage.startsWith(OperatorEvent.GIT_NETWORK_COMMAND_TIMED_OUT.head())
-        warnings[0].formattedMessage.contains('subcommand=ls-remote')
-        warnings[0].formattedMessage.contains('deadline=PT0.05S')
-
-        and: 'at least the deadline, and nowhere near a minute — a sum of clock readings reports decades'
-        def elapsed = Duration.parse((warnings[0].formattedMessage =~ /elapsed=(PT[^,]+)/)[0][1] as String)
-        elapsed >= NETWORK_TIMEOUT
-        elapsed <Duration.ofMinutes(1)
-    }
-
     // Runs only where the parent environment carries an operator GIT_SSH_COMMAND: the runner has no
     // seam for the child's base environment, and the spec does not rewrite the JVM's own. Where it
     // is unset the two branch features above assert the same pass-through rule's other half.
@@ -159,6 +176,19 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
     /** The stand-in whose every invocation takes 150 ms, under the 50 ms network deadline. */
     private GitProcessRunner slowRunner() {
         new GitProcessRunner(slowGit.toString(), NETWORK_TIMEOUT)
+    }
+
+    /** The WARN lines of one slow network command cut off on {@link #CUT_OFF_TIMEOUT}. */
+    private List<String> cutOffWarnings() {
+        def events = LogCaptureSupport.capture(GitProcessRunner, Level.INFO) {
+            new GitProcessRunner(slowGit.toString(), CUT_OFF_TIMEOUT).run(tempDir, 'ls-remote', 'origin')
+        }
+        events.findAll { it.level == Level.WARN }*.formattedMessage
+    }
+
+    /** The {@code elapsed=} the first of {@code warnings} reports. */
+    private static Duration elapsedIn(List<String> warnings) {
+        Duration.parse((warnings[0] =~ /elapsed=(PT[^,]+)/)[0][1] as String)
     }
 
     private Path recordingGit(Duration delay) {
