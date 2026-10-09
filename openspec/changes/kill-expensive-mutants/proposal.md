@@ -18,7 +18,7 @@ and `GitProcessRunner.run` resolves the clone key for a mutating command through
 bounded fetch even starts. The deadline is sound; the fixture is not. It is also one of several stalling `git`
 stand-ins that each spell the stall by hand: two private helpers in the module
 (`GitProcessRunnerBoundedNetworkSpec`, this one), a declared pair of traits in `:test-fixtures`
-(`StallingGitFixture`, `StallingReadGitFixture`), and five more scenario scripts in the module's
+(`StallingGitFixture`, `StallingReadGitFixture`), and six more scenario scripts in the module's
 test tree that sleep on a subcommand of their own choosing. The stall mechanics — strip the leading
 `-c` pairs, sleep on a chosen subcommand set, answer the rest — are past the rule-of-three point
 for one owner.
@@ -82,8 +82,9 @@ cheap without making it weaker is the second half of the speed-up.
 
 - **FR1** — For each mutant in the hotspot list a spec exists whose covering feature runs in
   under 500 ms, requires no network, no Docker and no real repository, and kills it. The list,
-  named by mutation rather than by line so it survives the two active changes that rewrite
-  `GitProcessRunner.execute` (`own-git-invocation-policy`, `add-subprocess-access-log`):
+  named by mutation rather than by line so it survives a later rewrite of
+  `GitProcessRunner.execute` (`add-subprocess-access-log`, active, minimizes the child
+  environment; any later routing of the argv through one invocation policy):
   `GitProcessRunner.execute` — the network-or-not choice of argv (NegateConditionals), the
   network-only SSH stall detection (NegateConditionals on the guard, VoidMethodCall on the
   call), the transfer-environment application (VoidMethodCall), the network-only deadline
@@ -172,18 +173,20 @@ capability behavior to specify and are carried by tasks 1–3 and the architectu
   (`scope-pit-locally`, "Test changes widen the mutation scope"), so the measuring runs of this
   change are whole-tree runs.
 - `adapters/git/src/test/groovy/.../adapter/git/` — new specs (`GitProcessRunnerNetworkBranchSpec`,
-  `StateUsageMapperSpec`, a hand-off feature in `CloneMutationLockSpec`), a `RecordingGit` helper,
-  six specs rewired to the builder, three exemptions documented in place.
-- `bootstrap/src/test` — `StallingGitOwnerSpec`, the whole-tree scan over both test trees.
+  `StateUsageMapperSpec`, a hand-off feature in `CloneMutationLockSpec`), a `RecordingGit` helper
+  extracted from `GitProcessRunnerTransferSpec`'s recording script (which is rewired to it), six
+  specs rewired to the builder, three exemptions documented in place.
+- `bootstrap/src/test` — `StallingGitSpec` (the builder's own spec; `:test-fixtures` has no test
+  source set) and `StallingGitOwnerSpec`, the whole-tree scan over both test trees.
 - `build-logic/src/main/groovy/pitest-gate-conventions.gradle` (or a sibling file under the size
   cap) — the report task; `build-logic/src/functionalTest` — a TestKit scenario over a canned
   `mutations.xml`.
 - `docs/guides/developer-guide.md` — one paragraph on the cost report under per-module
   verification.
 - No production Java; no port, adapter or dependency change.
-- Sequenced after `scope-pit-locally` (archived 2026-10-05) and **before** `own-git-invocation-policy`
-  and `add-subprocess-access-log`: both rewrite `GitProcessRunner.execute`, so the fast killers of
+- Sequenced after `scope-pit-locally` (archived 2026-10-05) and **before**
+  `add-subprocess-access-log`: it rewrites `GitProcessRunner.execute`, so the fast killers of
   this change are written against the method as it is today and re-verified by their scoped PIT
-  runs when those changes land. `add-subprocess-access-log` (task 7.3) will also minimize the git
+  runs when that change lands. `add-subprocess-access-log` (task 7.3) will also minimize the git
   child's environment; the pass-through assertion on `GIT_SSH_COMMAND` (design D1 (e)) then moves
-  onto that change's retained set. Neither change modifies a requirement this one touches.
+  onto that change's retained set. It modifies no requirement this one touches.

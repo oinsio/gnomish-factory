@@ -1,7 +1,7 @@
 # Tasks
 
-Sequenced after `scope-pit-locally` (archived) and before `own-git-invocation-policy` and
-`add-subprocess-access-log` (proposal, Impact). Tasks that touch `test-fixtures/src/` widen the
+Sequenced after `scope-pit-locally` (archived) and before `add-subprocess-access-log`
+(proposal, Impact). Tasks that touch `test-fixtures/src/` widen the
 mutation scope to every module, and a touch under `adapters/git/src/test` widens it to that whole
 module — which is the measurement this change needs. Each task's sub-agent runs
 `./gradlew :adapters:git:check` (or root `check` for `build-logic` and `:bootstrap` work) and
@@ -17,14 +17,21 @@ records timings where the task says so.
       If it does not, STOP and report: the production path is then suspect and NG2 applies.
 - [ ] 1.2 Add the `StallingGit` builder to
       `test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/`: `stallOn(String...)`,
-      `stallOnEverything()`, `stall(Duration)`, `markOnStall(Path)`, `answer(subcommand, stdout,
-      exit)`, `localDelay(Duration)`, `write(Path dir)`; always strips leading `-c` pairs; default
-      answer for an unlisted subcommand is exit 0 with no output. Javadoc: the local-command
-      sentence and the nine-copies history (UX2). Verify: a `StallingGitSpec` in `:test-fixtures`
-      runs the script with `version` (returns in < 100 ms), with `ls-remote` under a 200 ms stall
-      (returns after ≥ 200 ms), with `localDelay(300 ms)` and `version` (≥ 300 ms), with an
-      `answer` row (stdout and exit code as given), and with `markOnStall` (marker present once the
-      stall began).
+      `stallOnEverything()`, `stall(Duration)`, `beforeStall(String shellLine)`,
+      `markOnStall(Path)` (= `beforeStall` of a `touch`), `answer(List<String> argvPrefix, stdout,
+      exit)` (declaration order, first match wins) with `answer(subcommand, stdout, exit)` as the
+      one-element case, `answerWith(subcommand, shellFragment)` for file-backed answers computed at
+      run time, `localDelay(Duration)`, `write(Path dir)` (D4); always strips leading `-c` pairs;
+      default answer for an unlisted subcommand is exit 0 with no output. Javadoc: the
+      local-command sentence and the nine-copies history (UX2). Verify: a `StallingGitSpec` in
+      `:bootstrap` (`bootstrap/src/test/groovy/com/github/oinsio/gnomish/adapter/git/`, beside
+      `AdversarialGitConfigSpec` — `:test-fixtures` has no test source set) runs the script with
+      `version` (returns in < 100 ms), with `ls-remote` under a 200 ms stall (returns after
+      ≥ 200 ms), with `localDelay(300 ms)` and `version` (≥ 300 ms), with an `answer` row (stdout
+      and exit code as given), with two `answer` rows on one subcommand qualified by the second
+      argument (the longer prefix declared first wins), with an `answerWith` reading a file
+      rewritten after `write` (the new content is answered), with `beforeStall` lines (run in
+      order before the stall), and with `markOnStall` (marker present once the stall began).
 - [ ] 1.3 Rewire the six `:adapters:git` scripts to the builder per the D4 disposition table —
       `GitProcessRunnerBoundedNetworkSpec.stallingGit()` (with `localDelay(1 s)` and the
       `status` answer so "FR1, NG3: a local command … is not bounded" keeps its premise),
@@ -35,7 +42,9 @@ records timings where the task says so.
       `ContainerHarvestFetchSpec`'s FR7 feature ≤ 5 s (M3); the module `test` task's summed
       feature time is ≥ 60 s lower than baseline (compare XML totals).
 - [ ] 1.4 Make `StallingGitFixture` and `StallingReadGitFixture` build their scripts through the
-      builder, keeping their names, scenario files and `await*Started` loops; replace both
+      builder per the D4 table (`StallingGitFixture`: `beforeStall` for the attempts line, the
+      hook and the started marker; `answerWith` for `ls-remote`; the argv-qualified `rev-parse`
+      rows), keeping their names, scenario files and `await*Started` loops; replace both
       "Kept in sync with" markers by one sentence naming `StallingGit` as the owner of the stall
       mechanics. Verify: every spec implementing either trait green (`./gradlew check` — the
       fixtures change widens the scope to every module); `grep -rn "Kept in sync with"
@@ -51,10 +60,16 @@ records timings where the task says so.
 
 ## 2. Fast killers for `GitProcessRunner.execute` (D1; FR1, NFR-R1, NFR-R2; M2)
 
-- [ ] 2.1 Add a `RecordingGit` helper in `adapters/git/src/test` (same package as the specs): a
-      script that **appends** one block per invocation — `"$@"`, `GIT_SSH_COMMAND` and the
-      transfer-owner variable names — to a record file, optionally sleeping `N` ms first, then
-      `exit 0`. Verify: a feature makes two invocations and reads back two blocks in order.
+- [ ] 2.1 Add a `RecordingGit` helper in `adapters/git/src/test` (same package as the specs),
+      extracted from `GitProcessRunnerTransferSpec.recordingRunner()` (D1): a script that answers
+      the subcommands the caller names before recording (the clone-key `rev-parse` → `.git`), then
+      **appends** one block per invocation — the record lines the caller names, each a key and the
+      shell expression it prints (`"$@"`, `GIT_SSH_COMMAND`, the transfer-owner variables) — to a
+      record file, optionally sleeping `N` ms first, then `exit 0`. Rewire
+      `GitProcessRunnerTransferSpec.recordingRunner()` to build its script through it, with its
+      five record lines unchanged and its assertions unchanged (NG3), deleting the inline script.
+      Verify: a feature makes two invocations and reads back two blocks in order;
+      `GitProcessRunnerTransferSpec` green.
 - [ ] 2.2 Write `GitProcessRunnerNetworkBranchSpec`: (a) `version` carries no stall-detection `-c`
       options and no `GIT_SSH_COMMAND` (kills the argv-choice and SSH-guard negations); (b)
       `ls-remote` carries both (kills the SSH-call removal); (c) with a 50 ms network timeout, a
@@ -68,11 +83,15 @@ records timings where the task says so.
       no timeout longer than 100 ms (NFR-R1) and use no `system()` factory (NFR-R2). Verify: spec
       green; scoped PIT run (`-PpitScope=com.github.oinsio.gnomish.adapter.git.GitProcessRunner`)
       shows each of the five mutants with `killingTest` = this spec and `numberOfTestsRun` ≤ 20.
-- [ ] 2.3 Add the transfer-environment feature: through the package-private typed entry, run a
-      transfer whose owner environment sets a marker variable, and assert the **second** block of
-      the record (the transfer; the first is the clone-key `rev-parse`) saw it and that a variable
-      the owner unsets is absent. Verify: as 2.2, the VoidMethodCall mutant on the
-      transfer-environment application ≤ 20 tests, `killingTest` = this spec.
+- [ ] 2.3 Make the transfer-environment kill fast: the existing "FR6, NFR-S2" feature of
+      `GitProcessRunnerTransferSpec` (now built on `RecordingGit`) already runs a transfer through
+      the typed entry and asserts the allowlist is set and the inherited per-process configuration
+      is gone. Verify: as 2.2, the VoidMethodCall mutant on the transfer-environment application
+      ≤ 20 tests, `killingTest` = that feature. Only if the scoped PIT run still records it as
+      slow, state the measured cause in the task report and then add a feature that runs a
+      transfer whose owner environment sets a marker variable and asserts the transfer's block
+      (the clone-key `rev-parse` is answered, not recorded) saw it and that a variable the owner
+      unsets is absent.
 
 ## 3. Fast killers for the mapper and the lock (D2, D3; FR1; M2)
 
@@ -121,7 +140,7 @@ records timings where the task says so.
       if M1 is missed, list the next ten most expensive mutants from `expensive-mutants.txt`.
 - [ ] 5.2 Sweep: `grep -rn "sleep" adapters/git/src/test test-fixtures/src/main` — every hit is
       the owner, one of the three exemptions, or a non-script sleep (virtual sleepers, poll
-      loops); `grep -rn "stallingGit()\|stallingOn(" adapters/git/src/test` — no hand-written
+      loops); `grep -rn "stallingGit()\|stallingNetworkGit()\|stallingOn(" adapters/git/src/test` — no hand-written
       script survives; `grep -rn "Kept in sync with" test-fixtures/src/main` — the two traits no
       longer name each other. Report the greps and the disposition of every hit against the D4
       table (M5).

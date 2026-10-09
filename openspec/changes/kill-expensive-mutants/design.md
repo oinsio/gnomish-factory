@@ -27,8 +27,9 @@ See proposal.md — Why. What shapes the approach:
 - Stalling `git` stand-ins already have two shared ends: `StallingGitFixture` (answers every read,
   stalls on `push`, scripts a push scenario through files) and `StallingReadGitFixture` (stalls on
   everything, touches a marker) in `:test-fixtures`, each carrying a "Kept in sync with" marker for
-  the other. Beside them the `:adapters:git` test tree spells the same mechanics by hand nine
-  times (table under D4). One spec among them needs the opposite of "local commands answer at
+  the other. Beside them the `:adapters:git` test tree spells the same mechanics by hand in nine
+  scripts in the module (eight stand-ins and one tracing wrapper), plus the two traits (table
+  under D4). One spec among them needs the opposite of "local commands answer at
   once": `GitProcessRunnerBoundedNetworkSpec` proves a local command is *not* bounded by running
   one that outlives the deadline.
 - `pitest-gate-conventions.gradle` (81 lines) parses `mutations.xml` once per module for
@@ -40,9 +41,10 @@ See proposal.md — Why. What shapes the approach:
   `own-git-transfer-argv`) and log-capture fixtures that the log-expectation gate recognizes
   (`PushTerminationLoggingSpec` uses them). A transfer is repo-level mutating, so the typed entry
   makes two invocations of the binary: the key resolution, then the transfer itself.
-- Two active changes rewrite `GitProcessRunner.execute` after this one (proposal, Impact):
-  `own-git-invocation-policy` routes the argv through `GitInvocation`, `add-subprocess-access-log`
-  minimizes the child environment. The hotspot list is therefore named by mutation, not by line.
+- `GitProcessRunner.execute` is rewritten after this one (proposal, Impact):
+  `add-subprocess-access-log` (active) minimizes the child environment, and any later routing of
+  the argv through one invocation policy moves the same lines. The hotspot list is therefore named
+  by mutation, not by line.
 
 ## Goals / Non-Goals
 
@@ -67,8 +69,21 @@ sleeps, and its WARN reports an elapsed time below one minute — the Math mutan
 subtraction into an addition and reports decades, so a loose bound kills it and no minion load can
 fail it. That set kills the argv choice, the SSH guard and call, the deadline and the elapsed
 subtraction. The transfer-environment application is killed through the typed transfer entry with
-an environment the recording script prints; because a transfer is mutating, the record file holds
-the key-resolution block first and the transfer block second, and the assertion reads the second.
+an environment the recording script prints; because a transfer is mutating, the runner first
+resolves the clone key, which the stand-in answers (`rev-parse` → `.git`) without recording, so
+the record holds the transfer's block only.
+The recording stand-in is `RecordingGit`, extracted from the shape
+`GitProcessRunnerTransferSpec.recordingRunner()` already spells (answer the clone-key `rev-parse`,
+append the argv and chosen environment variables to a record file, exit 0): that spec builds its
+script through it, keeping its `argv=`, `allow=`, `count=`/`key0=`, `askpass=`/`ssh=`, `global=`
+record lines, so `RecordingGit` lets the caller name each record line (a key and the shell
+expression it prints) and the subcommands answered before recording. The transfer-environment
+feature is therefore `GitProcessRunnerTransferSpec`'s existing "FR6, NFR-S2" feature made first
+killer, not a second one; a new feature is added only if the scoped PIT run shows that one still
+slow, with the measured cause stated. `GitVersionCheckSpec.fakeGit(...)` and
+`ContainerHarvestFetchSpec.fakeGit(int, String, Path)` also record argv, but each then prints a
+scripted answer (a version string; a stderr text and an exit code): decision stand-ins, not
+recorders, and they stay their own.
 (e) An operator-set `GIT_SSH_COMMAND` in the parent environment is passed through unchanged —
 true while the child inherits the environment; when `add-subprocess-access-log` minimizes it,
 this feature asserts the variable is in that change's retained set instead. *Rationale:* FR1,
@@ -100,16 +115,23 @@ it.
 build through it; every plain-stall script in `:adapters:git` is rewired; three scenario scripts
 stay as named exemptions.** `StallingGit` (`test-fixtures/src/main/groovy/.../adapter/git/`) is a
 builder: `stallOn(String... subcommands)` or `stallOnEverything()`, `stall(Duration)`,
-`markOnStall(Path)`, `answer(String subcommand, String stdout, int exit)` (default for an
-unlisted subcommand: exit 0, no output — so `rev-parse` yields an empty answer and the clone key
-falls back to the working directory, as today), `localDelay(Duration)` (default zero), and
-`write(Path dir)` returning the script. It always strips the leading `-c` pairs. The javadoc
-states the local-command path and the nine-copies history (UX2). `StallingGitFixture` and
+`beforeStall(String shellLine)` (appended in order before the `sleep` of every stalled
+subcommand), `markOnStall(Path)` (defined as `beforeStall("touch '<path>'")`),
+`answer(List<String> argvPrefix, String stdout, int exit)` matched in declaration order, first
+match wins, with `answer(String subcommand, String stdout, int exit)` as the one-element case
+(default for an unlisted subcommand: exit 0, no output — so `rev-parse` yields an empty answer
+and the clone key falls back to the working directory, as today), `answerWith(String subcommand,
+String shellFragment)` for an answer computed at run time (a file the spec rewrites after the
+script was written — the javadoc says it is for file-backed answers, not a second way to spell a
+stall, and the owner spec's `sleep` scan still catches a stall written through it),
+`localDelay(Duration)` (default zero), and `write(Path dir)` returning the script. It always
+strips the leading `-c` pairs. The javadoc states the local-command path and the nine-copies
+history (UX2). `StallingGitFixture` and
 `StallingReadGitFixture` keep their names and their scenario files (push hook, marker, answer
 files) but build their script through the builder, and their mutual "Kept in sync with" markers
 are replaced by one sentence naming the owner — the pair dissolves into one implementation.
 *Rationale:* FR2; `manual-sync-pairs.md` preference order — a third implementation of a rule that
-already has a declared pair extracts the abstraction, and the module held seven. *Alternative
+already has a declared pair extracts the abstraction, and the module held eight stand-ins. *Alternative
 rejected:* a module-local `StallingGit` beside the pair in `:test-fixtures` (the first draft of this
 change) — a third parallel implementation, exactly what the rule forbids; also rejected:
 `exec sleep 60` in the harvest spec's script — it hides the actual cause (the key resolution)
@@ -123,10 +145,10 @@ Disposition of every script that sleeps in `adapters/git/src/test` and `test-fix
 | `GitProcessRunnerBoundedNetworkSpec.stallingGit()` | answers `rev-parse`, stalls on the network four, local commands sleep 1 s and print `local done` | rewired: `stallOn(network four)`, `answer('rev-parse', '.git', 0)`, `localDelay(1 s)`, `answer('status', 'local done', 0)` — the "local is not bounded" feature keeps its premise |
 | `ContainerHarvestFetchSpec.stallingGit()` | `sleep 60` on everything | rewired: `stallOn('fetch')`, `stall(60 s)` — the key resolution answers at once |
 | `GitProcessRunnerShutdownReportSpec` (`sleep 600`) | stalls on everything | rewired: `stallOnEverything()` |
-| `TaskBranchLocatorSpec` (`stalling-network-git.sh`) | answer table (`rev-parse`, `remote` → 128), stalls on `fetch|ls-remote`, default exit 1 | rewired: `stallOn('fetch','ls-remote')` + `answer(...)` rows; the default-exit-1 becomes an explicit `answer` for the subcommands the spec drives |
+| `TaskBranchLocatorSpec.stallingNetworkGit()` (writes `stalling-network-git.sh`) | answer table (`rev-parse --git-common-dir` → `.git`, any other `rev-parse` → 1, `remote` → 128), stalls on `fetch|ls-remote`, default exit 1 | rewired: `stallOn('fetch','ls-remote')`, `answer(['rev-parse','--git-common-dir'], '.git', 0)`, `answer('rev-parse', '', 1)`, `answer('remote', '', 128)` (an `answerWith` if the spec turns out to read the stderr text); the default-exit-1 becomes an explicit `answer` for the subcommands the spec drives |
 | `UsageHistoryWalkerTerminationSpec.stallingOn()` | stalls on one named argument, touches a marker, answers `log`/`rev-parse` | rewired: `stallOn(named)`, `markOnStall`, `answer` rows |
 | `ReplicaPairReconcilerTerminationSpec.stallingOn()` | same shape as the previous row (an undeclared pair today) | rewired the same way; the pair dissolves |
-| `StallingGitFixture.stallingGit()` | answers reads from files, runs a hook, stalls on `push` | builds through the builder: `stallOn('push')`, `markOnStall`, `answer` rows reading the scenario files; the hook stays a spec-side `answer` line |
+| `StallingGitFixture.stallingGit()` | answers reads from files, runs a hook, stalls on `push` | builds through the builder: `stallOn('push')`; `beforeStall` lines for the attempts line, the hook and the started marker, in that order; `answer(['rev-parse','--git-common-dir'], '.git', 0)` before `answer('rev-parse', <stalled tip>, 0)`; `answerWith('ls-remote', …)` reading the scenario files at run time; `answer` rows for the rest; the hook is a `beforeStall` line |
 | `StallingReadGitFixture.stallingGit()` | stalls on everything, touches a marker | builds through the builder: `stallOnEverything()`, `markOnStall` |
 | `GitProcessRunnerBoundedNetworkSpec` leaky-git (line 78) | prints a credential-bearing line to stderr, then stalls | **exemption**: the stderr text before the stall is the subject; a one-line script says it better than a builder option nobody else needs |
 | `TipStateCursorTerminationSpec` (`exec 1>&-; sleep 600`) | closes stdout, then stalls | **exemption**: the closed pipe is the subject |
@@ -153,7 +175,11 @@ appending to the gate file — within the cap, but "one file is one thing".
 **Sync surfaces: the declared pair `StallingGitFixture` ↔ `StallingReadGitFixture` is dissolved
 into the shared abstraction `StallingGit` (D4), and the undeclared pair
 `UsageHistoryWalkerTerminationSpec.stallingOn` ↔ `ReplicaPairReconcilerTerminationSpec.stallingOn`
-with it.** No other declared pair is touched; the change adds no parallel implementation.
+with it.** No other declared pair is touched. The recording stand-in of D1 extracts the shape
+`GitProcessRunnerTransferSpec.recordingRunner()` already spelled into `RecordingGit`, which that
+spec then builds through, so no second copy is added (shared abstraction, preference 1 of
+`manual-sync-pairs.md`); the argv-recording `fakeGit` helpers of `GitVersionCheckSpec` and
+`ContainerHarvestFetchSpec` are scripted-answer stand-ins, not recorders (D1).
 
 **Single-owner mechanisms:**
 
@@ -179,9 +205,9 @@ deleted; the scan is what keeps a tenth copy from appearing.
 - **Rewiring eight scripts touches `test-fixtures/src/`, which widens the mutation scope to every
   module** → the measuring runs (tasks 1.3, 5.1) are whole-tree runs anyway; the cost lands once,
   on this change's own `check`.
-- **`own-git-invocation-policy` and `add-subprocess-access-log` move the mutated lines** → the
-  hotspot list is named by mutation; the scoped PIT runs of tasks 2–3 are re-run as the verify
-  step when those changes rebase over this one.
+- **`add-subprocess-access-log` (and any later rewrite of `GitProcessRunner.execute`) moves the
+  mutated lines** → the hotspot list is named by mutation; the scoped PIT runs of tasks 2–3 are
+  re-run as the verify step when such a change rebases over this one.
 - **A report nobody reads** → the lifecycle line is in every `check` output and the nightly run's
   log; the developer guide names it as the first place to look when a module's gate slows.
 
