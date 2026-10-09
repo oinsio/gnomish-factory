@@ -19,11 +19,11 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
@@ -46,7 +46,7 @@ class TakeParkRetrySpec extends Specification {
 
     Tracker tracker = Mock()
     AtomicReference<Instant> now = new AtomicReference<>(Instant.parse('2026-01-01T00:00:00Z'))
-    Clock clock = { -> now.get() } as Clock
+    InstantSource clock = { -> now.get() } as InstantSource
     Sleeper sleeper = { Duration d -> now.set(now.get() + d) } as Sleeper
     TerminalWriteRetry retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
     AtomicInteger confirmed = new AtomicInteger()

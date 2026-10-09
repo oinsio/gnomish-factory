@@ -24,7 +24,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     Path tempDir
 
     def runner = new GitProcessRunner()
-    def locator = new TaskBranchLocator(runner)
+    def locator = new TaskBranchLocator(runner, VirtualTimeGitRetries.gitInfrastructure())
 
     private Path initBareWithBranch(Path parent, String repoName, String branch, String fileName, String content) {
         def bare = initBareRepo(parent, repoName)

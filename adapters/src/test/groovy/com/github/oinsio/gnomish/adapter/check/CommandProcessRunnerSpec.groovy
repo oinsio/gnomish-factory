@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
@@ -20,10 +20,10 @@ class CommandProcessRunnerSpec extends Specification {
     @TempDir
     Path tempDir
 
-    def runner = new CommandProcessRunner('sh')
+    def runner = new CommandProcessRunner('sh', new VirtualClock())
 
     private HostTaskExecutionEnvironment env() {
-        new HostTaskExecutionEnvironment(tempDir, new SystemClock(), ChildEnvAllowlist.none())
+        new HostTaskExecutionEnvironment(tempDir, new VirtualClock(), ChildEnvAllowlist.none())
     }
 
     private static VerifyCheck.Command command(String line) {
@@ -223,7 +223,7 @@ class CommandProcessRunnerSpec extends Specification {
 
     def "a process that cannot start yields a null outcome"() {
         given: 'a runner whose shell binary does not exist'
-        def brokenRunner = new CommandProcessRunner('definitely-not-a-real-shell-xyzzy')
+        def brokenRunner = new CommandProcessRunner('definitely-not-a-real-shell-xyzzy', new VirtualClock())
 
         expect: 'the runner returns null rather than throwing, so the caller maps it to CannotVerify'
         brokenRunner.run(command('echo hi'), env()) == null

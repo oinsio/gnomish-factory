@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.daemon;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import java.time.InstantSource;
 
 /**
  * The one long-lived daemon thread shape of the factory: a tick repeated on a cadence, guarded,
@@ -14,6 +15,13 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  * (Throwable)}: a failure of either is reported as an edge ({@link LoopEvents}) and the loop goes
  * on — after a failed tick to its wait, after a failed wait to its tick. A clean tick ends the
  * failure streak and resets the policy's backoff.
+ *
+ * <p><b>The suppressor is the loop's own (D2).</b> The loop builds its {@link RepeatSuppressor}
+ * from the {@link InstantSource} it is given and a roll-up period derived from its wait's interval by
+ * {@link RollUpPeriod} — at most one reminder per six ticks — so no loop class constructs or passes
+ * one, and a loop on a virtual clock rolls up and recovers on virtual time. The suppressor takes
+ * that same source directly, so the loop holds one clock, the same its owner stamps {@code
+ * lastRunAt} with.
  *
  * <p><b>Interrupts (D3).</b> Before every wait and after it, a requested stop ends the loop
  * quietly; otherwise a set interrupt flag is cleared and logged once as stray, and the loop waits
@@ -49,13 +57,15 @@ public final class SupervisedLoop {
      * @param tick one run of the loop's work, on the worker thread; never null
      * @param backoffSleeper the sleep seam the restart backoff is waited on (virtual under test);
      *     never null
-     * @param suppressor the repeat suppressor failures are reported to, keyed by the component, so
-     *     one may be shared by every loop of a process; never null
+     * @param clock the time source the loop's failure streaks are measured on — their roll-ups and
+     *     the recovery's outage duration (virtual under test); never null
      */
-    public SupervisedLoop(LoopShape shape, Runnable tick, Sleeper backoffSleeper, RepeatSuppressor suppressor) {
+    public SupervisedLoop(LoopShape shape, Runnable tick, Sleeper backoffSleeper, InstantSource clock) {
         this.shape = shape;
         this.tick = tick;
         this.backoffSleeper = backoffSleeper;
+        RepeatSuppressor suppressor = new RepeatSuppressor(
+                clock, RollUpPeriod.forInterval(shape.loopWait().interval()));
         this.events = new LoopEvents(shape.component(), suppressor);
     }
 

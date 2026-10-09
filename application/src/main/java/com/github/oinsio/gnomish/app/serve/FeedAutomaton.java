@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import java.time.InstantSource;
 
 /**
  * The {@code serve} feed loop: the four-state automaton (design D1) that decides, cycle by cycle,
@@ -40,7 +40,7 @@ public final class FeedAutomaton {
 
     private final SlotLedger slotLedger;
     private final Sleeper sleeper;
-    private final Clock clock;
+    private final InstantSource clock;
     private final int wipLimit;
     private final IdleTiming idleTiming;
 
@@ -68,7 +68,7 @@ public final class FeedAutomaton {
     FeedAutomaton(
             SlotLedger slotLedger,
             Sleeper sleeper,
-            Clock clock,
+            InstantSource clock,
             IdleTiming idleTiming,
             int wipLimit,
             FeedCycle cycle,
@@ -117,7 +117,7 @@ public final class FeedAutomaton {
     public void drain() throws InterruptedException {
         while (true) {
             slotLedger.acquire();
-            FeedCycle.Poll poll = cycle.poll(clock.now());
+            FeedCycle.Poll poll = cycle.poll(clock.instant());
             if (poll.candidates().isEmpty()) {
                 slotLedger.abandon();
                 break;
@@ -134,10 +134,10 @@ public final class FeedAutomaton {
     FeedState step() throws InterruptedException {
         // FR5: checked before the blocking acquire(), so a reader sees FULL while this call is parked.
         if (slotLedger.freeSlots() == 0) {
-            viewTracker.transitionTo(FeedState.FULL, clock.now());
+            viewTracker.transitionTo(FeedState.FULL, clock.instant());
         }
         slotLedger.acquire();
-        FeedCycle.Poll poll = cycle.poll(clock.now());
+        FeedCycle.Poll poll = cycle.poll(clock.instant());
         viewTracker.recordPoll(poll.now(), poll.openFrontCount());
 
         if (poll.candidates().isEmpty()) {

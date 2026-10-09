@@ -5,8 +5,8 @@ import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -64,7 +64,7 @@ public final class SnapshotWriter {
             Supplier<Snapshot> snapshotSupplier,
             SnapshotJsonMapper jsonMapper,
             Duration interval,
-            Clock clock,
+            InstantSource clock,
             int ledgerRetentionDays) {
         this.interval = interval;
         Path directory = Objects.requireNonNull(targetFile.getParent(), "targetFile must have a parent directory");

@@ -47,7 +47,7 @@ class UsageHistoryWalkerTerminationSpec extends Specification {
         Throwable thrown = null
         def walker = new Thread({
             try {
-                new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString())).walk(tempDir, 'PROJ-1')
+                new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()), VirtualTimeGitRetries.gitInfrastructure()).walk(tempDir, 'PROJ-1')
             } catch (Throwable t) {
                 thrown = t
             }

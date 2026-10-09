@@ -180,6 +180,9 @@ record TakeEngineExecution(
                     GitOutcomeRecorder.disposeWorkspace(git, cloneDir, worktree, outcome);
                 });
 
+        // FR18 of supervise-daemon-loops-and-embed-dashboard, open decision (task 3.3): the slot
+        // wiring carries the root's retry, but taking it here makes this leaf's eighth member, which
+        // process-invariants.md answers with a facade, not a wider record.
         var retry = TerminalWriteRetry.system();
         return new TakeOutcomeDispatch(retry, park, abortFuse, finish)
                 .dispatch(outcome, context, bootstrap.branchName(), order);

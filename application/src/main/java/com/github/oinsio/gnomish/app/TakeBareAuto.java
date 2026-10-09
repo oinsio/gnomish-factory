@@ -6,8 +6,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import java.time.Clock;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Random;
 
@@ -37,6 +38,7 @@ import java.util.Random;
 public final class TakeBareAuto {
 
     private final BareTakeClaimWalk walk;
+    private final InstantSource clock;
 
     /**
      * @param wiring the slot's equipment (D2 of introduce-slot-wiring), fixed for the whole take
@@ -51,7 +53,13 @@ public final class TakeBareAuto {
      *     never null — a seeded instance makes the pick deterministic for tests
      */
     TakeBareAuto(
-            SlotWiring wiring, Duration backoffBase, Duration backoffCap, Clock clock, int wipLimit, Random random) {
+            SlotWiring wiring,
+            Duration backoffBase,
+            Duration backoffCap,
+            InstantSource clock,
+            int wipLimit,
+            Random random) {
+        this.clock = clock;
         var claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.walk = new BareTakeClaimWalk(
                 claimAndWork, wiring.taskIdMdcKey(), backoffBase, backoffCap, clock, wipLimit, random);
@@ -78,8 +86,9 @@ public final class TakeBareAuto {
      */
     public TakeResult run(RunOrder run, Tracker tracker, InstanceId instanceId) {
         List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
-        // A one-shot run: its own latch, cold, discarded with the run (FR12).
-        new FinishedDecline().declineObserved(tracker, readyTasks);
+        // A one-shot run: its own latch, cold, discarded with the run (FR12), on the run's own
+        // clock (FR18 of supervise-daemon-loops-and-embed-dashboard).
+        new FinishedDecline(RepeatSuppressor.withDefaultRollUp(clock)).declineObserved(tracker, readyTasks);
         int openFrontCount = tracker.listOpen().size();
         return walk.resolve(run, tracker, instanceId, readyTasks, openFrontCount);
     }

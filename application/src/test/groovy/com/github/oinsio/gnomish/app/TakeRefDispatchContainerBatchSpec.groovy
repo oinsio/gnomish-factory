@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -84,7 +85,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
-        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
+        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper, new VirtualClock())
         def assembly = assemblyRunning(new ScriptedExecutor([
             completedRound('PROJ-1'),
             completedRound('PROJ-2')

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
@@ -65,7 +66,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     }
 
     private void dispatch(List<String> refs) {
-        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
+        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper, new VirtualClock())
         TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
                 new TakeArguments(CLONE_DIR, refs, null, false, false),
                 new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),

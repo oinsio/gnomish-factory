@@ -25,6 +25,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
@@ -71,7 +72,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 { TaskRef ref -> } as SlotRunner,
                 { Duration d -> } as Sleeper, {
                     -> Instant.now()
-                } as com.github.oinsio.gnomish.domain.engine.port.Clock,
+                } as java.time.InstantSource,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(60),
                 Duration.ofSeconds(30),
@@ -80,7 +81,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 notifier)
     }
 
-    private static InstanceHeartbeat newHeartbeat(Tracker tracker, com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
+    private static InstanceHeartbeat newHeartbeat(Tracker tracker, java.time.InstantSource clock) {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
@@ -90,7 +91,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 ClaimLostSink.IGNORE)
     }
 
-    private static StandingReaper newStandingReaper(com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
+    private static StandingReaper newStandingReaper(java.time.InstantSource clock) {
         new StandingReaper(
                 ReaperDuty.NONE,
                 { Duration d -> } as Sleeper,
@@ -99,7 +100,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 clock)
     }
 
-    private WorktreeJanitor newWorktreeJanitor(com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
+    private WorktreeJanitor newWorktreeJanitor(java.time.InstantSource clock) {
         new WorktreeJanitor(
                 RegisteredCloneFixture.unregistered(homeDir, homeDir.resolve('clone')),
                 Duration.ofDays(1),
@@ -115,17 +116,17 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         def tracker = Stub(Tracker)
         def trackerHealth = new TrackerHealthTracker(tracker, {
             -> Instant.now()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock)
+        } as java.time.InstantSource)
         def dirtyNotifier = new ForwardingDirtyNotifier()
         def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
         def slotLedger = new SlotLedger(3, {
             -> clock.instant()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
+        } as java.time.InstantSource, dirtyNotifier)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
         def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null, null, null)
         def engineClock = {
             -> clock.instant()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock
+        } as java.time.InstantSource
 
         when:
         def observability = ObservabilityAssembly.assemble(
@@ -144,11 +145,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                         newStandingReaper(engineClock),
                         newWorktreeJanitor(engineClock),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                        //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                        //     stamp a transition this spec never drives.
-                        RemoteOutageGates.system(
-                                BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30))))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })))
 
         then: 'a genuine, non-null wiring is returned'
         observability != null
@@ -187,12 +184,12 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         def tracker = Stub(Tracker)
         def trackerHealth = new TrackerHealthTracker(tracker, {
             -> Instant.now()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock)
+        } as java.time.InstantSource)
         def dirtyNotifier = new ForwardingDirtyNotifier()
         def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
         def slotLedger = new SlotLedger(1, {
             -> clock.instant()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
+        } as java.time.InstantSource, dirtyNotifier)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)
@@ -200,7 +197,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null, null, null)
         def engineClock = {
             -> clock.instant()
-        } as com.github.oinsio.gnomish.domain.engine.port.Clock
+        } as java.time.InstantSource
 
         when:
         def observability = ObservabilityAssembly.assemble(
@@ -219,11 +216,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                         newStandingReaper(engineClock),
                         newWorktreeJanitor(engineClock),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                        //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                        //     stamp a transition this spec never drives.
-                        RemoteOutageGates.system(
-                                BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30))))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 

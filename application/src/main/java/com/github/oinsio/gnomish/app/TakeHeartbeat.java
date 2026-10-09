@@ -16,9 +16,9 @@ import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.time.Duration;
+import java.time.InstantSource;
 
 /**
  * Assembles, once per {@code take} invocation (task 6.1, design D3, D4), the instance heartbeat
@@ -37,9 +37,10 @@ import java.time.Duration;
  * × multiplier} (design D8, task 5.1's derivation); and the {@link InstanceHeartbeat} tying them
  * together on the configured beat interval. The real-run beat interval sleeper is injected ({@code
  * ThreadSleeper} in production, a controllable sleeper under test); the {@code alive-at} clock is
- * the production {@link SystemClock}.
+ * the caller's {@link InstantSource}, the composition root's one time source.
  *
- * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat.
+ * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  *
  * @param instance the register/unregister lifecycle the claim choke point drives; never null
  * @param progress the engine-event listener whose snapshot each beat renders; never null
@@ -81,10 +82,12 @@ record TakeHeartbeat(
      * @param config the resolved tracker config carrying the beat interval and TTL multiplier
      * @param sleeper the beat-interval sleeper — production {@code ThreadSleeper}, a controllable
      *     sleeper under test; never null
+     * @param source the time source the beat's {@code alive-at} stamps and the standing reaper read;
+     *     never null
      * @return the assembled heartbeat views; never null
      */
-    static TakeHeartbeat forRun(Tracker tracker, TrackerConfig config, Sleeper sleeper) {
-        return forRun(tracker, config, sleeper, new SystemMonotonicTime());
+    static TakeHeartbeat forRun(Tracker tracker, TrackerConfig config, Sleeper sleeper, InstantSource source) {
+        return forRun(tracker, config, sleeper, new SystemMonotonicTime(), source);
     }
 
     /**
@@ -101,11 +104,16 @@ record TakeHeartbeat(
      * @param config the resolved tracker config carrying the beat interval and TTL multiplier
      * @param sleeper the beat-interval sleeper; never null
      * @param stateListener woken after every heartbeat-state transition; never null
+     * @param source the time source the beat and the standing reaper read; never null
      * @return the assembled heartbeat views; never null
      */
     static TakeHeartbeat forRun(
-            Tracker tracker, TrackerConfig config, Sleeper sleeper, HeartbeatStateListener stateListener) {
-        return forRun(tracker, config, sleeper, sleeper, new SystemMonotonicTime(), stateListener);
+            Tracker tracker,
+            TrackerConfig config,
+            Sleeper sleeper,
+            HeartbeatStateListener stateListener,
+            InstantSource source) {
+        return forRun(tracker, config, sleeper, sleeper, new SystemMonotonicTime(), stateListener, source);
     }
 
     /**
@@ -123,10 +131,12 @@ record TakeHeartbeat(
      * @param sleeper the beat-interval sleeper; never null
      * @param monotonicTime the monotonic time the reaper's staleness TTL is measured on — production
      *     {@link SystemMonotonicTime}, a controllable source under test; never null
+     * @param source the time source the beat and the standing reaper read; never null
      * @return the assembled heartbeat views; never null
      */
-    static TakeHeartbeat forRun(Tracker tracker, TrackerConfig config, Sleeper sleeper, MonotonicTime monotonicTime) {
-        return forRun(tracker, config, sleeper, sleeper, monotonicTime);
+    static TakeHeartbeat forRun(
+            Tracker tracker, TrackerConfig config, Sleeper sleeper, MonotonicTime monotonicTime, InstantSource source) {
+        return forRun(tracker, config, sleeper, sleeper, monotonicTime, source);
     }
 
     /**
@@ -149,6 +159,7 @@ record TakeHeartbeat(
      *     never null
      * @param monotonicTime the monotonic time the reaper's staleness TTL is measured on — production
      *     {@link SystemMonotonicTime}, a controllable source under test; never null
+     * @param source the time source the beat and the standing reaper read; never null
      * @return the assembled heartbeat views; never null
      */
     static TakeHeartbeat forRun(
@@ -156,8 +167,9 @@ record TakeHeartbeat(
             TrackerConfig config,
             Sleeper sleeper,
             Sleeper reaperSleeper,
-            MonotonicTime monotonicTime) {
-        return forRun(tracker, config, sleeper, reaperSleeper, monotonicTime, HeartbeatStateListener.IGNORE);
+            MonotonicTime monotonicTime,
+            InstantSource source) {
+        return forRun(tracker, config, sleeper, reaperSleeper, monotonicTime, HeartbeatStateListener.IGNORE, source);
     }
 
     /**
@@ -175,6 +187,8 @@ record TakeHeartbeat(
      * @param reaperSleeper the standing reaper's OWN interval sleeper, independent of {@code sleeper}
      * @param monotonicTime the monotonic time the reaper's staleness TTL is measured on; never null
      * @param stateListener woken after every heartbeat-state transition; never null
+     * @param source the one time source the beat's {@code alive-at} stamps, its suppressor and the
+     *     standing reaper all read (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      * @return the assembled heartbeat views; never null
      */
     static TakeHeartbeat forRun(
@@ -183,7 +197,8 @@ record TakeHeartbeat(
             Sleeper sleeper,
             Sleeper reaperSleeper,
             MonotonicTime monotonicTime,
-            HeartbeatStateListener stateListener) {
+            HeartbeatStateListener stateListener,
+            InstantSource source) {
         // FR13 of harden-task-branch-contract: the reaper's reassignment deadline and the holder's
         // own lost-detection deadline come from LeaseThresholds, which is where their required
         // order is stated and tested — never re-derived here.
@@ -195,10 +210,9 @@ record TakeHeartbeat(
         var staleness = new StalenessMemory(monotonicTime, ttl, windowGrace);
         var listing = new CachedOpenTaskListing();
         var reaper = new Reaper(tracker, staleness, listing);
-        var heartbeat =
-                new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), timing, flag, stateListener);
-        var standingReaper = new StandingReaper(
-                reaper, reaperSleeper, timing.interval(), heartbeat::liveClaimsSnapshot, new SystemClock());
+        var heartbeat = new InstanceHeartbeat(tracker, progress, sleeper, source, timing, flag, stateListener);
+        var standingReaper =
+                new StandingReaper(reaper, reaperSleeper, timing.interval(), heartbeat::liveClaimsSnapshot, source);
         var livenessOracle = new LivenessOracle(listing, staleness);
         return new TakeHeartbeat(heartbeat, progress, flag, standingReaper, livenessOracle);
     }

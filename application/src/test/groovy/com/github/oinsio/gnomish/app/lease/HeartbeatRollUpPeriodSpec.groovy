@@ -1,43 +1,25 @@
 package com.github.oinsio.gnomish.app.lease
 
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.app.daemon.RollUpPeriod
 import java.time.Duration
 import spock.lang.Specification
 
 /**
- * FR4 of harden-logging-observability: the roll-up period is derived from the beat interval, not
- * taken from the suppressor's catalog default. The two defaults are both five minutes, and a
- * roll-up period equal to the loop's own tick suppresses nothing — every repeat would already have
- * outlived the quiet period and would qualify as a roll-up, so a sustained outage would still cost
- * one WARN per beat. The period is therefore several beats long, and never shorter than the
- * catalog default for the very fast intervals a test or a tuned installation may use.
+ * FR2 of supervise-daemon-loops-and-embed-dashboard (design D2), carrying FR4 of
+ * harden-logging-observability: the heartbeat is exempt from the supervised loop but shares its
+ * roll-up rule, so its period comes from the rule's one owner, {@link RollUpPeriod} — whose own
+ * spec ({@code RollUpPeriodSpec}) holds the table. This spec pins only the delegation.
  */
 class HeartbeatRollUpPeriodSpec extends Specification {
 
-    def "FR4: the roll-up period outlives the beat interval it watches"() {
+    def "FR2: the heartbeat's roll-up period is the loop rule applied to its beat interval"() {
         expect:
+        new BeatTiming(interval, interval).rollUp() == RollUpPeriod.forInterval(interval)
         new BeatTiming(interval, interval).rollUp() == expected
 
         where:
         interval || expected
         Duration.ofMinutes(5) || Duration.ofMinutes(30)
-        Duration.ofSeconds(30) || RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
-        Duration.ofSeconds(50) || RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
-        Duration.ofSeconds(51) || Duration.ofSeconds(306)
         Duration.ofHours(1) || Duration.ofHours(6)
-    }
-
-    // The boundary itself: six beats exactly equal to the catalog default is not longer than it,
-    // so the default stands — one step above it, the derived period takes over.
-    def "FR4: at exactly six beats' worth of default, the default still wins"() {
-        given:
-        def sixBeatsIsExactlyDefault = RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL.dividedBy(6)
-
-        expect:
-        new BeatTiming(sixBeatsIsExactlyDefault, sixBeatsIsExactlyDefault).rollUp() == RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
-
-        and:
-        new BeatTiming(sixBeatsIsExactlyDefault.plusSeconds(1), sixBeatsIsExactlyDefault.plusSeconds(1)).rollUp() >
-                RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL
     }
 }

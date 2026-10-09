@@ -3,11 +3,11 @@ package com.github.oinsio.gnomish.app.lease;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.logtext.FailureReason;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,13 +42,13 @@ import org.slf4j.LoggerFactory;
  * @param clock the source of the {@code alive-at} instant
  * @param suppressor the edge-logging owner for each claim's beat-failure streak
  */
-record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, Clock clock, RepeatSuppressor suppressor) {
+record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, InstantSource clock, RepeatSuppressor suppressor) {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatBeater.class);
 
     /** What this beat learned about {@code ref}'s claim. */
     BeatOutcome beat(TaskRef ref) {
-        String payload = HeartbeatPayload.render(progress.progressFor(ref.id()), clock.now());
+        String payload = HeartbeatPayload.render(progress.progressFor(ref.id()), clock.instant());
         HeartbeatResult result;
         try {
             result = tracker.heartbeat(ref, payload);

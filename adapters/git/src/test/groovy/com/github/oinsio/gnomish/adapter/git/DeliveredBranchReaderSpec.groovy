@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -43,8 +44,8 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
-        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
-        reader = new DeliveredBranchReader(runner)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
+        reader = new DeliveredBranchReader(runner, VirtualTimeGitRetries.gitInfrastructure())
     }
 
     private static TaskContext context(String taskId = 'PROJ-1') {
@@ -101,7 +102,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
 
         when:
-        def delivered = new DeliveredBranchReader(runner).read(observerClone, 'PROJ-6')
+        def delivered = new DeliveredBranchReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(observerClone, 'PROJ-6')
 
         then: 'the delivered state is recovered via the remote-tracking ref, no local branch created'
         delivered.context().taskId() == 'PROJ-6'

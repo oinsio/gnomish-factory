@@ -3,11 +3,11 @@ package com.github.oinsio.gnomish.dashboard
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.board.ReadySummary
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -25,8 +25,8 @@ import spock.util.concurrent.PollingConditions
  * (NFR-R1). The cadence budget over an hour (one board fetch per board interval, never per render)
  * is the M2 success-metric assertion. Drives {@link
  * DashboardWatchLoop#renderOnce} directly — one cycle at a time, mirroring how {@code
- * FeedAutomatonSpec} drives {@code step()} — over a {@link StepClock} so cycle timing is
- * deterministic without a real sleep.
+ * FeedAutomatonSpec} drives {@code step()} — over a {@link VirtualClock} the spec advances between
+ * cycles, so cycle timing is deterministic without a real sleep.
  *
  * <p>NFR-P1, M1 of redesign-dashboard: the redesign is presentation-only, so these cadence and
  * board-fetch-budget assertions must hold unchanged across it — the same render cadence, the same
@@ -48,18 +48,22 @@ class DashboardWatchLoopSpec extends Specification {
         outputFile = homeDir.resolve('dashboard.html')
     }
 
-    private DashboardWatchLoop newLoop(List<Instant> instants) {
-        new DashboardWatchLoop(new DashboardRenderCycle(homeDir), Stub(Sleeper), new StepClock(instants))
+    /** The one time source of a feature; it moves only where the feature advances it. */
+    def clock = new VirtualClock(T0)
+
+    private DashboardWatchLoop newLoop() {
+        new DashboardWatchLoop(new DashboardRenderCycle(homeDir), Stub(Sleeper), clock)
     }
 
     def "a render cycle between board refreshes reuses the cached model without refetching"() {
         given: 'two cycles inside the 60s board cadence'
-        def loop = newLoop([T0, T0.plusSeconds(10)])
+        def loop = newLoop()
         def fetchCount = 0
         def fetch = { -> fetchCount++; model }
 
         when:
         loop.renderOnce(outputFile, fetch)
+        clock.advance(Duration.ofSeconds(10))
         loop.renderOnce(outputFile, fetch)
 
         then:
@@ -68,12 +72,13 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "a render cycle at or past the board cadence refetches"() {
         given: 'the second cycle lands exactly at the 60s board cadence'
-        def loop = newLoop([T0, T0.plusSeconds(60)])
+        def loop = newLoop()
         def fetchCount = 0
         def fetch = { -> fetchCount++; model }
 
         when:
         loop.renderOnce(outputFile, fetch)
+        clock.advance(Duration.ofSeconds(60))
         loop.renderOnce(outputFile, fetch)
 
         then:
@@ -82,16 +87,15 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "M2: over one hour of render cycles the board is fetched once per board cadence, never per render"() {
         given: 'one full hour of render cycles at the 10s render cadence'
-        long renderStep = DashboardWatchLoop.RENDER_CADENCE.seconds
-        int cycles = (int) (Duration.ofHours(1).seconds / renderStep)
-        def instants = (0..<cycles).collect { T0.plusSeconds(it * renderStep) }
-        def loop = newLoop(instants)
+        int cycles = (int) (Duration.ofHours(1).seconds / DashboardWatchLoop.RENDER_CADENCE.seconds)
+        def loop = newLoop()
         def fetchCount = 0
         def fetch = { -> fetchCount++; model }
 
-        when: 'every render cycle in the hour runs'
+        when: 'every render cycle in the hour runs, one render cadence apart'
         cycles.times {
             loop.renderOnce(outputFile, fetch)
+            clock.advance(DashboardWatchLoop.RENDER_CADENCE)
         }
 
         then: 'tracker reads stay within the board-cadence budget: one fetch per board interval, not per render'
@@ -104,7 +108,7 @@ class DashboardWatchLoopSpec extends Specification {
         given: 'an output path whose parent cannot be created — a regular file sits where the directory must be'
         def blocker = Files.createFile(homeDir.resolve('blocker'))
         def unwritable = blocker.resolve('dashboard.html')
-        def loop = newLoop([T0])
+        def loop = newLoop()
         def logs = LogCaptureSupport.attach(DashboardWatchLoop)
 
         when: 'a cycle renders but the atomic write cannot place its file'
@@ -133,7 +137,7 @@ class DashboardWatchLoopSpec extends Specification {
         def sleeper = { Duration d ->
             sleptDurations << d; throw new RuntimeException('stop after one cycle')
         } as Sleeper
-        def loop = new DashboardWatchLoop(new DashboardRenderCycle(homeDir), sleeper, new StepClock([T0]))
+        def loop = new DashboardWatchLoop(new DashboardRenderCycle(homeDir), sleeper, clock)
 
         when:
         loop.run(outputFile, { -> model })
@@ -150,7 +154,7 @@ class DashboardWatchLoopSpec extends Specification {
     def "run() exits when the calling thread is interrupted"() {
         given: 'a loop on the production sleeper, whose real 10s sleep only an interrupt can cut short'
         def loop = new DashboardWatchLoop(
-                new DashboardRenderCycle(homeDir), new ThreadSleeper(), new StepClock([T0, T0.plusSeconds(10)]))
+                new DashboardRenderCycle(homeDir), new ThreadSleeper(), clock)
 
         and: 'the loop runs on its own thread, exactly like gnomish dashboard --watch'
         def thread = new Thread({
@@ -173,7 +177,7 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "each cycle atomically replaces the output file with a complete, self-contained page"() {
         given:
-        def loop = newLoop([T0])
+        def loop = newLoop()
 
         when:
         loop.renderOnce(outputFile, { -> model })
@@ -187,7 +191,7 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "a watch-mode cycle marks the page as watch mode and bakes its meta-refresh"() {
         given:
-        def loop = newLoop([T0])
+        def loop = newLoop()
 
         when:
         loop.renderOnce(outputFile, { -> model })
@@ -204,7 +208,7 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "a board fetch failure degrades the board section but the cycle still writes a complete page"() {
         given:
-        def loop = newLoop([T0])
+        def loop = newLoop()
 
         when:
         loop.renderOnce(outputFile, {
@@ -219,7 +223,7 @@ class DashboardWatchLoopSpec extends Specification {
 
     def "the loop keeps running across a board outage: the next cycle after recovery refreshes normally"() {
         given: 'the fetch fails on the first (due) cycle and succeeds on the second, past the board cadence'
-        def loop = newLoop([T0, T0.plusSeconds(60)])
+        def loop = newLoop()
         def attempt = 0
         def fetch = {
             ->
@@ -232,6 +236,7 @@ class DashboardWatchLoopSpec extends Specification {
 
         when:
         loop.renderOnce(outputFile, fetch)
+        clock.advance(Duration.ofSeconds(60))
         loop.renderOnce(outputFile, fetch)
 
         then:

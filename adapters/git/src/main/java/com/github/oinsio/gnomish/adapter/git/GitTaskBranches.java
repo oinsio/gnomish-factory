@@ -48,14 +48,17 @@ public final class GitTaskBranches implements TaskBranchGit {
      * @param epochs the tenure whose epoch a container resume branch is stamped with; {@link
      *     ClaimEpochSource#NONE} where no claim is held — spelled out rather than defaulted, so a
      *     claimless assembly is a written choice (fix-claim-epoch-fence FR4)
+     * @param retry the infrastructure budget every branch lookup is re-attempted under — the
+     *     composition root's, so no collaborator builds its own (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskBranches(GitProcessRunner runner, ClaimEpochSource epochs) {
+    public GitTaskBranches(GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.hardening = new FactoryCloneHardening(runner);
-        this.resumeBranch = new ContainerResumeBranch(runner, epochs);
-        this.locator = new TaskBranchLocator(runner);
+        this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
+        this.locator = new TaskBranchLocator(runner, retry);
         this.lister = new TaskBranchLister(runner);
-        this.stateReader = new BranchStateReader(runner);
-        this.deliveredReader = new DeliveredBranchReader(runner);
+        this.stateReader = new BranchStateReader(runner, retry);
+        this.deliveredReader = new DeliveredBranchReader(runner, retry);
         this.push = new BranchPush(runner);
         this.reconciliation = new TaskBranchReconciliation(runner);
         this.parkFence = new ParkDeliveryFence(runner);

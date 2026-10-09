@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.e2e.E2eGitTree
 import com.github.oinsio.gnomish.e2e.E2eProcessHarness
 import com.github.oinsio.gnomish.e2e.E2eProcessResult
@@ -10,6 +9,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.Shared
 import spock.lang.Specification
@@ -133,7 +133,9 @@ class PaidSmokePermissionModeSpec extends Specification {
 
     @TypeChecked
     private static List<Map> launch(List<String> command, Path box, String prompt) {
-        def clock = new SystemClock()
+        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+        def clock = InstantSource.system()
         def handle = PaidSmokeAgentLauncher.launch(command, box, clock, prompt)
         List<String> lines = handle.output().withReader(StandardCharsets.UTF_8.name()) {
             it.readLines()

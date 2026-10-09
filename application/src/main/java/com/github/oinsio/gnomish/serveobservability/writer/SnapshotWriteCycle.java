@@ -6,8 +6,8 @@ import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * Snapshot} to the target file, then run the ledger retention sweep.
  *
  * <p>Self-description ({@code writtenAt}, {@code intervalSeconds}) is stamped here on the writer's
- * own {@link Clock}, right before serialization — not by the supplier — so callers assembling
+ * own {@link InstantSource}, right before serialization — not by the supplier — so callers assembling
  * {@link Snapshot} content never set these fields; whatever the supplier carries is replaced (FR2).
  *
  * <p><b>Failure isolation (NFR-R1).</b> {@link #writeOnce()} and the retention sweep each have
@@ -36,7 +36,7 @@ final class SnapshotWriteCycle {
     private final Supplier<Snapshot> snapshotSupplier;
     private final SnapshotJsonMapper jsonMapper;
     private final Duration interval;
-    private final Clock clock;
+    private final InstantSource clock;
     private final LedgerRetentionSweeper retentionSweeper;
 
     SnapshotWriteCycle(
@@ -44,7 +44,7 @@ final class SnapshotWriteCycle {
             Supplier<Snapshot> snapshotSupplier,
             SnapshotJsonMapper jsonMapper,
             Duration interval,
-            Clock clock,
+            InstantSource clock,
             LedgerRetentionSweeper retentionSweeper) {
         this.targetFile = targetFile;
         this.snapshotSupplier = snapshotSupplier;

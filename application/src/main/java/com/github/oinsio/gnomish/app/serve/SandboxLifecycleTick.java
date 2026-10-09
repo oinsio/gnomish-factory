@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +34,7 @@ public final class SandboxLifecycleTick {
     private final Path cloneDir;
     private final Duration interval;
     private final Sleeper sleeper;
-    private final Clock clock;
+    private final InstantSource clock;
     private volatile Instant lastRunAt;
 
     /**
@@ -51,14 +51,14 @@ public final class SandboxLifecycleTick {
             Path cloneDir,
             Duration interval,
             Sleeper sleeper,
-            Clock clock) {
+            InstantSource clock) {
         this.pass = pass;
         this.livenessOracle = livenessOracle;
         this.cloneDir = cloneDir;
         this.interval = interval;
         this.sleeper = sleeper;
         this.clock = clock;
-        this.lastRunAt = clock.now();
+        this.lastRunAt = clock.instant();
     }
 
     /** Starts the tick thread: one immediate tick, then every {@code interval} thereafter. */
@@ -85,7 +85,7 @@ public final class SandboxLifecycleTick {
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
         pass.run(cloneDir, livenessOracle.evaluate());
-        lastRunAt = clock.now();
+        lastRunAt = clock.instant();
     }
 
     /**

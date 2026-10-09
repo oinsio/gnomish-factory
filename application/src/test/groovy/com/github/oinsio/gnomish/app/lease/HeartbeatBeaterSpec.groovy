@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -25,10 +24,10 @@ class HeartbeatBeaterSpec extends Specification {
 
     private static final TaskRef A = new TaskRef('github:o/r#1')
 
-    RepeatSuppressor suppressor = new RepeatSuppressor(new MovableClock(Instant.parse('2026-09-28T10:00:00Z')),
-    Duration.ofMinutes(30))
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-09-28T10:00:00Z'))
+    RepeatSuppressor suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(30))
     Tracker tracker = Stub()
-    HeartbeatBeater beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), new VirtualClock(), suppressor)
+    HeartbeatBeater beater = new HeartbeatBeater(tracker, new HeartbeatProgress(), clock, suppressor)
     LogCaptureSupport logs = LogCaptureSupport.attach(HeartbeatBeater, Level.DEBUG)
 
     def cleanup() {

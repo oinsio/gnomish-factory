@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -35,7 +36,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
-        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, { String report ->
@@ -64,7 +65,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, report)
 
         when:
-        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, { String r ->
@@ -84,7 +85,7 @@ class TakeEscalationExitSpec extends Specification {
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
-        def result = TakeEscalationExit.exit(new TaskOutcome.Escalated(STATE, escalationReport), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeEscalationExit.exit(new TaskOutcome.Escalated(STATE, escalationReport), TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.park(REF, ParkReason.INFRA, { String r ->
@@ -111,7 +112,7 @@ class TakeEscalationExitSpec extends Specification {
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
-        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeEscalationExit.exit(escalated, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then: 'no park is written'
         0 * tracker.park(*_)

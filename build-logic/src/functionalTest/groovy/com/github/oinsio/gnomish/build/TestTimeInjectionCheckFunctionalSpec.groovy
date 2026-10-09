@@ -12,7 +12,7 @@ import spock.lang.TempDir
  *
  * <p>The gate's defining question is "does this test source wire production real time?", and a
  * {@code system()} factory answers it whether or not it takes arguments: {@code
- * RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)} wires a real {@code SystemClock}
+ * RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)} reads {@code InstantSource.system()}
  * exactly as {@code GitInfrastructureRetry.system()} does. The zero-arity-only pattern the check
  * shipped with let the whole argument-carrying class of factories through unseen.
  *

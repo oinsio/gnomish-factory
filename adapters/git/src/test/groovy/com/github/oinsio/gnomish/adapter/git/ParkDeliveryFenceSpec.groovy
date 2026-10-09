@@ -158,7 +158,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         def parked = commitPark()
 
         when:
-        def verdict = new GitTaskBranches(runner, ClaimEpochSource.NONE).fenceParkDelivery(clone, TASK_ID)
+        def verdict = new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).fenceParkDelivery(clone, TASK_ID)
 
         then:
         verdict instanceof ParkDeliveryVerdict.Delivered

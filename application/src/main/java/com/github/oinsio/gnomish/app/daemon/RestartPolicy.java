@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app.daemon;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
@@ -80,7 +80,7 @@ public abstract sealed class RestartPolicy permits RestartPolicy.Unbounded, Rest
         private final Unbounded respawns;
         private final int maxRestarts;
         private final Duration window;
-        private final Clock clock;
+        private final InstantSource clock;
         private final Deque<Instant> recentRestarts = new ArrayDeque<>();
 
         /**
@@ -90,7 +90,7 @@ public abstract sealed class RestartPolicy permits RestartPolicy.Unbounded, Rest
          * @param window the sliding period restarts are counted over; never null
          * @param clock the time source the window is measured on; never null
          */
-        public Bounded(Duration base, Duration cap, int maxRestarts, Duration window, Clock clock) {
+        public Bounded(Duration base, Duration cap, int maxRestarts, Duration window, InstantSource clock) {
             this.respawns = new Unbounded(base, cap);
             this.maxRestarts = maxRestarts;
             this.window = window;
@@ -99,7 +99,7 @@ public abstract sealed class RestartPolicy permits RestartPolicy.Unbounded, Rest
 
         @Override
         synchronized RestartDecision onDeath() {
-            Instant now = clock.now();
+            Instant now = clock.instant();
             Instant horizon = now.minus(window);
             recentRestarts.removeIf(at -> !at.isAfter(horizon));
             if (recentRestarts.size() >= maxRestarts) {

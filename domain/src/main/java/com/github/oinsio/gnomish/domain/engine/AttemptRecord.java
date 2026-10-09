@@ -32,7 +32,7 @@ import java.util.List;
  * round records none, but so does a verdict-less execution), so the manual-run status
  * contract reads {@code result} directly.
  *
- * <p>{@code startedAt} is the engine's {@link com.github.oinsio.gnomish.domain.engine.port.Clock}
+ * <p>{@code startedAt} is the engine's {@link java.time.InstantSource}
  * reading taken when the round began — the same instant conceptually as the round's {@link
  * EngineEvent.AttemptStarted}, captured at the top of the attempt and threaded through, NOT a
  * fresh reading taken when the round is recorded or persisted (FR15, design D11). Carrying it on

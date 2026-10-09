@@ -23,10 +23,9 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Random;
 import org.springframework.beans.factory.ObjectProvider;
@@ -46,7 +45,7 @@ import org.springframework.context.annotation.Primary;
  * ManualRunAssembly} builds those imperatively once that context exists, using the beans here as
  * building blocks.
  *
- * <p>{@link Random} and {@link Clock} beans are the two collaborators {@link
+ * <p>{@link Random} and {@link InstantSource} beans are the two collaborators {@link
  * AdHocTaskSynthesizer} needs — kept unseeded/system-real here since a manual run always wants a
  * genuine timestamp and a genuine random suffix; tests construct their own seeded instances
  * directly rather than through this configuration (see {@code AdHocTaskSynthesizerSpec}).
@@ -70,8 +69,9 @@ public class ManualRunConfiguration {
      * along, so the value threaded here holds for every check of every mode.
      */
     @Bean
-    public ShellCommandCheckRunner shellCommandCheckRunner(FactoryProperties factoryProperties) {
-        return new ShellCommandCheckRunner().withCheckTimeout(factoryProperties.checkCommandTimeout());
+    public ShellCommandCheckRunner shellCommandCheckRunner(
+            FactoryProperties factoryProperties, InstantSource instantSource) {
+        return new ShellCommandCheckRunner(instantSource).withCheckTimeout(factoryProperties.checkCommandTimeout());
     }
 
     @Bean
@@ -138,20 +138,24 @@ public class ManualRunConfiguration {
      * from the same backend and shares the one runner above.
      */
     @Bean
-    public TaskGit taskGit(GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook) {
+    public TaskGit taskGit(
+            GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook, InstantSource instantSource) {
+        // FR18 of supervise-daemon-loops-and-embed-dashboard: one infrastructure retry and the one
+        // time source for every git collaborator below — none builds its own.
+        GitInfrastructureRetry retry = GitInfrastructureRetry.system();
         return new TaskGit(
-                new GitTaskStore(gitProcessRunner, claimEpochBook),
-                new GitTaskBranches(gitProcessRunner, claimEpochBook),
+                new GitTaskStore(gitProcessRunner, claimEpochBook, retry, instantSource),
+                new GitTaskBranches(gitProcessRunner, claimEpochBook, retry),
                 new GitTaskWorktrees(gitProcessRunner, claimEpochBook),
                 // The mid-round push decoration (FR1, design D3 of wire-host-mid-round-push),
                 // built in exactly this one place: git-mode host control flows attach it via
                 // RunAssembly.withHostGitPush, and the selector applies it to the host rounds.
                 // The operator is stateless; per-task state (the shared poll suppressor) lives
                 // in the MidRoundPushRounds instance each application creates.
-                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner),
+                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner, instantSource),
                 // FR5, FR6 of add-base-ref-resolution: default-branch discovery and the narrow base
                 // refresh, under the production git infrastructure retry.
-                new GitBaseRefs(gitProcessRunner, GitInfrastructureRetry.system()),
+                new GitBaseRefs(gitProcessRunner, retry),
                 // FR4, design D2 of fix-claim-epoch-fence: the same book the three writers above
                 // stamp from travels inside the bundle, so the claiming commands wrap their
                 // resolved tracker with the record their own writers read.
@@ -194,9 +198,17 @@ public class ManualRunConfiguration {
                 profiles);
     }
 
+    /**
+     * The installation's one time source (design D16, D17 of
+     * supervise-daemon-loops-and-embed-dashboard): the only place real time enters production.
+     * Every component that reads the current instant receives this bean, or a retry or suppressor
+     * the composition root built on it.
+     *
+     * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
+     */
     @Bean
-    public SystemClock systemClock() {
-        return new SystemClock();
+    public InstantSource instantSource() {
+        return InstantSource.system();
     }
 
     @Bean
@@ -239,7 +251,7 @@ public class ManualRunConfiguration {
             SystemConsoleIO systemConsoleIO,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO,
             CheckEquipment checkEquipment,
-            SystemClock systemClock,
+            InstantSource instantSource,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
@@ -247,7 +259,7 @@ public class ManualRunConfiguration {
                 systemConsoleIO,
                 errorConsoleIO,
                 checkEquipment,
-                systemClock,
+                instantSource,
                 threadSleeper,
                 factoryProperties,
                 sandboxProperties);
@@ -335,17 +347,12 @@ public class ManualRunConfiguration {
     }
 
     @Bean
-    public Clock javaTimeClock() {
-        return Clock.systemUTC();
-    }
-
-    @Bean
     public Random taskIdRandom() {
         return new Random();
     }
 
     @Bean
-    public AdHocTaskSynthesizer adHocTaskSynthesizer(Clock javaTimeClock, Random taskIdRandom) {
-        return new AdHocTaskSynthesizer(javaTimeClock, taskIdRandom);
+    public AdHocTaskSynthesizer adHocTaskSynthesizer(InstantSource instantSource, Random taskIdRandom) {
+        return new AdHocTaskSynthesizer(instantSource, taskIdRandom);
     }
 }

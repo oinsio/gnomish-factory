@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -149,7 +150,7 @@ tracker:
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                TakeCommandSeams.DEFAULTS
+                TakeCommandSeams.defaults(new VirtualClock())
                 .withHeartbeatSleeper(sleeper)
                 .withReaperSleeper(reaperSleeper)
                 .withHeartbeatMonotonicTime(monotonic)

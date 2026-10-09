@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.status.AnchorLog
@@ -100,7 +101,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     }
 
     private void dispatch(List<String> refs) {
-        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
+        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper, new VirtualClock())
         TakeRefDispatch.run(dispatcher(assemblyRunning(new ScriptedExecutor([completedRound()])), heartbeat),
         new TakeArguments(cloneDir, refs, null, false, false),
         new BoundTracker(completingPipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, Stub(TrackerAdapterFactory), tracker,

@@ -201,7 +201,12 @@ a changed reason) at the site's level, repeats at DEBUG, a periodic roll-up
 naming the count, and one recovery line with the outage duration.
 `RepeatSuppressor` (`:logtext`) owns that decision; the call site owns the
 levels. Suppression state is in-memory per process — a restart may repeat the
-first-occurrence line, which is correct: a new process has told no one yet.
+first-occurrence line, which is correct: a new process has told no one yet. A
+loop's roll-up period is derived from its own interval — six ticks, never
+shorter than the catalog default (`RollUpPeriod.forInterval`) — and never taken
+from `RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL` directly, since a period equal
+to the tick suppresses nothing (introduced by
+`supervise-daemon-loops-and-embed-dashboard`, design D2).
 
 Sites that flood *within a single operation* rather than across calls (a parse
 loop over one file, a bulk deletion) use a local aggregate counter emitting one

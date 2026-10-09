@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
  * <p>Neither shape swallows an interrupt: both return with the thread's interrupt flag set, and the
  * loop's one interrupt check (design D3) decides whether that was its own stop or a stray.
  *
- * <p>Implements FR1, FR4, FR5 of supervise-daemon-loops-and-embed-dashboard.
+ * <p>Implements FR1, FR2, FR4, FR5 of supervise-daemon-loops-and-embed-dashboard.
  */
 public abstract sealed class LoopWait permits LoopWait.FixedInterval, LoopWait.IntervalOrSignal {
 
@@ -24,6 +24,15 @@ public abstract sealed class LoopWait permits LoopWait.FixedInterval, LoopWait.I
 
     /** Ends a wait {@code waiter} is in; never blocks (it runs under the loop's lock). */
     abstract void cutShort(Thread waiter);
+
+    /**
+     * The full wait between ticks absent a stop or a signal — what the loop derives its roll-up
+     * period from ({@link RollUpPeriod}, design D2). Implements FR2 of
+     * supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return the interval; never null
+     */
+    abstract Duration interval();
 
     /**
      * A fixed interval on an injected {@link Sleeper}, which restores the interrupt flag rather than
@@ -52,6 +61,11 @@ public abstract sealed class LoopWait permits LoopWait.FixedInterval, LoopWait.I
         @Override
         void cutShort(Thread waiter) {
             waiter.interrupt();
+        }
+
+        @Override
+        Duration interval() {
+            return interval;
         }
     }
 
@@ -92,6 +106,11 @@ public abstract sealed class LoopWait permits LoopWait.FixedInterval, LoopWait.I
         @Override
         void cutShort(Thread waiter) {
             signal();
+        }
+
+        @Override
+        Duration interval() {
+            return interval;
         }
 
         // Package-private: the coalescing spec reads what a wake left behind.

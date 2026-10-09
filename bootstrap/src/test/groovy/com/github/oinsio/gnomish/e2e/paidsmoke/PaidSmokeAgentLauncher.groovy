@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import groovy.transform.CompileStatic
-
 import java.nio.file.Path
+import java.time.InstantSource
 /**
  * Shared launch of a real {@code claude -p --output-format stream-json --verbose} round through
  * the {@code TaskExecutionEnvironment} port, with the prompt delivered on stdin (FR24, D18 of
@@ -32,7 +31,7 @@ final class PaidSmokeAgentLauncher {
      * @param prompt the prompt delivered to the CLI on stdin
      * @return the launched process handle
      */
-    static ExecHandle launch(String binary, Path workspaceRoot, SystemClock clock, String prompt) {
+    static ExecHandle launch(String binary, Path workspaceRoot, InstantSource clock, String prompt) {
         launch([
             binary,
             '-p',
@@ -49,7 +48,7 @@ final class PaidSmokeAgentLauncher {
      * @param prompt the prompt delivered to the CLI on stdin
      * @return the launched process handle
      */
-    static ExecHandle launch(List<String> command, Path workspaceRoot, SystemClock clock, String prompt) {
+    static ExecHandle launch(List<String> command, Path workspaceRoot, InstantSource clock, String prompt) {
         def environment = new HostTaskExecutionEnvironment(workspaceRoot, clock, ChildEnvAllowlist.none())
         environment.exec(new ExecCommand(command, [:], prompt, false))
     }

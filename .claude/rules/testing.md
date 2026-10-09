@@ -89,10 +89,10 @@ The bar: excluding the suite must remove **no production line** from mutation co
 
 ## Time is injected in tests, and the build checks it
 
-Components that retry or poll take their `Sleeper` and `Clock` as constructor arguments so a
+Components that retry or poll take their `Sleeper` and `InstantSource` as constructor arguments so a
 spec can drive them on virtual time (`VirtualClock`/`VirtualSleeper`, or the ready-made
 `VirtualTimeRetries` in `:test-fixtures`). Beside each such component sits a no-argument
-`system()` factory that wires the real `ThreadSleeper`/`SystemClock` with the production bound —
+`system()` factory that wires the real `ThreadSleeper` and `InstantSource.system()` with the production bound —
 **for the composition root, not for specs**.
 
 A spec that calls `system()` does not go red. Its collaborator never reports the failure the

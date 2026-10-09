@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -34,7 +35,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
     }
 
     private TaskRepository decorated(TaskRepository delegate, Path clone = cloneDir) {
-        new PushBestEffortTaskRepository(delegate, git, clone)
+        new PushBestEffortTaskRepository(delegate, git, clone, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
     def "an unreachable origin logs one WARN naming task, branch and event, and never propagates"() {

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -32,7 +33,7 @@ trait TakeCommandFixture implements AppAssemblyFixture {
 
     TakeCommand newTakeCommand(
             FactoryProperties factoryProperties, RegisteredClone clone, Map<String, TrackerAdapterFactory> trackerFactories,
-            TakeCommandSeams seams = TakeCommandSeams.DEFAULTS,
+            TakeCommandSeams seams = TakeCommandSeams.defaults(new VirtualClock()),
             SandboxLifecyclePass sandboxLifecyclePass = SandboxLifecyclePass.NONE) {
         TakeCommands.of(
                 newAssembly(factoryProperties),

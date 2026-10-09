@@ -2,12 +2,11 @@ package com.github.oinsio.gnomish.app.daemon
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.status.DaemonComponent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
@@ -43,7 +42,8 @@ final class SupervisedLoopHarness {
     final List<String> journal = Collections.synchronizedList([])
     final AtomicInteger ticks = new AtomicInteger()
     final CountDownLatch done = new CountDownLatch(1)
-    final MovableClock suppressorClock = new MovableClock(Instant.parse('2026-10-08T10:00:00Z'))
+    /** The loop's clock: its failure streaks roll up and recover on this virtual time only. */
+    final VirtualClock clock = new VirtualClock(Instant.parse('2026-10-08T10:00:00Z'))
     final LogCaptureSupport logs
     SupervisedLoop loop
     volatile boolean runaway
@@ -63,19 +63,31 @@ final class SupervisedLoopHarness {
         } as Sleeper, INTERVAL)
     }
 
+    /**
+     * A {@link LoopWait.FixedInterval} of {@code interval} whose sleeper journals the wait and moves
+     * {@link #clock} by it — the loop's time passes only as its own waits elapse.
+     */
+    LoopWait.FixedInterval clockedWait(Duration interval) {
+        def waits = new AtomicInteger()
+        new LoopWait.FixedInterval({ Duration d ->
+            haltIfRunaway(waits.incrementAndGet())
+            journal << "wait ${d}".toString()
+            clock.advance(d)
+        } as Sleeper, interval)
+    }
+
     SupervisedLoop build(LoopOrder order, LoopWait wait, Closure body,
             RestartPolicy policy = new RestartPolicy.Unbounded(INTERVAL, CAP),
             Sleeper backoffSleeper = { Duration d ->
                 journal << "backoff ${d}".toString()
             } as Sleeper) {
         def shape = new LoopShape(DaemonComponent.JANITOR, order, wait, policy)
-        def suppressor = new RepeatSuppressor(suppressorClock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
         loop = new SupervisedLoop(shape, {
             int n = ticks.incrementAndGet()
             haltIfRunaway(n)
             journal << "tick${n}".toString()
             body(n)
-        } as Runnable, backoffSleeper, suppressor)
+        } as Runnable, backoffSleeper, clock)
     }
 
     private void haltIfRunaway(int n) {

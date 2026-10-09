@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -85,13 +85,20 @@ public final class GithubClaimLease {
     private final GithubLabelOps labelOps;
     private final String readyLabel;
     private final String workingLabel;
+    /** The time source every stamp this collaborator writes is read from (FR20 of supervise-daemon-loops-and-embed-dashboard). */
+    private final InstantSource clock;
 
     public GithubClaimLease(
-            GithubHttpClient httpClient, GithubLabelOps labelOps, String readyLabel, String workingLabel) {
+            GithubHttpClient httpClient,
+            GithubLabelOps labelOps,
+            String readyLabel,
+            String workingLabel,
+            InstantSource clock) {
         this.httpClient = httpClient;
         this.labelOps = labelOps;
         this.readyLabel = readyLabel;
         this.workingLabel = workingLabel;
+        this.clock = clock;
     }
 
     /** Implements {@code Tracker.claim} for GitHub (FR6, NFR-R1, FR12). */
@@ -136,7 +143,7 @@ public final class GithubClaimLease {
         String body = GithubMarker.render(
                 GithubMarkerKind.CLAIM,
                 instanceId,
-                Instant.now(),
+                clock.instant(),
                 "🤖 gnomish: claimed by " + instanceId,
                 null,
                 identity,

@@ -49,7 +49,7 @@ class ClaimAnchorSpec extends Specification {
 
     def "the claim anchor is logged before the slot starts working the claimed task"() {
         given: 'a ledger with both permits free, one of them reserved by the caller as the feed does'
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
 
         and: 'a tracker that grants the claim'
@@ -86,7 +86,7 @@ class ClaimAnchorSpec extends Specification {
 
     def "the feed thread carries no task context away from the claim it just announced"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         Tracker tracker = [claim: { TaskRef ref, String instance ->
                 new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -111,7 +111,7 @@ class ClaimAnchorSpec extends Specification {
         }, RepeatSuppressorFixture.quiet())
 
         def gate = RemoteOutageGateFixtures.closedGate()
-        def resilience = new FeedResilience(outageRetry, new FinishedDecline(), gate)
+        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), gate)
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner,
                 new FeedSelection(Duration.ofMinutes(2), Duration.ofHours(1), 2, new Random(0)),
                 new FeedStateLogger(), resilience)

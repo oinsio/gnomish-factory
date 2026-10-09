@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -136,7 +137,7 @@ tracker:
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
         newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)],
-        TakeCommandSeams.DEFAULTS
+        TakeCommandSeams.defaults(new VirtualClock())
         .withServeProperties(serveProperties)
         .withHeartbeatSleeper(budgetedRealSleeper(600))
         .withReaperSleeper(budgetedRealSleeper(600)))

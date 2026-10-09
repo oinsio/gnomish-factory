@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.sandbox.*
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
@@ -150,7 +151,8 @@ autonomy:
         def wiring = new SlotWiring(
                 newAssembly(properties), git, registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 containerTakeSupport, new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                VirtualTimeRetries.terminalWrite())
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)

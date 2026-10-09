@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,8 +77,14 @@ public final class GithubCheckClientFactory implements CheckClientFactory {
             throw new IllegalArgumentException("factory.check.github.repo must be 'owner/name', got: '" + repo + "'");
         }
         int slash = repo.indexOf('/');
+        // FR18 of supervise-daemon-loops-and-embed-dashboard, open decision (task 3.3): the
+        // ServiceLoader-built factory is reached only through the plugin API's create(...), which
+        // carries no time source, so real time still enters the client here.
         return new GithubCheckExternalClient(
-                new GithubHttpClient(apiUrl, token), repo.substring(0, slash), repo.substring(slash + 1));
+                new GithubHttpClient(apiUrl, token),
+                repo.substring(0, slash),
+                repo.substring(slash + 1),
+                InstantSource.system());
     }
 
     /**

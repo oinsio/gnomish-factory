@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
-import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,10 +31,13 @@ public final class GithubDecisions {
 
     private final GithubCommentThread commentThread;
     private final GithubMarkerWriter markerWriter;
+    /** The time source every stamp this collaborator writes is read from (FR20 of supervise-daemon-loops-and-embed-dashboard). */
+    private final InstantSource clock;
 
-    public GithubDecisions(GithubHttpClient httpClient, GithubMarkerWriter markerWriter) {
+    public GithubDecisions(GithubHttpClient httpClient, GithubMarkerWriter markerWriter, InstantSource clock) {
         this.commentThread = new GithubCommentThread(httpClient);
         this.markerWriter = markerWriter;
+        this.clock = clock;
     }
 
     /** Implements {@code Tracker.collectDecisions} for GitHub (FR12). */
@@ -77,7 +80,7 @@ public final class GithubDecisions {
                         null,
                         tenure,
                         markerWriter.instanceId(),
-                        Instant.now()));
+                        clock.instant()));
     }
 
     /** Returns the index (in comment order) of the latest ACK-kind marker, or empty if none is present. */

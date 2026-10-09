@@ -63,7 +63,7 @@ class FeedCycleSpec extends Specification {
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
-        def resilience = new FeedResilience(outageRetry, new FinishedDecline(), gate)
+        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), gate)
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner, new FeedSelection(BASE, CAP, 2, new Random(0)),
                 new FeedStateLogger(), resilience)
     }
@@ -76,7 +76,7 @@ class FeedCycleSpec extends Specification {
     //     at 0 instead of restoring it to 1.
     def "claimOrAbandon abandons the reserved permit when every candidate loses the claim race"() {
         given: 'a ledger with its one permit already reserved, as the real caller (FeedAutomaton) does before claimOrAbandon'
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
 
         and: 'a tracker that reports every candidate as already held by another instance'
@@ -103,7 +103,7 @@ class FeedCycleSpec extends Specification {
     //     never entered at all, proven here by candidates that WOULD otherwise claim successfully.
     def "claimOrAbandon abandons the reserved permit and calls tracker.claim zero times while the gate is open"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
@@ -132,7 +132,7 @@ class FeedCycleSpec extends Specification {
     //     here through onClosedOutage once the gate closes.
     def "claimOrAbandon while the gate is open counts the abandoned permit toward the outage's released claims"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
@@ -170,7 +170,7 @@ class FeedCycleSpec extends Specification {
     //     calling tracker.claim — must still abandon the reserved permit.
     def "claimOrAbandon abandons the reserved permit when the candidate list is empty"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
@@ -193,7 +193,7 @@ class FeedCycleSpec extends Specification {
     // supplied count to 0 would wrongly consider it eligible (0 < 2) and claim it.
     def "claimOrAbandon skips a fresh candidate whose live open-front count has reached the WIP limit"() {
         given: 'a ledger with its one permit already reserved, and a tracker at the WIP limit (2 open)'
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         def claimCalls = new AtomicInteger()
         // Only the list's size is ever read (OpenFrontGate.isStillEligible), so a plain
@@ -225,7 +225,7 @@ class FeedCycleSpec extends Specification {
     //     the list is still claimed on this same cycle.
     def "claimOrAbandon skips a candidate still occupying a local slot and claims the next one instead"() {
         given: 'an old slot still occupies Z (its claim was self-reaped), and a fresh permit is reserved'
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(new TaskRef('github:o/r#zombie'))
         ledger.acquire()
@@ -271,7 +271,7 @@ class FeedCycleSpec extends Specification {
     //     stranding the permit.
     def "claimOrAbandon abandons the reserved permit when the only candidate still occupies a local slot"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(new TaskRef('github:o/r#zombie'))
         ledger.acquire()
@@ -297,7 +297,7 @@ class FeedCycleSpec extends Specification {
     //     claim the same ref again as an ordinary fresh claim.
     def "the same ref becomes claimable again once its old slot releases"() {
         given: 'the zombie slot has released; only the ledger history remembers it'
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(new TaskRef('github:o/r#zombie'))
         ledger.release(new TaskRef('github:o/r#zombie'))
@@ -328,7 +328,7 @@ class FeedCycleSpec extends Specification {
     //     branch.
     def "claimOrAbandon assigns the reserved permit and starts the slot when a candidate wins the claim race"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->

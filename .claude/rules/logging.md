@@ -250,6 +250,7 @@ would corrupt it.
 A loop that can fail every tick uses `RepeatSuppressor` (`:logtext`): first
 occurrence (or a changed reason) at the site's level, repeats DEBUG, periodic
 roll-up with the count at the site's level, one recovery line with the outage.
+A loop's roll-up period is derived from its interval (`RollUpPeriod.forInterval`), never taken from the catalog default.
 
 ```java
 switch (suppressor.failed(key, reason)) {

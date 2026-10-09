@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
@@ -42,7 +42,7 @@ final class LedgerRetentionSweeper {
 
     private final Path directory;
     private final int retentionDays;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param directory the observability directory to scan for {@code ledger-*.jsonl} files;
@@ -53,7 +53,7 @@ final class LedgerRetentionSweeper {
      * @param clock supplies the current instant used to compute "today" in UTC on every sweep;
      *     never null
      */
-    LedgerRetentionSweeper(Path directory, int retentionDays, Clock clock) {
+    LedgerRetentionSweeper(Path directory, int retentionDays, InstantSource clock) {
         if (retentionDays < 0) {
             throw new IllegalArgumentException("retentionDays must not be negative");
         }

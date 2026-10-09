@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
@@ -86,7 +87,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
     def "NFR-R2: a task with a recorded outcome is distinguishable from the interrupted case"() {
         given: 'contrast fixture — same shape, but recordOutcome was actually called (Paused, not Completed, so FR15 cleanup does not remove .gnomish-task/ before this read)'
         recordInterruptedRound('PROJ-INT-3')
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE).recordOutcome('PROJ-INT-3',
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock()).recordOutcome('PROJ-INT-3',
                 new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-INT-3', '--json')
 

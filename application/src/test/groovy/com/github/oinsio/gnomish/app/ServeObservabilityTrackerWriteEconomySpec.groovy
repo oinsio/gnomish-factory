@@ -39,11 +39,9 @@ import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWrit
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
@@ -186,12 +184,9 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
             dirtyCalls.incrementAndGet()
         } as DirtyNotifier
         def observedLedger = new SlotLedger(1, observedClock, notifier)
-        // TaskOutcomeLedgerWriter/RotatingLedgerAppender take a java.time.Clock, distinct from the
-        // domain Clock FeedAutomaton/SlotLedger/TrackerHealthTracker use; fixed to the same instant.
-        def ledgerClock = Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC)
         def appender = new RotatingLedgerAppender(
-                new LedgerAppender(serveDir.resolve('placeholder'), new LedgerJsonMapper()), serveDir, ledgerClock)
-        def ledgerWriter = new TaskOutcomeLedgerWriter(observedLedger, appender, INSTANCE_INFO, ledgerClock)
+                new LedgerAppender(serveDir.resolve('placeholder'), new LedgerJsonMapper()), serveDir, observedClock)
+        def ledgerWriter = new TaskOutcomeLedgerWriter(observedLedger, appender, INSTANCE_INFO, observedClock)
         def accumulator = new RunSummaryAccumulator()
         def observedAutomaton = FeedAutomatonFixture.feedAutomaton(healthTracker, INSTANCE, observedLedger,
                 observedSlotRunner(healthTracker, ledgerWriter, accumulator),

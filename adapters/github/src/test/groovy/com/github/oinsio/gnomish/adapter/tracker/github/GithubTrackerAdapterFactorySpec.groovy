@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
@@ -123,7 +124,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
         when:
         Tracker tracker = new GithubTrackerAdapterFactory()
-                .create(configFor(subsection()), INSTANCE_ID, 'contract-test-token')
+                .create(configFor(subsection()), INSTANCE_ID, 'contract-test-token', new VirtualClock())
 
         then: 'label provisioning already ran at construction time (startup smoke test, NFR-R4)'
         wireMock.verify(1, getRequestedFor(urlEqualTo("/repos/$OWNER/$REPO/labels?per_page=100")))
@@ -145,7 +146,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
                 .willReturn(aResponse().withStatus(201).withBody('{}')))
 
         when:
-        new GithubTrackerAdapterFactory().create(configFor(subsection()), INSTANCE_ID, 'contract-test-token')
+        new GithubTrackerAdapterFactory().create(configFor(subsection()), INSTANCE_ID, 'contract-test-token', new VirtualClock())
 
         then:
         wireMock.verify(1, postRequestedFor(
@@ -216,7 +217,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         ]
 
         when:
-        new GithubTrackerAdapterFactory().create(configFor(subsection), INSTANCE_ID, 'contract-test-token')
+        new GithubTrackerAdapterFactory().create(configFor(subsection), INSTANCE_ID, 'contract-test-token', new VirtualClock())
 
         then:
         wireMock.verify(1, postRequestedFor(

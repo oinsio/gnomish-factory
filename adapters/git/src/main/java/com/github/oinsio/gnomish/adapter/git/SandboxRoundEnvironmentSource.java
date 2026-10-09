@@ -5,13 +5,13 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
 
@@ -44,7 +44,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     private final String taskId;
     private final String branch;
     private final AttemptCommitRef attemptCommit;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param lease the run's environment lease; rounds run in the stage's leased environment
@@ -60,7 +60,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
             Path cloneDir,
             String taskId,
             AttemptCommitRef attemptCommit,
-            Clock clock) {
+            InstantSource clock) {
         this.lease = lease;
         this.runner = runner;
         this.cloneDir = cloneDir;
@@ -68,6 +68,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.attemptCommit = attemptCommit;
         this.clock = clock;
+        this.harvestSuppressor = RepeatSuppressor.withDefaultRollUp(clock);
     }
 
     /**
@@ -75,9 +76,11 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * per-round, but an environment that cannot be harvested is one fault whether it spans polls
      * of one round or rounds of one task, and a per-round suppressor would re-announce it each
      * time. Built here rather than injected — the constructor is already at the parameter limit,
-     * and this is the owner the round's {@link MidRoundPollContext} borrows it from.
+     * and this is the owner the round's {@link MidRoundPollContext} borrows it from — on the
+     * round source's own {@code clock}, so the streak and the harvest interval measure on one time
+     * source (FR18 of supervise-daemon-loops-and-embed-dashboard).
      */
-    private final RepeatSuppressor harvestSuppressor = RepeatSuppressor.system();
+    private final RepeatSuppressor harvestSuppressor;
 
     @Override
     public Round openRound(StageExecutor.Request request) {

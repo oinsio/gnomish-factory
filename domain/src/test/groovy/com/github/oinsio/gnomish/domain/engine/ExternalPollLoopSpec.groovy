@@ -48,7 +48,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
         and: 'the loop slept exactly twice, each of the interval — so virtual time advanced 2*interval'
         sleeper.slept == [interval, interval]
-        clock.now() == Instant.EPOCH + interval.multipliedBy(2)
+        clock.instant() == Instant.EPOCH + interval.multipliedBy(2)
     }
 
     def "a passing poll's run link is preserved into the recorded check result"() {

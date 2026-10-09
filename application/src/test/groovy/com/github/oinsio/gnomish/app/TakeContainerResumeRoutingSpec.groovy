@@ -28,6 +28,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingProperties
@@ -75,7 +76,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
                         containerTakeSupport))
         def mechanics = new ContainerResumeMechanics(
                 resumeRunner, [] as List<Segment>, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     SandboxRunSupport builtSupport

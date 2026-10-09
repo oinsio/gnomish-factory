@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -22,6 +22,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -112,8 +113,10 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
         new ManualRunAssembly(
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
-                new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(), githubRegistry(), secrets, properties),
-                new SystemClock(),
+                new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), githubRegistry(), secrets, properties),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new ThreadSleeper(),
                 properties,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
@@ -154,13 +157,15 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
                 new CheckEquipment(
                         new FilesExistCheckRunner(),
-                        new ShellCommandCheckRunner(),
+                        new ShellCommandCheckRunner(new VirtualClock()),
                         githubRegistry(),
                         // An empty factory home of its own: no secrets folder, so every secret resolves from
                         // the environment exactly as before the folders existed (FR8 of add-project-registry).
                         new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null),
                         githubCheckProperties()),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new ThreadSleeper(),
                 githubCheckProperties(),
                 new SandboxProperties(null, null, null, null, null, [

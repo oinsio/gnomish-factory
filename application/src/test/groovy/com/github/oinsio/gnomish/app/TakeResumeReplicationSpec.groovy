@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -79,7 +80,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
         def git = git()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor, verdict), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     /** A chain whose engine run escalates: two rounds, the last verification failing. */

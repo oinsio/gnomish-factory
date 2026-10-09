@@ -6,9 +6,9 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +40,7 @@ public final class DashboardWatchLoop {
     private final DashboardRenderCycle renderCycle;
     private final DashboardBoardCache boardCache = new DashboardBoardCache();
     private final Sleeper sleeper;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param renderCycle the render composition over the instance's serve directory, so this loop
@@ -49,7 +49,7 @@ public final class DashboardWatchLoop {
      *     sleeper under test; never null
      * @param clock the wall-clock time source for every cycle's observation instant; never null
      */
-    public DashboardWatchLoop(DashboardRenderCycle renderCycle, Sleeper sleeper, Clock clock) {
+    public DashboardWatchLoop(DashboardRenderCycle renderCycle, Sleeper sleeper, InstantSource clock) {
         this.renderCycle = renderCycle;
         this.sleeper = sleeper;
         this.clock = clock;

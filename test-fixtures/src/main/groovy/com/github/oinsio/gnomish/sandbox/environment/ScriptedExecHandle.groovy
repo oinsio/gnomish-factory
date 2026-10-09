@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
-
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 
 /**
  * One scripted in-box probe answer, in the shape the self-check captures it:
@@ -33,7 +32,7 @@ final class ScriptedExecHandle {
                     }
 
                     @Override
-                    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+                    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
                         throw new UnsupportedOperationException('not used by the self-check')
                     }
 

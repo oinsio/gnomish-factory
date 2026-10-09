@@ -88,7 +88,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         def events = parser.parse(FakeAgentScenarioReader.readerOf('missing-result-event'))
 
         when: 'the round result is extracted'
-        extractor.extract(events, clock.now())
+        extractor.extract(events, clock.instant())
 
         then: 'the essential-path failure is signaled by throwing'
         def ex = thrown(MissingResultEventException)
@@ -104,7 +104,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         events.every { !(it.event() instanceof AgentEvent.ResultEvent) }
 
         when: 'the round result is extracted'
-        extractor.extract(events, clock.now())
+        extractor.extract(events, clock.instant())
 
         then: 'the essential-path failure is signaled by throwing, same as a truly missing result'
         def ex = thrown(MissingResultEventException)
@@ -114,7 +114,7 @@ class AgentRoundResultExtractorSpec extends Specification {
     // NFR-R1, D3: an empty event list (nothing parsed at all) throws with no init session id known
     def "throws MissingResultEventException for an empty event list, without a session id to report"() {
         when: 'the round result is extracted from an empty list'
-        extractor.extract([], clock.now())
+        extractor.extract([], clock.instant())
 
         then: 'the failure is still signaled, falling back to an "unknown" session marker'
         def ex = thrown(MissingResultEventException)

@@ -13,12 +13,12 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
 import java.io.IOException;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
@@ -67,7 +67,7 @@ public final class ManualRunAssembly implements RunAssembly {
     final ConsoleIO errorConsole;
 
     final CheckEquipment checks;
-    final SystemClock systemClock;
+    final InstantSource instantSource;
     final ThreadSleeper threadSleeper;
     final FactoryProperties factoryProperties;
     final SandboxProperties sandboxProperties;
@@ -89,14 +89,14 @@ public final class ManualRunAssembly implements RunAssembly {
             SystemConsoleIO systemConsoleIO,
             ConsoleIO errorConsole,
             CheckEquipment checks,
-            SystemClock systemClock,
+            InstantSource instantSource,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
         this.systemConsoleIO = systemConsoleIO;
         this.errorConsole = errorConsole;
         this.checks = checks;
-        this.systemClock = systemClock;
+        this.instantSource = instantSource;
         this.threadSleeper = threadSleeper;
         this.factoryProperties = factoryProperties;
         this.sandboxProperties = sandboxProperties;
@@ -116,7 +116,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.systemConsoleIO = base.systemConsoleIO;
         this.errorConsole = base.errorConsole;
         this.checks = base.checks;
-        this.systemClock = base.systemClock;
+        this.instantSource = base.instantSource;
         this.threadSleeper = base.threadSleeper;
         this.factoryProperties = base.factoryProperties;
         this.sandboxProperties = base.sandboxProperties;
@@ -264,5 +264,14 @@ public final class ManualRunAssembly implements RunAssembly {
     @Override
     public DialogConsole dialogConsole() {
         return new DialogConsole(systemConsoleIO);
+    }
+
+    /**
+     * The composition root's one time source, the same instance every run this assembly builds
+     * reads (FR18 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    @Override
+    public InstantSource instantSource() {
+        return instantSource;
     }
 }

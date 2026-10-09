@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import spock.lang.Specification
 
@@ -70,7 +70,7 @@ class RestartCleanlinessSpec extends Specification {
         // that has not claimed anything yet (FR1, FR2).
         def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, {
             -> []
-        }, new SystemClock())
+        }, new VirtualClock())
 
         expect: 'the restart alone mints a different id — the two lives are never confused'
         newInstanceId != oldInstanceId

@@ -8,8 +8,8 @@
  * <p>Neither is an adapter (task 4.4, D12(a) of split-into-modules). {@code DialogConsole}
  * decorates an injected {@code ConsoleIO} with policy the use cases own; {@code SystemConsoleIO}
  * wraps two streams its caller hands it in a {@code BufferedReader} / {@code PrintStream} — a
- * pure JDK wrapper implementing a port, the same category as {@code SystemClock} / {@code
- * ThreadSleeper} in task 4.2. The environment itself — {@code System.in} / {@code System.out} /
+ * pure JDK wrapper implementing a port, the same category as {@code ThreadSleeper} in
+ * task 4.2. The environment itself — {@code System.in} / {@code System.out} /
  * {@code System.console()} — is named only at the composition root and in the {@code
  * @DoNotMutate} wiring methods that stand in for it.
  *

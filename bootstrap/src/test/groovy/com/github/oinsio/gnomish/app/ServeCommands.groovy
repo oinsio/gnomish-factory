@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import java.time.Clock
 
 /**
@@ -24,12 +25,13 @@ final class ServeCommands {
 
     static ServeCommand of(RunAssembly assembly, TaskGit git, RegisteredClone clone, String taskIdMdcKey,
             FactoryProperties factoryProperties, ServeProperties serveProperties, Clock clock,
-            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock, TrackerWiring trackerWiring,
+            java.time.InstantSource feedClock, TrackerWiring trackerWiring,
             FeedAutomatonStarter starter, SandboxLifecyclePass sandboxLifecyclePass,
             ContainerTakeSupport containerTakeSupport, ConsoleIO errorConsole) {
         def resolvedClone = RegisteredCloneFixture.provider(clone)
         def slotWiringFactory = new SlotWiringFactory(
-                assembly, resolvedClone, taskIdMdcKey, clock, containerTakeSupport, trackerWiring.pipelineSource())
+                assembly, resolvedClone, taskIdMdcKey, clock, containerTakeSupport, trackerWiring.pipelineSource(),
+                VirtualTimeRetries.terminalWrite())
         def runtimeAssembly = new ServeRuntimeAssembly(
                 slotWiringFactory,
                 new ServeAssembly(factoryProperties, serveProperties, feedClock, resolvedClone),

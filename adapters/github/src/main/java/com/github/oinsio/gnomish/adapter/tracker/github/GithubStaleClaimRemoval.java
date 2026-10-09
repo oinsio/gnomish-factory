@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.net.http.HttpResponse;
-import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -74,18 +74,22 @@ public final class GithubStaleClaimRemoval {
     private final GithubMarkerWriter markerWriter;
     private final String workingLabel;
     private final String readyLabel;
+    /** The time source every stamp this collaborator writes is read from (FR20 of supervise-daemon-loops-and-embed-dashboard). */
+    private final InstantSource clock;
 
     public GithubStaleClaimRemoval(
             GithubHttpClient httpClient,
             GithubLabelOps labelOps,
             GithubMarkerWriter markerWriter,
             String workingLabel,
-            String readyLabel) {
+            String readyLabel,
+            InstantSource clock) {
         this.httpClient = httpClient;
         this.labelOps = labelOps;
         this.markerWriter = markerWriter;
         this.workingLabel = workingLabel;
         this.readyLabel = readyLabel;
+        this.clock = clock;
     }
 
     /** Implements {@code Tracker.removeStaleClaim} for GitHub (FR4, FR5, FR19). */
@@ -195,7 +199,7 @@ public final class GithubStaleClaimRemoval {
                         null,
                         null,
                         markerWriter.instanceId(),
-                        Instant.now()));
+                        clock.instant()));
     }
 
     private void deleteClaimComment(GithubTaskId id, long commentId) {

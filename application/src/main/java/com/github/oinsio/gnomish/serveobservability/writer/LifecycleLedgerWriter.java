@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLineAssembler;
 import java.io.IOException;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,14 +28,14 @@ public final class LifecycleLedgerWriter {
 
     private final RotatingLedgerAppender appender;
     private final InstanceInfo instance;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param appender the shared ledger append point every line is written through; never null
      * @param instance this factory instance's identity, carried on every written line; never null
      * @param clock supplies the event's {@code at} instant on every write; never null
      */
-    public LifecycleLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, Clock clock) {
+    public LifecycleLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, InstantSource clock) {
         this.appender = appender;
         this.instance = instance;
         this.clock = clock;

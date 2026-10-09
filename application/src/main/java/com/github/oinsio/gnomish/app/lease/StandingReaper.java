@@ -1,178 +1,106 @@
 package com.github.oinsio.gnomish.app.lease;
 
-import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
+import com.github.oinsio.gnomish.app.daemon.LoopOrder;
+import com.github.oinsio.gnomish.app.daemon.LoopShape;
+import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
+import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Collection;
 import java.util.function.Supplier;
-import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * The standing reaper thread (design D1): unlike the old beat-riding reaper, this duty owns its own
- * virtual thread and ticks for the whole run's lifetime, whatever the held-claim count — including
- * zero, the {@code serve}-daemon-idle case this change fixes (FR1). Each tick reads a fresh
- * live-claims snapshot (design D3, typically {@code InstanceHeartbeat::liveClaimsSnapshot}) and
- * delegates to the real {@link ReaperDuty}.
+ * The standing reaper (design D1 of fix-reaper-idle-liveness): unlike the old beat-riding reaper,
+ * this duty ticks for the whole run's lifetime, whatever the held-claim count — including zero,
+ * the {@code serve}-daemon-idle case (FR1 of fix-reaper-idle-liveness). Each tick reads a fresh
+ * live-claims snapshot (design D3 of that change, typically {@code
+ * InstanceHeartbeat::liveClaimsSnapshot}) and delegates to the real {@link ReaperDuty}.
  *
- * <p><b>Un-killable loop (design D4, FR3).</b> {@link #loop()} wraps both the interval sleep and the
- * tick in one {@code catch (Throwable)} — wider than {@link InstanceHeartbeat}'s {@code catch
- * (RuntimeException)} and covering the sleep too — so an {@code Error} or a throwing sleeper is
- * logged WARN and the loop continues. Only {@link #stop()} breaks it, without a WARN/ERROR or respawn.
+ * <p><b>The thread is a supervised daemon loop</b> (design D1, D7 of
+ * supervise-daemon-loops-and-embed-dashboard). This class owns only its tick and its vitals; the
+ * thread, the guard, the stop and the restart belong to the {@link SupervisedLoop} it holds, shaped
+ * wait → tick on a {@link LoopWait.FixedInterval} of the reaper's interval, framed as {@link
+ * DaemonComponent#REAPER}, under {@link RestartPolicy.Unbounded} with the interval as the first
+ * backoff and a 10-minute cap — the policy the reaper always had, so a dead reaper is respawned
+ * forever and its rising restart count stays the {@code vitals.reaper.restartCount} alarm. Its
+ * failures log the loop's {@code DAEMON_LOOP_*} codes with {@code component=reaper}, rolled up on
+ * this reaper's own clock once per six intervals (design D2).
  *
- * <p><b>Supervised restart (design D4/D5, FR4, NFR-O1, UX2).</b> The worker's {@code
- * uncaughtExceptionHandler} — the second rung behind the in-loop guard — respawns unless {@link
- * #stop()} already raced it, after an exponential backoff ({@link RestartBackoff}) on the same
- * injected {@link Sleeper}. Restarts are unbounded (the daemon is never killed on reaper failure);
- * each respawn logs an ERROR with a rising restart count, the only surface for a persistent fault.
+ * <p>A stop cuts short the interval wait but never a tick (design D4 of that change): a sweep
+ * listing in flight completes within the tracker client's own deadline, and the loop ends at the
+ * check after it.
  *
- * <p>Implements FR1, FR2, FR3, FR4 of fix-reaper-idle-liveness.
+ * <p>Implements FR1, FR2, FR3, FR4 of fix-reaper-idle-liveness. Implements FR2, FR6 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class StandingReaper {
 
-    private static final Logger log = LoggerFactory.getLogger(StandingReaper.class);
+    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
+    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
 
     private final ReaperDuty reaperDuty;
-    private final Sleeper sleeper;
     private final Duration interval;
     private final Supplier<Collection<TaskRef>> liveClaimsSnapshot;
-    private final Clock clock;
-
-    private final Object lock = new Object();
-    private final RestartBackoff restartBackoff = new RestartBackoff();
-    private volatile boolean stopping;
-    private @Nullable Thread worker;
+    private final InstantSource clock;
+    private final SupervisedLoop loop;
     private volatile Instant lastRunAt;
 
     /**
      * @param reaperDuty the duty run every tick; never null
-     * @param sleeper the interval sleeper (virtual under test); never null
-     * @param interval the tick interval; never null
+     * @param sleeper the interval sleeper, also the restart backoff's (virtual under test); never null
+     * @param interval the tick interval, also the first restart backoff; never null
      * @param liveClaimsSnapshot supplies, fresh on every tick, the claims this instance holds live,
      *     excluded from staleness observation (design D3); never null
      * @param clock the source of the {@code lastRunAt} instant stamped after every completed tick
-     *     (task 2.5, FR7 of add-serve-observability); never null
+     *     (task 2.5, FR7 of add-serve-observability), and the loop's, whose failure roll-ups it
+     *     times (design D2 of supervise-daemon-loops-and-embed-dashboard); never null
      */
     public StandingReaper(
             ReaperDuty reaperDuty,
             Sleeper sleeper,
             Duration interval,
             Supplier<Collection<TaskRef>> liveClaimsSnapshot,
-            Clock clock) {
+            InstantSource clock) {
         this.reaperDuty = reaperDuty;
-        this.sleeper = sleeper;
         this.interval = interval;
         this.liveClaimsSnapshot = liveClaimsSnapshot;
         this.clock = clock;
-        this.lastRunAt = clock.now();
+        this.lastRunAt = clock.instant();
+        LoopShape shape = new LoopShape(
+                DaemonComponent.REAPER,
+                LoopOrder.WAIT_THEN_TICK,
+                new LoopWait.FixedInterval(sleeper, interval),
+                new RestartPolicy.Unbounded(interval, RESTART_BACKOFF_CAP));
+        this.loop = new SupervisedLoop(shape, this::tick, sleeper, clock);
     }
 
-    /**
-     * Starts the worker virtual thread running {@link #loop()} (FR1). Idempotent: a second call
-     * while a worker already runs is a no-op, so a double-start can never leak a second worker.
-     */
+    /** Starts the reaper's loop (FR1). Idempotent: a second call never starts a second thread. */
     public void start() {
-        synchronized (lock) {
-            if (worker != null) {
-                return;
-            }
-            worker = spawnWorker();
-        }
+        loop.start();
     }
 
     /**
-     * Stops the reaper: sets the {@code stopping} flag and interrupts the worker, so a sleep or
-     * tick in flight unwinds into {@link #loop()}'s exit check rather than a respawn (FR4).
+     * Stops the reaper and returns at once: an interval wait in progress is cut short, a tick in
+     * progress completes, and no respawn follows (FR4). Idempotent.
      */
     public void stop() {
-        stopping = true;
-        Thread current;
-        synchronized (lock) {
-            current = worker;
-        }
-        if (current != null) {
-            current.interrupt();
-        }
+        loop.stop();
     }
 
-    // Package-private: the resilience spec drives loop() on a real thread with a controllable
-    // sleeper; the direct-tick spec never calls this.
-    void loop() {
-        while (!stopping) {
-            try {
-                sleeper.sleep(interval);
-                tick();
-                // A clean tick resets the backoff (design D5), so a later death backs off from base.
-                restartBackoff.markCleanTick();
-            } catch (Throwable e) {
-                if (stopping) {
-                    return;
-                }
-                log.warn(
-                        OperatorEvent.STANDING_REAPER_TICK_FAILED.head()
-                                + "standing reaper tick failed; thread continues",
-                        e);
-            }
-        }
+    // Package-private: lifecycle specs stop the loop and await its thread before they assert.
+    void stopAndJoin() {
+        loop.stopAndJoin();
     }
 
-    // Package-private: the direct-tick spec drives one reap synchronously, no thread involved.
+    // Package-private: the direct-tick specs drive one reap synchronously, no thread involved.
     void tick() {
         reaperDuty.reapOnce(liveClaimsSnapshot.get());
-        lastRunAt = clock.now();
-    }
-
-    // The worker's Thread.UncaughtExceptionHandler: fires only if something escapes loop()'s
-    // Throwable guard. Respawns unless stop() already raced it (FR4), after an exponential backoff
-    // on the same injected sleeper (design D5). The backoff sleep is itself guarded so it never
-    // takes the daemon down; stop() may race the wait, in which case no respawn happens.
-    private void onWorkerDeath(Thread dead, Throwable cause) {
-        if (stopping) {
-            return;
-        }
-        Duration backoff = restartBackoff.nextBackoff(interval);
-        int restartCount = restartBackoff.nextRestartCount();
-        log.error(
-                OperatorEvent.STANDING_REAPER_WORKER_DIED.head()
-                        + "standing reaper worker {} died; respawning after {} backoff (restart #{})",
-                dead.getName(),
-                backoff,
-                restartCount,
-                cause);
-        try {
-            sleeper.sleep(backoff);
-        } catch (Throwable backoffFailure) {
-            log.warn(
-                    OperatorEvent.STANDING_REAPER_BACKOFF_SLEEP_FAILED.head()
-                            + "backoff sleep before respawn failed; respawning without further delay",
-                    backoffFailure);
-        }
-        if (stopping) {
-            return;
-        }
-        synchronized (lock) {
-            worker = spawnWorker();
-        }
-    }
-
-    private Thread spawnWorker() {
-        return Thread.ofVirtual()
-                .name("gnomish-standing-reaper")
-                .uncaughtExceptionHandler(this::onWorkerDeath)
-                .start(DaemonComponent.REAPER.framing(this::loop));
-    }
-
-    @Nullable
-    Thread worker() { // package-private: lifecycle specs read the current worker reference
-        synchronized (lock) {
-            return worker;
-        }
+        lastRunAt = clock.instant();
     }
 
     /**
@@ -186,13 +114,14 @@ public final class StandingReaper {
     }
 
     /**
-     * How many times the supervisor has respawned this reaper after a death (task 2.5). Implements
-     * FR7 of add-serve-observability.
+     * How many times this reaper's thread has been respawned after a death — the loop policy's
+     * lifetime count (design D7 of supervise-daemon-loops-and-embed-dashboard). Implements FR7 of
+     * add-serve-observability, FR6 of supervise-daemon-loops-and-embed-dashboard.
      *
      * @return the lifetime restart count
      */
     public int restartCount() {
-        return restartBackoff.restartCount();
+        return loop.restartCount();
     }
 
     /**

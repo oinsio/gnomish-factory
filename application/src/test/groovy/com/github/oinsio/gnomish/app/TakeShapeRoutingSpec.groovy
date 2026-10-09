@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import spock.lang.Specification
 
 /**
@@ -21,7 +22,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
     private void route(BranchShape shape) {
         def mechanics = Stub(ResumeMechanics)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
                 .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), shape)
     }
 
@@ -57,7 +58,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
 
         when:
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
                 .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), new BranchShape.Parked())
 
         then:

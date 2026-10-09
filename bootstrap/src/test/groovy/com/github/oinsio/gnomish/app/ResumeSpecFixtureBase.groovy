@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -89,7 +90,7 @@ tracker:
     }
 
     protected GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, registeredClone, taskGit.epochs())
+        new GitTaskRepository(gitRunner, registeredClone, taskGit.epochs(), new VirtualClock())
     }
 
     protected Path expectedWorktree(String taskDir) {

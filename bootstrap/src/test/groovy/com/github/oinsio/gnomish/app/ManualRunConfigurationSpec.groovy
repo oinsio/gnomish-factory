@@ -12,9 +12,9 @@ import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import java.nio.file.Path
+import java.time.InstantSource
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.ConfigurableApplicationContext
 import spock.lang.Shared
@@ -50,7 +50,7 @@ class ManualRunConfigurationSpec extends Specification {
     InMemoryAttemptPersistence attemptPersistence
 
     @Shared
-    SystemClock systemClock
+    InstantSource instantSource
 
     @Shared
     ThreadSleeper threadSleeper
@@ -78,7 +78,7 @@ class ManualRunConfigurationSpec extends Specification {
         filesExistCheckRunner = context.getBean(FilesExistCheckRunner)
         shellCommandCheckRunner = context.getBean(ShellCommandCheckRunner)
         attemptPersistence = context.getBean(InMemoryAttemptPersistence)
-        systemClock = context.getBean(SystemClock)
+        instantSource = context.getBean('instantSource', InstantSource)
         threadSleeper = context.getBean(ThreadSleeper)
         systemConsoleIO = context.getBean(SystemConsoleIO)
         pipelineStartup = context.getBean(PipelineStartup)
@@ -98,7 +98,7 @@ class ManualRunConfigurationSpec extends Specification {
         filesExistCheckRunner != null
         shellCommandCheckRunner != null
         attemptPersistence != null
-        systemClock != null
+        instantSource != null
         threadSleeper != null
         systemConsoleIO != null
     }

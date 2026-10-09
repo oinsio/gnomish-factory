@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
 import com.github.oinsio.gnomish.status.WallTime;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -28,7 +28,7 @@ import org.slf4j.MDC;
 record TakeDispatcher(
         SlotWiring wiring,
         FactoryProperties factoryProperties,
-        Clock clock,
+        InstantSource clock,
         RefResolution refs,
         TakeoverConfirmation takeoverConfirmation) {
 
@@ -102,7 +102,7 @@ record TakeDispatcher(
      * the summary really is the last line of a grep by that id. Results describing a run that
      * never happened — an empty queue, a declined or foreign ref — assemble to no summary.
      *
-     * <p>Wall time comes from {@link System#nanoTime()} rather than this record's {@link Clock}: a
+     * <p>Wall time comes from {@link System#nanoTime()} rather than this record's {@link InstantSource}: a
      * duration must not be affected by a wall-clock adjustment landing mid-run.
      */
     private static void summarize(TakeResult result, long startedNanos) {

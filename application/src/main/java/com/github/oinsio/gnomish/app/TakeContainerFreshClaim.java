@@ -116,7 +116,8 @@ final class TakeContainerFreshClaim {
                 wiring.abort(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
-                bound.lawBinding());
+                bound.lawBinding(),
+                wiring.terminalWriteRetry());
         return execution.run(lawBound, support, synthesized.context(), synthesized.initialState(), null);
     }
 }

@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -93,7 +94,7 @@ tracker:
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
         newTakeCommand(
                 testProperties(instanceName: INSTANCE_NAME, agentCliBinary: FakeAgentSupport.wrapperFor('plain-round')), registeredClone, registry,
-                TakeCommandSeams.DEFAULTS
+                TakeCommandSeams.defaults(new VirtualClock())
                 .withHeartbeatSleeper(new ThreadSleeper())
                 .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
     }

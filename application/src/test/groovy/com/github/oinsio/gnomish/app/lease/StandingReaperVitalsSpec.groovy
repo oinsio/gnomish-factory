@@ -24,7 +24,7 @@ class StandingReaperVitalsSpec extends Specification {
     // FR7: before any tick, lastRunAt is the construction instant.
     def "lastRunAt starts at construction time"() {
         expect:
-        reaper.lastRunAt() == clock.now()
+        reaper.lastRunAt() == clock.instant()
     }
 
     // FR7: every completed tick stamps lastRunAt from the injected clock.
@@ -34,7 +34,7 @@ class StandingReaperVitalsSpec extends Specification {
         reaper.tick()
 
         then:
-        reaper.lastRunAt() == clock.now()
+        reaper.lastRunAt() == clock.instant()
     }
 
     // FR7: restartCount starts at zero and never resets — a growing count is reaping

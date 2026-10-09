@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,7 +21,7 @@ import spock.lang.Specification
 class FeedOutageRetrySuppressionSpec extends Specification {
 
     /** Virtual time: the roll-up interval is minutes long and no spec may sleep. */
-    MovableClock clock = new MovableClock(Instant.parse('2026-09-03T10:00:00Z'))
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-09-03T10:00:00Z'))
 
     RepeatSuppressor suppressor = new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
 

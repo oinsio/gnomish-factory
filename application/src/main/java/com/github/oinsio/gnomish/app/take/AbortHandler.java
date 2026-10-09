@@ -10,7 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  * @param clock supplies the abort timestamp recorded in {@link AbortRecord};
  *     never null
  */
-public record AbortHandler(Tracker tracker, Clock clock) {
+public record AbortHandler(Tracker tracker, InstantSource clock) {
 
     private static final Logger log = LoggerFactory.getLogger(AbortHandler.class);
 

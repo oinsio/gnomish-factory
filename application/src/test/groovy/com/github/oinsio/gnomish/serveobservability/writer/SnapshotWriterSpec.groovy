@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -13,13 +14,10 @@ import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
-import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -56,7 +54,7 @@ class SnapshotWriterSpec extends Specification {
         def target = tempDir.resolve('snapshot.json')
         def snapshot = fixtureSnapshot()
         def writeInstant = Instant.parse('2026-08-02T10:15:00Z')
-        def clock = Clock.fixed(writeInstant, ZoneOffset.UTC)
+        def clock = new VirtualClock(writeInstant)
         def writer = new SnapshotWriter(target, {
             -> snapshot
         }, mapper, Duration.ofSeconds(45), clock, 0)
@@ -76,10 +74,7 @@ class SnapshotWriterSpec extends Specification {
     def "two consecutive ticks at different times produce different writtenAt values reflecting the actual write time"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def clock = new StepClock([
-            Instant.parse('2026-08-02T10:00:00Z'),
-            Instant.parse('2026-08-02T10:00:31Z')
-        ])
+        def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
         }, mapper, Duration.ofSeconds(30), clock, 0)
@@ -87,6 +82,7 @@ class SnapshotWriterSpec extends Specification {
         when:
         writer.tick()
         def firstText = Files.readString(target)
+        clock.advance(Duration.ofSeconds(31))
         writer.tick()
         def secondText = Files.readString(target)
 
@@ -101,7 +97,7 @@ class SnapshotWriterSpec extends Specification {
     def "intervalSeconds in the written file matches the writer's configured interval"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def clock = Clock.fixed(Instant.parse('2026-08-02T10:00:00Z'), ZoneOffset.UTC)
+        def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
         }, mapper, Duration.ofSeconds(90), clock, 0)
@@ -119,7 +115,7 @@ class SnapshotWriterSpec extends Specification {
         def calls = new AtomicInteger()
         def writer = new SnapshotWriter(target, {
             -> calls.incrementAndGet(); fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
 
         when:
         writer.tick()
@@ -139,7 +135,7 @@ class SnapshotWriterSpec extends Specification {
         def target = blockingFile.resolve('snapshot.json')
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
 
         when:
         writer.tick()
@@ -156,7 +152,7 @@ class SnapshotWriterSpec extends Specification {
         def target = tempDir.resolve('snapshot.json')
         def staleLedger = tempDir.resolve('ledger-2026-01-01.jsonl')
         Files.writeString(staleLedger, 'stale')
-        def clock = Clock.fixed(Instant.parse('2026-08-02T10:00:00Z'), ZoneOffset.UTC)
+        def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
         }, mapper, Duration.ofSeconds(30), clock, 30)
@@ -176,7 +172,7 @@ class SnapshotWriterSpec extends Specification {
         def target = tempDir.resolve('snapshot.json')
         def ancientLedger = tempDir.resolve('ledger-2020-01-01.jsonl')
         Files.writeString(ancientLedger, 'ancient')
-        def clock = Clock.fixed(Instant.parse('2026-08-02T10:00:00Z'), ZoneOffset.UTC)
+        def clock = new VirtualClock(Instant.parse('2026-08-02T10:00:00Z'))
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
         }, mapper, Duration.ofSeconds(30), clock, 0)
@@ -198,7 +194,7 @@ class SnapshotWriterSpec extends Specification {
         def stopped = new AtomicBoolean(false)
         def writer = new SnapshotWriter(target, {
             -> stopped.get() ? stoppedSnapshot() : fixtureSnapshot()
-        }, mapper, Duration.ofMillis(20), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofMillis(20), new VirtualClock(), 0)
         writer.start()
         new PollingConditions(timeout: 2).eventually {
             assert Files.exists(target)
@@ -236,7 +232,7 @@ class SnapshotWriterSpec extends Specification {
                 return fixtureSnapshot()
             }
             return stoppedSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
         writer.start()
         assert firstCallStarted.await(2, TimeUnit.SECONDS)
 
@@ -272,7 +268,7 @@ class SnapshotWriterSpec extends Specification {
                 writer.stop()
             }
             fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(10), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(10), new VirtualClock(), 0)
         writer.start()
 
         when: 'wait until the worker thread is genuinely parked waiting for its next tick'
@@ -297,7 +293,7 @@ class SnapshotWriterSpec extends Specification {
         def target = tempDir.resolve('snapshot.json')
         def writer = new SnapshotWriter(target, {
             -> fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+        }, mapper, Duration.ofSeconds(30), new VirtualClock(), 0)
 
         when:
         writer.stopAfterFinalWrite()

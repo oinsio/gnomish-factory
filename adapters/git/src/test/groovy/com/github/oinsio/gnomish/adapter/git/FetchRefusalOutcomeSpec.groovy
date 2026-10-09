@@ -119,7 +119,7 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
         def taskClone = cloneLackingTaskBranch('shape', 'PROJ-2')
 
         when:
-        def shape = new GitTaskBranches(refusingRunner(), ClaimEpochSource.NONE).classifyShape(taskClone, 'PROJ-2')
+        def shape = new GitTaskBranches(refusingRunner(), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(taskClone, 'PROJ-2')
 
         then: 'Corrupt: the branch parks for a human on this first classification, spending no attempt'
         shape instanceof BranchShape.Corrupt
@@ -143,16 +143,16 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
         where:
         reader | read
         'readState' | { GitProcessRunner r, Path c ->
-            new BranchStateReader(r).read(c, 'PROJ-3')
+            new BranchStateReader(r, VirtualTimeGitRetries.gitInfrastructure()).read(c, 'PROJ-3')
         }
         'readDelivered' | { GitProcessRunner r, Path c ->
-            new DeliveredBranchReader(r).read(c, 'PROJ-3')
+            new DeliveredBranchReader(r, VirtualTimeGitRetries.gitInfrastructure()).read(c, 'PROJ-3')
         }
         'ensureLocalBranch' | { GitProcessRunner r, Path c ->
-            new ContainerResumeBranch(r, ClaimEpochSource.NONE).ensureLocalBranch(c, 'PROJ-3')
+            new ContainerResumeBranch(r, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).ensureLocalBranch(c, 'PROJ-3')
         }
         'usage' | { GitProcessRunner r, Path c ->
-            new UsageHistoryWalker(r).walk(c, 'PROJ-3')
+            new UsageHistoryWalker(r, VirtualTimeGitRetries.gitInfrastructure()).walk(c, 'PROJ-3')
         }
     }
 

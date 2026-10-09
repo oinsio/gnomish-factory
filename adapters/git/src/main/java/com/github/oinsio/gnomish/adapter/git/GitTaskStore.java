@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.nio.file.Path;
+import java.time.InstantSource;
 import java.util.Optional;
 
 /**
@@ -43,17 +44,27 @@ public final class GitTaskStore implements TaskStoreGit {
     private final GitProcessRunner runner;
     private final UsageHistoryWalker usageWalker;
     private final ClaimEpochSource epochs;
+    private final GitInfrastructureRetry retry;
+    private final InstantSource clock;
 
     /**
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
      * @param epochs the tenure the collaborators this facade hands out stamp their commits with
      *     (FR13 of harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is
      *     held — {@code status} and {@code usage} read a branch without one
+     * @param retry the infrastructure budget branch lookups and the first push are re-attempted
+     *     under; never null
+     * @param clock the time source the lifecycle store stamps {@code createdAt} from and the first
+     *     push's suppressor measures on — the composition root's one (FR18, FR20 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskStore(GitProcessRunner runner, ClaimEpochSource epochs) {
+    public GitTaskStore(
+            GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry, InstantSource clock) {
         this.runner = runner;
-        this.usageWalker = new UsageHistoryWalker(runner);
+        this.usageWalker = new UsageHistoryWalker(runner, retry);
         this.epochs = epochs;
+        this.retry = retry;
+        this.clock = clock;
     }
 
     /**
@@ -64,7 +75,7 @@ public final class GitTaskStore implements TaskStoreGit {
     @Override
     public TaskLifecycleStore taskRepository(RegisteredClone clone) {
         return new PushBestEffortTaskLifecycleStore(
-                new GitTaskRepository(runner, clone, epochs), runner, clone.clonePath());
+                new GitTaskRepository(runner, clone, epochs, clock), runner, clone.clonePath(), retry, clock);
     }
 
     @Override

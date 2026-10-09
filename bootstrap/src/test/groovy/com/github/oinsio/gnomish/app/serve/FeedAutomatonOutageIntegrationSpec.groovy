@@ -109,7 +109,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def slotRunner = { TaskRef ref -> claimed.add(ref) } as SlotRunner
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
@@ -158,7 +158,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
             listReady: { int limit -> feedQuery.listReady(limit) },
             listOpen : { -> [] },
         ] as Tracker
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
         def automaton = FeedAutomatonFixture.feedAutomaton(

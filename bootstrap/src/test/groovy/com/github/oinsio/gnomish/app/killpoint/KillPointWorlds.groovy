@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
@@ -20,10 +21,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 
 /**
  * Builds the two branch media a kill point can freeze — the host factory clone with worktrees, and
@@ -58,7 +61,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         def epochs = new ClaimEpochBook()
         Path gitLog = root.resolve('git-invocations.log')
         def runner = new GitProcessRunner(recordingGit(gitLog).toString())
-        def store = new GitTaskRepository(runner, registered, epochs)
+        def store = new GitTaskRepository(runner, registered, epochs, new VirtualClock())
         def world = seed(clone, store, epochs, 'HEAD', registered.worktrees().resolve(TASK_ID))
         world.gitLog = gitLog
         world.runner = runner
@@ -86,7 +89,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         Path index = root.resolve('index')
         Files.createDirectories(index)
         def epochs = new ClaimEpochBook()
-        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), epochs, cursors), epochs, 'base', null)
+        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), epochs, cursors), epochs, 'base', null)
     }
 
     /**
@@ -115,13 +118,13 @@ trait KillPointWorlds implements BareGitRepoFixture {
                 origin: origin,
                 creatingClone: creating,
                 creating: new GitTaskRepository(
-                        runner, RegisteredCloneFixture.registered(root.resolve('creating-home'), creating), new ClaimEpochBook()),
+                        runner, RegisteredCloneFixture.registered(root.resolve('creating-home'), creating), new ClaimEpochBook(), new VirtualClock()),
                 recovering: new PushBestEffortTaskRepository(
                         new GitTaskRepository(
                                 runner, RegisteredCloneFixture.registered(root.resolve('recovering-home'), recovering),
-                                new ClaimEpochBook()),
+                                new ClaimEpochBook(), new VirtualClock()),
                         runner,
-                        recovering),
+                        recovering, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()),
                 recoveringClone: recovering,
                 taskId: TASK_ID)
     }

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -65,7 +66,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), index)
-        repository = new GitObjectsTaskRepository(gitObjects, ClaimEpochSource.NONE, DenialCursorSource.NONE)
+        repository = new GitObjectsTaskRepository(gitObjects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
     protected static StageDefinition stage() {

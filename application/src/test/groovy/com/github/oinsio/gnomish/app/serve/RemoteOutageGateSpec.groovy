@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 
@@ -42,18 +44,22 @@ class RemoteOutageGateSpec extends Specification {
         !gate(BaseRefGit.UNWIRED).isOpen()
     }
 
-    // FR14, NFR-O1, NFR-O3 of add-base-ref-resolution: the composition-root factory (task 7.4)
-    //     wires a real, usable, closed gate under the target DEFAULT_TARGET names.
-    def "the composition-root system() factory builds a real, closed gate"() {
+    // FR14, NFR-O1, NFR-O3 of add-base-ref-resolution: the serve factory (task 7.4) wires a usable,
+    //     closed gate under the target DEFAULT_TARGET names; FR18 of
+    //     supervise-daemon-loops-and-embed-dashboard: on the time source it is handed.
+    def "the serve factory builds a closed gate on the source it is handed"() {
         given:
-        // real-time-wiring: the composition-root factory IS the subject of this feature — the gate is
-        //     built and read, never opened or probed, so no clock-driven decision runs.
-        def g = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30),
-                Duration.ofMinutes(10), Duration.ofHours(1), {}, { ignored -> })
+        def source = new VirtualClock(Instant.parse('2026-10-09T10:00:00Z'))
+        def g = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'),
+                new ServeProperties(0, null, null, null, null, null, null, null, null), source, {}, { ignored -> })
 
-        expect:
-        !g.isOpen()
+        when:
+        g.openOnFailure('boom')
+
+        then:
+        g.isOpen()
         g.health().target() == 'origin'
+        g.health().openSince() == source.instant()
     }
 
     // FR14: a slot's infrastructure failure opens the gate.

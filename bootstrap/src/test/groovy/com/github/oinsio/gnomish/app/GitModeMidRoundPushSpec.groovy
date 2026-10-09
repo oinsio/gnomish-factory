@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -15,6 +16,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -101,10 +103,10 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
     private static TaskGit taskGit() {
         def runner = new GitProcessRunner()
         new TaskGit(
-                new GitTaskStore(runner, ClaimEpochSource.NONE),
-                new GitTaskBranches(runner, ClaimEpochSource.NONE),
+                new GitTaskStore(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()),
+                new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()),
                 new GitTaskWorktrees(runner, ClaimEpochSource.NONE), { RoundEnvironmentSource rounds ->
-                    new MidRoundPushRounds(rounds, runner)
+                    new MidRoundPushRounds(rounds, runner, new VirtualClock())
                 }, new ClaimEpochBook())
     }
 

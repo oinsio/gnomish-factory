@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import spock.lang.Specification
 
@@ -22,7 +23,7 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
 
     private final CheckEquipment equipment = new CheckEquipment(
     new FilesExistCheckRunner(),
-    new ShellCommandCheckRunner(),
+    new ShellCommandCheckRunner(new VirtualClock()),
     [:],
     MapSecretsProvider.NONE,
     new FactoryProperties('check-equipment', null, null, null))

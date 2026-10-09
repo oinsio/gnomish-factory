@@ -10,11 +10,15 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
+import java.time.InstantSource
 
 /**
  * Wires the REAL production {@link GithubTracker} (composing the real {@link
@@ -85,6 +89,16 @@ class GithubTrackerContractSpec extends TrackerReleaseContract {
      */
     private static final String DESIGNATOR_RULE = 'base(?:-[0-9]+)?:(.+)'
 
+    /**
+     * The tracker's "now": virtual time that moves one second per read, so successive writes carry
+     * distinct stamps the way a live tracker's do, without real time (FR18, FR20 of
+     * supervise-daemon-loops-and-embed-dashboard).
+     */
+    private static final VirtualClock CLOCK = new VirtualClock(Instant.parse('2026-07-20T12:00:00Z'))
+    private static final InstantSource TICKING = {
+        -> CLOCK.advance(Duration.ofSeconds(1)); CLOCK.instant()
+    } as InstantSource
+
     private WireMockServer wireMock
     private GithubTrackerFixtureAdapter fixtureAdapter
 
@@ -105,17 +119,17 @@ class GithubTrackerContractSpec extends TrackerReleaseContract {
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
                 new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
                 FixtureSeeder.DELIVERED_LABEL, GithubDesignatorRules.from([designators: [base: DESIGNATOR_RULE]])),
-                new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
+                new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL, TICKING),
                 new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
                 FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),
                 new GithubCorrespondence(markerWriter(httpClient, INSTANCE_ID)),
-                new GithubDecisions(httpClient, markerWriter(httpClient, INSTANCE_ID)),
-                new GithubHeartbeat(httpClient, HOLDER_INSTANCE_ID),
+                new GithubDecisions(httpClient, markerWriter(httpClient, INSTANCE_ID), TICKING),
+                new GithubHeartbeat(httpClient, HOLDER_INSTANCE_ID, TICKING),
                 new GithubOpenQuery(cache, OWNER, REPO, LABELS),
                 new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
-                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID), LABELS))
+                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL, TICKING),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID), LABELS, TICKING))
 
         fixtureAdapter = new GithubTrackerFixtureAdapter(
                 realTracker, registry, wireMock.baseUrl(), OWNER, REPO, INSTANCE_ID)
@@ -184,6 +198,6 @@ class GithubTrackerContractSpec extends TrackerReleaseContract {
     }
 
     private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, TICKING)
     }
 }

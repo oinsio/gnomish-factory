@@ -33,7 +33,7 @@ import spock.lang.TempDir
 class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes {
 
     private static final Instant NOW = Instant.parse('2026-09-27T10:00:00Z')
-    private static final com.github.oinsio.gnomish.domain.engine.port.Clock ENGINE_CLOCK = {
+    private static final java.time.InstantSource ENGINE_CLOCK = {
         -> NOW
     }
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(

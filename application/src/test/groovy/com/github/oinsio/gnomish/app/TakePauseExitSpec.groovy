@@ -69,7 +69,7 @@ class TakePauseExitSpec extends Specification {
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:
-        def result = TakePauseExit.finish(paused, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakePauseExit.finish(paused, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
@@ -94,7 +94,7 @@ class TakePauseExitSpec extends Specification {
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:
-        def result = TakePauseExit.finish(paused, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakePauseExit.finish(paused, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then: 'no park is written'
         0 * tracker.park(*_)

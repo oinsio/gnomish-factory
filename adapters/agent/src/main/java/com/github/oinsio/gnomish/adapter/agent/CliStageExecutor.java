@@ -6,9 +6,9 @@ import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import java.time.InstantSource;
 
 /**
  * The real CLI {@link StageExecutor} adapter (task 6.5 of add-agent-executor):
@@ -55,31 +55,34 @@ public final class CliStageExecutor implements StageExecutor {
 
     /**
      * No-op listener. See the canonical constructor {@link #CliStageExecutor(FactoryProperties,
-     * Clock, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for the full parameter
+     * InstantSource, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for the full parameter
      * contract.
      */
-    public CliStageExecutor(FactoryProperties factoryProperties, Clock clock, PipelineLaw law) {
+    public CliStageExecutor(FactoryProperties factoryProperties, InstantSource clock, PipelineLaw law) {
         this(factoryProperties, clock, _ -> {}, law);
     }
 
     /**
      * {@link ChildEnvAllowlist#none()}. See the canonical constructor {@link #CliStageExecutor(
-     * FactoryProperties, Clock, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for
+     * FactoryProperties, InstantSource, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for
      * the full parameter contract.
      */
     public CliStageExecutor(
-            FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener, PipelineLaw law) {
+            FactoryProperties factoryProperties,
+            InstantSource clock,
+            AgentProgressListener progressListener,
+            PipelineLaw law) {
         this(factoryProperties, clock, progressListener, ChildEnvAllowlist.none(), law);
     }
 
     /**
      * Host default (a {@link HostRoundEnvironmentSource}). See the canonical constructor {@link
-     * #CliStageExecutor(FactoryProperties, Clock, AgentProgressListener, PipelineLaw,
+     * #CliStageExecutor(FactoryProperties, InstantSource, AgentProgressListener, PipelineLaw,
      * RoundEnvironmentSource)} for the full parameter contract.
      */
     public CliStageExecutor(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             ChildEnvAllowlist childEnv,
             PipelineLaw law) {
@@ -101,7 +104,7 @@ public final class CliStageExecutor implements StageExecutor {
      */
     public CliStageExecutor(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             PipelineLaw law,
             RoundEnvironmentSource environmentSource) {
@@ -121,7 +124,7 @@ public final class CliStageExecutor implements StageExecutor {
      */
     CliStageExecutor(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             DecisionFileTransport decisionFileTransport,
             PipelineLaw law) {
@@ -131,7 +134,7 @@ public final class CliStageExecutor implements StageExecutor {
     /** Testing seam (package-private): same as the four-argument overload, plus the allowlist. */
     CliStageExecutor(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             DecisionFileTransport decisionFileTransport,
             ChildEnvAllowlist childEnv,
@@ -152,12 +155,13 @@ public final class CliStageExecutor implements StageExecutor {
      * @param childEnv the run's layered child-env allowlist; never null
      * @return the host round source, identical to the host constructor's; never null
      */
-    public static RoundEnvironmentSource hostRounds(Clock clock, ChildEnvAllowlist childEnv) {
+    public static RoundEnvironmentSource hostRounds(InstantSource clock, ChildEnvAllowlist childEnv) {
         return hostRounds(new DecisionFileTransport(), clock, childEnv);
     }
 
     /** Testing seam (package-private): {@link #hostRounds} with the transport supplied. */
-    static RoundEnvironmentSource hostRounds(DecisionFileTransport transport, Clock clock, ChildEnvAllowlist childEnv) {
+    static RoundEnvironmentSource hostRounds(
+            DecisionFileTransport transport, InstantSource clock, ChildEnvAllowlist childEnv) {
         return new HostRoundEnvironmentSource(transport, clock, childEnv);
     }
 

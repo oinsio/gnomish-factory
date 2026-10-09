@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.app.serve
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,7 +24,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     // FR11: stopping claims immediately is the very first step, ahead of any flagging or waiting.
     def "interrupts the feed thread and eventually kills the process tree"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(200), killer, inertReaper())
@@ -49,7 +49,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     // FR11: drain's post-drain normal exit passes null (nothing to interrupt) — must be a safe no-op.
     def "accepts a null feed thread and still kills the process tree"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
@@ -67,7 +67,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     //     ClaimLossFlag with a reason).
     def "flags every occupied slot's claim with the shutdown reason"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         ledger.acquire()
@@ -94,7 +94,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     //     awaitDrained returns immediately when every permit is already free.
     def "returns promptly when nothing is occupied, without waiting out a long grace window"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofSeconds(30), killer, inertReaper())
@@ -113,7 +113,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     //     is still killed once the grace window expires, even with a slot still occupied.
     def "kills the process tree even when the grace window expires with a slot still occupied"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         def flag = new ClaimLossFlag()
@@ -137,18 +137,27 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
     // proves the observable effect of stop(): no further ticks happen once shutdown() returns.
     def "stops the standing reaper as part of the shutdown sequence"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def tickCount = new AtomicInteger()
         def reaperDuty = { Collection refs ->
             tickCount.incrementAndGet()
         } as ReaperDuty
-        def sleeper = { Duration d -> Thread.sleep(5) } as Sleeper
+        // Honours the stop's interrupt as the production ThreadSleeper does: the flag is restored,
+        // nothing is thrown, so the supervised loop ends quietly (design D3/D4 of
+        // supervise-daemon-loops-and-embed-dashboard).
+        def sleeper = { Duration d ->
+            try {
+                Thread.sleep(5)
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt()
+            }
+        } as Sleeper
         def standingReaper =
                 new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), {
                     []
-                } as Supplier, new SystemClock())
+                } as Supplier, new VirtualClock())
         standingReaper.start()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, standingReaper)
 

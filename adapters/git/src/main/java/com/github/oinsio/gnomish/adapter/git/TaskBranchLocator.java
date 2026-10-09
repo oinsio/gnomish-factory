@@ -64,10 +64,6 @@ public final class TaskBranchLocator {
     private final RemoteBranchTip remoteTip;
     private final GitInfrastructureRetry retry;
 
-    public TaskBranchLocator(GitProcessRunner runner) {
-        this(runner, GitInfrastructureRetry.system());
-    }
-
     /**
      * @param runner the git subprocess seam; never null
      * @param retry the infrastructure budget the unsettled lookup is re-attempted under; never null

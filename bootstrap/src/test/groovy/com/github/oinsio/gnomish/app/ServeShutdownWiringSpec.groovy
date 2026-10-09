@@ -29,8 +29,9 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -64,6 +65,7 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
@@ -133,7 +135,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def wiring = new SlotWiring(
                 newAssembly(), TaskGitFixture.real(), registeredClone, 'taskId', new AbortFuse(abortHandler, 3), [],
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
+                VirtualTimeRetries.terminalWrite())
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)
@@ -142,8 +145,10 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
     private FeedAutomaton newAutomaton(TakeSlotRunner slotRunner) {
         FeedAutomatonFixture.feedAutomaton(
-                tracker, INSTANCE, new SlotLedger(1), slotRunner,
-                { Duration d -> } as Sleeper, new SystemClock(), Duration.ofMillis(1), Duration.ofMillis(1),
+                tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), slotRunner,
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                { Duration d -> } as Sleeper, InstantSource.system(), Duration.ofMillis(1), Duration.ofMillis(1),
                 Duration.ofMillis(1), 1, new Random(0))
     }
 
@@ -154,8 +159,10 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def inertReaper = new StandingReaper(
                 ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
                     []
-                } as Supplier, new SystemClock())
-        new ServeShutdown(new SlotLedger(1), new ClaimLossFlag(), Duration.ofMillis(10), killer, inertReaper)
+                    // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                    //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                } as Supplier, InstantSource.system())
+        new ServeShutdown(new SlotLedger(1, new VirtualClock()), new ClaimLossFlag(), Duration.ofMillis(10), killer, inertReaper)
     }
 
     // FR1, FR4, FR12 of add-serve-observability (task 5.1): a real ObservabilityWiring, built
@@ -218,7 +225,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 tempDir.resolve(ledgerPrefix), clock)
         snapshotWriter.start()
         new ObservabilityWiring(
-                lifecycleTracker, snapshotWriter, new LedgerWriters(appender, new SlotLedger(1), instance, clock), clock)
+                lifecycleTracker, snapshotWriter, new LedgerWriters(appender, new SlotLedger(1, new VirtualClock()), instance, clock), clock)
     }
 
     private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {

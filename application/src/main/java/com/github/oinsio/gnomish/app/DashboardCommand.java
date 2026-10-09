@@ -14,8 +14,8 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.function.Supplier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
@@ -46,7 +46,7 @@ final class DashboardCommand {
     private static final int BOARD_READY_LIMIT = 50;
 
     private final DashboardArgumentsParser argumentsParser = new DashboardArgumentsParser();
-    private final Clock clock;
+    private final InstantSource clock;
     private final Sleeper sleeper;
     // The clone the configuration loader resolved from --dir (design D9 of add-project-registry).
     private final ProjectScope scope;
@@ -54,12 +54,12 @@ final class DashboardCommand {
     private final TrackerWiring trackerWiring;
 
     DashboardCommand(
-            Clock javaTimeClock,
+            InstantSource instantSource,
             Sleeper sleeper,
             ProjectScope scope,
             FactoryProperties factoryProperties,
             TrackerWiring trackerWiring) {
-        this.clock = javaTimeClock;
+        this.clock = instantSource;
         this.sleeper = sleeper;
         this.scope = scope;
         this.factoryProperties = factoryProperties;

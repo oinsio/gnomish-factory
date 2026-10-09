@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -78,7 +79,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
     private GithubStaleClaimRemoval newRemoval() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
         new GithubStaleClaimRemoval(httpClient, new GithubLabelOps(httpClient),
-                markerWriter(httpClient, INSTANCE_ID), WORKING_LABEL, READY_LABEL)
+                markerWriter(httpClient, INSTANCE_ID), WORKING_LABEL, READY_LABEL, new VirtualClock())
     }
 
     private TaskRef refFor(int issueNumber) {
@@ -406,6 +407,6 @@ class GithubStaleClaimRemovalSpec extends Specification {
     }
 
     private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, new VirtualClock())
     }
 }

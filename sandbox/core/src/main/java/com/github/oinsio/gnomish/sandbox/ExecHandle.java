@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.sandbox;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 
 /**
  * A live handle to a process started by {@link
@@ -49,7 +49,7 @@ public interface ExecHandle {
      * @param clock the read-time source for the exit instant; never null
      * @return the wait outcome; never null
      */
-    Wait waitForExitOrTimeout(Duration timeout, Clock clock);
+    Wait waitForExitOrTimeout(Duration timeout, InstantSource clock);
 
     /**
      * Blocks until the process exits and returns its exit code — the form a

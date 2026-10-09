@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import org.jspecify.annotations.Nullable;
@@ -89,6 +90,17 @@ public interface RunAssembly {
      *     null
      */
     DialogConsole dialogConsole();
+
+    /**
+     * The run's time source — the composition root's one {@link InstantSource} (design D17 of
+     * supervise-daemon-loops-and-embed-dashboard), for the resume paths that stamp a decision before
+     * any {@link #assemble} call, the same way {@link #dialogConsole} serves their output.
+     *
+     * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return the source every run this assembly builds reads "now" from; never null
+     */
+    InstantSource instantSource();
 
     /**
      * Returns a copy of this assembly that also fans every engine event into {@code listener} (task

@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.time.Duration;
+import java.time.InstantSource;
 
 /**
  * The timing equipment every box operation runs on (design D11 of add-parameter-count-gate): the
@@ -18,4 +18,4 @@ import java.time.Duration;
  * @param dockerCommandTimeout the hard bound on each {@code docker} management command — the
  *     installation's {@code factory.docker-command-timeout}; never null
  */
-public record BoxTiming(Clock clock, Sleeper sleeper, Duration dockerCommandTimeout) {}
+public record BoxTiming(InstantSource clock, Sleeper sleeper, Duration dockerCommandTimeout) {}

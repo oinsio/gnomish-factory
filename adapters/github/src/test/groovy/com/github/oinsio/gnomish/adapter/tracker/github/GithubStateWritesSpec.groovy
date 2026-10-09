@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -84,7 +85,7 @@ class GithubStateWritesSpec extends Specification {
             Optional.of(new ClaimEpoch(epoch))
         } as ClaimEpochSource
         def writer = new GithubMarkerWriter(
-                new GithubCommentUpsert(httpClient), source, 'gnomish-factory-x7k2q1')
+                new GithubCommentUpsert(httpClient), source, 'gnomish-factory-x7k2q1', new VirtualClock())
         new GithubStateWrites(httpClient, labelOps, writer,
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready')
     }
@@ -301,7 +302,7 @@ class GithubStateWritesSpec extends Specification {
     }
 
     private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, new VirtualClock())
     }
 
     def "an abort of a live tenure is scoped and stamped by that tenure, not by its own wall clock (FR13)"() {

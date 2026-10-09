@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -43,7 +44,7 @@ class TakeBatchSpec extends Specification {
         }
 
         when:
-        def outcomes = TakeBatch.run(refs, 3, perRef)
+        def outcomes = TakeBatch.run(refs, 3, new VirtualClock(), perRef)
 
         then:
         outcomes*.ref() == ['a', 'b', 'c']
@@ -69,7 +70,7 @@ class TakeBatchSpec extends Specification {
         }
 
         when:
-        TakeBatch.run(refs, 1, perRef)
+        TakeBatch.run(refs, 1, new VirtualClock(), perRef)
 
         then:
         maxConcurrent.get() == 1
@@ -96,7 +97,7 @@ class TakeBatchSpec extends Specification {
 
         when: 'the batch is driven on its own thread — run() blocks until every ref finishes'
         def batchThread = Thread.ofVirtual().start {
-            TakeBatch.run(refs, 2, perRef)
+            TakeBatch.run(refs, 2, new VirtualClock(), perRef)
         }
 
         then: 'both slot-occupying refs started, but the third has not — no free slot yet'
@@ -128,7 +129,7 @@ class TakeBatchSpec extends Specification {
         def logs = LogCaptureSupport.attach(TakeBatch)
 
         when:
-        def outcomes = TakeBatch.run(refs, 3, perRef)
+        def outcomes = TakeBatch.run(refs, 3, new VirtualClock(), perRef)
 
         then:
         outcomes*.ref() == ['a', 'b', 'c']
@@ -163,7 +164,7 @@ class TakeBatchSpec extends Specification {
         def caught = null
         def blockedThread = Thread.ofVirtual().start {
             try {
-                TakeBatch.run(refs, 1, blockForever)
+                TakeBatch.run(refs, 1, new VirtualClock(), blockForever)
             } catch (InterruptedException e) {
                 caught = e
             }

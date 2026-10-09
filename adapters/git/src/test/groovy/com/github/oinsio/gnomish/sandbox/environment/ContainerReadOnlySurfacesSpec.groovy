@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -11,6 +10,7 @@ import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.IgnoreIf
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -43,7 +43,7 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
     @TempDir
     Path tempDir
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = { -> Instant.now() } as InstantSource
     private ContainerTaskExecutionEnvironment env
 
     def setupSpec() {

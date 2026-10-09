@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
@@ -66,10 +67,13 @@ public final class GithubHeartbeat {
 
     private final GithubHttpClient httpClient;
     private final String instanceId;
+    /** The time source every stamp this collaborator writes is read from (FR20 of supervise-daemon-loops-and-embed-dashboard). */
+    private final InstantSource clock;
 
-    public GithubHeartbeat(GithubHttpClient httpClient, String instanceId) {
+    public GithubHeartbeat(GithubHttpClient httpClient, String instanceId, InstantSource clock) {
         this.httpClient = httpClient;
         this.instanceId = instanceId;
+        this.clock = clock;
     }
 
     /** Implements {@code Tracker.heartbeat} for GitHub (FR1, FR8). */
@@ -116,7 +120,7 @@ public final class GithubHeartbeat {
         String body = GithubMarker.render(
                 GithubMarkerKind.CLAIM,
                 instanceId,
-                Instant.now(),
+                clock.instant(),
                 progressPayload,
                 null,
                 GithubClaimLease.claimIdentityOf(id, instanceId),

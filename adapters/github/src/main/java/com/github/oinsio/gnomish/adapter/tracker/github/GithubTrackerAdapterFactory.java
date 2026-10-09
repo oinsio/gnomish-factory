@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,7 +36,7 @@ import java.util.Set;
  * the constructor (FR2, design D2).
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port; FR1, FR2, FR4, FR17 of
- * add-plugin-architecture.
+ * add-plugin-architecture; FR20 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory {
 
@@ -74,10 +75,15 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     // missing-token throw is covered by GithubTrackerAdapterFactorySpec with an empty provider, and
     // a resolved token flows into the WireMock-backed assembly that same spec drives through the
     // explicit-token seam. No decision lives here.
+    //
+    // FR20 of supervise-daemon-loops-and-embed-dashboard, open decision (task 3.3): the
+    // ServiceLoader-built factory is reached only through the plugin API's create(...), which
+    // carries no time source, so this entry point is still where real time enters the adapter;
+    // every collaborator below it takes the source from here.
     @DoNotMutate
     @Override
     public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
-        return create(config, instanceId, requireToken(secrets, config), epochs);
+        return create(config, instanceId, requireToken(secrets, config), epochs, InstantSource.system());
     }
 
     /**
@@ -88,11 +94,17 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      * --add-opens}). The public {@link #create(SecretsProvider, TrackerConfig, String)} is the only production
      * entry point and always resolves the token from the environment (NFR-S1).
      */
-    Tracker create(TrackerConfig config, String instanceId, String token) {
-        return create(config, instanceId, token, ClaimEpochSource.NONE);
+    Tracker create(TrackerConfig config, String instanceId, String token, InstantSource clock) {
+        return create(config, instanceId, token, ClaimEpochSource.NONE, clock);
     }
 
-    Tracker create(TrackerConfig config, String instanceId, String token, ClaimEpochSource epochs) {
+    /**
+     * The full assembly seam: every collaborator that stamps an instant — the claim, marker,
+     * heartbeat, decision-ack, stale-claim and index-repair writes — reads it from {@code clock}
+     * (FR20 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    Tracker create(
+            TrackerConfig config, String instanceId, String token, ClaimEpochSource epochs, InstantSource clock) {
         Map<String, Object> subsection = config.subsection();
         GithubRepoRef repoRef = GithubTrackerAdapterFactorySupport.requireRepoRef(subsection);
         String owner = repoRef.owner();
@@ -112,7 +124,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         var labelOps = new GithubLabelOps(httpClient);
         // One renderer for every GithubMarkerKind (FR11): every structural comment this adapter
         // writes is stamped and upserted through it, so no write path posts blind.
-        var markerWriter = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), epochs, instanceId);
+        var markerWriter = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), epochs, instanceId, clock);
 
         var stateLabels = new GithubStateLabels(
                 readyLabel.name(), workingLabel.name(), needsHumanLabel.name(), deliveredLabel.name());
@@ -128,7 +140,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
                         needsHumanLabel.name(),
                         deliveredLabel.name(),
                         GithubDesignatorRules.from(subsection)),
-                new GithubClaimLease(httpClient, labelOps, readyLabel.name(), workingLabel.name()),
+                new GithubClaimLease(httpClient, labelOps, readyLabel.name(), workingLabel.name(), clock),
                 new GithubStateWrites(
                         httpClient,
                         labelOps,
@@ -138,11 +150,12 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
                         deliveredLabel.name(),
                         readyLabel.name()),
                 new GithubCorrespondence(markerWriter),
-                new GithubDecisions(httpClient, markerWriter),
-                new GithubHeartbeat(httpClient, instanceId),
+                new GithubDecisions(httpClient, markerWriter, clock),
+                new GithubHeartbeat(httpClient, instanceId, clock),
                 new GithubOpenQuery(cache, owner, repo, stateLabels),
-                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter, workingLabel.name(), readyLabel.name()),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter, stateLabels));
+                new GithubStaleClaimRemoval(
+                        httpClient, labelOps, markerWriter, workingLabel.name(), readyLabel.name(), clock),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter, stateLabels, clock));
     }
 
     @Override
@@ -162,7 +175,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     }
 
     /**
-     * Package-private testing seam mirroring {@link #create(TrackerConfig, String, String)}:
+     * Package-private testing seam mirroring {@link #create(TrackerConfig, String, String, InstantSource)}:
      * verifies {@code ref} against an explicit {@code token} instead of the environment. Delegates to
      * {@link GithubForeignRepoCheck} (design D8), which issues a {@code GET /repos/{owner}/{repo}}
      * only when the ref's owner/repo differ from the configured binding — a matching id returns empty

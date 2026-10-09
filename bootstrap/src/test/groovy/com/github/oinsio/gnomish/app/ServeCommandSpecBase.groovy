@@ -8,11 +8,11 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -105,7 +105,9 @@ advancement: auto
                 testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
                 Clock.systemUTC(),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new TrackerWiring(registry, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }

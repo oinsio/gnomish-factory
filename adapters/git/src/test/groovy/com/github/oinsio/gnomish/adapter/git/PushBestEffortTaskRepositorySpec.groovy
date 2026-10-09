@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
@@ -32,7 +33,7 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
     }
 
     private TaskRepository decorated(TaskRepository delegate) {
-        new PushBestEffortTaskRepository(delegate, git, cloneDir)
+        new PushBestEffortTaskRepository(delegate, git, cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
     def "createTask's commit reaches origin"() {
@@ -88,7 +89,7 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         def delegate = Mock(TaskRepository)
         def log = tempDir.resolve('argv.log')
         def repository = new PushBestEffortTaskRepository(delegate,
-                new GitProcessRunner(recordingGit(log).toString()), cloneDir)
+                new GitProcessRunner(recordingGit(log).toString()), cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
         String cleanupTip = null
 
         when:

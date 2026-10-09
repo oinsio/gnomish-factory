@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,26 +34,22 @@ import java.util.stream.Collectors;
  * #occupiedRefs()}). Implements FR6, FR11 of add-serve-observability (each occupied slot's {@code
  * since}, exposed via {@link #occupiedEntries()}). Implements FR1 of add-serve-observability
  * (design D4): {@link #assign(TaskRef)} and {@link #release(TaskRef)} — the calls that change
- * occupancy — wake the injected {@link DirtyNotifier} for an immediate snapshot write.
+ * occupancy — wake the injected {@link DirtyNotifier} for an immediate snapshot write. Implements
+ * FR18 of supervise-daemon-loops-and-embed-dashboard: every constructor takes its time source.
  */
 public final class SlotLedger {
 
     private final Semaphore permits;
     private final Map<TaskRef, Instant> occupied = new ConcurrentHashMap<>();
     private final int totalSlots;
-    private final Clock clock;
+    private final InstantSource clock;
     private final DirtyNotifier dirtyNotifier;
 
-    /** Equivalent to {@link #SlotLedger(int, Clock)} with the production system clock. */
-    public SlotLedger(int slots) {
-        this(slots, new SystemClock());
-    }
-
     /**
-     * Equivalent to {@link #SlotLedger(int, Clock, DirtyNotifier)} with a no-op notifier — every
+     * Equivalent to {@link #SlotLedger(int, InstantSource, DirtyNotifier)} with a no-op notifier — every
      * caller predating the observability writer (task 5.x wires the real one).
      */
-    public SlotLedger(int slots, Clock clock) {
+    public SlotLedger(int slots, InstantSource clock) {
         this(slots, clock, DirtyNotifier.NOOP);
     }
 
@@ -65,7 +60,7 @@ public final class SlotLedger {
      * @param dirtyNotifier woken by {@link #assign(TaskRef)} and {@link #release(TaskRef)} (FR1 of
      *     add-serve-observability, design D4); {@link DirtyNotifier#NOOP} absent a writer to wake
      */
-    public SlotLedger(int slots, Clock clock, DirtyNotifier dirtyNotifier) {
+    public SlotLedger(int slots, InstantSource clock, DirtyNotifier dirtyNotifier) {
         if (slots <= 0) {
             throw new IllegalArgumentException("SlotLedger slots must be positive");
         }
@@ -89,14 +84,14 @@ public final class SlotLedger {
     /**
      * Ties the permit most recently acquired by this thread to {@code ref}, marking that task as
      * occupying a slot of this instance. Called once a claim succeeds. Also captures the current
-     * instant from the injected {@link Clock} as this slot's {@code since} (FR6, feeds FR11's
+     * instant from the injected {@link InstantSource} as this slot's {@code since} (FR6, feeds FR11's
      * {@code startedAt}), read back via {@link #occupiedEntries()}.
      *
      * @throws IllegalStateException if {@code ref} already occupies a slot of this instance (the
      *     FR1 same-instance double-assignment guard)
      */
     public void assign(TaskRef ref) {
-        if (occupied.putIfAbsent(ref, clock.now()) != null) {
+        if (occupied.putIfAbsent(ref, clock.instant()) != null) {
             throw new IllegalStateException("task " + ref.id() + " already occupies a slot");
         }
         DirtyNotifier.markDirtySafely(dirtyNotifier, "SlotLedger.assign");

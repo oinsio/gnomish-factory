@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
@@ -9,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,13 +38,13 @@ final class VerifyOrchestrator {
     private final CommandCheckRunner commandRunner;
     private final ExternalPolling externalPolling;
     private final JudgeVoting judgeVoting;
-    private final Clock clock;
+    private final InstantSource clock;
     private final EngineEventListener listener;
 
     /**
      * Wires the collaborators the verify chain drives: the built-in and command runners,
      * the {@link ExternalPolling} poll loop, the {@link JudgeVoting} majority loop, the
-     * injected {@link Clock} it times against, and the {@link EngineEventListener} it
+     * injected {@link InstantSource} it times against, and the {@link EngineEventListener} it
      * emits to. All immutable (NFR-R1).
      *
      * @param builtinRunner the port that runs built-in declarative checks; never null
@@ -59,7 +59,7 @@ final class VerifyOrchestrator {
             CommandCheckRunner commandRunner,
             ExternalPolling externalPolling,
             JudgeVoting judgeVoting,
-            Clock clock,
+            InstantSource clock,
             EngineEventListener listener) {
         this.builtinRunner = builtinRunner;
         this.commandRunner = commandRunner;
@@ -73,7 +73,7 @@ final class VerifyOrchestrator {
      * Runs {@code checks} in strict manifest order against {@code workspace}, returning
      * the {@link VerificationResult} of the checks that actually ran. Each check is derived
      * to a {@link CheckRef}, bracketed by a {@link EngineEvent.CheckStarted}/{@link
-     * EngineEvent.CheckFinished} pair, timed against the {@link Clock}, and recorded as a
+     * EngineEvent.CheckFinished} pair, timed against the {@link InstantSource}, and recorded as a
      * {@link CheckResult}; per FR2 the loop breaks at the first non-{@link Verdict.Pass}
      * verdict. An empty list verifies vacuously; accumulation is local (NFR-R1).
      *
@@ -92,9 +92,9 @@ final class VerifyOrchestrator {
             var check = checks.get(i);
             var ref = CheckRef.of(i, check);
             Events.emit(listener, new EngineEvent.CheckStarted(key, ref));
-            var start = clock.now();
+            var start = clock.instant();
             var verdict = runCheck(check, ref, context, workspace, judgePerVote);
-            var duration = Duration.between(start, clock.now());
+            var duration = Duration.between(start, clock.instant());
             var result = new CheckResult(ref, verdict, duration);
             results.add(result);
             Events.emit(listener, new EngineEvent.CheckFinished(key, result));

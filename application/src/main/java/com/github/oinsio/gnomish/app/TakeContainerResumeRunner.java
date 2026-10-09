@@ -29,7 +29,7 @@ import org.jspecify.annotations.Nullable;
  * claim exactly alike on the two failure branches.
  *
  * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR12,
- * D13 of add-base-ref-resolution.
+ * D13 of add-base-ref-resolution; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class TakeContainerResumeRunner {
 
@@ -117,7 +117,8 @@ final class TakeContainerResumeRunner {
      */
     TaskContext appendDecision(
             ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
-        var decision = ResumeDecisionCommit.decisionFor(finalState, text);
+        var decision = ResumeDecisionCommit.decisionFor(
+                finalState, text, wiring.assembly().instantSource().instant());
         bootstrap.support().disposeExistingEnvironment();
         bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
@@ -129,6 +130,7 @@ final class TakeContainerResumeRunner {
                 wiring.abort(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
-                lawBinding);
+                lawBinding,
+                wiring.terminalWriteRetry());
     }
 }

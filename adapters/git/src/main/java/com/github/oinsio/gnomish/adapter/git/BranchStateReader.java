@@ -52,9 +52,14 @@ public final class BranchStateReader {
     private final TaskBranchLocator locator;
     private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
 
-    public BranchStateReader(GitProcessRunner runner) {
+    /**
+     * @param runner the git subprocess seam; never null
+     * @param retry the infrastructure budget the branch lookup is re-attempted under, the
+     *     composition root's own (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
+     */
+    public BranchStateReader(GitProcessRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
-        this.locator = new TaskBranchLocator(runner);
+        this.locator = new TaskBranchLocator(runner, retry);
     }
 
     /**

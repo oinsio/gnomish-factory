@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app.sandboxlifecycle;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import java.time.Clock;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
 public final class SweepTickLog implements SweepVerdictListener {
 
     private final Duration keptReapAge;
-    private final Clock clock;
+    private final InstantSource clock;
     private final int inventoryBound;
 
     private final Map<SweepVerdictCategory, Integer> tally = new EnumMap<>(SweepVerdictCategory.class);
@@ -45,7 +45,7 @@ public final class SweepTickLog implements SweepVerdictListener {
      * @param inventoryBound how many kept environments the published record carries before
      *     truncating; must be positive
      */
-    public SweepTickLog(Duration keptReapAge, Clock clock, int inventoryBound) {
+    public SweepTickLog(Duration keptReapAge, InstantSource clock, int inventoryBound) {
         this.keptReapAge = keptReapAge;
         this.clock = clock;
         this.inventoryBound = inventoryBound;

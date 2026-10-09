@@ -17,12 +17,13 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
+import java.time.InstantSource
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -158,12 +159,14 @@ class ThreeProviderVerifyChainSpec extends Specification {
             String sha,
             RecordingEventListener listener = new RecordingEventListener(),
             List<String> allowlist = LOOPBACK_ALLOWLIST) {
-        def clock = new SystemClock()
+        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+        def clock = InstantSource.system()
         def polling = new ExternalPolling(
                 platform.checkClient(allowlist), AttemptDelivery.assumedDelivered(), clock, new ThreadSleeper())
         def orchestrator = new VerifyOrchestrator(
                 new ScriptedBuiltinCheckRunner(),
-                new ShellCommandCheckRunner().withEnvironments(new TempDirCheckEnvironments(tempDir, clock)),
+                new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(new TempDirCheckEnvironments(tempDir, clock)),
                 polling,
                 new JudgeVoting(new ScriptedJudgeVoter()),
                 clock,

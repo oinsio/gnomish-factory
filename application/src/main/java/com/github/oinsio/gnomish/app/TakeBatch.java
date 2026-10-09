@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -36,7 +37,7 @@ import org.slf4j.MDC;
  * TakeBatchOutcome#toolFailure(String, RuntimeException) tool-failure outcome} so the ref is
  * reported like any other and the other refs still run to completion.
  *
- * <p>Implements FR3, NFR-O2 of add-factory-serve.
+ * <p>Implements FR3, NFR-O2 of add-factory-serve; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class TakeBatch {
 
@@ -50,6 +51,8 @@ final class TakeBatch {
      * @param refs the raw ref strings to run, in the order the operator listed them; never empty
      * @param slots the instance's concurrency limit N (design D3's {@code factory.serve.slots},
      *     FR2: "the N limit applies to batch and serve"); positive
+     * @param clock the time source the batch's slot ledger stamps each slot's {@code since} from —
+     *     the dispatcher's own (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      * @param perRef runs one raw ref to its terminal {@link TakeResult}; called from a dedicated
      *     virtual thread per ref, so it must be safe to invoke concurrently with itself; an
      *     uncaught {@link RuntimeException} is captured as that ref's own tool-failure outcome
@@ -58,9 +61,10 @@ final class TakeBatch {
      * @throws InterruptedException if the calling thread is interrupted while waiting for a free
      *     slot or for the in-flight refs to finish
      */
-    static List<TakeBatchOutcome> run(List<String> refs, int slots, Function<String, TakeResult> perRef)
+    static List<TakeBatchOutcome> run(
+            List<String> refs, int slots, InstantSource clock, Function<String, TakeResult> perRef)
             throws InterruptedException {
-        SlotLedger ledger = new SlotLedger(slots);
+        SlotLedger ledger = new SlotLedger(slots, clock);
         TakeBatchOutcome[] outcomes = new TakeBatchOutcome[refs.size()];
         List<Thread> inFlight = new ArrayList<>(refs.size());
         for (int i = 0; i < refs.size(); i++) {
@@ -113,7 +117,7 @@ final class TakeBatch {
     static List<TakeBatchOutcome> dispatch(
             TakeDispatcher dispatcher, TakeArguments takeArguments, BoundTracker bound, int slots)
             throws InterruptedException {
-        return run(takeArguments.refs(), slots, rawRef -> {
+        return run(takeArguments.refs(), slots, dispatcher.clock(), rawRef -> {
             try {
                 return dispatcher.runOneRef(takeArguments, rawRef, bound, TakeoverConfirmation.UNAVAILABLE);
             } finally {

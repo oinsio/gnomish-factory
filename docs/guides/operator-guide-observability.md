@@ -215,6 +215,22 @@ the `OperatorEvent` enum in `:operatorevent`; codes worth knowing by heart are
 few, and the second command above is the practical way to find the ones a given
 incident produced.
 
+**Retired codes.** A code that is retired keeps its number forever: no later
+line reuses it, so an alert rule or a saved grep keyed on it simply stops
+matching. Where the line itself lives on under a shared code, the table below
+gives the replacement and the `component` filter that narrows the shared code
+back to the old line. Later rows (janitor, sweep, snapshot) join this table as
+their loops move to the shared codes.
+
+| Retired code                                  | Replacement code                         | `component` filter |
+|-----------------------------------------------|------------------------------------------|--------------------|
+| GF067 `STANDING_REAPER_TICK_FAILED`           | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=reaper` |
+| GF068 `STANDING_REAPER_WORKER_DIED`           | GF154 `DAEMON_LOOP_WORKER_DIED`          | `component=reaper` |
+| GF069 `STANDING_REAPER_BACKOFF_SLEEP_FAILED`  | GF156 `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` | `component=reaper` |
+
+So an old `grep '\[GF067\]'` becomes
+`grep 'component=reaper' "$LOG" | grep '\[GF152\]'`.
+
 **Do not build alerting on the log.** It rolls, it can be truncated by a
 `kill -9` outside the owned stop sequence, and its wording is not a contract
 beyond the codes. Alert on `snapshot.json` (below); read the log afterwards to

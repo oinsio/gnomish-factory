@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.util.function.UnaryOperator
 
 /**
@@ -66,7 +67,7 @@ final class TaskGitFixture {
         // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
         // startup reads origin's default branch through it. Its retry runs on virtual time, so a
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.
-        new TaskGit(new GitTaskStore(runner, stamps), new GitTaskBranches(runner, stamps),
+        new TaskGit(new GitTaskStore(runner, stamps, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()), new GitTaskBranches(runner, stamps, VirtualTimeGitRetries.gitInfrastructure()),
                 new GitTaskWorktrees(runner, stamps), UnaryOperator.identity(),
                 new GitBaseRefs(runner, VirtualTimeGitRetries.gitInfrastructure()), record)
     }

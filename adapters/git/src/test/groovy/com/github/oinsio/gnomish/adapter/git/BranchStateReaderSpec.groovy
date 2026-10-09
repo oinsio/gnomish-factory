@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -34,7 +35,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     Path tempDir
 
     def runner = new GitProcessRunner()
-    def reader = new BranchStateReader(runner)
+    def reader = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure())
     Path cloneDir
     RegisteredClone registeredClone
 
@@ -47,7 +48,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     }
 
     private GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     private Path worktreeFor(String taskId) {
@@ -157,7 +158,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
-        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
@@ -300,7 +301,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('ro-seed-worktrees'), seedRepo)
-        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
@@ -313,7 +314,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         def observerClone = tempDir.resolve('ro-observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
         def observerWorktrees = tempDir.resolve('ro-observer-worktrees')
-        def readerUnderTest = new BranchStateReader(runner)
+        def readerUnderTest = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure())
 
         when:
         def result = readerUnderTest.read(observerClone, 'PROJ-9')

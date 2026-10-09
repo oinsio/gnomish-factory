@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 
 /**
  * Bounded retry for a terminal tracker write (finish/park) against a tracker outage (FR10, D10,
@@ -18,10 +17,10 @@ import java.time.Instant;
  * later. Only an outage retries: any other {@link RuntimeException} (a bug, a rejected request) is
  * not caught and surfaces at once, so a fault never loops for ten minutes.
  *
- * <p>Time is injected as the engine's {@link Sleeper}/{@link Clock} seams (the same pair the
+ * <p>Time is injected as the engine's {@link Sleeper}/{@link InstantSource} seams (the same pair the
  * external-poll loop uses, {@code ExternalPolling}): a virtual sleeper that advances a virtual clock
  * makes the bound and the backoff deterministic and instant under test (no real sleeping), while
- * {@link #system()} wires the production {@link ThreadSleeper}/{@link SystemClock}.
+ * {@link #system()} wires the production {@link ThreadSleeper}/{@link InstantSource}.
  *
  * <p>The abort path is deliberately NOT wrapped by this class — {@code AbortHandler} stays
  * fire-and-forget best-effort (a dead tracker never blocks an abort); only finish and park retry.
@@ -32,7 +31,7 @@ import java.time.Instant;
  * @param clock the injected time source the bound is measured against; never null
  * @param bound the maximum wall time to keep retrying before giving up; never null, positive
  */
-public record TerminalWriteRetry(Sleeper sleeper, Clock clock, Duration bound) {
+public record TerminalWriteRetry(Sleeper sleeper, InstantSource clock, Duration bound) {
 
     /** Default hold-the-slot bound per design D10: {@code ~10 minutes}. */
     public static final Duration DEFAULT_BOUND = Duration.ofMinutes(10);
@@ -48,9 +47,9 @@ public record TerminalWriteRetry(Sleeper sleeper, Clock clock, Duration bound) {
         DEFERRED
     }
 
-    /** The production retry: real {@link ThreadSleeper}/{@link SystemClock}, the {@link #DEFAULT_BOUND}. */
+    /** The production retry: real {@link ThreadSleeper}/{@link InstantSource}, the {@link #DEFAULT_BOUND}. */
     public static TerminalWriteRetry system() {
-        return new TerminalWriteRetry(new ThreadSleeper(), new SystemClock(), DEFAULT_BOUND);
+        return new TerminalWriteRetry(new ThreadSleeper(), InstantSource.system(), DEFAULT_BOUND);
     }
 
     /**
@@ -64,14 +63,14 @@ public record TerminalWriteRetry(Sleeper sleeper, Clock clock, Duration bound) {
      * @return {@link Result#CONFIRMED} once the write lands, {@link Result#DEFERRED} on give-up
      */
     public Result confirm(Runnable write) {
-        Instant deadline = clock.now().plus(bound);
+        Instant deadline = clock.instant().plus(bound);
         Duration backoff = INITIAL_BACKOFF;
         while (true) {
             try {
                 write.run();
                 return Result.CONFIRMED;
             } catch (TrackerUnavailableException outage) {
-                if (!clock.now().isBefore(deadline)) {
+                if (!clock.instant().isBefore(deadline)) {
                     return Result.DEFERRED;
                 }
                 sleeper.sleep(backoff);

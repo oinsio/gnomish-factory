@@ -4,12 +4,12 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.time.InstantSource
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -25,7 +25,7 @@ class HostFileChannelBoundarySpec extends Specification {
     @TempDir
     Path workingCopy
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = { -> Instant.now() } as InstantSource
 
     HostTaskExecutionEnvironment env
 

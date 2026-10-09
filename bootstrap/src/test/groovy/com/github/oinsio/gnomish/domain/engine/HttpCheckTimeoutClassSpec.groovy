@@ -9,10 +9,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Path
+import java.time.InstantSource
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -61,7 +61,9 @@ class HttpCheckTimeoutClassSpec extends Specification {
         def polling = new ExternalPolling(
                 platform.checkClient(LOOPBACK_ALLOWLIST),
                 AttemptDelivery.assumedDelivered(),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new ThreadSleeper())
         def ref = new AttemptCommitRef()
         ref.record(ThreeProviderPlatformFixture.GREEN_SHA)

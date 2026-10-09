@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 
 /**
@@ -26,9 +27,11 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
  * add-serve-sandbox-lifecycle; FR2, FR15 of harden-task-branch-contract.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
+ * @param retry the bounded terminal-write retry every reconciled tracker write runs under — the
+ *     slot wiring's (FR18 of supervise-daemon-loops-and-embed-dashboard)
  */
 record TakeDispositionResume<B extends ResumedBranch>(
-        ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git) {
+        ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git, TerminalWriteRetry retry) {
 
     /**
      * Dispatches the order's task branch on its classified shape (see class javadoc).
@@ -61,7 +64,7 @@ record TakeDispositionResume<B extends ResumedBranch>(
         String taskId = order.taskId();
         return switch (shape) {
             // Delivery is terminal: the branch is done and only the tracker write may be owed.
-            case BranchShape.Delivered() -> TakeReconcileFinish.deliverCompleted(git, order);
+            case BranchShape.Delivered() -> TakeReconcileFinish.deliverCompleted(git, order, retry);
             case BranchShape.Created(),
                     BranchShape.InProgress(),
                     BranchShape.Answered(),
@@ -78,6 +81,6 @@ record TakeDispositionResume<B extends ResumedBranch>(
     }
 
     private TakeLoadedBranchRoutes<B> routes() {
-        return new TakeLoadedBranchRoutes<>(mechanics, decisionResume, git);
+        return new TakeLoadedBranchRoutes<>(mechanics, decisionResume, git, retry);
     }
 }

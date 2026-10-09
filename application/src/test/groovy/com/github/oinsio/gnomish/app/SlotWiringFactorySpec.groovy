@@ -7,6 +7,8 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
@@ -36,8 +38,10 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         }
         def bound = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, CONFIG, adapterFactory, tracker, INSTANCE)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
-        def heartbeat = TakeHeartbeat.forRun(tracker, CONFIG, { Duration d -> } as Sleeper)
-        def factory = new SlotWiringFactory(plain, RegisteredCloneFixture.provider(CLONE), 'taskId', FIXED_CLOCK, support, source)
+        def heartbeat = TakeHeartbeat.forRun(tracker, CONFIG, { Duration d -> } as Sleeper, FIXED_CLOCK)
+        def retry = VirtualTimeRetries.terminalWrite()
+        def factory = new SlotWiringFactory(
+                plain, RegisteredCloneFixture.provider(CLONE), 'taskId', FIXED_CLOCK, support, source, retry)
 
         when:
         def wiring = factory.slotWiring(bound, git, heartbeat)
@@ -53,6 +57,9 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         wiring.registeredClone() == CLONE
         wiring.taskIdMdcKey() == 'taskId'
         wiring.containerTakeSupport().is(support)
+
+        and: "FR18 of supervise-daemon-loops-and-embed-dashboard: the root's terminal-write retry, not one of the wiring's own"
+        wiring.terminalWriteRetry().is(retry)
 
         and: "the bound tracker's members: the abort handler writes to the tracker the slot claims through"
         wiring.abort().handler().tracker().is(tracker)

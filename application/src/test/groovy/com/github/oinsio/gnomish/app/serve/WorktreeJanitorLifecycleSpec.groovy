@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -12,6 +11,7 @@ import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -35,7 +35,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     RegisteredClone registeredClone
     def ticks = new AtomicInteger()
     def sleeper = new BlockingSleeper()
-    def clock = { -> Instant.now() } as Clock
+    def clock = { -> Instant.now() } as InstantSource
 
     def setup() {
         registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('my-project'))

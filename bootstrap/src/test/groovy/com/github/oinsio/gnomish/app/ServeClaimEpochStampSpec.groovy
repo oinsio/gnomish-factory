@@ -12,10 +12,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -78,7 +78,9 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
                 properties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new TrackerWiring([github: claimWatcher], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 LiveConsoleIO.onStderr())

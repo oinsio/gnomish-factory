@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Path
+import java.time.InstantSource
 
 /**
  * A {@link CheckEnvironmentSource} that serves every command check from one fixed directory,
@@ -25,9 +25,9 @@ import java.nio.file.Path
 class TempDirCheckEnvironments implements CheckEnvironmentSource {
 
     private final Path directory
-    private final Clock clock
+    private final InstantSource clock
 
-    TempDirCheckEnvironments(Path directory, Clock clock) {
+    TempDirCheckEnvironments(Path directory, InstantSource clock) {
         this.directory = directory
         this.clock = clock
     }

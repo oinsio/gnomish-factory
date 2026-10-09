@@ -5,7 +5,8 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
-import java.time.Clock;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
+import java.time.InstantSource;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
@@ -28,9 +29,10 @@ final class SlotWiringFactory {
     private final RunAssembly assembly;
     private final ObjectProvider<RegisteredClone> resolvedClone;
     private final String taskIdMdcKey;
-    private final Clock clock;
+    private final InstantSource clock;
     private final ContainerTakeSupport containerTakeSupport;
     private final PipelineSource pipelineSource;
+    private final TerminalWriteRetry terminalWriteRetry;
 
     /**
      * @param assembly the plain run assembly the wiring's copy is derived from
@@ -42,20 +44,24 @@ final class SlotWiringFactory {
      * @param containerTakeSupport the container-mode seam of the take chain
      * @param pipelineSource the source the startup definition came from, which every fresh claim
      *     reads its task tier through (FR13 of add-base-ref-resolution)
+     * @param terminalWriteRetry the bounded terminal-write retry the root built on its one time
+     *     source, handed to every slot (FR18 of supervise-daemon-loops-and-embed-dashboard)
      */
     SlotWiringFactory(
             RunAssembly assembly,
             ObjectProvider<RegisteredClone> resolvedClone,
             String taskIdMdcKey,
-            Clock clock,
+            InstantSource clock,
             ContainerTakeSupport containerTakeSupport,
-            PipelineSource pipelineSource) {
+            PipelineSource pipelineSource,
+            TerminalWriteRetry terminalWriteRetry) {
         this.assembly = assembly;
         this.resolvedClone = resolvedClone;
         this.taskIdMdcKey = taskIdMdcKey;
         this.clock = clock;
         this.containerTakeSupport = containerTakeSupport;
         this.pipelineSource = pipelineSource;
+        this.terminalWriteRetry = terminalWriteRetry;
     }
 
     /**
@@ -78,6 +84,7 @@ final class SlotWiringFactory {
                 bound.credentialEnvVars(),
                 containerTakeSupport,
                 heartbeat.tenure(),
-                bound.trustedBase());
+                bound.trustedBase(),
+                terminalWriteRetry);
     }
 }

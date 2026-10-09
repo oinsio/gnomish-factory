@@ -62,13 +62,10 @@ public final class FinishedDecline {
      */
     private final Set<String> latched = ConcurrentHashMap.newKeySet();
 
-    /** The production wiring: a fresh latch, live for as long as this decliner is. */
-    public FinishedDecline() {
-        this(RepeatSuppressor.system());
-    }
-
     /**
-     * @param latch the per-task announcement latch; a spec drives it on virtual time
+     * @param latch the per-task announcement latch, live for as long as this decliner is; built by
+     *     the caller on its own time source (FR18 of supervise-daemon-loops-and-embed-dashboard), a
+     *     spec drives it on virtual time
      */
     public FinishedDecline(RepeatSuppressor latch) {
         this.latch = latch;

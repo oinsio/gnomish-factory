@@ -34,7 +34,8 @@ import org.springframework.boot.ApplicationArguments;
  * around dispatch, so it runs for the whole invocation regardless of how it ends (fix-reaper-idle-
  * liveness FR1, FR5).
  *
- * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port; FR3, FR10 of add-project-registry.
+ * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port; FR3, FR10 of add-project-registry;
+ * FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class TakeCommand {
 
@@ -50,7 +51,7 @@ final class TakeCommand {
     private final SandboxLifecyclePass sandboxLifecyclePass;
 
     /**
-     * The canonical construction; production wiring passes {@link TakeCommandSeams#DEFAULTS} with
+     * The canonical construction; production wiring passes {@link TakeCommandSeams#defaults} with
      * the installation's own {@link ServeProperties}, a spec layers on the seams it overrides.
      *
      * @param slotWiringFactory builds the invocation's one {@link SlotWiring} once the tracker is
@@ -134,7 +135,8 @@ final class TakeCommand {
                     trackerConfig,
                     seams.heartbeatSleeper(),
                     seams.reaperSleeper(),
-                    seams.heartbeatMonotonicTime());
+                    seams.heartbeatMonotonicTime(),
+                    seams.clock());
             // The take side's one slot wiring (design "Where a SlotWiring is built" of
             // introduce-slot-wiring; built by the factory of design D9 of collapse-composition-roots):
             // built once per invocation, as soon as the heartbeat exists, and shared by explicit,

@@ -26,7 +26,6 @@ import com.github.oinsio.gnomish.app.project.ProjectRegistry
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
@@ -35,6 +34,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.InstantSource
 import java.util.function.BooleanSupplier
 import java.util.function.Supplier
 import org.springframework.beans.factory.ObjectProvider
@@ -68,7 +68,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * Builds a fresh {@link ManualRunAssembly} from the standard
      * 6-collaborator set: {@link SystemConsoleIO} (over {@code input}/
      * {@code output}), {@link FilesExistCheckRunner}, {@link
-     * ShellCommandCheckRunner}, {@link SystemClock}, {@link ThreadSleeper},
+     * ShellCommandCheckRunner}, {@link InstantSource}, {@link ThreadSleeper},
      * and {@code factoryProperties}. Every call returns a brand-new
      * instance — no collaborator is cached on the trait (NFR-R1), so two
      * calls from the same spec never share state.
@@ -91,13 +91,17 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
                 new CheckEquipment(
                         new FilesExistCheckRunner(),
-                        new ShellCommandCheckRunner(),
+                        // real-time-wiring: the shipped composition's check runner measures real wall time;
+                        //     the time source is not the subject here.
+                        new ShellCommandCheckRunner(InstantSource.system()),
                         [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                         // An empty factory home of its own: no secrets folder, so every secret resolves from
                         // the environment exactly as before the folders existed (FR8 of add-project-registry).
                         new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null),
                         factoryProperties),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new ThreadSleeper(),
                 factoryProperties,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
@@ -211,7 +215,9 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
         def errorConsole = LiveConsoleIO.onStderr()
         def checkClientRegistry = [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
-        def systemClock = new SystemClock()
+        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+        def instantSource = InstantSource.system()
         // The assembly the context's manualRunAssembly bean builds (design D3 of
         // collapse-composition-roots): the same instances the runner itself receives below.
         def assembly = new ManualRunAssembly(
@@ -219,11 +225,11 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 errorConsole,
                 new CheckEquipment(
                         new FilesExistCheckRunner(),
-                        new ShellCommandCheckRunner(),
+                        new ShellCommandCheckRunner(instantSource),
                         checkClientRegistry,
                         MapSecretsProvider.NONE,
                         factoryProperties),
-                systemClock,
+                instantSource,
                 new ThreadSleeper(),
                 factoryProperties,
                 sandboxProperties)
@@ -235,9 +241,9 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 bindingProperties, DiscoveredBindings.real(), git, dockerProbe)
         def trackerWiring = new TrackerWiring(trackerAdapterRegistry, MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())
         def serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null)
-        def javaTimeClock = Clock.systemUTC()
-        def sandboxLifecyclePass = commands.sandboxLifecyclePass(sandboxProperties, factoryProperties, javaTimeClock)
-        def slotWiringFactory = commands.slotWiringFactory(assembly, resolvedClone, javaTimeClock, containerSupports, trackerWiring)
+        def sandboxLifecyclePass = commands.sandboxLifecyclePass(sandboxProperties, factoryProperties, instantSource)
+        def slotWiringFactory = commands.slotWiringFactory(
+                assembly, resolvedClone, instantSource, new ThreadSleeper(), containerSupports, trackerWiring)
         def reportCommands = new ReportCommands(
                 new StatusCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
                 new UsageCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
@@ -246,10 +252,10 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         def dispatch = commands.subcommandDispatch(
                 reportCommands,
                 commands.takeCommand(slotWiringFactory, git, factoryProperties, scope, trackerWiring,
-                commands.takeCommandSeams(serveProperties, javaTimeClock), sandboxLifecyclePass),
+                commands.takeCommandSeams(serveProperties, instantSource), sandboxLifecyclePass),
                 commands.serveCommand(
                         commands.serveRuntimeAssembly(slotWiringFactory,
-                        commands.serveAssembly(factoryProperties, serveProperties, systemClock, resolvedClone), git, javaTimeClock,
+                        commands.serveAssembly(factoryProperties, serveProperties, instantSource, resolvedClone), git, instantSource,
                         sandboxLifecyclePass, sandboxProperties),
                         git, scope, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(

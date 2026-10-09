@@ -18,7 +18,7 @@ import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.serveobservability.SweepVital;
-import java.time.Clock;
+import java.time.InstantSource;
 
 /**
  * Orchestrates the whole {@code serve} daemon runtime once the tracker is live, over the leaf
@@ -31,14 +31,16 @@ import java.time.Clock;
  * <p>Implements FR13 of add-factory-serve. Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of
  * add-serve-observability. Implements FR8 of collapse-composition-roots. Implements FR9, FR10 of
  * add-project-registry: neither the serve directory nor the janitor's worktree folder is relayed
- * through here — both come from the registered clone {@link ServeAssembly} reads.
+ * through here — both come from the registered clone {@link ServeAssembly} reads. Implements FR18
+ * of supervise-daemon-loops-and-embed-dashboard: the heartbeat is built on the root's one time
+ * source.
  */
 final class ServeRuntimeAssembly {
 
     private final SlotWiringFactory slotWiringFactory;
     private final ServeAssembly builders;
     private final TaskGit git;
-    private final Clock clock;
+    private final InstantSource clock;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final SandboxProperties sandboxProperties;
 
@@ -47,7 +49,7 @@ final class ServeRuntimeAssembly {
      *     shares with {@code take} (design D9 of collapse-composition-roots)
      * @param builders the leaf builders over the daemon's properties and engine clock
      * @param git the task-git port, decorated here with the remote-outage gate
-     * @param clock supplies "now" for the sweep tick log and the observability wiring
+     * @param clock supplies "now" for the heartbeat, the sweep tick log and the observability wiring
      * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam; {@link SandboxLifecyclePass#NONE}
      *     on a host-only install
      * @param sandboxProperties supplies the sandbox reap age the sweep vital is measured against —
@@ -57,7 +59,7 @@ final class ServeRuntimeAssembly {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly builders,
             TaskGit git,
-            Clock clock,
+            InstantSource clock,
             SandboxLifecyclePass sandboxLifecyclePass,
             SandboxProperties sandboxProperties) {
         this.slotWiringFactory = slotWiringFactory;
@@ -89,7 +91,7 @@ final class ServeRuntimeAssembly {
         // FR13: joins the assembly before TakeSlotRunner is built (reused for the daemon's lifetime).
         // FR7 (design D4): the heartbeat's state transitions wake the same writer.
         TakeHeartbeat heartbeat = TakeHeartbeat.forRun(
-                served.tracker(), served.trackerConfig(), new ThreadSleeper(), dirtyNotifier::markDirty);
+                served.tracker(), served.trackerConfig(), new ThreadSleeper(), dirtyNotifier::markDirty, clock);
 
         SlotLedger slotLedger = builders.slotLedger(effectiveSlots, dirtyNotifier);
         // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): ONE gate instance shared by the slot

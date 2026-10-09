@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.logtext;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -41,7 +41,7 @@ public final class RepeatSuppressor {
      */
     public static final Duration DEFAULT_ROLL_UP_INTERVAL = Duration.ofMinutes(5);
 
-    private final Clock clock;
+    private final InstantSource clock;
     private final Duration rollUpInterval;
     private final ConcurrentMap<String, Streak> streaks = new ConcurrentHashMap<>();
 
@@ -51,7 +51,7 @@ public final class RepeatSuppressor {
      * @param rollUpInterval the quiet period between roll-ups; never null, must be positive
      * @throws IllegalArgumentException if {@code rollUpInterval} is not positive
      */
-    public RepeatSuppressor(Clock clock, Duration rollUpInterval) {
+    public RepeatSuppressor(InstantSource clock, Duration rollUpInterval) {
         if (rollUpInterval.isNegative() || rollUpInterval.isZero()) {
             throw new IllegalArgumentException("rollUpInterval must be positive, got " + rollUpInterval);
         }
@@ -60,14 +60,19 @@ public final class RepeatSuppressor {
     }
 
     /**
-     * The production wiring: the system clock and the default roll-up interval. For the composition
-     * root, never for a spec — a spec builds the two-argument constructor with virtual time, which
-     * the {@code checkTestTimeInjection} gate enforces.
+     * A suppressor on {@code source} with the default roll-up interval: the form a site that is not a
+     * supervised loop builds from the time source its wiring handed it (design D17 of
+     * supervise-daemon-loops-and-embed-dashboard), so real time enters only where the composition
+     * root chose it. A loop derives its period from its interval instead ({@code RollUpPeriod}).
      *
-     * @return a suppressor on real time; never null
+     * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @param source the time source the roll-up interval and the outage duration are measured on;
+     *     never null
+     * @return a suppressor with {@link #DEFAULT_ROLL_UP_INTERVAL}; never null
      */
-    public static RepeatSuppressor system() {
-        return new RepeatSuppressor(Clock.systemUTC(), DEFAULT_ROLL_UP_INTERVAL);
+    public static RepeatSuppressor withDefaultRollUp(InstantSource source) {
+        return new RepeatSuppressor(source, DEFAULT_ROLL_UP_INTERVAL);
     }
 
     /**

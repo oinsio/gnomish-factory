@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app.lease;
 
-import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.app.daemon.RollUpPeriod;
 import java.time.Duration;
 
 /**
@@ -18,7 +17,8 @@ import java.time.Duration;
  * harden-task-branch-contract).
  *
  * <p>Implements FR1 of add-claim-heartbeat; FR13 of harden-task-branch-contract; FR4 of
- * harden-logging-observability; FR1 of collapse-composition-roots.
+ * harden-logging-observability; FR1 of collapse-composition-roots; FR2 of
+ * supervise-daemon-loops-and-embed-dashboard.
  *
  * @param interval the beat interval (design D8 of add-claim-heartbeat, default five minutes)
  * @param lostDetection how far a claim's last confirmed beat may fall behind before the holder
@@ -34,22 +34,14 @@ public record BeatTiming(Duration interval, Duration lostDetection) {
     }
 
     /**
-     * The quiet period between roll-ups for a loop that ticks every {@link #interval}. A roll-up
-     * period equal to the loop's own tick is no suppression at all — every repeat would qualify —
-     * and the beat interval's own default (design D8) is exactly the suppressor's default, so the
-     * period is derived from the loop rather than taken from the catalog: at most one reminder per
-     * six beats, and never more often than {@link RepeatSuppressor#DEFAULT_ROLL_UP_INTERVAL}.
+     * The quiet period between roll-ups for a loop that ticks every {@link #interval}: the
+     * heartbeat is exempt from the supervised loop but shares its rule, so the period comes from
+     * the one owner of it, {@link RollUpPeriod#forInterval} (design D2 of
+     * supervise-daemon-loops-and-embed-dashboard).
+     *
+     * @return the heartbeat's roll-up period; never null
      */
-    // @DoNotMutate: provably equivalent mutant. The two arms of the comparison return equal
-    //     durations at the boundary — when six beats are exactly the default, `>` and `>=` both
-    //     yield the default's own value — so no covering test can distinguish the boundary
-    //     mutation (testing.md, "provably equivalent mutant"). HeartbeatRollUpPeriodSpec covers
-    //     the method on both sides of the boundary and on the boundary itself.
-    @DoNotMutate
     public Duration rollUp() {
-        Duration sixBeats = interval.multipliedBy(6);
-        return sixBeats.compareTo(RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL) > 0
-                ? sixBeats
-                : RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL;
+        return RollUpPeriod.forInterval(interval);
     }
 }

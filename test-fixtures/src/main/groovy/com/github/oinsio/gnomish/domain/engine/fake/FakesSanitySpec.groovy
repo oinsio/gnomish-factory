@@ -94,7 +94,7 @@ class FakesSanitySpec extends Specification {
 
         then: 'the side effect fired and the scripted verdict still came back'
         verdict instanceof Verdict.Pass
-        clock.now() == Instant.EPOCH.plusSeconds(7)
+        clock.instant() == Instant.EPOCH.plusSeconds(7)
         runner.calls.size() == 1
     }
 

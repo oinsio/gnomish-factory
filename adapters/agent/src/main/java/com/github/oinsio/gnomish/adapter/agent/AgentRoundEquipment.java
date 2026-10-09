@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import java.time.InstantSource;
 
 /**
  * The equipment every agent round is launched with: the installation config (CLI binary, tail
@@ -22,6 +22,6 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock;
  */
 record AgentRoundEquipment(
         FactoryProperties factoryProperties,
-        Clock clock,
+        InstantSource clock,
         AgentProgressListener progressListener,
         AgentRoundResultExtractor resultExtractor) {}

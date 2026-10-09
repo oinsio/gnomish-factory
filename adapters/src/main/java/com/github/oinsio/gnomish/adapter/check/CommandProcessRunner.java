@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -9,6 +7,7 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -65,11 +64,14 @@ final class CommandProcessRunner {
 
     private final Duration checkTimeout;
 
-    private final Clock clock;
+    private final InstantSource clock;
 
-    /** A runner over {@code shell} bounded by the documented default timeout. */
-    CommandProcessRunner(String shell) {
-        this(shell, DEFAULT_CHECK_TIMEOUT, new SystemClock());
+    /**
+     * A runner over {@code shell} bounded by the documented default timeout, measuring on {@code
+     * clock} (FR18 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    CommandProcessRunner(String shell, InstantSource clock) {
+        this(shell, DEFAULT_CHECK_TIMEOUT, clock);
     }
 
     /**
@@ -78,7 +80,7 @@ final class CommandProcessRunner {
      *     installation's {@code factory.check-command-timeout}, and specs inject a sub-second one
      * @param clock the read-time source for the measured wall time
      */
-    CommandProcessRunner(String shell, Duration checkTimeout, Clock clock) {
+    CommandProcessRunner(String shell, Duration checkTimeout, InstantSource clock) {
         this.shell = shell;
         this.checkTimeout = checkTimeout;
         this.clock = clock;

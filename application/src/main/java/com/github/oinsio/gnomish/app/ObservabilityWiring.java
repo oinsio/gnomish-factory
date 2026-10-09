@@ -8,8 +8,8 @@ import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWrite
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -33,14 +33,14 @@ final class ObservabilityWiring {
     private final LifecycleStateTracker lifecycleTracker;
     private final SnapshotWriter snapshotWriter;
     private final LedgerWriters ledgerWriters;
-    private final Clock clock;
+    private final InstantSource clock;
     private final AtomicBoolean stopped = new AtomicBoolean();
 
     ObservabilityWiring(
             LifecycleStateTracker lifecycleTracker,
             SnapshotWriter snapshotWriter,
             LedgerWriters ledgerWriters,
-            Clock clock) {
+            InstantSource clock) {
         this.lifecycleTracker = lifecycleTracker;
         this.snapshotWriter = snapshotWriter;
         this.ledgerWriters = ledgerWriters;

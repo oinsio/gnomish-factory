@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +50,7 @@ final class TakeDisposition {
      * @param clock the run's clock, used only to render the display-only last-beat age in the
      *     takeover facts (design D9); never null
      */
-    TakeDisposition(SlotWiring wiring, boolean takeoverFlag, TakeoverConfirmation confirmation, Clock clock) {
+    TakeDisposition(SlotWiring wiring, boolean takeoverFlag, TakeoverConfirmation confirmation, InstantSource clock) {
         this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }

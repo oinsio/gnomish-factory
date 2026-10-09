@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Instant
+import java.time.InstantSource
 
 /**
  * A scripted {@link RecordingDockerCli} whose answers make a full materialize +
@@ -97,7 +97,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         sandbox,
                         new BoxTiming({
                             -> Instant.now()
-                        } as Clock, { d -> } as Sleeper, DEFAULT_COMMAND_TIMEOUT),
+                        } as InstantSource, { d -> } as Sleeper, DEFAULT_COMMAND_TIMEOUT),
                         ChildEnvAllowlist.none(),
                         guardRoot,
                         new ObjectOwnership(mode, projectId)))

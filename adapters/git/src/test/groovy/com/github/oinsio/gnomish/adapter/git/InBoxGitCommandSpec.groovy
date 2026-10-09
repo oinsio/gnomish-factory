@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -11,6 +10,7 @@ import java.io.InputStream
 import java.io.UncheckedIOException
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -127,7 +127,7 @@ class InBoxGitCommandSpec extends Specification {
         }
 
         @Override
-        ExecHandle.Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+        ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
             new ExecHandle.Wait.Exited(Duration.ZERO)
         }
 

@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
-import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -58,17 +58,22 @@ public final class GithubMarkerWriter {
     private final GithubCommentUpsert upsert;
     private final ClaimEpochSource epochs;
     private final String instanceId;
+    private final InstantSource clock;
 
     /**
      * @param upsert the find-then-upsert primitive every write lands through
      * @param epochs this instance's tenure record — {@link ClaimEpochSource#NONE}
      *     for a path that never claims
      * @param instanceId the identifier of this factory instance, recorded in every marker
+     * @param clock the time source every marker's {@code at} stamp is read from (FR20 of
+     *     supervise-daemon-loops-and-embed-dashboard)
      */
-    public GithubMarkerWriter(GithubCommentUpsert upsert, ClaimEpochSource epochs, String instanceId) {
+    public GithubMarkerWriter(
+            GithubCommentUpsert upsert, ClaimEpochSource epochs, String instanceId, InstantSource clock) {
         this.upsert = upsert;
         this.epochs = epochs;
         this.instanceId = instanceId;
+        this.clock = clock;
     }
 
     /** The instance identifier this writer stamps into its markers. */
@@ -92,7 +97,8 @@ public final class GithubMarkerWriter {
         String scope = tenure.map(epoch -> Long.toString(epoch.token())).orElseGet(() -> digestOf(humanText));
         return write(
                 id,
-                new GithubMarkerWrite(kind, scope, humanText, reason, tenure.orElse(null), instanceId, Instant.now()));
+                new GithubMarkerWrite(
+                        kind, scope, humanText, reason, tenure.orElse(null), instanceId, clock.instant()));
     }
 
     /**

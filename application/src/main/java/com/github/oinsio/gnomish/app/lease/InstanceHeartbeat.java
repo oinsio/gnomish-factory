@@ -2,13 +2,13 @@ package com.github.oinsio.gnomish.app.lease;
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,7 +57,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     private final Sleeper sleeper;
     private final Duration interval;
     private final ClaimLostSink claimLostSink;
-    private final Clock clock;
+    private final InstantSource clock;
     private final HeartbeatStateListener stateListener;
     private final HeldClaims claims = new HeldClaims();
     private final Duration lostDetection;
@@ -76,7 +76,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             Tracker tracker,
             HeartbeatProgress progress,
             Sleeper sleeper,
-            Clock clock,
+            InstantSource clock,
             Duration interval,
             ClaimLostSink claimLostSink) {
         this(tracker, progress, sleeper, clock, interval, claimLostSink, HeartbeatStateListener.IGNORE);
@@ -93,7 +93,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             Tracker tracker,
             HeartbeatProgress progress,
             Sleeper sleeper,
-            Clock clock,
+            InstantSource clock,
             Duration interval,
             ClaimLostSink claimLostSink,
             HeartbeatStateListener stateListener) {
@@ -119,17 +119,18 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             Tracker tracker,
             HeartbeatProgress progress,
             Sleeper sleeper,
-            Clock clock,
+            InstantSource clock,
             BeatTiming timing,
             ClaimLostSink claimLostSink,
             HeartbeatStateListener stateListener) {
         this.lostDetection = timing.lostDetection();
         // The edge-logging owner for the two streaks this thread can run: each claim's beat
-        // failures (namespaced by HeartbeatBeater) and the tick itself failing. Built here rather
+        // failures (namespaced by HeartbeatBeater) and the tick itself failing. Built here, on the
+        // heartbeat's own time source (FR19 of supervise-daemon-loops-and-embed-dashboard), rather
         // than injected because it is log-plane only — it decides how a repeated failure is
         // *said*, never what the beat does — and the constructor is already at the parameter
         // limit (process-invariants.md). FR4 of harden-logging-observability.
-        RepeatSuppressor suppressor = new RepeatSuppressor(java.time.Clock.systemUTC(), timing.rollUp());
+        RepeatSuppressor suppressor = new RepeatSuppressor(clock, timing.rollUp());
         this.tickLog = new HeartbeatTickLog(suppressor);
         this.beater = new HeartbeatBeater(tracker, progress, clock, suppressor);
         this.sleeper = sleeper;
@@ -137,7 +138,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
         this.claimLostSink = claimLostSink;
         this.clock = clock;
         this.stateListener = stateListener;
-        this.lastTickAt = clock.now();
+        this.lastTickAt = clock.instant();
     }
 
     /**
@@ -150,7 +151,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     public void register(TaskRef ref) {
         // A tenure starts confirmed: the claim was just acquired, so its liveness is known now and
         // the lost-detection clock runs from here rather than from some earlier tenure's beat.
-        lastConfirmedAt.put(ref, clock.now());
+        lastConfirmedAt.put(ref, clock.instant());
         // IDLE/DIED → RUNNING is the FR7 trigger; a register onto a running worker fires nothing.
         if (claims.registerAndMaybeStart(ref, this::loop, this::onWorkerDeath)) {
             notifyStateChanged();
@@ -244,7 +245,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
 
     // Package-private: the deterministic beat specs drive one tick directly.
     void tick() {
-        Instant now = clock.now();
+        Instant now = clock.instant();
         lastTickAt = now;
         for (TaskRef ref : claims.snapshot()) {
             switch (beater.beat(ref)) {

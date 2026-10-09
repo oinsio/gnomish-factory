@@ -6,8 +6,8 @@ import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.time.Duration
 import java.util.function.Supplier
 import org.slf4j.LoggerFactory
@@ -41,7 +41,7 @@ abstract class ServeShutdownSpecBase extends Specification {
         new StandingReaper(
                 ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
                     []
-                } as Supplier, new SystemClock())
+                } as Supplier, new VirtualClock())
     }
 
     // Captures ServeShutdown's log output so the grace-window summary line — the only observable

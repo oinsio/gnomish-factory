@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import java.time.Clock
 
 /**
@@ -21,12 +23,12 @@ final class TakeCommands {
 
     private TakeCommands() {}
 
-    /** All seams at {@link TakeCommandSeams#DEFAULTS}. */
+    /** All seams at {@link TakeCommandSeams#defaults}. */
     static TakeCommand of(RunAssembly assembly, TaskGit git, RegisteredClone clone, String taskIdMdcKey,
             FactoryProperties factoryProperties, Clock clock, TrackerWiring trackerWiring,
             SandboxLifecyclePass sandboxLifecyclePass, ContainerTakeSupport containerTakeSupport) {
         of(assembly, git, clone, taskIdMdcKey, factoryProperties, clock, trackerWiring,
-                TakeCommandSeams.DEFAULTS, sandboxLifecyclePass, containerTakeSupport)
+                TakeCommandSeams.defaults(new VirtualClock()), sandboxLifecyclePass, containerTakeSupport)
     }
 
     static TakeCommand of(RunAssembly assembly, TaskGit git, RegisteredClone clone, String taskIdMdcKey,
@@ -35,7 +37,7 @@ final class TakeCommands {
         def resolvedClone = RegisteredCloneFixture.provider(clone)
         def slotWiringFactory = new SlotWiringFactory(
                 assembly, resolvedClone, taskIdMdcKey, clock, containerTakeSupport,
-                trackerWiring.pipelineSource())
+                trackerWiring.pipelineSource(), VirtualTimeRetries.terminalWrite())
         new TakeCommand(slotWiringFactory, git, factoryProperties, new ProjectScope(resolvedClone, factoryProperties),
                 trackerWiring, seams.withClock(clock), sandboxLifecyclePass)
     }

@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -20,7 +20,7 @@ import spock.lang.TempDir
  */
 class HostExecHandleTreeKillSpec extends Specification {
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = { -> Instant.now() } as InstantSource
 
     @TempDir
     Path tempDir

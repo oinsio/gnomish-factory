@@ -9,7 +9,7 @@
  *
  * <p>Application layer, not adapters (task 4.4, D12(a) of split-into-modules): both are value
  * wrappers over a path and a ref respectively, with no external system behind them — the same
- * treatment task 4.2 gave {@code SystemClock} / {@code ThreadSleeper}. They live here rather than
+ * treatment task 4.2 gave {@code ThreadSleeper}. They live here rather than
  * in {@code :domain} because {@code DirectoryWorkspace} validates its root through {@code
  * java.nio.file}, which the domain-purity gate forbids.
  *

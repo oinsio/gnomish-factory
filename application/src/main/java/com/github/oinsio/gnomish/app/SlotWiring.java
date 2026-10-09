@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import java.util.List;
 
 /**
@@ -21,7 +22,8 @@ import java.util.List;
  * <p>Never log a wiring whole: the record {@code toString} renders the credential variable names
  * it carries (NFR-S1). It carries names only, never a credential value.
  *
- * <p>Implements FR1 of introduce-slot-wiring; FR9 of add-project-registry.
+ * <p>Implements FR1 of introduce-slot-wiring; FR9 of add-project-registry; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  *
  * @param assembly the run assembly (listener-augmented with the heartbeat's progress listener)
  * @param git the task-git capability set, including the claim-epoch book
@@ -34,6 +36,9 @@ import java.util.List;
  * @param containerTakeSupport the container-mode seam of the take chain
  * @param tenure the claim beat and claim-loss flag of the run's heartbeat
  * @param trustedBase the trusted tier bound once at startup
+ * @param terminalWriteRetry the bounded retry every terminal tracker write (finish, park, and their
+ *     reconciled re-drives) runs under, built by the composition root on its one time source
+ *     (FR18 of supervise-daemon-loops-and-embed-dashboard)
  */
 public record SlotWiring(
         RunAssembly assembly,
@@ -44,4 +49,5 @@ public record SlotWiring(
         List<String> credentialEnvVarsToScrub,
         ContainerTakeSupport containerTakeSupport,
         ClaimTenure tenure,
-        TrustedBaseContext trustedBase) {}
+        TrustedBaseContext trustedBase,
+        TerminalWriteRetry terminalWriteRetry) {}

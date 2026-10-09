@@ -7,7 +7,7 @@ package com.github.oinsio.gnomish.app.lease;
  * supply a controllable, deterministic value.
  *
  * <p>This is deliberately a <em>separate</em> seam from the engine's {@link
- * com.github.oinsio.gnomish.domain.engine.port.Clock}: that clock returns a
+ * java.time.InstantSource}: that clock returns a
  * wall-clock {@link java.time.Instant}, which NTP can step forward or backward, and a
  * TTL measured on a wall clock could be shortened or lengthened by a clock
  * adjustment mid-window. Staleness is an <em>elapsed-duration</em> judgment on the

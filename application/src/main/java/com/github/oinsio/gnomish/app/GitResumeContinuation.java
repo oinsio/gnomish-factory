@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -33,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * the park commit); the host arm has none, since its worktree is the branch. Adding or re-meaning
  * an arm on one side alone is the divergence this pair guards against (UX2).
  *
- * <p>Implements FR5, FR8, UX2 of add-git-workflow.
+ * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class GitResumeContinuation {
 
@@ -105,7 +104,7 @@ final class GitResumeContinuation {
         var escalated = new TaskOutcome.Escalated(finalState, report);
 
         DialogConsole console = assembly.dialogConsole();
-        var resumption = new EscalationResume(console, Clock.systemUTC(), returnPath())
+        var resumption = new EscalationResume(console, assembly.instantSource(), returnPath())
                 .decide(bootstrap.context(), escalated, decision);
         if (decision != null) {
             // The decision and the attempts reset land in one commit (NFR-R1 of make-run-headless).

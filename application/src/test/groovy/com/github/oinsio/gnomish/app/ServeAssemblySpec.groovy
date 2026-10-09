@@ -7,8 +7,8 @@ import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.time.Duration
 import java.util.function.Supplier
 import spock.lang.Specification
@@ -31,7 +31,7 @@ class ServeAssemblySpec extends Specification {
     // claim in that SAME ClaimLossFlag instance (the round-boundary check elsewhere consults).
     def "builds a ServeShutdown wired over the given slot ledger and claim-loss flag"() {
         given:
-        def slotLedger = new SlotLedger(1)
+        def slotLedger = new SlotLedger(1, new VirtualClock())
         slotLedger.acquire()
         slotLedger.assign(REF)
         def claimLossFlag = new ClaimLossFlag()
@@ -40,7 +40,7 @@ class ServeAssemblySpec extends Specification {
         def standingReaper = new StandingReaper(
                 ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
                     []
-                } as Supplier, new SystemClock())
+                } as Supplier, new VirtualClock())
 
         when:
         def shutdown = new ServeAssembly(null, serveProperties, null, null).shutdown(slotLedger, claimLossFlag, standingReaper)

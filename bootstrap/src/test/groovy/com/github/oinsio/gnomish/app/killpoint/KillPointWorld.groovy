@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -17,7 +18,6 @@ import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-
 import java.nio.file.Path
 /**
  * One task under a kill-point run: the branch medium its transition writes to, the tracker its
@@ -95,7 +95,7 @@ class KillPointWorld implements BareGitRepoFixture {
 
     /** The classified shape's label, read through the production classifier over the real tip. */
     String shape() {
-        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE).classifyShape(repoDir, taskId).label()
+        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(repoDir, taskId).label()
     }
 
     /**

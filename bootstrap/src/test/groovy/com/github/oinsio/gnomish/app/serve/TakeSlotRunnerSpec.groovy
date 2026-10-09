@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger as LogbackLogger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -17,6 +18,8 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
@@ -68,10 +71,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
-    // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and over
-    //     BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to stamp the
-    //     slot's own refresh, which this spec reads back but never paces.
-    RemoteOutageGate remoteOutageGate = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30))
+    RemoteOutageGate remoteOutageGate = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -143,7 +143,8 @@ tracker:
                 newAssembly(properties), RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
                 registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                VirtualTimeRetries.terminalWrite())
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
                 tracker, INSTANCE)
@@ -260,7 +261,7 @@ tracker:
         given:
         tracker.fetchTask(new TaskRef('PROJ-7')) >> workingTask('PROJ-7')
         def slotRunner = newSlotRunner()
-        def slotLedger = new SlotLedger(1)
+        def slotLedger = new SlotLedger(1, new VirtualClock())
         def ref = new TaskRef('PROJ-7')
         slotLedger.assign(ref)
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')

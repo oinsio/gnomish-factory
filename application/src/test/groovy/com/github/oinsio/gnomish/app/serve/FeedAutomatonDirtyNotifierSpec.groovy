@@ -52,7 +52,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when:
@@ -70,7 +70,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
         when: 'a second cycle lands back in the same Idle-empty state as construction'
@@ -87,7 +87,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
+        def automaton = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1))
 
         expect:

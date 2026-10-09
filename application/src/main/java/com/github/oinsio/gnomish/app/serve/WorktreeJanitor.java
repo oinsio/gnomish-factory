@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -15,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -59,7 +59,7 @@ public final class WorktreeJanitor {
     private final Path cloneWorktrees;
     private final Duration ageThreshold;
     private final TaskEnvironmentDisposal disposal;
-    private final Clock clock;
+    private final InstantSource clock;
     private final Sleeper sleeper;
     private final Supplier<Set<TaskRef>> heldRefs;
     private volatile Instant lastRunAt;
@@ -78,7 +78,7 @@ public final class WorktreeJanitor {
             RegisteredClone clone,
             Duration ageThreshold,
             TaskEnvironmentDisposal disposal,
-            Clock clock,
+            InstantSource clock,
             Sleeper sleeper,
             Supplier<Set<TaskRef>> heldRefs) {
         this.cloneWorktrees = clone.worktrees();
@@ -87,7 +87,7 @@ public final class WorktreeJanitor {
         this.clock = clock;
         this.sleeper = sleeper;
         this.heldRefs = heldRefs;
-        this.lastRunAt = clock.now();
+        this.lastRunAt = clock.instant();
     }
 
     /**
@@ -116,12 +116,12 @@ public final class WorktreeJanitor {
 
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
-        lastRunAt = clock.now();
+        lastRunAt = clock.instant();
         if (!Files.isDirectory(cloneWorktrees)) {
             return;
         }
         Set<String> held = heldEnvironmentKeys();
-        Instant now = clock.now();
+        Instant now = clock.instant();
         try (Stream<Path> children = Files.list(cloneWorktrees)) {
             children.filter(Files::isDirectory).forEach(dir -> disposeIfAged(dir, held, now));
         } catch (IOException e) {

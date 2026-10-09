@@ -10,10 +10,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -87,7 +87,9 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
                 testProperties(instanceName: 'gnomish-factory'),
                 new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null),
                 Clock.systemUTC(),
-                new SystemClock(),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(),
                 new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), { FeedAutomaton automaton ->
                     automaton.run()
                 } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),

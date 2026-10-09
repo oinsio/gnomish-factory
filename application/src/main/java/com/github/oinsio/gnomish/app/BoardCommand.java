@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.board.BoardModel;
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
 
@@ -37,19 +37,19 @@ final class BoardCommand {
     private final BoardArgumentsParser argumentsParser = new BoardArgumentsParser();
     private final BoardTextRenderer textRenderer = new BoardTextRenderer();
     private final BoardJsonMapper jsonMapper = new BoardJsonMapper();
-    private final Clock clock;
+    private final InstantSource clock;
     private final FactoryProperties factoryProperties;
     private final ProjectScope scope;
     private final TrackerWiring trackerWiring;
     private final ConsoleIO console;
 
     BoardCommand(
-            Clock javaTimeClock,
+            InstantSource instantSource,
             FactoryProperties factoryProperties,
             ProjectScope scope,
             TrackerWiring trackerWiring,
             ConsoleIO console) {
-        this.clock = javaTimeClock;
+        this.clock = instantSource;
         this.factoryProperties = factoryProperties;
         this.scope = scope;
         this.trackerWiring = trackerWiring;

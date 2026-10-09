@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 
 /**
  * Shared daemon-free construction seam for {@link ContainerEnvironments} specs
@@ -20,7 +20,7 @@ trait ContainerEnvironmentsFixture {
     RecordingDockerCli docker = new RecordingDockerCli()
     SandboxProperties sandbox = new SandboxProperties(
     'gnomish/img', null, null, null, null, null, false, null, null, null, null)
-    Clock clock = { -> Instant.now() } as Clock
+    InstantSource clock = { -> Instant.now() } as InstantSource
     ContainerHarvest harvester = { String container, String branch -> } as ContainerHarvest
     Sleeper sleeper = { Duration d -> } as Sleeper
     // The docker-command bound is the production default: no scripted command here ever waits on it.

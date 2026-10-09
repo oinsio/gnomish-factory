@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -50,7 +50,9 @@ class PaidSmokeReferenceDumpSpec extends Specification {
 
     private final String claudeBinary = System.getProperty('paidSmoke.claudeBinary', 'claude')
 
-    private final SystemClock clock = new SystemClock()
+    // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+    //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+    private final InstantSource clock = InstantSource.system()
 
     def setupSpec() {
         // Runs once for the whole spec (not per-feature): a single small real round proves login,

@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.ReportPlane;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import org.jspecify.annotations.Nullable;
 
@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
 public final class EscalationResume {
 
     private final DialogConsole console;
-    private final Clock clock;
+    private final InstantSource clock;
     private final TerminalOutcomeRender.ReturnPath returnPath;
 
     /**
@@ -44,7 +44,7 @@ public final class EscalationResume {
      * @param returnPath where the task resumes from, named by the restatement; never null — a
      *     resume always has a branch
      */
-    EscalationResume(DialogConsole console, Clock clock, TerminalOutcomeRender.ReturnPath returnPath) {
+    EscalationResume(DialogConsole console, InstantSource clock, TerminalOutcomeRender.ReturnPath returnPath) {
         this.console = console;
         this.clock = clock;
         this.returnPath = returnPath;

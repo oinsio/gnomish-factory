@@ -6,10 +6,10 @@ import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.INTERVA
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -103,7 +103,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     //     backoff and the respawn. The window clock is read under the decision, so it stops there.
     def "a stop arriving while the restart is decided skips the backoff and the respawn"() {
         given:
-        def stopOnRead = { -> rig.stopHere(); Instant.EPOCH } as Clock
+        def stopOnRead = { -> rig.stopHere(); Instant.EPOCH } as InstantSource
         def policy = new RestartPolicy.Bounded(INTERVAL, CAP, 5, Duration.ofMinutes(10), stopOnRead)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             throw new SupervisedLoopHarness.Unrenderable()

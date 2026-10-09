@@ -49,9 +49,11 @@ final class TakeReconcileFinish {
      * @param order the take order of the just-claimed task whose branch recorded {@code Completed}:
      *     the clone, the task's identity, the tracker the deferred finish is made through, and this
      *     instance's identity for the pre-write claim check; never null
+     * @param retry the bounded terminal-write retry the deferred finish runs under, the slot
+     *     wiring's (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      * @return the {@link TakeResult.Delivered} the deferred finish produced; never null
      */
-    static TakeResult deliverCompleted(TaskGit git, TakeOrder order) {
+    static TakeResult deliverCompleted(TaskGit git, TakeOrder order, TerminalWriteRetry retry) {
         DeliveredBranchState delivered =
                 git.branches().readDelivered(order.run().cloneDir(), order.taskId());
         var completed = new TaskOutcome.Completed(delivered.finalState());
@@ -62,7 +64,7 @@ final class TakeReconcileFinish {
                 delivered.context(),
                 TaskIdSanitizer.branchName(order.taskId()),
                 order,
-                TerminalWriteRetry.system(),
+                retry,
                 new FinishTransition.Recovered(() -> {}));
     }
 
@@ -82,16 +84,18 @@ final class TakeReconcileFinish {
      * @param order the take order of the just-claimed task: the tracker the deferred finish is
      *     made through, the task's identity, and this instance's identity for the pre-write claim
      *     check; never null
+     * @param retry the bounded terminal-write retry the deferred finish runs under; never null
      * @return the {@link TakeResult.Delivered} the deferred finish produced; never null
      */
-    static TakeResult finishUncleaned(ResumedBranch branch, TaskState finalState, Runnable cleanup, TakeOrder order) {
+    static TakeResult finishUncleaned(
+            ResumedBranch branch, TaskState finalState, Runnable cleanup, TakeOrder order, TerminalWriteRetry retry) {
         var completed = new TaskOutcome.Completed(finalState);
         return TakeFinishReport.finish(
                 completed,
                 branch.context(),
                 branch.branchName(),
                 order,
-                TerminalWriteRetry.system(),
+                retry,
                 new FinishTransition.Recovered(cleanup));
     }
 }

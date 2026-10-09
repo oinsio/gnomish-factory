@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +8,7 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -73,11 +73,11 @@ final class StreamDrain implements AutoCloseable {
      *     thread, per line; never null
      * @return the running drain; never null
      */
-    static StreamDrain start(InputStream output, Clock clock, AgentProgressListener progressListener) {
+    static StreamDrain start(InputStream output, InstantSource clock, AgentProgressListener progressListener) {
         return new StreamDrain(output, clock, progressListener);
     }
 
-    private StreamDrain(InputStream output, Clock clock, AgentProgressListener progressListener) {
+    private StreamDrain(InputStream output, InstantSource clock, AgentProgressListener progressListener) {
         this.source = output;
         this.counting = new CountingInputStream(output);
         var parser = new StreamJsonParser(clock, progressListener);

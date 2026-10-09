@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -43,7 +44,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
-        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.createTask(new TaskContext('PROJ-1', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
     }
 
@@ -166,7 +167,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         def held = { String id ->
             Optional.of(new ClaimEpoch(4711))
         } as ClaimEpochSource
-        new GitTaskRepository(runner, registeredClone, held)
+        new GitTaskRepository(runner, registeredClone, held, new VirtualClock())
                 .createTask(new TaskContext('PROJ-2', UntrustedText.tracker('Fix the other thing'), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))

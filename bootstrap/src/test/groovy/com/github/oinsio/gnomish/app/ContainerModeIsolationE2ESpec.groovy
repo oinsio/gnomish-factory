@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -19,6 +18,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -75,7 +75,9 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
                 taskKey,
                 new BoxGitLink(cloneDir, new ContainerHarvestFetch(gitRunner, cloneDir)),
                 new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
-                new BoxTiming(new SystemClock(), new ThreadSleeper(), Duration.ofMinutes(5)),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                new BoxTiming(InstantSource.system(), new ThreadSleeper(), Duration.ofMinutes(5)),
                 ChildEnvAllowlist.none(),
                 tempDir.resolve('guard-config'),
                 new ObjectOwnership(OwnershipMode.MANUAL, 'test-project'))

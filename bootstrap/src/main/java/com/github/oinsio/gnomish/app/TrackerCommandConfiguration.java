@@ -7,9 +7,10 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
+import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +27,8 @@ import org.springframework.context.annotation.Configuration;
  * tracker.
  *
  * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1, FR7 of
- * collapse-composition-roots; FR3, FR9, FR10 of add-project-registry.
+ * collapse-composition-roots; FR3, FR9, FR10 of add-project-registry; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 @Configuration
 public class TrackerCommandConfiguration {
@@ -38,8 +40,8 @@ public class TrackerCommandConfiguration {
      */
     @Bean
     SandboxLifecyclePass sandboxLifecyclePass(
-            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, Clock javaTimeClock) {
-        return SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock);
+            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, InstantSource instantSource) {
+        return SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, instantSource);
     }
 
     /**
@@ -53,16 +55,20 @@ public class TrackerCommandConfiguration {
     SlotWiringFactory slotWiringFactory(
             ManualRunAssembly manualRunAssembly,
             ObjectProvider<RegisteredClone> registeredClone,
-            Clock javaTimeClock,
+            InstantSource instantSource,
+            ThreadSleeper threadSleeper,
             ContainerSupports containerSupports,
             TrackerWiring trackerWiring) {
         return new SlotWiringFactory(
                 manualRunAssembly,
                 registeredClone,
                 ManualRunRunner.TASK_ID_KEY,
-                javaTimeClock,
+                instantSource,
                 containerSupports.takeSupport(),
-                trackerWiring.pipelineSource());
+                trackerWiring.pipelineSource(),
+                // FR18 of supervise-daemon-loops-and-embed-dashboard: the one terminal-write retry
+                // every slot's finish and park run under, on the root's one time source.
+                new TerminalWriteRetry(threadSleeper, instantSource, TerminalWriteRetry.DEFAULT_BOUND));
     }
 
     /**
@@ -74,9 +80,9 @@ public class TrackerCommandConfiguration {
     ServeAssembly serveAssembly(
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            SystemClock systemClock,
+            InstantSource instantSource,
             ObjectProvider<RegisteredClone> registeredClone) {
-        return new ServeAssembly(factoryProperties, serveProperties, systemClock, registeredClone);
+        return new ServeAssembly(factoryProperties, serveProperties, instantSource, registeredClone);
     }
 
     /**
@@ -88,11 +94,11 @@ public class TrackerCommandConfiguration {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly serveAssembly,
             TaskGit git,
-            Clock javaTimeClock,
+            InstantSource instantSource,
             SandboxLifecyclePass sandboxLifecyclePass,
             SandboxProperties sandboxProperties) {
         return new ServeRuntimeAssembly(
-                slotWiringFactory, serveAssembly, git, javaTimeClock, sandboxLifecyclePass, sandboxProperties);
+                slotWiringFactory, serveAssembly, git, instantSource, sandboxLifecyclePass, sandboxProperties);
     }
 
     /**
@@ -101,8 +107,8 @@ public class TrackerCommandConfiguration {
      * clock.
      */
     @Bean
-    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, Clock javaTimeClock) {
-        return TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties).withClock(javaTimeClock);
+    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, InstantSource instantSource) {
+        return TakeCommandSeams.defaults(instantSource).withServeProperties(serveProperties);
     }
 
     /**

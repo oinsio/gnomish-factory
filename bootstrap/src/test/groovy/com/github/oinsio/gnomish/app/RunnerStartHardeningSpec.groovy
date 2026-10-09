@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -198,7 +199,8 @@ tracker:
                         newAssembly(FakeAgentSupport.propertiesFor('plain-round')), TaskGitFixture.real(), registered(clone), 'taskId',
                         new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), 3), [], ContainerTakeSupport.hostOnly(),
                         new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
-                        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(
+                        new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)),
+                        VirtualTimeRetries.terminalWrite())).claim(
                 new TakeOrder(new RunOrder(clone, null, pipeline(), false),
                 trackerTask, tracker, InstanceId.generate('test-instance')))
 

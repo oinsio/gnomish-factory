@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -26,7 +27,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
     @TempDir
     Path tempDir
 
-    def runner = new ShellCommandCheckRunner()
+    def runner = new ShellCommandCheckRunner(new VirtualClock())
 
     def "run(...) maps exit 0 to a Pass verdict"() {
         given:
@@ -102,7 +103,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
 
     def "a shell start failure is caught and yields CannotVerify"() {
         given: 'a runner configured with a nonexistent shell executable'
-        def failingRunner = new ShellCommandCheckRunner('/no/such/shell-binary')
+        def failingRunner = new ShellCommandCheckRunner('/no/such/shell-binary', new VirtualClock())
         def check = command('pwd')
 
         when:

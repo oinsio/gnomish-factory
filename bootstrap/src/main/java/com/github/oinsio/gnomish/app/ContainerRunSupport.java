@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage;
+import com.github.oinsio.gnomish.adapter.git.GitInfrastructureRetry;
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence;
@@ -28,7 +29,6 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.Segment;
@@ -37,6 +37,7 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import com.github.oinsio.gnomish.sandbox.environment.LeasedEnvironment;
 import java.nio.file.Path;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -74,6 +75,15 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final ClaimEpochSource epochs;
 
     /**
+     * The bundle's one time source: the lifecycle store's {@code createdAt}, its first push's
+     * suppressor and the round source all read it. Still built here rather than handed down from
+     * the root's {@code instantSource} bean: the constructor is at the parameter limit and the
+     * {@link ContainerSupports} test constructor would pass it (FR18 of
+     * supervise-daemon-loops-and-embed-dashboard, task 3.3 — open decision).
+     */
+    private final InstantSource instantSource = InstantSource.system();
+
+    /**
      * Canonical wiring over an already-built environments seam. Package-private (not {@code
      * private}) so daemon-free specs can inject a {@link ContainerEnvironments} over a scripted
      * fake docker CLI — the same seam discipline as {@code ContainerEnvironments}'s own
@@ -100,7 +110,11 @@ final class ContainerRunSupport implements SandboxRunSupport {
         // (FR1, FR6, design D1 of fix-lifecycle-push): every write through this repository is
         // replicated best-effort before it returns, so no caller here pushes by hand.
         this.taskRepository = new PushBestEffortTaskLifecycleStore(
-                new GitObjectsTaskRepository(gitObjects, epochs, this::currentDenialPosition), runner, cloneDir);
+                new GitObjectsTaskRepository(gitObjects, instantSource, epochs, this::currentDenialPosition),
+                runner,
+                cloneDir,
+                GitInfrastructureRetry.system(),
+                instantSource);
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -132,7 +146,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public SandboxRunPieces pieces(@Nullable PendingVerification pendingVerification) {
         return new SandboxRunPieces(
-                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, attemptCommit, new SystemClock()),
+                new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, attemptCommit, instantSource),
                 judgeEnvironments,
                 new SandboxCheckEnvironmentSource(lease, environments, branch),
                 gitObjects,

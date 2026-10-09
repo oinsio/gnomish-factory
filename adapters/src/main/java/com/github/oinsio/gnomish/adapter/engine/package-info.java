@@ -1,7 +1,7 @@
 /**
  * Production cross-cutting adapters for the engine's environment and persistence
  * ports: {@link com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence},
- * {@link com.github.oinsio.gnomish.domain.engine.time.SystemClock}, and
+ * {@link java.time.InstantSource}, and
  * {@link com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper}. These don't fit
  * {@code adapter.check}/{@code adapter.workspace} — they are not check-specific and
  * not workspace I/O, but the plain

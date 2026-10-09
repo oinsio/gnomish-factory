@@ -8,10 +8,8 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Consumer
 import spock.lang.Specification
@@ -40,10 +38,10 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     }
 
     private VirtualClock clock = new VirtualClock()
-    // A fixed real-time clock for the suppressor: since it never advances, every failed probe on
-    // the SAME reason lands inside the roll-up's quiet period, so First/Repeat are deterministic
-    // without needing to drive two independent clocks in lockstep.
-    private RepeatSuppressor suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
+    // The suppressor runs on the gates' own virtual clock, with a quiet period longer than any
+    // feature here advances it: every failed probe on the SAME reason lands inside it, so
+    // First/Repeat are deterministic and no roll-up interleaves.
+    private RepeatSuppressor suppressor = new RepeatSuppressor(clock, Duration.ofDays(1))
 
     private RemoteOutageGate gate(
             BaseRefGit baseRefGit,

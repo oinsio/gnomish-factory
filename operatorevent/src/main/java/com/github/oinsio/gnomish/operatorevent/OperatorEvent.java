@@ -98,9 +98,11 @@ public enum OperatorEvent {
     REAPER_SWEEP_LISTING_FAILED("GF064"),
     REAPER_FOREIGN_BRANCH_UNOWNED("GF065"),
     REAPER_REPAIR_FAILED("GF066"),
-    STANDING_REAPER_TICK_FAILED("GF067"),
-    STANDING_REAPER_WORKER_DIED("GF068"),
-    STANDING_REAPER_BACKOFF_SLEEP_FAILED("GF069"),
+    // GF067, GF068 and GF069 are retired (supervise-daemon-loops-and-embed-dashboard, design D6):
+    // the standing reaper's own tick-failed, worker-died and backoff-sleep-failed lines are now
+    // the supervised loop's DAEMON_LOOP_TICK_FAILED, DAEMON_LOOP_WORKER_DIED and
+    // DAEMON_LOOP_BACKOFF_SLEEP_FAILED with component=reaper. A retired code stays retired — the
+    // gap is not filled.
     DIRTY_NOTIFIER_FAILED("GF070"),
     FEED_CANDIDATE_OCCUPIES_SLOT("GF071"),
     FEED_TRACKER_OUTAGE_SUSPECTED("GF072"),

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -78,7 +79,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     }
 
     private GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, registeredClone, ClaimEpochSource.NONE)
+        new GitTaskRepository(gitRunner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     private Path expectedWorktree(String taskId) {

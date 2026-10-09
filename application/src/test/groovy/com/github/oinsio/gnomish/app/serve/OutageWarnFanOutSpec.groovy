@@ -20,10 +20,8 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -54,9 +52,10 @@ class OutageWarnFanOutSpec extends Specification {
     private Tracker tracker = Mock()
 
     private RemoteOutageGate gate() {
-        def suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
+        def clock = new VirtualClock()
+        def suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(5))
         new RemoteOutageGate(
-                baseRefGit, ROOT, new VirtualClock(), new Random(1), Duration.ofSeconds(30), Duration.ofMinutes(10),
+                baseRefGit, ROOT, clock, new Random(1), Duration.ofSeconds(30), Duration.ofMinutes(10),
                 new RemoteOutageWiring('origin', suppressor, Duration.ofHours(1), {}, { ignored -> }))
     }
 

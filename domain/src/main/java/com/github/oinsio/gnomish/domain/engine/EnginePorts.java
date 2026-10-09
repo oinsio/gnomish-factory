@@ -3,13 +3,13 @@ package com.github.oinsio.gnomish.domain.engine;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import java.time.InstantSource;
 
 /**
  * The bundle of ten collaborators the engine drives instead of touching the outside
@@ -23,14 +23,16 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
  * {@link ExternalCheckClient}, {@link JudgeVoter}) serve the verify chain (design D2).
  * The remaining five are cross-cutting seams: {@link EngineEventListener} observes the
  * event stream (D7), {@link AttemptPersistence} durably records each round (D7), the
- * injected {@link Clock}/{@link Sleeper} make the poll loop's timing deterministic (D8),
- * and {@link AttemptDelivery} verifies the external-check push precondition before the
- * poll loop starts (FR21 of add-sandbox-core).
+ * two environment ports — the JDK {@link InstantSource} (the one type for the current
+ * instant across the codebase) and {@link Sleeper} — make the poll loop's timing
+ * deterministic (D8), and {@link AttemptDelivery} verifies the external-check push
+ * precondition before the poll loop starts (FR21 of add-sandbox-core).
  *
  * <p>An inert record: it holds the collaborators and enforces no rule beyond the
  * non-null-by-default contract of the {@code @NullMarked} package. Compared by content.
  *
- * <p>Implements FR1 of add-stage-engine; FR21 of add-sandbox-core.
+ * <p>Implements FR1 of add-stage-engine; FR21 of add-sandbox-core; FR17 of
+ * supervise-daemon-loops-and-embed-dashboard (the instant-source environment port).
  *
  * @param executor the port that runs one round of a stage's work; never null
  * @param builtinRunner the port that runs built-in declarative checks; never null
@@ -39,7 +41,7 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
  * @param judgeVoter the port that casts one judge vote; never null
  * @param listener the observer the engine emits its event stream to; never null
  * @param persistence the port that durably records each executed round; never null
- * @param clock the injected time source for timestamps and poll deadlines; never null
+ * @param clock the injected instant source (environment port) for timestamps and poll deadlines; never null
  * @param sleeper the injected sleep seam the poll loop waits on; never null
  * @param attemptDelivery the external-check push-precondition seam; never null
  */
@@ -51,7 +53,7 @@ public record EnginePorts(
         JudgeVoter judgeVoter,
         EngineEventListener listener,
         AttemptPersistence persistence,
-        Clock clock,
+        InstantSource clock,
         Sleeper sleeper,
         AttemptDelivery attemptDelivery) {
 
@@ -70,7 +72,7 @@ public record EnginePorts(
             JudgeVoter judgeVoter,
             EngineEventListener listener,
             AttemptPersistence persistence,
-            Clock clock,
+            InstantSource clock,
             Sleeper sleeper) {
         this(
                 executor,

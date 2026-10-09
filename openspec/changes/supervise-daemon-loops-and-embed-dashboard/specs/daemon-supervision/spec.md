@@ -32,8 +32,9 @@ logged and SHALL NOT end the loop: the loop continues with its next wait.
 ### Requirement: Repeated failures of a loop log edges
 A loop whose work fails on consecutive runs SHALL log the first failure (or a
 changed reason) at WARN, repeats at DEBUG with a periodic counted roll-up, and
-one recovery line on the first clean run after a failure.
-<!-- implements FR2, NFR-O1 of supervise-daemon-loops-and-embed-dashboard -->
+one recovery line on the first clean run after a failure. The roll-up window
+SHALL be measured on the time source the loop stamps its own state with.
+<!-- implements FR2, FR19, NFR-O1 of supervise-daemon-loops-and-embed-dashboard -->
 
 #### Scenario: A persistently failing loop floods no console
 - **WHEN** a loop's work fails on fifty consecutive runs for the same reason
@@ -42,6 +43,20 @@ one recovery line on the first clean run after a failure.
 #### Scenario: Recovery is announced
 - **WHEN** the work succeeds after failing runs
 - **THEN** one INFO line reports the recovery
+
+#### Scenario: The roll-up period outlives the loop's own interval
+- **WHEN** a loop whose interval is five minutes fails for a full hour
+- **THEN** the console shows the first WARN and at most one roll-up per six runs, never one per run
+
+#### Scenario: Suppression runs on the loop's time source
+- **WHEN** a loop is built on a virtual instant source and its failures span a roll-up period on that source
+- **THEN** the roll-up and the recovery are observed without real time passing
+
+#### Scenario: Heartbeat suppression runs on the heartbeat's own time source
+- **WHEN** the claim heartbeat is built on a virtual instant source and its beat fails across a
+  roll-up period on that source
+- **THEN** the roll-up and, after a successful beat, the recovery are observed without real time
+  passing, on the same source its `alive-at` stamps come from
 
 ### Requirement: The Unbounded restart policy respawns a dead loop thread
 If a loop's thread dies despite the failure guard and the loop's restart

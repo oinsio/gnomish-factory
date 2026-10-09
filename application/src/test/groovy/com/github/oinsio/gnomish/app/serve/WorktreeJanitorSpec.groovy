@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -14,6 +13,7 @@ import java.nio.file.attribute.FileTime
 import java.nio.file.attribute.PosixFilePermission
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import org.slf4j.MDC
 import spock.lang.Requires
 import spock.lang.Specification
@@ -37,7 +37,7 @@ class WorktreeJanitorSpec extends Specification {
     RegisteredClone registeredClone
     List<String> disposed = []
     def disposal = { String key -> disposed << key } as TaskEnvironmentDisposal
-    def clock = { -> NOW } as Clock
+    def clock = { -> NOW } as InstantSource
     def sleeper = Mock(Sleeper)
 
     def setup() {
@@ -232,7 +232,7 @@ class WorktreeJanitorSpec extends Specification {
         instance.lastRunAt() == NOW
 
         when: 'a tick completes on a clock set one minute later'
-        def laterClock = { -> NOW + Duration.ofMinutes(1) } as Clock
+        def laterClock = { -> NOW + Duration.ofMinutes(1) } as InstantSource
         def later = new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, laterClock, sleeper, {
             -> Set.of()
         })

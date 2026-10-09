@@ -37,11 +37,13 @@ public record InMemoryTrackerHarness(InMemoryTracker adapter) {
     }
 
     /**
-     * Simulates a human posting a free-text reply comment on {@code ref}, visible to a subsequent
-     * {@code collectDecisions} per the normal port semantics (only if posted after the last ack, FR12).
+     * Simulates a human posting a free-text reply comment on {@code ref} at {@code postedAt}, visible
+     * to a subsequent {@code collectDecisions} per the normal port semantics (only if posted after
+     * the last ack, FR12). The instant is the caller's, read from its own time source — this
+     * harness keeps no clock (FR18 of supervise-daemon-loops-and-embed-dashboard).
      */
-    public void reply(TaskRef ref, String body) {
-        seedReply(adapter, ref, new HumanReply(body, Instant.now()));
+    public void reply(TaskRef ref, String body, Instant postedAt) {
+        seedReply(adapter, ref, new HumanReply(body, postedAt));
     }
 
     /**

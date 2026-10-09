@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.time.Instant
 
 /**
  * The state transitions {@code park} and {@code finish} write, the {@code finished} fact derived
@@ -73,7 +74,7 @@ class InMemoryTerminalStateSpec extends AbstractInMemoryTrackerSpec {
         def ref = seedWorking('fixture:harness-reply')
 
         when:
-        harness.reply(ref, 'go ahead')
+        harness.reply(ref, 'go ahead', Instant.parse('2026-01-01T00:00:00Z'))
 
         then:
         tracker.collectDecisions(ref)*.body() == ['go ahead']

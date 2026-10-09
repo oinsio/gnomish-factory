@@ -15,12 +15,13 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicBoolean
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -65,7 +66,9 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
                 registeredClone(), 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
-                new SystemClock(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                InstantSource.system(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE,
                 ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }
@@ -142,7 +145,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         def clone = RegisteredCloneFixture.registered(homeDir, cloneDir)
-        new GitTaskRepository(runner, clone, TaskGitFixture.real().epochs())
+        new GitTaskRepository(runner, clone, TaskGitFixture.real().epochs(), new VirtualClock())
                 .createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
         // FR3 of add-project-registry: usage reads the clone the loader resolved for --dir
@@ -243,7 +246,9 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                         newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(),
                         registeredClone(), 'taskId',
                         testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
-                        new SystemClock(), new TrackerWiring([github: new FixedTrackerAdapterFactory({
+                        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                        InstantSource.system(), new TrackerWiring([github: new FixedTrackerAdapterFactory({
                                 trackerStub
                             })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), { FeedAutomaton automaton ->
                             starterInvoked.set(true)

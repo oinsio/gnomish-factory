@@ -4,13 +4,13 @@ import com.github.oinsio.gnomish.app.project.CloneName
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -40,7 +40,7 @@ class WorktreeJanitorCloneScopeSpec extends Specification {
         new WorktreeJanitor(clone, AGE_THRESHOLD, { String key ->
             disposed << key
         } as TaskEnvironmentDisposal,
-        { -> NOW } as Clock, Mock(Sleeper), { -> Set.of() })
+        { -> NOW } as InstantSource, Mock(Sleeper), { -> Set.of() })
     }
 
     private static Path agedWorktree(Path folder) {

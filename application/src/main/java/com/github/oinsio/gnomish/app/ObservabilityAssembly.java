@@ -20,8 +20,8 @@ import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 
@@ -81,7 +81,7 @@ final class ObservabilityAssembly {
             InstanceId instanceId,
             Path serveDir,
             ForwardingDirtyNotifier dirtyNotifier,
-            Clock clock,
+            InstantSource clock,
             SnapshotSources sources) {
         InstanceInfo instance = new InstanceInfo(
                 instanceId.value(), resolveHost(), FactoryVersion.current().value());

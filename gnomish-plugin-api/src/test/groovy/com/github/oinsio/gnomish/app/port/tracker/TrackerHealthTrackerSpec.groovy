@@ -37,7 +37,7 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.listOpen()
 
         then:
-        tracker.lastSuccessAt() == clock.now()
+        tracker.lastSuccessAt() == clock.instant()
         tracker.consecutiveFailures() == 0
     }
 
@@ -82,7 +82,7 @@ class TrackerHealthTrackerSpec extends Specification {
 
         then:
         tracker.consecutiveFailures() == 0
-        tracker.lastSuccessAt() == clock.now()
+        tracker.lastSuccessAt() == clock.instant()
     }
 
     def "alternating success and failure calls track only the current streak"() {

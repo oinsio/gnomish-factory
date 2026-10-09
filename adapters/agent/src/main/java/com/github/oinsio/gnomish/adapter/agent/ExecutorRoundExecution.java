@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -16,6 +15,7 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,7 +60,7 @@ final class ExecutorRoundExecution {
             String prompt,
             RoundEnvironmentSource.Round round) {
         FactoryProperties factoryProperties = equipment.factoryProperties();
-        Clock clock = equipment.clock();
+        InstantSource clock = equipment.clock();
         var stage = request.stage();
         var executor = stage.executor();
         var invocationFlags = AgentInvocationOptions.renderForExecutor(
@@ -100,7 +100,7 @@ final class ExecutorRoundExecution {
                         };
 
                 List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
-                Instant roundEnd = clock.now();
+                Instant roundEnd = clock.instant();
                 AgentRoundResult roundResult = equipment.resultExtractor().extract(events, roundEnd, drain.bytesRead());
                 ExecutorUsage usage = withWallTime(roundResult.usage(), wallTime);
                 ToolTrace trace = trace(request, events, roundEnd);

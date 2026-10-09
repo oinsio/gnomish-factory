@@ -30,11 +30,10 @@ import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.nio.file.Path;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.Objects;
 import java.util.Random;
 import java.util.function.Consumer;
@@ -52,38 +51,39 @@ import org.springframework.beans.factory.ObjectProvider;
  * the janitor sweeps the clone's own worktree folder (D2 of add-project-registry).
  *
  * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve; D7 of collapse-composition-roots; FR9,
- * FR10, NFR-R2 of add-project-registry.
+ * FR10, NFR-R2 of add-project-registry; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class ServeAssembly {
 
     private final FactoryProperties factoryProperties;
     private final ServeProperties serveProperties;
-    private final com.github.oinsio.gnomish.domain.engine.port.Clock feedClock;
+    private final InstantSource instantSource;
     private final ObjectProvider<RegisteredClone> resolvedClone;
 
     /**
-     * The engine clock is the one the feed, the slot ledger and the tracker-health decorator read;
-     * the clone (D9 of add-project-registry) is read lazily: its bean exists once a project resolved.
+     * The instant source is the composition root's one (design D17 of
+     * supervise-daemon-loops-and-embed-dashboard): the feed, the slot ledger, the tracker-health
+     * decorator, the remote outage gate, the worktree janitor and the sweep tick all read it; the clone (D9 of add-project-registry) is read lazily: its bean exists once a project resolved.
      */
     ServeAssembly(
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
+            InstantSource instantSource,
             ObjectProvider<RegisteredClone> resolvedClone) {
         this.factoryProperties = factoryProperties;
         this.serveProperties = serveProperties;
-        this.feedClock = feedClock;
+        this.instantSource = instantSource;
         this.resolvedClone = resolvedClone;
     }
 
     /** FR8, D12 of add-serve-observability: the health decorator every downstream caller shares. */
     TrackerHealthTracker trackerHealth(Tracker liveTracker) {
-        return new TrackerHealthTracker(liveTracker, feedClock);
+        return new TrackerHealthTracker(liveTracker, instantSource);
     }
 
     /** FR13: the one slot ledger the feed, the slot runner and the janitor share. */
     SlotLedger slotLedger(int effectiveSlots, DirtyNotifier dirtyNotifier) {
-        return new SlotLedger(effectiveSlots, feedClock, dirtyNotifier);
+        return new SlotLedger(effectiveSlots, instantSource, dirtyNotifier);
     }
 
     /**
@@ -92,14 +92,7 @@ final class ServeAssembly {
      */
     RemoteOutageGate remoteOutageGate(
             BaseRefGit baseRefs, Path cloneDir, Runnable onTransition, Consumer<RemoteOutageClosedOutage> ledgerSink) {
-        return RemoteOutageGates.system(
-                baseRefs,
-                cloneDir,
-                serveProperties.idlePollInterval(),
-                serveProperties.remoteProbeIntervalCap(),
-                serveProperties.remoteSustainedOpenThreshold(),
-                onTransition,
-                ledgerSink);
+        return RemoteOutageGates.forServe(baseRefs, cloneDir, serveProperties, instantSource, onTransition, ledgerSink);
     }
 
     /**
@@ -107,7 +100,10 @@ final class ServeAssembly {
      * registered project's {@code serve/<instance>} directory (FR10 of add-project-registry).
      */
     ObservabilityWiring observability(
-            InstanceId instanceId, ForwardingDirtyNotifier dirtyNotifier, Clock clock, SnapshotSources sources) {
+            InstanceId instanceId,
+            ForwardingDirtyNotifier dirtyNotifier,
+            InstantSource clock,
+            SnapshotSources sources) {
         Path serveDir = resolvedClone.getObject().layout().serveDir(factoryProperties.instanceName());
         return ObservabilityAssembly.assemble(serveProperties, instanceId, serveDir, dirtyNotifier, clock, sources);
     }
@@ -125,7 +121,7 @@ final class ServeAssembly {
         // constructed here over the daemon's timing equipment.
         var assembly = new FeedAssembly(
                 new ThreadSleeper(),
-                feedClock,
+                instantSource,
                 new IdleTiming(
                         serveProperties.idlePollInterval(),
                         trackerProperties.abortBackoffBase(),
@@ -157,7 +153,7 @@ final class ServeAssembly {
                 clone,
                 serveProperties.worktreeAgeThreshold(),
                 git.worktrees().environmentDisposal(clone),
-                new SystemClock(),
+                instantSource,
                 new ThreadSleeper(),
                 slotLedger::occupiedRefs);
     }
@@ -189,6 +185,6 @@ final class ServeAssembly {
                 serveArguments.dir(),
                 serveProperties.sandboxSweepInterval(),
                 new ThreadSleeper(),
-                new SystemClock());
+                instantSource);
     }
 }

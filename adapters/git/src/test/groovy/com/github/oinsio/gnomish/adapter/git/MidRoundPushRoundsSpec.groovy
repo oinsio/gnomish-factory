@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -68,7 +69,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // and pushes the task branch best-effort — the tip lands on origin before the round closes.
     def "a commit between two progress events is pushed by the round's listener"() {
         given:
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner)
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
         def round = source.openRound(request())
 
         when:
@@ -86,7 +87,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // starting tip, not a movement to push.
     def "each round gets a fresh listener with its own baseline"() {
         given:
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner)
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
         source.openRound(request(0))
         gnomeCommit()
 
@@ -102,7 +103,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "delegated methods pass through to the host round"() {
         given:
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner)
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
 
         when:
         def round = source.openRound(request())
@@ -125,7 +126,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         given: 'a git wrapper that logs every invocation before delegating to the real binary'
         Path invocationLog = tempDir.resolve('git-invocations.log')
         def countingRunner = new GitProcessRunner(recordingGit(invocationLog).toString())
-        def source = new MidRoundPushRounds(new PassThroughRounds(), countingRunner)
+        def source = new MidRoundPushRounds(new PassThroughRounds(), countingRunner, new VirtualClock())
 
         when: 'a round opens (baseline read) and two stationary events arrive'
         def round = source.openRound(request())
@@ -149,7 +150,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "a tip-resolution failure spanning two rounds logs one WARN edge, not one per round"() {
         given: 'a workspace that is not a git repository, so every rev-parse fails'
         Path notARepo = Files.createDirectories(tempDir.resolve('not-a-repo'))
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner)
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
 
         when: 'two rounds open over the broken workspace and each observes one event'
@@ -174,7 +175,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         given: 'origin points nowhere, so the triggered push fails'
         runner.run(repo, 'remote', 'set-url', 'origin', tempDir.resolve('no-such-remote.git').toString())
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner)
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
         def round = source.openRound(request())
         def logs = LogCaptureSupport.attach(BestEffortPush, Level.DEBUG)
 
@@ -200,7 +201,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         given: 'a workspace that is not a git repository'
         Path notARepo = Files.createDirectories(tempDir.resolve('broken'))
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner)
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
         def round = source.openRound(request(notARepo, 0))
 

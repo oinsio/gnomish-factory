@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -67,7 +68,7 @@ class GithubMarkerWriterSpec extends Specification {
         def source = epoch == null
                 ? ClaimEpochSource.NONE
                 : { String taskId -> Optional.of(epoch) } as ClaimEpochSource
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), source, 'gnomish-factory-x7k2q1')
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), source, 'gnomish-factory-x7k2q1', new VirtualClock())
     }
 
     private void stubThread(List<Map> comments) {

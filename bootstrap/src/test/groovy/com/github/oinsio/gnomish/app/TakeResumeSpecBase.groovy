@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Clock
@@ -106,7 +107,8 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         new SlotWiring(assembly, git, registeredClone, 'taskId',
                 new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD),
                 credentialEnvVarsToScrub, ContainerTakeSupport.hostOnly(), tenure,
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                VirtualTimeRetries.terminalWrite())
     }
 
     /**

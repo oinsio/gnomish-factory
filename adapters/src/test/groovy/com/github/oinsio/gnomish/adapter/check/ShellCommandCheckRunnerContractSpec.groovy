@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.contract.CheckRunnerContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Path
@@ -20,7 +21,7 @@ class ShellCommandCheckRunnerContractSpec extends CheckRunnerContract {
     @TempDir
     Path tempDir
 
-    def runner = new ShellCommandCheckRunner()
+    def runner = new ShellCommandCheckRunner(new VirtualClock())
 
     private DirectoryWorkspace workspace() {
         new DirectoryWorkspace(tempDir)

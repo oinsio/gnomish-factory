@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -122,7 +123,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
-        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
@@ -169,7 +170,7 @@ fi
 exec git "\$@"
 """
         fakeGit.toFile().setExecutable(true)
-        def fakeWalker = new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()))
+        def fakeWalker = new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()), VirtualTimeGitRetries.gitInfrastructure())
 
         when:
         def result = (fakeWalker.walk(cloneDir, 'PROJ-8') as UsageHistoryResult.Found)
@@ -184,7 +185,7 @@ exec git "\$@"
      * {@link FailingSubcommandGitFixture}, also used by {@code GitShowTipTerminationSpec} et al.
      */
     private UsageHistoryWalker walkerFailing(String subcommand) {
-        new UsageHistoryWalker(new GitProcessRunner(gitFailingOn(tempDir, subcommand).toString()))
+        new UsageHistoryWalker(new GitProcessRunner(gitFailingOn(tempDir, subcommand).toString()), VirtualTimeGitRetries.gitInfrastructure())
     }
 
     // FR5 of harden-logging-observability: a refused commit listing renders as a report with no

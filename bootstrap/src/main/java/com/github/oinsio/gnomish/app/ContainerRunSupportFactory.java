@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
@@ -20,7 +19,7 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.ObjectOwnership;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.nio.file.Path;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -93,16 +92,21 @@ record ContainerRunSupportFactory(
         // normalize-project-identity-url).
         String projectId = ProjectIdentity.resolve(
                 sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
+        // FR18 of supervise-daemon-loops-and-embed-dashboard: one source for the box timing and the
+        // sweep pass. Still built here rather than taken from the root's instantSource bean: the
+        // ContainerSupports test constructor that builds this factory is at the parameter limit
+        // (task 3.3 — open decision).
+        InstantSource instantSource = InstantSource.system();
         var environments = ContainerEnvironments.forTask(
                 TaskIdSanitizer.sanitize(taskId),
                 new BoxGitLink(cloneDir, new ContainerHarvestFetch(runner, cloneDir)),
                 sandboxProperties,
-                new BoxTiming(new SystemClock(), new ThreadSleeper(), factoryProperties.dockerCommandTimeout()),
+                new BoxTiming(instantSource, new ThreadSleeper(), factoryProperties.dockerCommandTimeout()),
                 allowlist,
                 Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
                 new ObjectOwnership(ownershipMode, projectId));
         var sandboxLifecyclePass =
-                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, Clock.systemUTC());
+                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, instantSource);
         return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass, epochs);
     }
 }

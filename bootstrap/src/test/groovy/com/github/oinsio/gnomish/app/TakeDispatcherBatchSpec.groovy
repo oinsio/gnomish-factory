@@ -26,7 +26,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -37,6 +37,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -132,7 +133,8 @@ tracker:
         def wiring = new SlotWiring(newAssembly(testProps()), TaskGitFixture.real(), registeredClone, 'taskId',
                 new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD), [],
                 ContainerTakeSupport.hostOnly(), noopHeartbeat().tenure(),
-                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                VirtualTimeRetries.terminalWrite())
         new TakeDispatcher(wiring, testProps(), Clock.systemUTC(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), confirmation)
     }
 
@@ -146,7 +148,9 @@ tracker:
         def standingReaper =
                 new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), {
                     []
-                }, new SystemClock())
+                    // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+                    //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+                }, InstantSource.system())
         new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper,
                 new LivenessOracle(new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1))))
     }

@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 
 /**
@@ -19,10 +19,14 @@ final class ResumeDecisionCommit {
 
     private ResumeDecisionCommit() {}
 
-    /** Builds the {@link Decision} for {@code text}, stamped with the park's stage and "tracker". */
-    static Decision decisionFor(TaskState finalState, String text) {
+    /**
+     * Builds the {@link Decision} for {@code text}, stamped with the park's stage, "tracker" and
+     * {@code at} — the instant the caller read from its own time source, never a clock of this
+     * class's (FR18 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    static Decision decisionFor(TaskState finalState, String text, Instant at) {
         String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
-        return new Decision(text, stage, "tracker", Clock.systemUTC().instant());
+        return new Decision(text, stage, "tracker", at);
     }
 
     /** Returns a copy of {@code context} with {@code decision} appended to its decision history. */

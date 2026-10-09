@@ -18,7 +18,7 @@ import org.gradle.api.tasks.TaskAction
  * <p><b>The defect this exists to catch.</b> Components that retry or poll take their {@code
  * Sleeper} and {@code Clock} as constructor arguments precisely so a spec can drive them on virtual
  * time. Beside each such component the codebase also offers a no-argument {@code system()} factory
- * that wires the real {@code ThreadSleeper} and {@code SystemClock} with the production bound — for
+ * that wires the real {@code ThreadSleeper} and {@code InstantSource.system()} with the production bound — for
  * the composition root to call. When a spec calls it instead, nothing goes red: the collaborator in
  * that spec never reports the failure that would make the retry sleep, so the call sits there
  * looking correct. It stays correct only until some later change makes that collaborator report an
@@ -54,8 +54,8 @@ abstract class TestTimeInjectionCheck extends DefaultTask {
     /**
      * A call of the shape {@code SomeType.system(} — arity deliberately unconstrained. The wiring
      * a {@code system()} factory performs is the same whether or not the factory takes arguments:
-     * {@code RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)} builds a real {@code
-     * SystemClock} exactly as {@code GitInfrastructureRetry.system()} does, and its arguments name
+     * {@code RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)} reads {@code
+     * InstantSource.system()} exactly as {@code GitInfrastructureRetry.system()} does, and its arguments name
      * collaborators and bounds, never the time source. Requiring an empty argument list let that
      * whole class of factories through unseen.
      */
@@ -92,7 +92,7 @@ Test sources wire production real time instead of injecting it (${violations.siz
 
 ${violations.join('\n')}
 
-A `.system(...)` factory wires the real ThreadSleeper/SystemClock with the production bound. In a
+A `.system(...)` factory wires the real ThreadSleeper and InstantSource.system() with the production bound. In a
 spec that is a latent hang, not a bug you can see: it sleeps only once some collaborator starts
 reporting the failure the retry waits on, and then it blocks for the whole bound per exercise.
 

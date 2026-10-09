@@ -16,10 +16,8 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -44,12 +42,14 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
     private static final ObjectMapper JSON = new ObjectMapper()
 
-    private VirtualClock slotClock = new VirtualClock()
-    private SlotLedger slotLedger = new SlotLedger(2, slotClock)
+    /** One virtual time source for the slot ledger, the appender and the writer. */
+    private VirtualClock clock = new VirtualClock()
+    private SlotLedger slotLedger = new SlotLedger(2, clock)
 
+    /** Moves the one source to {@code now}, the instant the finishing task is stamped with. */
     private TaskOutcomeLedgerWriter writer(Instant now) {
-        def appender = ledgerAppenderFor(serveDir(), now)
-        return new TaskOutcomeLedgerWriter(slotLedger, appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
+        clock.advance(Duration.between(clock.instant(), now))
+        return new TaskOutcomeLedgerWriter(slotLedger, ledgerAppenderOn(serveDir(), clock), INSTANCE, clock)
     }
 
     private Path ledgerFile(Instant now) {
@@ -63,7 +63,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     def "writes exactly one taskOutcome line for a Delivered result, with startedAt from the slot ledger"() {
         given:
         def ref = new TaskRef('PROJ-1')
-        slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:05:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
@@ -88,7 +88,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     def "writes an awaitingHuman line carrying its parkReason"() {
         given:
         def ref = new TaskRef('PROJ-2')
-        slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.AwaitingHuman(
@@ -108,7 +108,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     def "writes nothing to the ledger directory for EmptyQueue"() {
         given:
         def ref = new TaskRef('PROJ-3')
-        slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
 
@@ -122,7 +122,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     def "writes nothing to the ledger directory for Skipped"() {
         given:
         def ref = new TaskRef('PROJ-4')
-        slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
 
@@ -143,9 +143,9 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         given:
         def refA = new TaskRef('PROJ-A')
         def refB = new TaskRef('PROJ-B')
-        slotClock.instant = Instant.parse('2026-08-03T09:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T09:00:00Z')))
         slotLedger.assign(refA)
-        slotClock.instant = Instant.parse('2026-08-03T09:30:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T09:30:00Z')))
         slotLedger.assign(refB)
         def now = Instant.parse('2026-08-03T10:00:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
@@ -174,7 +174,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     def "swallows an IOException from a blocked ledger directory, leaving an ERROR naming the task"() {
         given:
         def ref = new TaskRef('PROJ-6')
-        slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
         slotLedger.assign(ref)
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')

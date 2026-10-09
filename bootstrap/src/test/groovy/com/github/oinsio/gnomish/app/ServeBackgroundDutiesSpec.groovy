@@ -21,8 +21,8 @@ class ServeBackgroundDutiesSpec extends ServeCommandSpecBase {
     // FR14, D10 (task 5.2): proves ServeCommand#run really calls WorktreeJanitor::start — not
     // merely assembles the janitor — via the only externally observable effect a fire-and-forget
     // janitor thread has: it disposes of a real, aged, unheld worktree shortly after startup. No
-    // test seam exists for the janitor (ServeAssembly.worktreeJanitor wires a real ThreadSleeper/
-    // SystemClock), so this drives a real `git worktree add`/`git worktree remove --force` round
+    // test seam exists for the janitor (ServeAssembly.worktreeJanitor wires a real ThreadSleeper and
+    // the system instant source), so this drives a real `git worktree add`/`git worktree remove --force` round
     // trip and polls for the directory's disappearance.
     def "the worktree janitor is actually started and disposes an aged unheld worktree on startup"() {
         given: 'projectDir is a real git repo with one commit (from setup()), and a registered, aged worktree'

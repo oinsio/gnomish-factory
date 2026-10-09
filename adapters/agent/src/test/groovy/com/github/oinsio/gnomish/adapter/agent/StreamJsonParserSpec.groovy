@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.adapter.agent
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -13,7 +13,7 @@ import spock.lang.Specification
  * Covers each known event type parsed correctly, unknown types/fields silently
  * ignored with parsing continuing, non-JSON and malformed lines skipped without
  * throwing, the null-vs-present distinctions later tasks depend on
- * (parentToolUseId, modelUsage), and read-time stamping via the injected Clock
+ * (parentToolUseId, modelUsage), and read-time stamping via the injected InstantSource
  * (FR6, NFR-O3). Implements FR4, FR6, NFR-O3, D3 of add-agent-executor.
  */
 class StreamJsonParserSpec extends Specification {
@@ -34,7 +34,7 @@ class StreamJsonParserSpec extends Specification {
         events[0].event() instanceof AgentEvent.InitEvent
         events[0].event().sessionId().forLog()== 'sess-1'
         events[0].event().model().forLog()== 'claude-x'
-        events[0].readAt() == clock.now()
+        events[0].readAt() == clock.instant()
     }
 
     // FR4, D3: a system line whose subtype is not "init" is skipped, not misread as an InitEvent
@@ -192,7 +192,7 @@ class StreamJsonParserSpec extends Specification {
         events[1].event().parentToolUseId() == 'toolu_top_1'
     }
 
-    // FR6, NFR-O3, D3: each event is stamped with the Clock's reading taken as its line is read
+    // FR6, NFR-O3, D3: each event is stamped with the InstantSource's reading taken as its line is read
     def "stamps each event with the read-time instant advancing between lines"() {
         given: 'a two-line stream and a clock advanced between reads'
         def first = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'
@@ -213,7 +213,7 @@ class StreamJsonParserSpec extends Specification {
         events[1].readAt() == Instant.ofEpochSecond(200)
     }
 
-    private static final class AdvancingClock implements Clock {
+    private static final class AdvancingClock implements InstantSource {
         private final Iterator<Instant> readings
 
         AdvancingClock(List<Instant> readings) {
@@ -221,7 +221,7 @@ class StreamJsonParserSpec extends Specification {
         }
 
         @Override
-        Instant now() {
+        Instant instant() {
             readings.next()
         }
     }

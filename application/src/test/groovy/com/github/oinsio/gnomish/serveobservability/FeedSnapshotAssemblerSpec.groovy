@@ -57,7 +57,7 @@ class FeedSnapshotAssemblerSpec extends Specification {
             }] as Tracker
         SlotRunner runner = { TaskRef ref -> } as SlotRunner
         def automaton = FeedAutomatonFixture.feedAutomaton(
-                tracker, InstanceId.generate('gnome'), new SlotLedger(1), runner, sleeper, clock,
+                tracker, InstanceId.generate('gnome'), new SlotLedger(1, new VirtualClock()), runner, sleeper, clock,
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 
         when:
@@ -65,8 +65,8 @@ class FeedSnapshotAssemblerSpec extends Specification {
 
         then: 'the construction-time idle baseline, translated'
         snapshot.state() == FeedPhase.IDLE_EMPTY
-        snapshot.since() == clock.now()
-        snapshot.lastPollAt() == clock.now()
+        snapshot.since() == clock.instant()
+        snapshot.lastPollAt() == clock.instant()
         snapshot.openFronts() == 0
         snapshot.wipLimit() == 2
     }

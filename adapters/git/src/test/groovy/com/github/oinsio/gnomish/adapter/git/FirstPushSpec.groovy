@@ -2,10 +2,10 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.FirstPushFailedException
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -28,7 +28,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
     def runner = new GitProcessRunner()
 
     /** Virtual time: the suppressor's roll-up interval is minutes long and no spec may sleep. */
-    MovableClock clock = new MovableClock(Instant.parse('2026-08-31T10:00:00Z'))
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-08-31T10:00:00Z'))
 
     RepeatSuppressor suppressor = new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
 

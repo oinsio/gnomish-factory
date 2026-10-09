@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
 /**
@@ -22,11 +22,11 @@ trait UsageHistoryFixture implements SeededCloneFixture {
 
     void setupUsageHistoryFixture() {
         setupSeededClone()
-        walker = new UsageHistoryWalker(runner)
+        walker = new UsageHistoryWalker(runner, VirtualTimeGitRetries.gitInfrastructure())
     }
 
     GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     GitAttemptPersistence persistenceFor(String taskId) {

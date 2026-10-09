@@ -48,6 +48,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -227,6 +228,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 ->
                 throw new UnsupportedOperationException('no console in this spec')
             },
+            instantSource: { -> clock },
             withExtraListener: { listener ->
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
@@ -275,6 +277,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
             dialogConsole: { -> console },
+            instantSource: { -> clock },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
             withHostGitPush: { decoration ->
@@ -394,7 +397,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
         new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
-        containerTakeSupport, tenure, trustedBase)
+        containerTakeSupport, tenure, trustedBase, VirtualTimeRetries.terminalWrite())
     }
 
     /**

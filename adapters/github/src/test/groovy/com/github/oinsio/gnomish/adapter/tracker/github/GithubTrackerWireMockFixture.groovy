@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -70,16 +71,16 @@ trait GithubTrackerWireMockFixture {
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
                 new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
                 GithubDesignatorRules.none()),
-                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
+                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working', new VirtualClock()),
                 new GithubStateWrites(httpClient, labelOps, marker,
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
                 new GithubCorrespondence(marker),
-                new GithubDecisions(httpClient, marker),
-                new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1'),
+                new GithubDecisions(httpClient, marker, new VirtualClock()),
+                new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1', new VirtualClock()),
                 new GithubOpenQuery(cache, 'acme', 'widgets', LABELS),
                 new GithubStaleClaimRemoval(httpClient, labelOps, marker,
-                'gnomish:working', 'gnomish:ready'),
-                new GithubIndexRepair(httpClient, labelOps, marker, LABELS))
+                'gnomish:working', 'gnomish:ready', new VirtualClock()),
+                new GithubIndexRepair(httpClient, labelOps, marker, LABELS, new VirtualClock()))
     }
 
     TaskRef ref() {
@@ -99,6 +100,6 @@ trait GithubTrackerWireMockFixture {
     }
 
     static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, new VirtualClock())
     }
 }

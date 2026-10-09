@@ -3,16 +3,15 @@ package com.github.oinsio.gnomish.e2e.paidsmoke
 import com.github.oinsio.gnomish.adapter.agent.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.adapter.agent.StreamJsonParser
 import com.github.oinsio.gnomish.adapter.agent.TimestampedEvent
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import groovy.transform.CompileStatic
-
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 /**
  * Fail-fast precondition for the paid smoke task (task 11.3, M4, D11): «is `claude` logged in and
  * able to bill a real round?» rather than the Ollama layer's weaker «does the binary resolve on
@@ -50,7 +49,9 @@ final class ClaudeLoginPreflight {
      *     CLI) or a human-readable reason the preflight failed — never throws
      */
     static Result check(String binary = 'claude', Path workspaceRoot) {
-        def clock = new SystemClock()
+        // real-time-wiring: real wall time, unchanged from the deleted domain clock adapter
+        //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
+        def clock = InstantSource.system()
         if (!Files.isDirectory(workspaceRoot)) {
             return Result.failure("workspace root is not a directory: ${workspaceRoot}")
         }
@@ -80,7 +81,7 @@ final class ClaudeLoginPreflight {
         }
 
         try {
-            def result = new AgentRoundResultExtractor().extract(events, clock.now())
+            def result = new AgentRoundResultExtractor().extract(events, clock.instant())
             return Result.success(result.sessionId())
         } catch (RuntimeException e) {
             return Result.failure(

@@ -2,11 +2,11 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import java.time.InstantSource;
 
 /**
  * The host-mode {@link JudgeEnvironmentSource} (G4: host isolation mechanics unchanged): a {@link
@@ -24,7 +24,8 @@ import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironmen
  * @param clock the exec start-instant source; never null
  * @param childEnv the run's layered child-env allowlist (D6, FR9); never null
  */
-public record HostJudgeEnvironmentSource(Clock clock, ChildEnvAllowlist childEnv) implements JudgeEnvironmentSource {
+public record HostJudgeEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv)
+        implements JudgeEnvironmentSource {
 
     @Override
     public TaskExecutionEnvironment environmentFor(Workspace workspace) {

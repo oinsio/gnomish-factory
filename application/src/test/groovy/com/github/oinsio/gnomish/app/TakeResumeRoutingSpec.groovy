@@ -31,6 +31,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -112,7 +113,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     /** The shared routing table (TakeDispositionResume) over HOST mechanics — design D8. */
     private TakeDispositionResume chainOver(TakeResumeRunner runner, TaskGit git) {
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs()) {

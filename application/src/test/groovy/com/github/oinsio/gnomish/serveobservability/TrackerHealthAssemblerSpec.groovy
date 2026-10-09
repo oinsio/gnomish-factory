@@ -44,6 +44,6 @@ class TrackerHealthAssemblerSpec extends Specification {
         tracker.postNote(new com.github.oinsio.gnomish.app.port.tracker.TaskRef('PROJ-1'), 'note')
 
         then:
-        TrackerHealthAssembler.assemble(tracker) == new TrackerHealth(clock.now(), 0)
+        TrackerHealthAssembler.assemble(tracker) == new TrackerHealth(clock.instant(), 0)
     }
 }

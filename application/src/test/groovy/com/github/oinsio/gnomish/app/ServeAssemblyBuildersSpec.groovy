@@ -22,7 +22,6 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import java.time.Clock
 import java.time.Duration
 import spock.lang.Specification
 /**
@@ -53,10 +52,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         when:
         def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, clock, null).feedAutomaton(trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
-                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-                //     stamp a transition this spec never drives.
-                RemoteOutageGates.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
+                RemoteOutageGates.forServe(BaseRefGit.UNWIRED, CLONE_DIR, new ServeProperties(0, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }))
 
         then:
         automaton.view().wipLimit() == 7
@@ -71,8 +67,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
 
         when:
-        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, null, RegisteredCloneFixture.provider(CLONE))
-                .worktreeJanitor(new SlotLedger(1), git)
+        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), RegisteredCloneFixture.provider(CLONE))
+                .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git)
 
         then:
         1 * worktrees.environmentDisposal(CLONE) >> Stub(TaskEnvironmentDisposal)
@@ -84,7 +80,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     def "a host-only install's tick is not observed"() {
         given:
         def tickLog = new SweepTickLog(
-                Duration.ofDays(7), Clock.systemUTC(), 20)
+                Duration.ofDays(7), new VirtualClock(), 20)
         def ticks = []
         def livenessOracle = new LivenessOracle(
                 new CachedOpenTaskListing(),
@@ -92,7 +88,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                         new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null, null).sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
                 SandboxLifecyclePass.NONE,
                 livenessOracle,
@@ -122,10 +118,10 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                         new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         def realTickLog = new SweepTickLog(
-                Duration.ofDays(7), Clock.systemUTC(), 20)
+                Duration.ofDays(7), new VirtualClock(), 20)
 
         when:
-        def tick = new ServeAssembly(null, SERVE_PROPERTIES, null, null).sandboxLifecycleTick(
+        def tick = new ServeAssembly(null, SERVE_PROPERTIES, new VirtualClock(), null).sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
                 pass,
                 livenessOracle,

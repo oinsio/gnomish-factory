@@ -7,12 +7,12 @@ import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -57,32 +57,35 @@ public final class CliJudgeVoter implements JudgeVoter {
 
     /**
      * No-op listener, {@link ChildEnvAllowlist#none()}, host environment. See the canonical
-     * constructor {@link #CliJudgeVoter(FactoryProperties, Clock, AgentProgressListener,
+     * constructor {@link #CliJudgeVoter(FactoryProperties, InstantSource, AgentProgressListener,
      * ChildEnvAllowlist, PipelineLaw, JudgeEnvironmentSource)} for the full parameter contract.
      */
-    public CliJudgeVoter(FactoryProperties factoryProperties, Clock clock, PipelineLaw law) {
+    public CliJudgeVoter(FactoryProperties factoryProperties, InstantSource clock, PipelineLaw law) {
         this(factoryProperties, clock, _ -> {}, law);
     }
 
     /**
      * {@link ChildEnvAllowlist#none()}, host environment. See the canonical constructor {@link
-     * #CliJudgeVoter(FactoryProperties, Clock, AgentProgressListener, ChildEnvAllowlist,
+     * #CliJudgeVoter(FactoryProperties, InstantSource, AgentProgressListener, ChildEnvAllowlist,
      * PipelineLaw, JudgeEnvironmentSource)} for the full parameter contract.
      */
     public CliJudgeVoter(
-            FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener, PipelineLaw law) {
+            FactoryProperties factoryProperties,
+            InstantSource clock,
+            AgentProgressListener progressListener,
+            PipelineLaw law) {
         this(factoryProperties, clock, progressListener, ChildEnvAllowlist.none(), law);
     }
 
     /**
      * Host environment (a {@link HostTaskExecutionEnvironment} over the graded {@link
      * DirectoryWorkspace}'s root). See the canonical constructor {@link #CliJudgeVoter(
-     * FactoryProperties, Clock, AgentProgressListener, ChildEnvAllowlist, PipelineLaw,
+     * FactoryProperties, InstantSource, AgentProgressListener, ChildEnvAllowlist, PipelineLaw,
      * JudgeEnvironmentSource)} for the full parameter contract.
      */
     public CliJudgeVoter(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             ChildEnvAllowlist childEnv,
             PipelineLaw law) {
@@ -111,7 +114,7 @@ public final class CliJudgeVoter implements JudgeVoter {
      */
     public CliJudgeVoter(
             FactoryProperties factoryProperties,
-            Clock clock,
+            InstantSource clock,
             AgentProgressListener progressListener,
             ChildEnvAllowlist childEnv,
             PipelineLaw law,

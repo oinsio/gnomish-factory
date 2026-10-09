@@ -59,7 +59,15 @@ final class TakeFinishReport {
      * tracker state — the run still returns the mapped {@link TakeResult.Delivered} (the branch
      * carries the delivered outcome; the residual TOCTOU costs at most a stray label).
      *
-     * <p>Implements FR18, D11 of add-tracker-port; FR7 of add-claim-heartbeat.
+     * <p>The git-unfenced {@code tracker.finish} write is wrapped in {@code retry} so a tracker
+     * outage at the finish line is retried with backoff for the bounded hold-the-slot period (FR10,
+     * D10, NFR-R3 of add-claim-heartbeat); on give-up the run still returns {@link
+     * TakeResult.Delivered} and logs an ERROR naming the unreconciled finish, which
+     * reconcile-on-resume completes later. The caller has already recorded the outcome commit and
+     * owns the cleanup, so both branch-side steps are empty — a fresh write, which is what keeps it
+     * from spending a probe read (FR10).
+     *
+     * <p>Implements FR18, D11 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
      *
      * @param completed the fresh engine completion to exit the run with; never null
      * @param context the task's identity and decisions, reflecting all decisions up to this run;
@@ -67,33 +75,10 @@ final class TakeFinishReport {
      * @param branchName the task branch's short name, appended as a report line; never null
      * @param order the take order whose task is finished: its tracker, the task's identity, and
      *     this instance's identity for the pre-write claim check; never null
+     * @param retry the bounded terminal-write retry the finish runs under — the slot wiring's,
+     *     built on the composition root's time source (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      * @return the {@link TakeResult.Delivered} the finish call was made with; never null
-     */
-    static TakeResult finish(TaskOutcome.Completed completed, TaskContext context, String branchName, TakeOrder order) {
-        return finish(
-                completed,
-                context,
-                branchName,
-                order,
-                TerminalWriteRetry.system(),
-                // The caller of this convenience overload has already recorded the outcome commit and
-                // owns the cleanup itself, so both branch-side steps are empty here — but the write is
-                // still a fresh one, which is what keeps it from spending a probe read (FR10).
-                new FinishTransition.Fresh(() -> {}, () -> {}));
-    }
-
-    /**
-     * As {@link #finish(TaskOutcome.Completed, TaskContext, String, TakeOrder)},
-     * but wraps the git-unfenced {@code tracker.finish} write in {@code retry} so a tracker outage
-     * at the finish line is retried with backoff for the bounded hold-the-slot period (FR10, D10,
-     * NFR-R3 of add-claim-heartbeat). The delivered outcome is already durable in the branch (the
-     * {@code Completed} cleanup commit), so on give-up the run still returns {@link
-     * TakeResult.Delivered} and logs an ERROR naming the unreconciled finish — reconcile-on-resume
-     * (the {@code Completed} cleanup-detection path) completes the deferred write later. No
-     * "tracker-write pending" marker is set for a finish: {@code Completed}'s reconcile is decided
-     * by the stripped-tip cleanup detection, not by the marker (which serves the park case).
-     *
-     * <p>Implements FR18, D11 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
      */
     static TakeResult finish(
             TaskOutcome.Completed completed,

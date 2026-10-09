@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.serve
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import spock.lang.Specification
 
 /**
@@ -19,7 +20,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     def "assign wakes the dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
-        def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(1, new VirtualClock(), notifier)
 
         when:
         ledger.acquire()
@@ -32,7 +33,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     def "release wakes the dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
-        def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(1, new VirtualClock(), notifier)
         ledger.acquire()
         ledger.assign(A)
 
@@ -46,7 +47,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     def "acquire alone does not wake the dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
-        def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(1, new VirtualClock(), notifier)
 
         when:
         ledger.acquire()
@@ -58,7 +59,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     def "abandon does not wake the dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
-        def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(1, new VirtualClock(), notifier)
         ledger.acquire()
 
         when:
@@ -71,7 +72,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     def "a rejected assign of an already-occupied task does not fire again"() {
         given: 'the first assign already fired its own notification'
         def notifier = Mock(DirtyNotifier)
-        def ledger = new SlotLedger(2, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(2, new VirtualClock(), notifier)
         ledger.acquire()
         ledger.assign(A)
 
@@ -91,7 +92,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
         DirtyNotifier notifier = {
             -> throw new RuntimeException('notifier boom')
         }
-        def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.domain.engine.time.SystemClock(), notifier)
+        def ledger = new SlotLedger(1, new VirtualClock(), notifier)
 
         when:
         ledger.acquire()
@@ -111,7 +112,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
 
     def "the existing two-arg constructor defaults to a no-op notifier"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
 
         when:
         ledger.acquire()

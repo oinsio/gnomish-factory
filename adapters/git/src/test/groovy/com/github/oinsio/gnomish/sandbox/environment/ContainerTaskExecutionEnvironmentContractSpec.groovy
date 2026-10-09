@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.gittransfer.GitVersion
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -12,6 +11,7 @@ import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.IgnoreIf
 import spock.lang.TempDir
 
@@ -41,7 +41,7 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
     @TempDir
     Path tempDir
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = { -> Instant.now() } as InstantSource
 
     def setupSpec() {
         GitSandboxImage.ensureBuilt()

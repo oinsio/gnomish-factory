@@ -139,7 +139,7 @@ class SupervisedLoopSpec extends Specification {
     def "a failure streak outlasting the roll-up interval is reminded at WARN with its count"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
-            if (n == 2) rig.suppressorClock.advance(Duration.ofMinutes(6))
+            if (n == 2) rig.clock.advance(Duration.ofMinutes(6))
             if (n <= 2) throw new IllegalStateException('tracker down')
             rig.stopHere()
         }
@@ -151,5 +151,55 @@ class SupervisedLoopSpec extends Specification {
         def warns = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)*.formattedMessage
         warns.size() == 2
         warns[1].contains('(2x so far)')
+    }
+
+    // FR2, NFR-O1 (daemon-supervision "The roll-up period outlives the loop's own interval"): a
+    //     5 min loop failing for an hour rolls up every 30 min (six ticks), never once per tick —
+    //     on the catalog's 5 min default every one of its twelve failures would have been a WARN.
+    def "FR2: a five-minute loop failing for an hour logs the first WARN and at most one roll-up per six runs"() {
+        given:
+        def fiveMinutes = Duration.ofMinutes(5)
+        rig.build(LoopOrder.TICK_THEN_WAIT, rig.clockedWait(fiveMinutes)) { n ->
+            if (n <= 12) throw new IllegalStateException('tracker down')
+            rig.stopHere()
+        }
+
+        when:
+        rig.runToStop()
+
+        then:
+        def warns = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)*.formattedMessage
+        warns.size() == 2
+        warns[0].contains('(1x so far)')
+        warns[1].contains('(7x so far)')
+        rig.atLevel(Level.WARN).size() == 2
+        rig.atLevel(Level.DEBUG)*.formattedMessage.findAll {
+            it.contains('still failing')
+        }.size() == 10
+    }
+
+    // FR2 (daemon-supervision "Suppression runs on the loop's clock"): the roll-up and the
+    //     recovery's outage duration are read from the clock the loop was built with — only the
+    //     virtual clock moves, by the loop's own 1 min waits, and both edges appear.
+    def "FR2: the roll-up and the recovery are timed on the loop's own virtual clock"() {
+        given:
+        rig.build(LoopOrder.TICK_THEN_WAIT, rig.clockedWait(INTERVAL)) { n ->
+            if (n <= 7) throw new IllegalStateException('tracker down')
+            rig.stopHere()
+        }
+
+        when:
+        rig.runToStop()
+
+        then: 'six ticks of 1 min is the roll-up period, so the seventh failure is reminded at WARN'
+        def warns = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)*.formattedMessage
+        warns.size() == 2
+        warns[1].contains('(7x so far)')
+
+        and: 'the recovery measures the outage on the virtual clock: seven 1 min waits'
+        rig.atLevel(Level.INFO)*.formattedMessage == [
+            'daemon loop recovered after 7 failure(s) over PT7M: last was tick failed: ' +
+            'java.lang.IllegalStateException: tracker down'
+        ]
     }
 }

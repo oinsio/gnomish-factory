@@ -8,10 +8,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -41,7 +41,7 @@ class GithubWorkflowRunPollLoggingSpec extends Specification {
     private static final Duration ROLL_UP = Duration.ofMinutes(5)
 
     WireMockServer wireMock
-    MovableClock clock = new MovableClock(Instant.parse('2026-08-31T10:00:00Z'))
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-08-31T10:00:00Z'))
     RepeatSuppressor suppressor = new RepeatSuppressor(clock, ROLL_UP)
     LogCaptureSupport logs
 

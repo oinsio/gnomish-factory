@@ -75,14 +75,16 @@ import org.jspecify.annotations.Nullable;
  * modes report the same event differently.
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
- * add-tracker-port and add-sandbox-core.
+ * add-tracker-port and add-sandbox-core; FR18 of supervise-daemon-loops-and-embed-dashboard (the
+ * terminal-write retry comes from the slot wiring).
  */
 record TakeContainerEngineExecution(
         RunAssembly assembly,
         AbortFuse abortFuse,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
-        LawBinding lawBinding) {
+        LawBinding lawBinding,
+        TerminalWriteRetry retry) {
 
     /**
      * Runs the engine exactly once against {@code support} (see class javadoc).
@@ -131,7 +133,6 @@ record TakeContainerEngineExecution(
 
         settleTerminalBoundary(support, outcome);
 
-        var retry = TerminalWriteRetry.system();
         String branchName = TaskIdSanitizer.branchName(order.taskId());
         // The park's intent is recorded here, not in settleTerminalBoundary: that method only settles
         // the box (kept stopped), and the outcome commit belongs to the protocol that follows it

@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -63,7 +64,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
     /** Creates {@code taskId} at {@code implement} stage start off the clone's current HEAD. */
     private void createTaskAtHead(RegisteredClone clone, String taskId) {
         Path repo = clone.clonePath()
-        new GitTaskRepository(runner, clone, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, clone, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('T'), UntrustedText.tracker('B'), []),
                 TaskStart.commit(repo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
@@ -257,7 +258,7 @@ exec git "\$@"
 
     def "FR16: a mixed-shape clone lists one row per branch, each carrying its shape"() {
         given: 'a delivered branch, a freshly created one, an in-flight one and a parked one'
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         createLocalTask('DELIVERED-1')
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')

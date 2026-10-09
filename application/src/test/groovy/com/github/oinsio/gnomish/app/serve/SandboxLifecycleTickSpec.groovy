@@ -7,13 +7,13 @@ import com.github.oinsio.gnomish.app.lease.LivenessOracle
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -28,7 +28,7 @@ class SandboxLifecycleTickSpec extends Specification {
     static final Instant NOW = Instant.parse('2026-08-07T12:00:00Z')
 
     def cloneDir = Path.of('/tmp/project')
-    def clock = { -> NOW } as Clock
+    def clock = { -> NOW } as InstantSource
     def livenessOracle = new LivenessOracle(new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
     def "tick evaluates the liveness oracle fresh and runs the pass against this clone dir"() {
@@ -55,7 +55,7 @@ class SandboxLifecycleTickSpec extends Specification {
     def "tick re-stamps lastRunAt from the clock, replacing the construction instant"() {
         given:
         def instants = [NOW, NOW.plusSeconds(300)].iterator()
-        def advancingClock = { -> instants.next() } as Clock
+        def advancingClock = { -> instants.next() } as InstantSource
         def sandboxTick = new SandboxLifecycleTick(SandboxLifecyclePass.NONE, livenessOracle, cloneDir, Duration.ofMinutes(5), Mock(Sleeper), advancingClock)
 
         expect: 'construction seeds it, so the assertion below cannot pass by accident'

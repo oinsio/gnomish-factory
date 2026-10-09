@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import java.time.InstantSource;
 
 /**
  * The serve feed's assembly object: builds a {@link FeedAutomaton} from the collaborators that used
@@ -33,7 +33,7 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  *     feed's selection grades against
  * @param wipLimit the WIP limit W (FR6 of add-factory-serve)
  */
-public record FeedAssembly(Sleeper sleeper, Clock clock, IdleTiming idleTiming, int wipLimit) {
+public record FeedAssembly(Sleeper sleeper, InstantSource clock, IdleTiming idleTiming, int wipLimit) {
 
     /**
      * Builds the feed automaton over {@code tracker}, claiming as {@code instanceId}.
@@ -52,11 +52,11 @@ public record FeedAssembly(Sleeper sleeper, Clock clock, IdleTiming idleTiming, 
             DirtyNotifier dirtyNotifier,
             RemoteOutageGate remoteOutageGate) {
         // NFR-R3: the outage backoff reuses the Idle state's jittered interval, not a separate policy.
-        // FR4: the retry's own edge logging runs on real time — the suppressor is log-plane only,
-        //     never a source of behavior, so it does not join the injected-time contract the
-        //     sleeper and clock above carry.
-        var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered, RepeatSuppressor.system());
-        var resilience = new FeedResilience(outageRetry, new FinishedDecline(), remoteOutageGate);
+        // FR4: the retry's edge logging and the finished-decline latch measure on the feed's own
+        //     clock (FR18 of supervise-daemon-loops-and-embed-dashboard): one time source per feed.
+        var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered, RepeatSuppressor.withDefaultRollUp(clock));
+        var resilience = new FeedResilience(
+                outageRetry, new FinishedDecline(RepeatSuppressor.withDefaultRollUp(clock)), remoteOutageGate);
         var cycle = new FeedCycle(
                 new FeedTracker(tracker, instanceId),
                 slotLedger,
@@ -65,7 +65,7 @@ public record FeedAssembly(Sleeper sleeper, Clock clock, IdleTiming idleTiming, 
                 new FeedStateLogger(),
                 resilience);
         // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.
-        var viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.now(), wipLimit, dirtyNotifier);
+        var viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.instant(), wipLimit, dirtyNotifier);
         return new FeedAutomaton(slotLedger, sleeper, clock, idleTiming, wipLimit, cycle, viewTracker);
     }
 }

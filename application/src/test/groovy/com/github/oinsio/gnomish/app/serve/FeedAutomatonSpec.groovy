@@ -97,7 +97,7 @@ class FeedAutomatonSpec extends Specification {
     def "Full sends no tracker polls while occupied and unblocks immediately on release"() {
         given: 'a single-slot ledger already fully occupied'
         def busy = new TaskRef('github:o/r#busy')
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(busy)
 
@@ -141,7 +141,7 @@ class FeedAutomatonSpec extends Specification {
     //     never collides with the previous cycle's still-occupied (or not-yet-released) slot.
     def "Filling claims repeatedly with no pause and never sleeps"() {
         given:
-        def ledger = new SlotLedger(3)
+        def ledger = new SlotLedger(3, new VirtualClock())
         def counter = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit ->
@@ -172,7 +172,7 @@ class FeedAutomatonSpec extends Specification {
     // FR9: a claim-race loss (Held) falls through to the next candidate within the same cycle.
     def "a lost claim race falls through to the next candidate"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def lost = fresh('github:o/r#1')
         def won = fresh('github:o/r#2')
         def claimCalls = new CopyOnWriteArrayList<TaskRef>()
@@ -201,7 +201,7 @@ class FeedAutomatonSpec extends Specification {
     //     single idle interval is slept, jittered by up to +20% (design D4).
     def "Idle-empty polls, finds nothing, and sleeps the jittered idle interval"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         Tracker tracker = [
             listReady: { int limit -> [] },
             listOpen : { -> [] },
@@ -222,7 +222,7 @@ class FeedAutomatonSpec extends Specification {
     //     idle interval.
     def "Idle-blocked polls, finds only WIP-blocked fresh tasks, and sleeps the same idle interval"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
             new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
@@ -256,7 +256,7 @@ class FeedAutomatonSpec extends Specification {
             // A fresh single-slot ledger per seed: sharing one across the five step() calls would
             // park the second call forever in acquire() under a permit-leaking mutant.
             def localSleeper = new VirtualSleeper(new VirtualClock())
-            def a = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1), capturing([]), localSleeper, clock, BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
+            def a = FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, new SlotLedger(1, new VirtualClock()), capturing([]), localSleeper, clock, BASE, CAP, IDLE, WIP_LIMIT, new Random(seed))
             a.step()
             def slept = localSleeper.slept.first()
             slept.toNanos() >= IDLE.toNanos() && slept.toNanos() <= (IDLE.toNanos() * 1.2) as long
@@ -272,7 +272,7 @@ class FeedAutomatonSpec extends Specification {
     //     returns, proving occupied slots finish even after claiming has already stopped.
     def "drain claims and runs every eligible task, then returns once all slots empty, with no sleep"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def remaining = new CopyOnWriteArrayList<>(['1', '2', '3'])
         Tracker tracker = [
             listReady: { int limit ->
@@ -306,7 +306,7 @@ class FeedAutomatonSpec extends Specification {
     //     from the very first poll claims nothing and returns immediately, no sleep either.
     def "drain on an empty queue returns immediately, claiming nothing"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit -> [] },
@@ -333,7 +333,7 @@ class FeedAutomatonSpec extends Specification {
     //     scenario's bounded-run framing).
     def "drain does not re-poll after the first empty observation even if work would appear later"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def pollCount = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit -> pollCount.incrementAndGet(); [] },
@@ -372,7 +372,7 @@ class FeedAutomatonSpec extends Specification {
     //     daemon log actually sees (INFO), not DEBUG.
     def "Idle-blocked logs an INFO line naming the open-front count and that fresh work is not starting"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
             new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
@@ -399,7 +399,7 @@ class FeedAutomatonSpec extends Specification {
     //     into Idle-blocked, not on every subsequent cycle while it remains blocked.
     def "staying in Idle-blocked across repeated cycles logs the INFO line only once, on the transition"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
             new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
@@ -431,7 +431,7 @@ class FeedAutomatonSpec extends Specification {
     //     it from a run that starts (and stays) Idle-blocked from the first cycle.
     def "a Filling to Idle-blocked transition is logged when the cycle after a claim finds only WIP-blocked tasks"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def fillingCounter = new AtomicInteger()
         def openFronts = (1..WIP_LIMIT).collect {
             new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, UntrustedText.tracker('fixture title'))
@@ -468,7 +468,7 @@ class FeedAutomatonSpec extends Specification {
     //     never propagates out of step().
     def "step() retries a listReady outage with backoff and proceeds once the tracker recovers"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def calls = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit ->
@@ -494,7 +494,7 @@ class FeedAutomatonSpec extends Specification {
     // NFR-R3: same outage tolerance for listOpen, on the eligibility-count read inside poll().
     def "step() retries a listOpen outage with backoff and proceeds once the tracker recovers"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def calls = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit -> [] },
@@ -522,7 +522,7 @@ class FeedAutomatonSpec extends Specification {
     //     starts the slot exactly as if there had been no outage.
     def "step() retries a claim outage with backoff and eventually claims once the tracker recovers"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def candidate = fresh('github:o/r#1')
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
@@ -554,7 +554,7 @@ class FeedAutomatonSpec extends Specification {
     //     SUCCEEDS empty, after the tracker has recovered.
     def "drain retries a tracker outage and only commits to stopping on the first successful empty poll"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def calls = new AtomicInteger()
         Tracker tracker = [
             listReady: { int limit ->
@@ -580,7 +580,7 @@ class FeedAutomatonSpec extends Specification {
     //     eligible task once the tracker recovers, rather than crashing the drain run.
     def "drain retries a claim outage with backoff and still claims the task on recovery"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def remaining = new CopyOnWriteArrayList<>(['1'])
         def claimAttempts = new AtomicInteger()
         Tracker tracker = [
@@ -614,7 +614,7 @@ class FeedAutomatonSpec extends Specification {
     //     observes that call's effect.
     def "step() notifies the state logger of a Filling transition"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },
@@ -641,7 +641,7 @@ class FeedAutomatonSpec extends Specification {
     //     rather than skipped.
     def "drain blocks on awaitDrained until an unrelated still-running slot is released"() {
         given: 'one slot occupied externally, one free — drain finds nothing itself to claim'
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def stillRunning = new TaskRef('github:o/r#still-running')
         ledger.acquire()
         ledger.assign(stillRunning)
@@ -676,7 +676,7 @@ class FeedAutomatonSpec extends Specification {
     //     per-cycle decision point to observe Full from without adding a busy-poll.
     def "filling the last free slot logs Full at the moment it happens"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },

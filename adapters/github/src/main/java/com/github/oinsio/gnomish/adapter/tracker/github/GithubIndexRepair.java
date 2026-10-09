@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.StateLabels;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import java.net.http.HttpResponse;
-import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,16 +51,20 @@ public final class GithubIndexRepair {
     private final GithubLabelOps labelOps;
     private final GithubMarkerWriter markerWriter;
     private final GithubStateLabels labels;
+    /** The time source every stamp this collaborator writes is read from (FR20 of supervise-daemon-loops-and-embed-dashboard). */
+    private final InstantSource clock;
 
     public GithubIndexRepair(
             GithubHttpClient httpClient,
             GithubLabelOps labelOps,
             GithubMarkerWriter markerWriter,
-            GithubStateLabels labels) {
+            GithubStateLabels labels,
+            InstantSource clock) {
         this.httpClient = httpClient;
         this.labelOps = labelOps;
         this.markerWriter = markerWriter;
         this.labels = labels;
+        this.clock = clock;
     }
 
     /** Implements {@code Tracker.repairIndex} for GitHub (FR19, FR12). */
@@ -129,7 +133,7 @@ public final class GithubIndexRepair {
                         null,
                         null,
                         markerWriter.instanceId(),
-                        Instant.now()));
+                        clock.instant()));
     }
 
     /** The label flip the observed boundary implies; no boundary at all rolls the claim back. */

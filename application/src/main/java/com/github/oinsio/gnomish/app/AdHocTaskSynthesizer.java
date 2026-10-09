@@ -7,7 +7,8 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.time.Clock;
+import java.time.InstantSource;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Random;
@@ -33,16 +34,16 @@ public final class AdHocTaskSynthesizer {
     private static final String ID_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int ID_SUFFIX_LENGTH = 2;
 
-    private final Clock clock;
+    private final InstantSource clock;
     private final Random random;
 
     /**
-     * @param clock the time source for the generated id's timestamp component; a fixed clock
-     *     makes generation deterministic for tests (FR2)
+     * @param clock the time source for the generated id's timestamp component; a fixed source
+     *     makes generation deterministic for tests (FR2); the timestamp is rendered in UTC
      * @param random the source of the generated id's 2-character suffix; a seeded instance
      *     makes generation deterministic for tests (FR2)
      */
-    public AdHocTaskSynthesizer(Clock clock, Random random) {
+    public AdHocTaskSynthesizer(InstantSource clock, Random random) {
         this.clock = clock;
         this.random = random;
     }
@@ -88,7 +89,7 @@ public final class AdHocTaskSynthesizer {
     }
 
     private String generateTaskId() {
-        String timestamp = ID_TIMESTAMP.format(clock.instant().atZone(clock.getZone()));
+        String timestamp = ID_TIMESTAMP.format(clock.instant().atZone(ZoneOffset.UTC));
         StringBuilder suffix = new StringBuilder(ID_SUFFIX_LENGTH);
         for (int i = 0; i < ID_SUFFIX_LENGTH; i++) {
             suffix.append(ID_CHARSET.charAt(random.nextInt(ID_CHARSET.length())));

@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppende
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
-import java.time.Clock;
+import java.time.InstantSource;
 
 /**
  * Every ledger write point one {@code serve} instance owns, built over its one {@link
@@ -24,7 +24,7 @@ final class LedgerWriters {
 
     private final RotatingLedgerAppender appender;
     private final InstanceInfo instance;
-    private final Clock clock;
+    private final InstantSource clock;
     private final LifecycleLedgerWriter lifecycle;
     private final TaskOutcomeLedgerWriter taskOutcome;
     private final SweepLedgerWriter sweep;
@@ -37,7 +37,7 @@ final class LedgerWriters {
      * @param instance this process's identity, carried on every ledger line; never null
      * @param clock the wall-clock time source for every write point; never null
      */
-    LedgerWriters(RotatingLedgerAppender appender, SlotLedger slotLedger, InstanceInfo instance, Clock clock) {
+    LedgerWriters(RotatingLedgerAppender appender, SlotLedger slotLedger, InstanceInfo instance, InstantSource clock) {
         this.appender = appender;
         this.instance = instance;
         this.clock = clock;

@@ -8,8 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
 import java.time.Duration;
+import java.time.InstantSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -34,7 +34,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR6 of add-claim-heartbeat.
  */
 record TakeTakeover(
-        TakeClaimAndWork claimAndWork, TakeoverConfirmation confirmation, boolean takeoverFlag, Clock clock) {
+        TakeClaimAndWork claimAndWork, TakeoverConfirmation confirmation, boolean takeoverFlag, InstantSource clock) {
 
     /**
      * @param claimAndWork the shared claim-and-resume sequence the confirmed path falls through to,

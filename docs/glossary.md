@@ -131,7 +131,7 @@ terms) live in `.claude/rules/process-invariants.md`.
   is not equipment — it is what the wiring and the dispatch chain are built
   over. *Not:* the order, and not the slot wiring.
 - **Feed assembly** — the serve feed's assembly object: holds the feed's
-  timing equipment (sleeper, clock, idle timing, WIP limit) as fields and
+  timing equipment (sleeper, instant source, idle timing, WIP limit) as fields and
   builds one feed automaton per `serve` daemon from the per-daemon values
   (tracker, instance id, slot ledger, slot runner, dirty notifier, outage
   gate), constructing the feed's cycle and view tracker on the way. The one
@@ -167,8 +167,8 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
 - **Agent round equipment** — what every agent round is launched with: the
-  installation's agent settings (CLI binary, tail drain grace), the clock
-  that stamps the round, the live-progress subscriber and the extractor that
+  installation's agent settings (CLI binary, tail drain grace), the instant
+  source that stamps the round, the live-progress subscriber and the extractor that
   shapes the round's essential result. Built once per owner (the stage
   executor, the judge voter) and taken whole by that owner's round
   execution, so the group is assembled in one place rather than re-listed at
@@ -491,8 +491,8 @@ trusted/task tier split, and the law-root rule.
   neither names a thing without the other — a seed source with no way back is
   a leak, a harvest into nothing has no destination. Type: `BoxGitLink`; the
   environment harvests through it rather than reading the fetch back out.
-- **Box timing** — the timing equipment every box operation runs on: the clock
-  that stamps exec starts, the pause the self-check waits with, and the
+- **Box timing** — the timing equipment every box operation runs on: the instant
+  source that stamps exec starts, the pause the self-check waits with, and the
   deadline every `docker` management command is bounded by. All three are
   about time; a host directory such as the guard config root is deliberately
   not in it. Type: `BoxTiming`.

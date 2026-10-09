@@ -155,7 +155,7 @@ class StageAttemptLoopSpec extends Specification {
     //     begin instant, not a later reading. Asserted for every round result the engine records.
     def "records startedAt as the begin-of-round Clock reading, unaffected by mid-round advance"() {
         given: "the clock is at a known begin instant and advances mid-round during verification"
-        clock.instant = begin
+        clock.advance(Duration.between(clock.instant(), begin))
         def stageDef = stage('build', 3, [builtin('files_exist')])
         builtinRunner.onRun = { check, workspace ->
             clock.advance(Duration.ofMinutes(5))
@@ -172,7 +172,7 @@ class StageAttemptLoopSpec extends Specification {
         def record = persistence.entries[0].state.attempts()[0]
         record.result() == expectedResult
         record.startedAt() == begin
-        clock.now() == begin.plus(Duration.ofMinutes(5))
+        clock.instant() == begin.plus(Duration.ofMinutes(5))
 
         where:
         begin | verdict || expectedResult
@@ -186,7 +186,7 @@ class StageAttemptLoopSpec extends Specification {
     def "records startedAt on a DecisionNeeded round taken when the round began"() {
         given: 'the clock is at a known begin instant and the executor asks a human'
         def begin = Instant.parse('2026-07-16T09:30:00Z')
-        clock.instant = begin
+        clock.advance(Duration.between(clock.instant(), begin))
         def stageDef = stage('build', 3, [builtin('files_exist')])
         executor.scripted << new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
             UntrustedText.agent('pg'),
@@ -207,7 +207,7 @@ class StageAttemptLoopSpec extends Specification {
     //     when THAT round began — the clock advances between rounds and each record captures its own.
     def "records each round's own begin instant as the clock advances between rounds"() {
         given: 'a stage that fails its check twice then passes on the third round'
-        clock.instant = Instant.parse('2026-07-16T10:00:00Z')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-07-16T10:00:00Z')))
         def stageDef = stage('build', 5, [builtin('files_exist')])
         executor.scripted << completed(ExecutorUsage.none())
         executor.scripted << completed(ExecutorUsage.none())
