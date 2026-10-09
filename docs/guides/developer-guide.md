@@ -82,6 +82,10 @@ The branch scope trades one risk for speed: a mutant in an unchanged class can s
 
 Reports land per module: `<module>/build/reports/jacoco/test/html/index.html` and `<module>/build/reports/pitest/index.html`.
 
+<!-- implements FR3, FR4, NFR-O1, UX1 of kill-expensive-mutants -->
+
+Every module `pitest` run, `check` included, also writes a mutation-cost report to `<module>/build/reports/pitest/expensive-mutants.txt` and prints one line such as `PIT mutation cost :adapters:git: 2 above threshold (100 tests); most expensive …`. The report lists, most expensive first, the mutants PIT killed only after more than 100 test executions; the threshold is one constant in [`pitest-cost-conventions.gradle`](../../build-logic/src/main/groovy/pitest-cost-conventions.gradle). It is report-only and never fails the build, because PIT's test order — and so the count — depends on recorded timings. Answer a hotspot with a fast killing spec, not an exemption: a small, fast feature that kills the mutant runs early, since PIT tries the covering tests in ascending order of their recorded coverage-pass time plus covered blocks / 10. The `@DoNotMutate` and `excludedClasses` bars in [`testing.md`](../../.claude/rules/testing.md) are unchanged. When measuring one class, scope it by its exact name (`-PpitScope=<fqcn>`): a glob such as `Foo*` also matches `FooSpec`.
+
 Formatting is applied automatically: a Claude Code hook formats files as the agent edits them, and a git pre-commit hook (installed into `.git/hooks/` by any `./gradlew check` run) formats staged files as a safety net. Manual fallback: `./gradlew spotlessApply`.
 
 ## Dependency locking and verification

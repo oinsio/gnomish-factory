@@ -20,9 +20,6 @@ import spock.lang.TempDir
  */
 class UsageHistoryWalkerTerminationSpec extends Specification {
 
-    /** Long enough that the stalled command can only end on an interrupt, never on itself. */
-    private static final String STALL_SECONDS = '600'
-
     @TempDir
     Path tempDir
 
@@ -65,20 +62,12 @@ class UsageHistoryWalkerTerminationSpec extends Specification {
      * can be asked to produce on demand.
      */
     private Path stallingOn(String stalled) {
-        def script = tempDir.resolve("git-stalling-on-${stalled}.sh")
-        script.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-for a in "\$@"; do
-  case "\$a" in
-    ${stalled}) touch '${stallStarted()}'; sleep ${STALL_SECONDS};;
-    log) echo ${'a' * 40}; exit 0;;
-    rev-parse) echo ${'a' * 40}; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().executable = true
-        script
+        new StallingGit()
+                .stallOn(stalled)
+                .markOnStall(stallStarted())
+                .answer('log', 'a' * 40, 0)
+                .answer('rev-parse', 'a' * 40, 0)
+                .write(tempDir)
     }
 
     private Path stallStarted() {

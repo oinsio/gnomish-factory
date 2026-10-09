@@ -294,23 +294,20 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     /**
      * A git whose network commands never return — so the runner ends them on its own deadline —
      * and whose {@code remote get-url} fails: the combination in which a silenced origin read
-     * would otherwise pass for "this clone is purely local".
+     * would otherwise pass for "this clone is purely local". Every subcommand the locator drives
+     * is answered explicitly: the clone-key resolution, the ref probes (absent) and the origin read
+     * (failed); the spec reads none of their output text.
      */
     private Path stallingNetworkGit() {
-        def script = tempDir.resolve('stalling-network-git.sh')
-        script.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-case "\$1" in
-  rev-parse)
-    if [ "\$2" = "--git-common-dir" ]; then echo '.git'; exit 0; fi
-    exit 1 ;;
-  remote) echo 'fatal: No such remote' 1>&2; exit 128 ;;
-  fetch|ls-remote) sleep 600 ;;
-esac
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
+        new StallingGit()
+                .stallOn('fetch', 'ls-remote')
+                .answer([
+                    'rev-parse',
+                    '--git-common-dir'
+                ], '.git', 0)
+                .answer('rev-parse', '', 1)
+                .answer('remote', '', 128)
+                .write(tempDir)
     }
 
     /**

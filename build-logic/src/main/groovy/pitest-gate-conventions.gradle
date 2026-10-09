@@ -9,6 +9,8 @@ plugins {
     id 'info.solidsoft.pitest'
     // The scope skip this script shares with `pitest` (NFR-R3 of scope-pit-locally).
     id 'pitest-scope-conventions'
+    // What the run cost — the report finalizing `pitest` (FR4, D6 of kill-expensive-mutants).
+    id 'pitest-cost-conventions'
 }
 
 // A module the mutation scope skips is skipped as a whole: its verdict and its report finalizer
