@@ -187,8 +187,9 @@ change. Each new task names its consumers and its old-way sweep (`implementation
       `TaskState.approveGate` constructs `AtStage`/`PipelineEnd` through `Advancement.afterGate`,
       never the gate; allowlist by file, asserted reached. Red when a copy is planted in a scratch file.
 - [x] 5.2 `OutcomeConsumptionGateSpec` (`:bootstrap`; design D7): `resetAttempts()` in `*/src/main`
-      appears only in `TaskState.java`, `EscalationResume.java`, `TakeDecisionResume.java`, and
-      the two mechanics; allowlist by file, asserted reached.
+      appears only in `TaskState.java`, `EscalationResume.java`, `TakeDecisionResume.java`
+      (required, asserted reached); the two `ResumeMechanics` implementations are permitted but
+      not required — they relay the reset state and do not spell the call; allowlist by file.
 - [x] 5.3 Identity specs (`:bootstrap`, bare origin, both media; `testing.md` "Invariant specs
       across a flow"): `GateApprovalIdentitySpec` — after a `manual` pass and an approval, every
       tip in the branch history either carries `AwaitingApproval(s)` or carries the approval

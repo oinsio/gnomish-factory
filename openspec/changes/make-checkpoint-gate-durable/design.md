@@ -137,22 +137,29 @@ from it anyway: level-triggered re-delivery — the pickup re-reads the tip and 
 stop, but from an explicit fact.
 
 **D2 — The approval is the pivot write.** `TaskRepository.approveCheckpoint(taskId,
-TaskState approved)` lands one commit: `state.json` position `AwaitingApproval(s)` → the
+Position.AwaitingApproval gate, TaskState approved)` lands one commit: `state.json` position `AwaitingApproval(s)` → the
 position after `s`, `task.json` `outcome` null, `trackerWritePending` false, attempt history
 untouched (a checkpoint resets nothing). The approved state is computed by the caller that
 holds the pinned definition, through the public `TaskState.approveGate(PipelineDefinition)`,
 which delegates to the package-private `Advancement.afterGate` (the AUTO branch of
 `positionAfter`) — one owner for "what follows a stage"; the repositories hold no pipeline
 definition and do not recompute it. It refuses, writing nothing, on what the tip alone shows:
-the tip's position is not `AwaitingApproval(s)` for the stage named, or `approved.position()`
-is itself a gate — the refusal is `CheckpointApprovalRefusedException` carrying the tip's actual position,
-reported once at WARN with a catalog code (NFR-O1). Keyed by the gate stage only: a `manual`
+the tip's position is not `gate`, or `approved.position()` is itself a gate — the refusal is
+`CheckpointApprovalRefusedException` carrying the tip's actual position, reported once at WARN
+with a catalog code (NFR-O1). `gate` is the variant the caller pattern-matched off the tip
+state (`CheckpointApproval.approve`, the shared seam of D7), never constructed. Naming the gate
+is what makes a stale approval harmless: an approval computed from one gate can never open
+another the tip has since reached, and a repeated approval finds a tip it already moved and
+refuses (NFR-R2). Keyed by the gate stage only: a `manual`
 stage that passed does not retry, so no later visit of the same stage can be confused with the
 approved one (proposal Q1 deferred to `add-stage-iteration`). Callers: `run`
 `GitResumeContinuation.resumePaused` / `ContainerResumeOutcomes.resumePaused` (which after
 `make-run-headless` §2 continue without a prompt — they now approve, then continue), and
 `take`'s pickup of a returned checkpoint through `ResumeMechanics.approveCheckpoint(order,
-branch)` implemented by both mechanics. *Rationale:* Richardson's pivot — the one go/no-go
+branch)` implemented by both mechanics — all four through `CheckpointApproval.approve`
+(`:application`, package-private): compute `approveGate`, run the medium's pre-write hook (the
+container medium disposes its kept box there), hand the tip's gate and the approved state to
+the repository. *Rationale:* Richardson's pivot — the one go/no-go
 write — with a single owner and a type, not a flag. *Alternative rejected:* let the engine
 advance past the gate in memory on a "confirmed" resume and persist with the next round — the
 in-memory reset defect (4b of the audit) in a new place; a kill before the first round commit
@@ -272,8 +279,8 @@ gate demands equality, so no mixed-version grace is possible anyway.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `Advancement.positionAfter(definition, stage)` — the one decision of what a pass leaves as position | `Position` (sealed; `AwaitingApproval` for `MANUAL`) | `StageAttemptLoop.java:157` (the round commit); `Engine.runStages` MANUAL arm (returns the persisted state, no in-memory advance); the approval's "position after the gate" (the AUTO branch, `Advancement.afterGate`, reached only through the public `TaskState.approveGate(definition)`), computed by the four callers that hold the pinned definition: `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`), `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` (`take`), and handed to the repository as `approved`; `add-stage-finished-event`'s `StagePassed.advancedTo` (reads the same value) | `Advancement.nextPosition(next)` call in `Engine.java:185-187` — deleted; the mode-blind javadoc — rewritten | the sealed `Position` switch (22 readers fail to compile until they name the gate); `AdvancementSpec` mode table; `:bootstrap` grep gate `PositionConstructionGateSpec`: `new Position.AwaitingApproval(` appears in `*/src/main` only in `Advancement.java` and `StateJsonMapper.java` (the wire reader; the repositories' refusal checks pattern-match the variant, they do not construct it) |
-| `TaskRepository.approveCheckpoint` — the only writer past a gate | one commit; refuses as `CheckpointApprovalRefusedException` | `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`); `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` ← `TakeLoadedBranchRoutes` Paused arm (`take`) | "continue with `finalState`" in both `resumePaused` arms and in `TakeLoadedBranchRoutes` → `resumeWithoutDecision` for a `Paused` tip — deleted | the Engine refuses to run from `AwaitingApproval` (D1), so a path that skips the approval cannot make progress; `PositionConstructionGateSpec` above; identity spec `GateApprovalIdentitySpec` (`:bootstrap`, bare origin, both media): after any approval the tip's position is past the gate **iff** its `outcome` is null, in the same commit, and that position is the one following the gate in the pinned definition |
+| `Advancement.positionAfter(definition, stage)` — the one decision of what a pass leaves as position | `Position` (sealed; `AwaitingApproval` for `MANUAL`) | `StageAttemptLoop.java:157` (the round commit); `Engine.runStages` MANUAL arm (returns the persisted state, no in-memory advance); the approval's "position after the gate" (the AUTO branch, `Advancement.afterGate`, reached only through the public `TaskState.approveGate(definition)`), computed in `CheckpointApproval.approve` — the shared seam of the four callers that hold the pinned definition: `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`), `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` (`take`) — and handed to the repository as `approved` together with the tip's gate; `add-stage-finished-event`'s `StagePassed.advancedTo` (reads the same value) | `Advancement.nextPosition(next)` call in `Engine.java:185-187` — deleted; the mode-blind javadoc — rewritten | the sealed `Position` switch (22 readers fail to compile until they name the gate); `AdvancementSpec` mode table; `:bootstrap` grep gate `PositionConstructionGateSpec`: `new Position.AwaitingApproval(` appears in `*/src/main` only in `Advancement.java` and `StateJsonMapper.java` (the wire reader; the repositories' refusal checks pattern-match the variant, they do not construct it) |
+| `TaskRepository.approveCheckpoint(taskId, gate, approved)` — the only writer past a gate | one commit; refuses as `CheckpointApprovalRefusedException` | `CheckpointApproval.approve` (`:application`) — the one call site, which pattern-matches `gate` off the tip state and never constructs it; reached from `GitResumeContinuation.resumePaused`, `ContainerResumeOutcomes.resumePaused` (`run`, via `CheckpointApproval.continuePause`); `HostResumeMechanics.approveCheckpoint`, `ContainerResumeMechanics.approveCheckpoint` ← `TakeLoadedBranchRoutes` Paused arm (`take`) | "continue with `finalState`" in both `resumePaused` arms and in `TakeLoadedBranchRoutes` → `resumeWithoutDecision` for a `Paused` tip — deleted | the Engine refuses to run from `AwaitingApproval` (D1), so a path that skips the approval cannot make progress; `PositionConstructionGateSpec` above; identity spec `GateApprovalIdentitySpec` (`:bootstrap`, bare origin, both media): after any approval the tip's position is past the gate **iff** its `outcome` is null, in the same commit, and that position is the one following the gate in the pinned definition |
 | `TaskRepository.resumeFrom` — the only way a consumed outcome is cleared besides `appendDecision` / `approveCheckpoint` | one commit; refuses when `outcome` already null | `EscalationResume.decide` null-decision path (`run`); `TakeDecisionResume` bare-return arm; `HostResumeMechanics.resumeFrom`, `ContainerResumeMechanics.resumeFrom` ← `TakeLoadedBranchRoutes.resumeWithoutDecision` when the tip's `outcome` is recorded | in-memory `finalState.resetAttempts()` with no write: `TakeDecisionResume.java:69`, `EscalationResume` (formerly `EscalationResumeDialog.java:83`) — replaced by the write; `TakeResumeRunner.resumeWithoutDecision` / `TakeContainerResumeRunner.resumeWithoutDecision` continuing over a recorded outcome — routed through `resumeFrom` first | `:bootstrap` grep gate `OutcomeConsumptionGateSpec`: `resetAttempts()` appears in `*/src/main` only in `TaskState` and the call sites that hand the result to one of the three writers (allowlisted by file); identity spec `ConsumedOutcomeIdentitySpec` (bare origin, both media): after any continuation, `task.json outcome == null` **iff** `state.json` carries the continuation's reset/approved state, one commit apart from the park |
 | `AttemptRecord.stop` — the one durable copy of a round's stop | `Stop` (sealed) | writer: `StageAttemptLoop` (DECISION_NEEDED / CANNOT_VERIFY arms); readers: `Engine.preflight`, `StatusReport`/`AttemptMapper` (render) | the in-memory-only `EscalationReport` as the sole carrier of the question — the report is now rebuilt from the record | the type: `AttemptRecord`'s constructor requires a `Stop`; `StageAttemptLoopSpec` asserts the stop on the recorded round for both results |
 | `BranchShapeClassifier` with the position among its facts — the one classification of a gate | `BranchShape.AwaitingApproval` | every shape reader (`TakeDispositionResume`, `BranchRepairLog`, `status`, `GitResumeRunner`/`ContainerResumeRunner` routing) | `InProgress` for a tip at a gate — the classifier now reads `BranchTipFacts.position` | the sealed `BranchShape` switch; `BranchShapeClassifierPropertySpec` generates positions |
@@ -304,7 +311,13 @@ Approval (one commit): before it, `AwaitingApproval` + whatever the park left; a
 approved position with `outcome` null — `InProgress` or `CompletedUncleaned`-to-be at
 `PipelineEnd`. A kill right after the approval commit, before the next round, freezes
 `InProgress` at the following stage: the ordinary interrupted-run shape, correct. Resumed
-write (one commit): before it, `Parked`; after it, `InProgress` at the reset state. Stop on
+write (one commit): before it, `Parked`; after it, the written state with `outcome` null —
+`InProgress` where the write keeps the recorded rounds (an `Aborted` or legacy `Paused`
+return with rounds on record), `Created` where it carries `resetAttempts()` (an `Escalated`
+return: the reset empties the stage's round history, so the tip classifies as a stage not yet
+run), or `Answered` when that reset tip's `task.json` already records a decision — same owner
+(the stage engine), same direction (roll forward) for all three; `ResumedKillPoints` pins the
+`Created` row. Stop on
 the record: the round commit carries it; a kill before the park commit freezes `InProgress`
 whose next run re-escalates from the record (D3) and records the park — roll forward.
 

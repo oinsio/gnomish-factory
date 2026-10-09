@@ -17,7 +17,8 @@ recorded as `PASSED` would silently erase item history.
 The iteration state (cursor, item snapshot, per-item attempt count,
 progress records) lands in `state.json` as a sibling of `position`,
 following the `egressCursor` precedent (additive under v1, absent = not
-iterating; old builds ignore it). `Position` stays `AtStage | PipelineEnd`.
+iterating; old builds ignore it). `Position` gains no variant for iteration (it is
+`AtStage | AwaitingApproval | PipelineEnd` since `make-checkpoint-gate-durable`).
 *Rationale:* the audit showed the sealed `Position` is mirrored in two wire
 DTO trees and gated by a version check — a new variant is a wire-breaking
 change; the additive-field precedent is established and tested.

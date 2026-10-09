@@ -354,8 +354,10 @@ None.
 
 - M8 (2026-10-08): `grep -rn "ContainerEnvironments.forTask(" */src/main sandbox/*/src/main`
   returns nothing; `ContainerSupportFactory.create` declares five parameters; neither
-  container runner nor `ContainerTakeSupport` holds a `SandboxProperties` or
-  `FactoryProperties` field.
+  container runner holds a `SandboxProperties` or `FactoryProperties` field;
+  `ContainerTakeSupport` holds no `FactoryProperties` and keeps `SandboxProperties` only
+  because `TakeWorkRouter.plan` reads it for its own mode decision (the exception task 10.1
+  grants, documented in the record's javadoc).
 - M9 (2026-10-08): `LiveBoxConcurrencySpec` green — a reader returns while a materialize
   blocks; `grep -n "synchronized" ` over `EnvironmentLease` and `FreshJudgeEnvironments`
   returns nothing, both delegate to the one live box.
