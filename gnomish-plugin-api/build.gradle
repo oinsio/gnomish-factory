@@ -43,7 +43,10 @@ plugins {
 // overload. The same change retires the `:domain` `Clock` port for `java.time.InstantSource`
 // (`TrackerHealthTracker` and the re-exposed engine types take the JDK source, FR17) and moves
 // `SystemClock`/`ThreadSleeper` out of `:domain`, carrying real time as the new `TimeEquipment`
-// value (FR22) that both contexts expose. Pre-1.0, a breaking change is a MINOR bump;
+// value (FR22) that both contexts expose. The same 0.11.0 also removes three `OperatorEvent`
+// constants the supervised loop retired (`WORKTREE_JANITOR_TICK_FAILED`, `SNAPSHOT_TICK_FAILED`,
+// `SANDBOX_LIFECYCLE_TICK_FAILED` — GF073, GF077, GF105; FR6), so the operatorevent jar was
+// re-baselined too. Pre-1.0, a breaking change is a MINOR bump;
 // `compat-baseline/` was regenerated (`updateApiCompatibilityBaseline`) in the same change so a
 // reviewer sees the break and the bump that accepts it in one diff.
 //

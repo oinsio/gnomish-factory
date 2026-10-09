@@ -195,7 +195,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * supervise-daemon-loops-and-embed-dashboard) — what every graph this fixture assembles runs on
      * unless a spec hands in its own.
      */
-    static TimeEquipment rootTimeEquipment() {
+    TimeEquipment rootTimeEquipment() {
         new ManualRunConfiguration().timeEquipment()
     }
 
@@ -285,7 +285,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 commands.serveCommand(
                         commands.serveRuntimeAssembly(slotWiringFactory,
                         commands.serveAssembly(factoryProperties, serveProperties, timeEquipment, resolvedClone), git,
-                        sandboxLifecyclePass, sandboxProperties),
+                        sandboxLifecyclePass, sandboxProperties,
+                        commands.serveDashboard(trackerWiring, scope, factoryProperties, timeEquipment)),
                         git, scope, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(
                 scope,

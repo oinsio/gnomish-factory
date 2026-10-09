@@ -54,8 +54,10 @@ class EnvelopeMediumBoundarySpec extends Specification {
      *   <li>{@code TaskWorktreeManager} — {@code isDirectory} on the worktree path before
      *       registration;
      *   <li>{@code DirectoryWorkspace} — {@code isDirectory} on the workspace root;
-     *   <li>{@code WorktreeJanitor} — {@code isDirectory}/{@code list}/{@code walk} over workspace
-     *       roots;
+     *   <li>{@code WorktreeJanitor} — {@code isDirectory}/{@code list} over workspace roots;
+     *   <li>{@code WorktreeActivity} — {@code walk} under one workspace for its newest file's
+     *       modification time, the janitor's age measure (split out of the janitor by
+     *       supervise-daemon-loops-and-embed-dashboard);
      *   <li>{@code AdHocTaskSynthesizer} — {@code readString} of an operator's task file;
      *   <li>{@code OperatorFile}, {@code ProjectFolders}, {@code ProjectRegistry} — the operator's
      *       configuration and project files under the factory home, never a task branch
@@ -68,6 +70,7 @@ class EnvelopeMediumBoundarySpec extends Specification {
         'application/src/main/java/com/github/oinsio/gnomish/app/project/OperatorFile.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/project/ProjectFolders.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/project/ProjectRegistry.java',
+        'application/src/main/java/com/github/oinsio/gnomish/app/serve/WorktreeActivity.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/serve/WorktreeJanitor.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/workspace/DirectoryWorkspace.java',
     ]

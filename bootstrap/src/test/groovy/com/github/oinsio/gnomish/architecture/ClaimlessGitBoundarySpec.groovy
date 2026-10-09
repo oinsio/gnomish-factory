@@ -90,7 +90,7 @@ class ClaimlessGitBoundarySpec extends Specification {
      * {@code take}, {@code serve}, or a tracker-backed resume) moves onto the bundle's tenure
      * record; a spec that never claims is listed here with the reason it never does.
      *
-     * <p>Four reasons, and no others:
+     * <p>Five reasons, and no others:
      *
      * <ul>
      *   <li><b>The read-only commands.</b> {@code status} and {@code usage} read a branch and write
@@ -114,9 +114,15 @@ class ClaimlessGitBoundarySpec extends Specification {
      *   <li><b>Claimless branch readers.</b> The two kill-point worlds build a {@code
      *       GitTaskBranches} only to classify a tip. Classification takes no epoch at all since FR1,
      *       and these readers never write, so there is no tenure for them to stamp from.
+     *   <li><b>The board-reader discriminator.</b> {@code BoardReaderSplitFactory} builds no git
+     *       layer and hands out no tenure: it only compares the context it receives with the empty
+     *       source, the one fact that tells the embedded dashboard's reader from the claiming
+     *       daemon (design D11 of supervise-daemon-loops-and-embed-dashboard), so the serve specs
+     *       can break the page without touching the daemon's tracker.
      * </ul>
      */
     private static final List<String> CLAIMLESS_SPECS = [
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/BoardReaderSplitFactory.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerContinuationMedium.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerGitModeRunnerSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerLifecycleCoverageGapsE2ESpec.groovy',
