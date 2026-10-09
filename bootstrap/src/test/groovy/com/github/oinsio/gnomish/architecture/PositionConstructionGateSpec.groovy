@@ -36,10 +36,8 @@ class PositionConstructionGateSpec extends Specification {
 
     /** The files allowed to construct {@code Position.AwaitingApproval}, each with why. */
     private static final Map<String, String> ALLOWED = [
-        ('domain/src/main/java/com/github/oinsio/gnomish/domain/engine/Advancement.java'):
-        'the owner: positionAfter, MANUAL arm',
-        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/state/StateJsonMapper.java'):
-        'the wire reader of the awaitingApproval token',
+        ('domain/src/main/java/com/github/oinsio/gnomish/domain/engine/Advancement.java'): 'the owner: positionAfter, MANUAL arm',
+        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/state/StateJsonMapper.java'): 'the wire reader of the awaitingApproval token',
     ]
 
     private static final String POSITION_FQN = 'com\\.github\\.oinsio\\.gnomish\\.domain\\.engine\\.Position'

@@ -31,12 +31,9 @@ class ProcessEnvironmentOwnerSpec extends Specification {
 
     /** Files allowed to write into an inherited environment, each with why. */
     private static final Map<String, String> EXEMPT = [
-        (FIXTURES + 'adapter/git/SeedTransferFixture.groovy'):
-        'git seeding a fixture repository, not a gnome product; it needs the git test configuration as the test JVM has it',
-        (BOOT + 'distribution/ReleasePreflightScriptSpec.groovy'):
-        'the release preflight CI script under a stubbed gh on PATH; it is not a gnome product and reads no GNOMISH_* variable',
-        ('gittransfer/src/test/groovy/com/github/oinsio/gnomish/gittransfer/GitTransferSpec.groovy'):
-        'GitTransfer.environment() is a value\'s own map, asserted immutable — not a ProcessBuilder\'s',
+        (FIXTURES + 'adapter/git/SeedTransferFixture.groovy'): 'git seeding a fixture repository, not a gnome product; it needs the git test configuration as the test JVM has it',
+        (BOOT + 'distribution/ReleasePreflightScriptSpec.groovy'): 'the release preflight CI script under a stubbed gh on PATH; it is not a gnome product and reads no GNOMISH_* variable',
+        ('gittransfer/src/test/groovy/com/github/oinsio/gnomish/gittransfer/GitTransferSpec.groovy'): 'GitTransfer.environment() is a value\'s own map, asserted immutable — not a ProcessBuilder\'s',
     ]
 
     /** Writers the scan must see as compliant: proof that it reaches both trees, nested modules included. */
