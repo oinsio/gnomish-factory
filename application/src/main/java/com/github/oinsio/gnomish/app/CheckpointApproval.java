@@ -28,12 +28,15 @@ final class CheckpointApproval {
      * @param gated the state read off the tip; its position is a gate
      * @param definition the task's pinned pipeline; the gate's stage is resolved against it
      * @param beforeWrite run once the approved state is computed and before the commit — the
-     *     container medium disposes its kept box there, so a refused computation touches nothing
+     *     container medium disposes its kept box there. A refused {@code approveGate} touches
+     *     nothing; a repository refusal comes after it, so the box is already disposed by then and
+     *     the next pickup rebuilds it from the tip (the round's work is on the branch since its
+     *     snapshot, so nothing durable is lost)
      * @return the approved state, past the gate; never itself a gate
      * @throws IllegalStateException when {@code gated} is not at a gate, or its stage is not declared
-     *     in {@code definition}; nothing was written
+     *     in {@code definition}; nothing was written and {@code beforeWrite} did not run
      * @throws com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException when the tip no
-     *     longer sits at this gate; nothing was written
+     *     longer sits at this gate; nothing was written, {@code beforeWrite} already ran
      */
     static TaskState approve(
             TaskRepository repository,
