@@ -825,6 +825,100 @@ different question); a time-weighted one is NG11.
 *how it reaches the OS*. `StallingGitOwnerSpec` keeps its scan and gains the library path as the
 one allowed `sleep` site.
 
+**D26 — Links are derived from the tables, never committed** (added 2026-10-10 after the second
+review of the library; FR24 as amended, FR26, M11). *Alternative zero first:* delete the committed
+`links/` directory and ask what still varies per test. Only one thing: the preset's name has to
+reach the script, and production leaves exactly one channel for it — `$0`, since it execs the
+configured path with its own argv and clears the environment. A symbolic link created by a test to
+an already-assessed script costs what a committed one costs (measured again in the review: fresh
+script 0.4 s on first exec, link 0.06 s, `cat` of a file beside it 0.06 s; the assessment is keyed
+by inode), so the committed set was a registry and nothing more, and its one invariant ("every
+section has its link", `StandInLibrarySpec`) was a manual sync pair with the tables.
+
+- *The owner creates the link.* `StandIn.git(id)` (and `docker`, `agent`) hands out
+  `<jvm-dir>/<id> -> stand-in.sh`, created lazily on first use in a directory the owner makes once
+  per JVM (so PIT's minions never share one, and parallel JVMs cannot race). `StandIn.link(at, id)`
+  and `StandIn.recording(dir, id)` keep their contracts: a per-run link now targets the JVM link,
+  the chain the script already walks (`readlink` once gives the preset, the per-run name stays
+  the name git or the fake agent reads). The script finds the library by its own real path — the
+  last target of the chain — instead of by the link's directory, which no longer lies inside it.
+- *The library.* `links/` is deleted; a preset is a section, full stop. `StandInLibrarySpec`
+  enumerates sections, not links. The read-only rule keeps its teeth unchanged: a link the owner
+  made for a plain selection targets the script directly, so the script still refuses `record`,
+  `write`, `export-name` and `@name` through it (exit 97), and the test's temporary directory is
+  the only place a per-run file can land.
+- *Each behaviour once (FR26).* The four `harvest-*` presets become one taking the refusal from its
+  link's name; the four `agent-judged-by-*` become one (one judge model name for every spec,
+  argv capture always on — the log beside the link is free). `quick`, `local` and `stall` under
+  `process/` are rows (`exit 3`; `delay 0.2` then `exit 7`; `stall 600`) in a `process` table;
+  `tree`, `parent`, `agent-forking`, `late`, `polite`, `stubborn`, `leaky`, `exit-leaky`,
+  `trailing` stay scripts because a trap or a fork is their subject. `steps/noisy.sh` and
+  `process/noisy.sh` fold into the parameterised one. A row no feature of `StandInLibrarySpec`
+  reaches fails that spec (the `unstub` check of bats-mock, applied once, in the library's own
+  spec, never per consumer).
+
+*Alternatives rejected:*
+1. **Keep the committed links as a registry.** Honest case: a `ls links/` is the preset list, and
+   the gate's "a spec never writes an executable" has a visible proof in the tree. Where it breaks:
+   81 files that carry nothing the table headers do not, one hand-kept invariant, and a review
+   noise item per new scenario. The list is `grep '^\[' tables/*.params`.
+2. **A sidecar plan file beside the per-run link** (jasonkarns/bats-mock, the one library that
+   solved the same problem with one dispatcher plus a per-test symlink): `<link>.preset` holding
+   the section name and parameters. Honest case: it also carries parameters, which would fold
+   presets that differ in more than one word. Where it breaks: a second artefact kind per test and
+   a grammar extension for a need that `@name` already covers; taken up only if a later scenario
+   needs two parameters from one link.
+3. **An off-the-shelf stand-in library** (NG13): all select by `PATH` or environment; all but one
+   write an executable per test; none is POSIX-sh plus JVM-callable.
+4. **Deriving the links at build time** (a Gradle task writing `build/stand-in/links`): one more
+   build step and a path the minions must be handed; the owner already knows the library and can
+   make a link in microseconds.
+
+**D27 — Specs above the git adapter fake its port in process** (added 2026-10-10, second review;
+FR27, M13). The review classified the library: of 59 git and docker presets, 43 never reach the
+real binary — their whole table is scripted answers — and about 20 of those exist only to make
+`GitProcessRunner` return a chosen `GitCommandResult` to a class above it (`FirstPush`,
+`TaskBranchLocator`, `ReplicaPairReconciler`, `ContainerHarvestFetch`, `UsageHistoryWalker`,
+`OriginRemote`, `ParkDeliveryFence`, `RefspecPush`, `RemoteAttemptDelivery`). Those specs are
+in-process fakes written as shell and paid for as a process per git call per mutant. Freeman and
+Pryce (GOOS ch. 8): fake the types you own; test the adapter with the real thing. The project
+already does this for every other port; the runner is the one `final` class with 60 direct
+holders and no role in front of it.
+
+- *The port.* `GitRunner`, a package-private interface in `adapters/git` with the runner's two
+  entries (`run(Path, String...)`, `run(Path, GitTransfer)`); `GitProcessRunner implements
+  GitRunner` and keeps everything else — argv, environment, deadlines, the mutation lock, the
+  `rev-parse --git-common-dir` parse. Every holder's field and constructor parameter becomes
+  `GitRunner`; the composition root and the adapter's own specs still construct the class.
+- *The fake.* `ScriptedGit` in `adapters/git/src/test` (same package: `GitCommandResult` is
+  package-private, and that is right — the result stays the adapter's type): rows of argv prefix
+  → result, first match wins, an unmatched call throws (the exit-97 contract of the stand-in,
+  kept), and a `stalls(prefix, latch)` row that blocks the calling thread until the spec releases
+  it — the shape `lock-scope.md` already prescribes for termination specs — so
+  `ReplicaPairReconcilerTerminationSpec` and `UsageHistoryWalkerTerminationSpec` lose their
+  `sleep 600` process and gain a deterministic interrupt point. Argv matching stays as strict as
+  the table's prefixes so the regression the stand-ins caught (a changed argv shape) still fails.
+- *What keeps its stand-in.* The specs of the four `ProcessBuilder` owners (`GitProcessRunner`,
+  `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment`), where the process is the subject; every
+  mixed preset that delegates part of the argv to the real git over a real repository
+  (`refuse-fetch`, `fetch-fsck-refused`, `trace-clone-mutations`, …); the end-to-end layer in
+  `:bootstrap`; `GitVersionCheck`, which spawns `git --version` itself.
+- *Sequencing against the two active runner changes.* `own-git-invocation-policy` and
+  `add-subprocess-access-log` both rewrite `GitProcessRunner.execute` (0 of 22 and 0 of 32 tasks
+  done). D27 touches the class's signature line and its holders' types, not `execute`; whichever
+  lands second rebases a one-line `implements` and nothing else. Group 14 therefore runs before
+  both, and their task lists are updated by a note, not a rewrite.
+
+*Alternatives rejected:*
+1. **Leave the scripted presets as they are.** Honest case: they work, they are reviewed once,
+   and the argv prefixes are a real contract. Where it breaks: every mutant of `FirstPush` pays a
+   process start per git call for an answer a Spock stub returns in microseconds, and the design
+   of ADR 0015 said "stand-ins serve the adapters" while two thirds of them served the layer above.
+2. **Real git with `pre-receive` hooks for the push scenarios** (NG12): more realistic, slower,
+   and the stalling variant puts real git between the kill and the sleep.
+3. **A port one level higher** (fake `FirstPush` itself from its callers): already the case for
+   the callers; the gap was exactly the one level between the runner and its holders.
+
 ### Single-owner mechanisms
 
 | Owner                                                 | Value (type)                                                                                          | Consumers                                                                                                                                                                                  | Old way removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Enforced by                                                                                                                                                                                                                                                                                                           |
@@ -841,7 +935,8 @@ one allowed `sleep` site.
 | `TrackerWiring.boardReader` over `BoundTracker` (D11) | the read-only board client built from the configuration and adapter factory bound from origin's default branch (`Tracker`, from a `BoundTracker` and a minted `InstanceId`) | the embedded `BoardSource`, built for the serve runtime assembly (`app/ServeRuntimeAssembly.java`) by `app/ServeDashboard.java`, which holds the `BoardReaders` role interface (task 9.3: the on/off decision is its own, so the runtime assembly stays straight-line)                                                | inside `serve`, `TrackerWiring.resolveReadOnly(dir, …)`; a `SecretsProvider` reaching the serve assembly. **Exemptions:** `app/DashboardCommand.java` and `app/BoardCommand.java` (standalone commands with no bound law)                                                                                                                                                                                                                                                                                                  | the type: `boardReader` takes a `BoundTracker`, and no `Path dir` reaches it. `TrackerWiringOwnerBoundarySpec` (unchanged): `SecretsProvider` stays declared only by `TrackerWiring`. Boundary spec: `resolveReadOnly(` declared only in `TrackerWiring.java` and called only from the two exempt files. Identity spec: `ServeDashboardBoundLimitSpec` — a `serve --dashboard --drain` run over a bare origin whose default branch sets `wip-limit: 10` (and a second row, 4, below the mapper's default) while the clone's checkout sets `wip-limit: 3` in a local commit renders origin's limit as the WIP denominator |
 | `BoardModel` (D13)                                    | the WIP limit eligibility was judged by and the open-front count (`int wipLimit`, `openFrontCount()`) | `board/json/BoardJsonMapper.java`, `dashboard/DashboardStatusCardRenderer.java`, `app/BoardCommand.java`                                                                                   | `BoardJsonMapper.serialize(model, wipLimit)` / `toDto(model, wipLimit)` and its inline `workingRows().size() + awaitingHumanRows().size()`; the four-argument `BoardModel.build` overload that defaults the limit to `Integer.MAX_VALUE` (deleted, test callers moved to the five-argument form)                                                                                                                                                                                                        | the signature: no `wipLimit` parameter remains on any renderer. Identity spec: one model built with a limit and a WIP-held row; the JSON `wipLimit`, the status card's WIP denominator and the limit eligibility used are the same value. Byte-stability spec: the existing board JSON reference fixture is unchanged |
 
-| `StandIn` in `:test-fixtures` over the committed library `test-fixtures/src/main/resources/stand-in/` (D23) | the path production receives as a stand-in binary (a committed preset's `git`/`docker`/agent link, or one per-run link to it), with the behaviour chosen by the preset's parameter table (`Path`; a primitive because `ProcessBuilder` consumes exactly that — the owner is enforced by the gate, not the type) | every spec that runs a stand-in: `test-fixtures` builders (`StallingGit`, `FailingSubcommandGitFixture`, `TransferAdversaryFixture`, `BareGitRepoFixture`, `FakeAgentSupport`), `adapters/git` (`RecordingGit` and the 25 specs with inline scripts, `BaseRefreshSpec` … `WorktreeSalvageSpec`), `bootstrap/app` (10 specs, `AgentDecisionRoundTripSpec` … `TakeCommandCredentialScrubSpec`), `gitobjects` (2), `sandbox/docker` (`FakeDockerBinary`, `HostExecHandleTreeKillSpec`), `subprocess` (`FakeBinaries`), `adapters/agent` (`CliStageExecutorCredentialScrubSpec`) — the task list of group 13 names each | inline `#!/bin/sh` text and `executable = true` / `setExecutable(` in specs and builders, deleted; survivors: container-run scripts (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage`), shipped-script specs (`LauncherScriptSpec`, `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`) and the stalling gate's seeded detector data (`StallingGitOwnerSpec`), each listed in the gate with its reason; `RecordingGit`, `FakeDockerBinary` and the per-spec wrapper builders deleted | `StandInOwnerSpec` (`:bootstrap`, D23), scan asserted to reach every allowlisted file |
+| `StandIn` in `:test-fixtures` over the committed library `test-fixtures/src/main/resources/stand-in/` (D23, D26) | the path production receives as a stand-in binary (a link the owner creates once per JVM for a plain selection, or one per-run link to it), with the behaviour chosen by the preset's table section (`Path`; a primitive because `ProcessBuilder` consumes exactly that — the owner is enforced by the gate, not the type). Old way removed by D26: the committed `links/` directory and `StandIn.preset(id)` resolving through it, deleted; `StandInLibrarySpec` enumerates sections | every spec that runs a stand-in: `test-fixtures` builders (`StallingGit`, `FailingSubcommandGitFixture`, `TransferAdversaryFixture`, `BareGitRepoFixture`, `FakeAgentSupport`), `adapters/git` (`RecordingGit` and the 25 specs with inline scripts, `BaseRefreshSpec` … `WorktreeSalvageSpec`), `bootstrap/app` (10 specs, `AgentDecisionRoundTripSpec` … `TakeCommandCredentialScrubSpec`), `gitobjects` (2), `sandbox/docker` (`FakeDockerBinary`, `HostExecHandleTreeKillSpec`), `subprocess` (`FakeBinaries`), `adapters/agent` (`CliStageExecutorCredentialScrubSpec`) — the task list of group 13 names each | inline `#!/bin/sh` text and `executable = true` / `setExecutable(` in specs and builders, deleted; survivors: container-run scripts (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage`), shipped-script specs (`LauncherScriptSpec`, `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`) and the stalling gate's seeded detector data (`StallingGitOwnerSpec`), each listed in the gate with its reason; `RecordingGit`, `FakeDockerBinary` and the per-spec wrapper builders deleted | `StandInOwnerSpec` (`:bootstrap`, D23), scan asserted to reach every allowlisted file |
+| `GitProcessRunner` behind the `GitRunner` role interface (D27) | one `GitCommandResult` per git invocation (`GitCommandResult`, package-private; the fake and the class produce the same type) | every production holder of the runner: the 60 classes of `adapters/git` with a `private final GitProcessRunner` field (`BaseRefresh` … `WorktreeSalvage`, listed by `grep -rl 'private final GitProcessRunner' adapters/git/src/main`), the one site in `:application` and the five in `:bootstrap`; the composition root constructs the class | fields, constructor parameters and factory signatures typed `GitProcessRunner` outside the class and the composition root, retyped to `GitRunner`; old-way grep: `GitProcessRunner` as a field or parameter type outside `GitProcessRunner.java` and `bootstrap/src/main` — expected empty | `GitRunnerBoundarySpec` (`:bootstrap`, shape of `ClaimlessGitBoundarySpec`): the old-way grep as a gate over `adapters/git/src/main` and `application/src/main`, plus the compiler once the fields are retyped |
 
 ## Risks / Trade-offs
 
@@ -854,6 +949,19 @@ one allowed `sleep` site.
   suite rather than pass quietly, which is the point.
 - [Linux never had the cost, so the migration shows nothing in CI] → M12 is measured on the
   reference machine (D25); CI's own duration is NG11.
+- [A per-JVM link directory outlives the JVM] → it is made under the JVM's temporary directory with
+  deletion on exit; a leftover costs nothing, since the script it points at is the committed one,
+  and the next JVM makes its own.
+- [The script found the library by the link's directory; a per-JVM link lies elsewhere] → the
+  script resolves the chain to its own real path and takes the library from there; the library spec
+  runs every preset through a per-JVM link, so a wrong resolution fails there first.
+- [`ScriptedGit` answers a looser argv than the stand-in tables did] → its rows are the same
+  prefixes, an unmatched call throws, and the fake lives beside the adapter's own result type; a
+  spec that wants to assert "git was never called" asserts an empty call log, which the stand-in
+  could not offer at all.
+- [Group 14 and the two active runner changes touch one class] → D27 changes the class's
+  `implements` line and its holders' types; `execute` is untouched. The order is stated in the
+  three task lists, and the later change rebases one line.
 - [An `Error` now ends the worker instead of being logged as a tick failure (D2 as amended)] → the
   respawn with backoff replaces the continue; a persistent `Error` produces one ERROR line per
   death, bounded by the policy's cap, instead of a suppressed WARN streak, and a `Bounded` loop may

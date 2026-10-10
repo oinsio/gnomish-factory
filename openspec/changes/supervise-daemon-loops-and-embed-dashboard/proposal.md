@@ -148,6 +148,17 @@ written before anyone here knew it.
   `:subprocess`), reducing class complexity (mutant density is 6–20 per 100
   lines everywhere; the cost is per process start, not per mutant), and the
   refuted "deadline-waiting mutants" reading.
+- **NG12** — Replacing push stand-ins with real `pre-receive` hooks on a bare
+  origin (examined in the 2026-10-10 second review). It costs three processes
+  per push instead of one `sh`, and a stalling hook puts real git between the
+  kill and the sleep — the "mutant hangs on real I/O" shape `testing.md`
+  excludes. Drift from real git stays covered by the end-to-end layer, which
+  is outside PIT.
+- **NG13** — An off-the-shelf stand-in library. Every surveyed one (bats-mock,
+  shellmock, bash_shell_mock, shellspec, fakear) selects behaviour through
+  `PATH` or the environment, which production does not consult, and all but
+  one write a fresh executable per test; the JVM has no `Process` double. The
+  port-and-fake of FR27 is the standard answer there.
 
 ## Users & Scenarios
 
@@ -272,17 +283,40 @@ written before anyone here knew it.
   the break.
 - **FR24** — Every stand-in binary a test runs (a `git`, `docker`, agent or
   process-shaped fake) SHALL be a committed script in `test-fixtures` whose
-  per-scenario parameters are committed presets beside it. A spec SHALL select
-  a preset by path and SHALL NOT write an executable file or shell text; the
-  one per-run artefact allowed is a symbolic link to a preset, created by the
-  single owner fixture, where a scenario needs a per-run output location
-  (argv recording). A build gate SHALL fail on any other writer of executable
-  files or shebang text in test sources, with named exemptions for scripts
-  that run inside a container and for specs of shipped scripts.
+  per-scenario parameters are committed presets beside it: a preset is a
+  section of a committed table, and nothing else. A spec SHALL select a preset
+  by name and SHALL NOT write an executable file or shell text; the only
+  artefact created at test time is a symbolic link to the committed script,
+  made by the single owner fixture — once per JVM for a plain selection, once
+  per run where a scenario needs a per-run output location (argv recording) or
+  a name of its own (a hook). The library SHALL commit no links (amended
+  2026-10-10 after the second review: a link to an already-assessed script
+  costs the same whether committed or created, so the committed set was a
+  registry, not a performance need). A build gate SHALL fail on any other
+  writer of executable files or shebang text in test sources, with named
+  exemptions for scripts that run inside a container and for specs of shipped
+  scripts.
 - **FR25** — The nine `bootstrap` specs that drive a real Docker daemon or a
   Gitea container and whose production classes are all covered by in-process
   specs SHALL leave PIT's test scan by the `testing.md` exclusion bar; the
   three specs that run on the fake `ScriptedSandboxDocker` SHALL stay in it.
+- **FR26** — The stand-in library SHALL hold each behaviour once (added
+  2026-10-10, second review): two presets that differ in one word SHALL be one
+  preset taking that word from its link's name; a process-shaped fake whose
+  whole behaviour is an exit code, a delay or a stall SHALL be a table preset,
+  not a script of its own; and a table row no run of the library's own spec
+  reaches SHALL fail that spec, so dead rows cannot accumulate.
+- **FR27** — A spec whose subject sits above a subprocess adapter SHALL fake
+  the adapter's port in process, not run a stand-in binary (added 2026-10-10,
+  second review). `GitProcessRunner` SHALL be reached through a role interface
+  the adapter package owns; every production holder of the runner SHALL depend
+  on the interface; a spec of a class above it SHALL drive a scripted in-process
+  fake that answers by argv prefix, fails on an unexpected call, and blocks on a
+  latch where the subject is termination. Stand-in binaries remain for the
+  specs of the four classes that own a `ProcessBuilder` (`GitProcessRunner`,
+  `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment`), for the
+  end-to-end layer, and for mixed scenarios that hand part of the argv to the
+  real git.
 
 ### Non-Functional: Reliability
 
@@ -368,6 +402,17 @@ written before anyone here knew it.
   `:logtext`. Specs building two clocks for one flow: 11 → 0.
 - **M11** — Test-source sites that write an executable file or shebang text:
   61 scripts in ~50 files → 1 owner fixture plus the named exemptions.
+  Committed links under the library: 81 → 0; preset sections: 81 → at most 45
+  once the one-word-apart presets are folded (FR26) and the presets whose only
+  consumer was a spec above the adapter are gone (FR27); scripts under
+  `process/`: 13 → 9.
+- **M13** — Specs of classes above `GitProcessRunner` that spawn a git process
+  through a stand-in: about 20 (`FirstPushSpec`, `TaskBranchLocatorSpec`,
+  `ReplicaPairReconcilerSpec` and its termination twin, `ContainerHarvestFetchSpec`,
+  `UsageHistoryWalkerTerminationSpec`, `OriginRemoteSpec`,
+  `ParkDeliveryFenceTerminationSpec`, `RefspecPushSpec`, `RemoteAttemptDeliverySpec`,
+  …) → 0; production holders typed `GitProcessRunner` outside the adapter and
+  the composition root: 60 → 0.
 - **M12** — On the 14-core reference machine, with the mutant count unchanged:
   `:adapters:git:pitest` 1204 s → under 480 s; `:bootstrap:pitest` 2934 s →
   under 1200 s; the whole local `check` under 45 min (was ≈ 90 min of PIT).
@@ -382,7 +427,10 @@ written before anyone here knew it.
 - **Q3** — How many stand-in presets the 61 inline scripts collapse into. The
   keyword survey says 15–20 scenarios; where two specs differ only in a
   refusal text written for one test, one canonical text is preferred. Settle
-  during tasks 13.4–13.5 and record the count in the task report.
+  during tasks 13.4–13.5 and record the count in the task report. *Answered
+  2026-10-10:* 81 sections, 66 of them with exactly one consumer — the
+  library catalogued scenarios rather than shared them, which is what FR26 and
+  FR27 act on.
 
 ## Capabilities
 
@@ -410,8 +458,10 @@ written before anyone here knew it.
 - `plugin/plugin-api-contract`: a breaking version bump with a regenerated
   compatibility baseline for the `create` reshape.
 - `quality-gates`: stand-in binaries and their presets are committed under
-  `test-fixtures` with one owner and a gate; nine out-of-process `bootstrap`
-  suites leave the mutation scan (FR24, FR25).
+  `test-fixtures` with one owner and a gate, the library commits no links and
+  holds each behaviour once; specs above a subprocess adapter fake its port in
+  process; nine out-of-process `bootstrap` suites leave the mutation scan
+  (FR24–FR27).
 
 ## Impact
 
@@ -420,8 +470,16 @@ written before anyone here knew it.
   `adapters/git`, `:bootstrap`, `:gitobjects`, `sandbox/docker`, `:subprocess`
   and `adapters/agent` lose their inline scripts; `:bootstrap` gains
   `StandInOwnerSpec` and nine `excludedTestClasses` entries in
-  `verification.gradle`; no production code changes; `docs/adr/0015`, the
-  testing and design-decisions rules, and the glossary are updated.
+  `verification.gradle`; `docs/adr/0015`, the testing and design-decisions
+  rules, and the glossary are updated. The second review (FR26, FR27) deletes
+  the library's `links/` directory and three `process/` scripts, and makes one
+  production change, in `adapters/git` only: a role interface in front of
+  `GitProcessRunner` that its 60 holders in the package, the one in
+  `:application` and the five in `:bootstrap` take instead of the class; the
+  class itself, its argv, environment and deadlines are untouched. The two
+  active changes that rewrite the runner's `execute` (`own-git-invocation-policy`,
+  `add-subprocess-access-log`) see one more interface to implement and no
+  moved line; group 14 states the order.
 - `:application` — `app/lease/StandingReaper`, `RestartBackoff`;
   `app/serve/WorktreeJanitor`, `SandboxLifecycleTick`, `ServeShutdown`;
   `app/ServeCommand`, `ServeArguments(Parser)`, `ServeAssembly`,

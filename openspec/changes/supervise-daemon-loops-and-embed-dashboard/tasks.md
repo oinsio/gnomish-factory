@@ -793,3 +793,101 @@ the PIT step is skipped and the named specs are the check). The `implementation.
       hidden.
 - [x] 13.9 Final gate: the root `./gradlew check` once (no `--tests`, no `-PpitScope`); fix what
       fails. Verify: green; whole-`check` wall time recorded in the report against M12's 45 min.
+
+### 13b. Second review of the library (D26; FR24 as amended, FR26, M11)
+
+Added 2026-10-10 after `/architect` reviewed ADR 0015 against prior art (no off-the-shelf stand-in
+library fits; the assessment is keyed by inode, so a link a test creates costs what a committed one
+costs). Each task runs under `verification-scope.md`; none touches production Java, so the check is
+the named specs plus `StandInOwnerSpec`, `StallingGitOwnerSpec` and `StandInLibrarySpec`.
+
+- [ ] 13.10 Links are derived (D26). `StandIn`: a per-JVM directory made once, lazily, under the
+      JVM's temporary directory with deletion on exit; `git(id)`, `docker(id)`, `agent(id)` return
+      `<jvm-dir>/<id> -> stand-in.sh`, created on first use; `link(at, id)` and `recording(dir, id)`
+      target that link; `preset(id)` validates against `StandInTables` sections, not a file.
+      `stand-in.sh`: resolve the chain to its own real path and take the library from there; the
+      preset is the name of the last link before the script. Delete `links/`. `StandInLibrarySpec`:
+      `presets()` from `StandInTables.sections()`, the "every section has its link" feature replaced
+      by "the library holds no link", the direct-link refusal features run through a per-JVM link.
+      `stand-in-conventions` unchanged. Verify: `StandInLibrarySpec`, `StandInSpec`, `StandInOwnerSpec`
+      green; `find test-fixtures/src/main/resources/stand-in -type l` empty.
+- [ ] 13.11 Each behaviour once, presets (FR26). `harvest-daemon-down|fsck-refused|not-a-repository|
+      rejected` → one `harvest-refuse` taking the stderr section from its link's name
+      (`@name` in the file column: `* refuse @code data/stderr#@name`, or the narrowest grammar
+      addition that expresses it — record which in the task report); `agent-judged-by-*` ×4 → one
+      `agent-judged` with one judge model name for every spec and argv capture always on
+      (`FakeAgentSupport.judgeModel` callers migrate to the one name). Verify: `ContainerHarvestFetchSpec`
+      and every spec `FakeAgentSupport` lists for the judged binary green; preset count recorded.
+- [ ] 13.12 Each behaviour once, processes (FR26). `quick`, `local`, `stall` become rows of a
+      `process.params` table (`StandIn.process(name)` resolves a table preset first, a script
+      second, and the library spec pins that order); `process/noisy.sh` and `steps/noisy.sh` become
+      one parameterised script. Verify: `ProcessSupervisorStallSpec`, `CaptureRunnerDrainSpec`,
+      `DockerCliBoundedSpec` green; `ls process/` is nine scripts.
+- [ ] 13.13 Dead rows (FR26). `StandInLibrarySpec`: each feature that runs a preset records the rows
+      the run reached (the script marks them in a per-run `<link>.reached`, or the spec derives the
+      set from the log and the answer); a final feature asserts that every row of every section was
+      reached by some feature and names the misses. Verify: the feature red with one unreachable row
+      added to a table, green after its removal.
+- [ ] 13.14 Durable record. ADR 0015 (decision 2: a preset is a section; the link is made by the
+      owner; the `GIT_CONFIG_PARAMETERS`/`core.hooksPath` note for hook presets), `testing.md`
+      "Stand-ins are prepared, not generated" (drop `links/<preset>`), `design-decisions.md`
+      "Alternative zero" (one sentence: the committed links were the registry that alternative zero
+      removes on the second pass), glossary **Preset** and **Stand-in**. Verify: `grep -rn 'links/'
+      docs .claude/rules` empty.
+
+## 14. Specs above the git adapter fake its port (D27, single-owner row 13; FR27, M13)
+
+Added 2026-10-10, second review. **Runs before `own-git-invocation-policy` and
+`add-subprocess-access-log`**: both rewrite `GitProcessRunner.execute`; this group changes the
+class's `implements` line and its holders' types only, so the later change rebases one line. Their
+task lists get a one-line note pointing here. Each task runs under `verification-scope.md`: the
+named specs, then `pitestVerifyAllKilled -PpitScope=` over the production classes it retyped (a
+retype adds no mutant; the step is the proof that none was lost). `implementation.md` applies: 14.1
+ends with the old-way sweep.
+
+- [ ] 14.1 The port. `GitRunner` (package-private interface, `adapters/git`): `run(Path, String...)`,
+      `run(Path, GitTransfer)`, javadoc naming `GitProcessRunner` as the one production
+      implementation and `ScriptedGit` as the one fake; `GitProcessRunner implements GitRunner`,
+      nothing else in it moves. Retype the 60 holders in `adapters/git` (`grep -rl 'private final
+      GitProcessRunner' adapters/git/src/main`), the site in `:application` and the five in
+      `:bootstrap`; constructors and factories take `GitRunner`; the composition root and the
+      adapter's own specs keep constructing the class. Sweep: `GitProcessRunner` as a field or
+      parameter type outside `GitProcessRunner.java` and `bootstrap/src/main` — expected empty, each
+      survivor named with its disposition. Verify: `./gradlew :adapters:git:compileJava
+      :application:compileJava :bootstrap:compileJava`; the specs of the retyped classes green.
+- [ ] 14.2 The gate. `GitRunnerBoundarySpec` (`:bootstrap`, shape of `ClaimlessGitBoundarySpec`):
+      scans `adapters/git/src/main`, `application/src/main` and `bootstrap/src/main`, comments
+      stripped, for `GitProcessRunner` as a field or parameter type; allowed only in
+      `GitProcessRunner.java` and the composition root files it lists; asserts the scan reached
+      every listed file. Verify: green; red when one holder is retyped back.
+- [ ] 14.3 The fake. `ScriptedGit` in `adapters/git/src/test` (same package as `GitCommandResult`):
+      rows `prefix → GitCommandResult` (first match wins, the argv prefix matched after leading `-c`
+      pairs exactly as `stand-in.sh` does), an unmatched call throws naming the argv, a call log
+      every spec can assert (including "never called"), and `stalls(prefix, CountDownLatch)` that
+      blocks the caller until released and answers `Termination.INTERRUPTED` on interrupt. Spec:
+      `ScriptedGitSpec` (each row kind; the unmatched throw; the latch released from another thread,
+      per `lock-scope.md`'s concurrency-spec shape). Verify: green.
+- [ ] 14.4 Migrate the above-adapter specs onto `ScriptedGit`, one spec per sub-task in the report:
+      `FirstPushSpec` (`first-push-absent`, `first-push-landed`, `missing-branch`),
+      `TaskBranchLocatorSpec` (`locator-fetch-refused`, `locator-lying-fetch`, `locator-stall-network`),
+      `ReplicaPairReconcilerSpec` (`reconcile-swap-loses`, `reconcile-swap-loses-silently`,
+      `reconcile-diverged-fails`), `ReplicaPairReconcilerTerminationSpec` (`reconcile-stall`),
+      `ContainerHarvestFetchSpec` (`harvest-refuse`, `stall-fetch`, `record-argv`),
+      `UsageHistoryWalkerTerminationSpec` (`walker-stall`), `OriginRemoteSpec` (`blank-url`),
+      `ParkDeliveryFenceTerminationSpec` and the `StallingGitFixture` users (`stall-push`,
+      `stall-push-lands`, `stall-push-origin-gone`), `RefspecPushSpec`, `RemoteAttemptDeliverySpec`,
+      `TipStateCursorTerminationSpec` (`closed-stdout-stall` — stays a stand-in if its subject is
+      the capped read of a real pipe; decide and record). Delete each preset whose last consumer
+      left; `StallingGit` and `StallingGitFixture` shrink to what the runner's own specs use or go.
+      Verify: each migrated spec green; `pitestVerifyAllKilled -PpitScope=<the spec's subject
+      class>` green per class.
+- [ ] 14.5 What stays, named. In the design's D27 list and in ADR 0015, record the presets that
+      remain and why each is a process matter (the four `ProcessBuilder` owners' specs, the mixed
+      presets, `GitVersionCheck`, the end-to-end layer); update `manual-sync-pairs.md` only if
+      `ScriptedGit` and `stand-in.sh` are declared a pair for the prefix-match rule (decide: the
+      rule is one sentence each side; declare it). Verify: `grep -rn "Kept in sync with"` lists both
+      ends or the design records why not.
+- [ ] 14.6 Measure (D25, M12, M13): rerun 13.8's five numbers for `:adapters:git` after 14.4; record
+      the preset count and the above-adapter stand-in count (expected 0) beside M13.
+- [ ] 14.7 Final gate: the root `./gradlew check` once; fix what fails. Verify: green; wall time
+      recorded against M12.
