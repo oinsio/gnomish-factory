@@ -602,7 +602,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 
 ## 11. Final gate
 
-- [ ] 11.1 Run the root `./gradlew check` once (no `--tests`, no `-PpitScope`) and fix what fails.
+- [x] 11.1 Run the root `./gradlew check` once (no `--tests`, no `-PpitScope`) and fix what fails.
       Verify: green, with 100% mutation on the changed classes and the log-contract, log-expectation,
       time-source and test-time-injection gates green (retired codes named by no test, new codes
       asserted, no real clock outside the root).
