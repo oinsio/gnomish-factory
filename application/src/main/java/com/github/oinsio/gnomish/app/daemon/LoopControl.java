@@ -11,7 +11,11 @@ import org.jspecify.annotations.Nullable;
  *
  * <p><b>A state-guarding lock</b> ({@code .claude/rules/lock-scope.md}): nothing blocking runs
  * under it. The only calls made while it is held are {@link RestartPolicy}'s in-memory decision,
- * {@link Thread#interrupt()}, a non-blocking semaphore release and starting a virtual thread.
+ * {@link Thread#interrupt()}, a non-blocking semaphore release and starting a virtual thread. The
+ * decision of {@link RestartPolicy.Bounded} reads its {@link java.time.InstantSource} under the
+ * lock: code this class does not control, bounded because reading the current instant is a
+ * non-blocking read of the time source the root built (the system clock, or a virtual clock under
+ * test) and takes no lock of its own that a loop thread could hold.
  * A wait is entered and left under the lock but performed outside it; a join reads the worker
  * under the lock and joins it outside.
  *
@@ -67,8 +71,41 @@ final class LoopControl {
         }
     }
 
-    /** Joins the current worker outside the lock until the one joined is the last there is. */
+    /**
+     * Joins the current worker outside the lock until the one joined is the last there is. An
+     * interrupt of the caller ends the wait early, its flag restored.
+     */
     void joinWorkers() {
+        try {
+            joinAll();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Joins like {@link #joinWorkers()}, but an interrupt of the caller does not end the wait: a
+     * caller that writes after the join (the final snapshot) must write after the last tick. The
+     * flag is restored once every worker has ended.
+     */
+    void joinWorkersThroughInterrupts() {
+        boolean interrupted = false;
+        while (true) {
+            try {
+                joinAll();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    // A worker cannot outlive itself, so its own join would never end; it is refused, not skipped,
+    // because a return would claim that no tick follows while the caller is that tick.
+    private void joinAll() throws InterruptedException {
         Thread joined = null;
         while (true) {
             Thread current;
@@ -78,12 +115,10 @@ final class LoopControl {
             if (current == null || current.equals(joined)) {
                 return;
             }
-            try {
-                current.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
+            if (current.equals(Thread.currentThread())) {
+                throw new IllegalStateException("a supervised loop cannot join its own worker");
             }
+            current.join();
             joined = current;
         }
     }

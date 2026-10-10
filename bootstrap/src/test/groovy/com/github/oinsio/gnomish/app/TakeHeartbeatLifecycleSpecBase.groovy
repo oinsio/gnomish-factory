@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -114,8 +115,8 @@ tracker:
                 'taskId',
                 factoryProperties,
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
-                    TakeCommandSeams.defaults(time).withHeartbeatSleeper(sleeper).withReaperSleeper(reaperSleeper)
-                }, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper)).withReaperSleeper(reaperSleeper)
+                }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     def "FR1: the held claim is beaten during a long round and beating stops at the terminal result"() {

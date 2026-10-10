@@ -21,8 +21,12 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  *
  * <p>{@code reaperSleeper} defaults to the equipment's own sleeper rather than a second one; this is
  * harmless both for the production sleeper (stateless, reentrant) and for specs that don't care
- * about reaper timing. Only a spec driving the two threads' ticks separately needs {@link
- * #withReaperSleeper(Sleeper)} alongside {@link #withHeartbeatSleeper(Sleeper)}.
+ * about reaper timing. It is a waiting-only half and never a second time: the reaper reads the
+ * equipment's one clock ({@link TakeHeartbeat}), so only a spec driving the two threads' ticks
+ * separately needs {@link #withReaperSleeper(Sleeper)}. No wither replaces the equipment itself:
+ * a spec's beat sleeper rides the equipment it hands to {@link #defaults}, built over the clock
+ * the fixture gave it (design D20 of supervise-daemon-loops-and-embed-dashboard, single-owner row
+ * 8).
  */
 record TakeCommandSeams(
         TimeEquipment time,
@@ -50,15 +54,6 @@ record TakeCommandSeams(
                 new SystemMonotonicTime(),
                 ConsoleTakeoverConfirmation.systemTty(),
                 new ServeProperties(0, null, null, null, null, null, null, null, null, null));
-    }
-
-    TakeCommandSeams withHeartbeatSleeper(Sleeper heartbeatSleeper) {
-        return new TakeCommandSeams(
-                new TimeEquipment(time.clock(), heartbeatSleeper),
-                reaperSleeper,
-                heartbeatMonotonicTime,
-                takeoverConfirmation,
-                serveProperties);
     }
 
     TakeCommandSeams withReaperSleeper(Sleeper reaperSleeper) {

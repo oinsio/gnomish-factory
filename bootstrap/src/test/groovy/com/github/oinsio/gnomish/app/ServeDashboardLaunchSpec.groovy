@@ -39,7 +39,7 @@ class ServeDashboardLaunchSpec extends ServeCommandSpecBase {
                 new ServeProperties(0, null, null, null, null, null, null, null, null, null),
                 new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
-                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), console)
+                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(), console)
     }
 
     private static String startAnchor(LogCaptureSupport capture) {

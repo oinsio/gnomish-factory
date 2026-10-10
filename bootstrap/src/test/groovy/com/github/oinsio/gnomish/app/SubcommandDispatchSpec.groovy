@@ -55,7 +55,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     private TakeCommand newTakeCommand() {
         TakeCommands.of(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, testProperties(), time), TaskGitFixture.real(),
-                registeredClone(), 'taskId', testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                registeredClone(), 'taskId', testProperties(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     /**
@@ -73,7 +73,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 registeredClone(), 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE,
-                ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
+                ContainerTakeSupportFixture.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     private BoardCommand newBoardCommand() {
@@ -252,7 +252,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                                 trackerStub
                             })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
-                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                         LiveConsoleIO.onStderr()))
         def args = new DefaultApplicationArguments('serve', "--dir=${projectDir}".toString())
 

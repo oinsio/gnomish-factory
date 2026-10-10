@@ -66,7 +66,7 @@ trait ServeObservabilityFixture {
                 factoryProperties,
                 new ServeProperties(1, null, null, null, null, null, null, null, null, null),
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 LiveConsoleIO.onStderr())
     }
 

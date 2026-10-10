@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.lease;
 import com.github.oinsio.gnomish.app.daemon.LoopOrder;
 import com.github.oinsio.gnomish.app.daemon.LoopShape;
 import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
 import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
@@ -23,7 +24,7 @@ import java.time.InstantSource;
  * thread, the guard, the stop and the restart belong to the {@link SupervisedLoop} it holds, shaped
  * wait → tick on a {@link LoopWait.FixedInterval} of the reaper's interval, framed as {@link
  * DaemonComponent#REAPER}, under {@link RestartPolicy.Unbounded} with the interval as the first
- * backoff and a 10-minute cap — the policy the reaper always had, so a dead reaper is respawned
+ * backoff and the shared {@link RestartBackoff#MAX_BACKOFF} cap — the policy the reaper always had, so a dead reaper is respawned
  * forever and its rising restart count stays the {@code vitals.reaper.restartCount} alarm. Its
  * failures log the loop's {@code DAEMON_LOOP_*} codes with {@code component=reaper}, rolled up on
  * this reaper's own clock once per six intervals (design D2).
@@ -36,9 +37,6 @@ import java.time.InstantSource;
  * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class StandingReaper {
-
-    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
-    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
 
     private final ReaperDuty reaperDuty;
     private final Duration interval;
@@ -67,7 +65,7 @@ public final class StandingReaper {
                 DaemonComponent.REAPER,
                 LoopOrder.WAIT_THEN_TICK,
                 new LoopWait.FixedInterval(time.sleeper(), interval),
-                new RestartPolicy.Unbounded(interval, RESTART_BACKOFF_CAP));
+                new RestartPolicy.Unbounded(interval));
         this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 

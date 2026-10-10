@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.serveobservability.writer;
 import com.github.oinsio.gnomish.app.daemon.LoopOrder;
 import com.github.oinsio.gnomish.app.daemon.LoopShape;
 import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
 import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
@@ -26,7 +27,7 @@ import java.util.function.Supplier;
  * supervise-daemon-loops-and-embed-dashboard). This class owns only its write cycle; the thread,
  * the guard, the stop and the restart belong to the {@link SupervisedLoop} it holds: tick → wait on
  * a {@link LoopWait.IntervalOrSignal} of the configured interval, framed as {@link
- * DaemonComponent#SNAPSHOT}, under {@link RestartPolicy.Unbounded} with a 10-minute cap. A failed
+ * DaemonComponent#SNAPSHOT}, under {@link RestartPolicy.Unbounded} with the shared {@link RestartBackoff#MAX_BACKOFF} cap. A failed
  * write cycle is the loop's {@code DAEMON_LOOP_TICK_FAILED} with {@code component=snapshot}, a
  * stray interrupt is absorbed and waited out in full, and a dead thread is respawned — so the
  * snapshot keeps being written while the daemon runs.
@@ -39,9 +40,6 @@ import java.util.function.Supplier;
  * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SnapshotWriter {
-
-    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
-    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
 
     private final SnapshotWriteCycle writeCycle;
     private final LoopWait.IntervalOrSignal wake;
@@ -78,10 +76,7 @@ public final class SnapshotWriter {
                 targetFile, snapshotSupplier, jsonMapper, interval, time.clock(), retentionSweeper);
         this.wake = new LoopWait.IntervalOrSignal(interval);
         LoopShape shape = new LoopShape(
-                DaemonComponent.SNAPSHOT,
-                LoopOrder.TICK_THEN_WAIT,
-                wake,
-                new RestartPolicy.Unbounded(interval, RESTART_BACKOFF_CAP));
+                DaemonComponent.SNAPSHOT, LoopOrder.TICK_THEN_WAIT, wake, new RestartPolicy.Unbounded(interval));
         this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 
@@ -112,8 +107,8 @@ public final class SnapshotWriter {
      * snapshot content at the moment this is called (FR4 of add-serve-observability's final {@code
      * stopped} snapshot; FR7 of supervise-daemon-loops-and-embed-dashboard). The loop is stopped
      * and joined first — including a worker a death handler respawned meanwhile — and only then is
-     * one last synchronous write performed alone. If the joining thread is interrupted, its flag is
-     * restored and the final write still happens. The caller must have already updated whatever
+     * one last synchronous write performed alone. If the joining thread is interrupted, the join
+     * still waits out a write in progress, the final write still happens, and the flag is restored. The caller must have already updated whatever
      * state the supplier reads before calling this.
      *
      * @throws IllegalStateException if the writer was never {@link #start()}ed

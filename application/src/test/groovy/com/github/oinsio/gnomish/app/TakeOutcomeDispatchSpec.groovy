@@ -75,6 +75,9 @@ class TakeOutcomeDispatchSpec extends Specification {
         when:
         def result = dispatch(new TaskOutcome.Aborted(STATE, new AttemptKey('PROJ-1', 'build', 0), UntrustedText.subprocess('lost')))
 
+        then: 'the abort facts come from one fresh fetch of the task'
+        1 * tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
+
         then: 'below the fuse: the abort is recorded, nothing is parked or finished'
         1 * tracker.recordAbort(REF, _)
         0 * tracker.park(*_)

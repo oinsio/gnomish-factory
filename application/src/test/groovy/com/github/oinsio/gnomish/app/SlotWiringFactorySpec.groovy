@@ -52,7 +52,7 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
             timeEquipment() >> time
         }
         def source = Stub(PipelineSource)
-        def support = ContainerTakeSupport.hostOnly()
+        def support = ContainerTakeSupportFixture.hostOnly()
         def tracker = Stub(Tracker)
         def adapterFactory = Stub(TrackerAdapterFactory) {
             credentialEnvVars(CONFIG) >> ['GNOMISH_GITHUB_TOKEN']
@@ -119,7 +119,7 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
         def heartbeat = TakeHeartbeat.forRun(tracker, CONFIG, VirtualTimeEquipment.on(FIXED_CLOCK, { Duration d -> } as Sleeper))
         def dispatch = new SlotWiringFactory(assembly, RegisteredCloneFixture.provider(CLONE), 'taskId',
-                ContainerTakeSupport.hostOnly(), Stub(PipelineSource)).slotWiring(bound_, git, heartbeat).outcomeDispatch()
+                ContainerTakeSupportFixture.hostOnly(), Stub(PipelineSource)).slotWiring(bound_, git, heartbeat).outcomeDispatch()
         def transitions = new TerminalTransitions(
                 new ParkTransition.Fresh({
                     new ParkDeliveryVerdict.Delivered()

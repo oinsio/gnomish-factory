@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -132,7 +133,7 @@ tracker:
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     /** Instance B's {@link TakeCommand}: the standing reaper's own sleeper and its monotonic clock
@@ -145,8 +146,8 @@ tracker:
                 'taskId',
                 factoryProperties,
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
-                    TakeCommandSeams.defaults(time).withHeartbeatSleeper(sleeper).withReaperSleeper(reaperSleeper).withHeartbeatMonotonicTime(monotonic).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
-                }, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper)).withReaperSleeper(reaperSleeper).withHeartbeatMonotonicTime(monotonic).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
+                }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     def "M2: a dead instance's Working claim is reaped by another run and later resumed from its branch"() {

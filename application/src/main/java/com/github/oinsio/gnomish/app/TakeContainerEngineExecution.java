@@ -62,8 +62,8 @@ import org.jspecify.annotations.Nullable;
  * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
  * argument taken from the claim, never derived per medium. A binding that changes on one side and
  * not the other would make the same task read different law in host and container mode. Both end
- * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the root's one
- * terminal-write retry and the slot's abort fuse (design D22 of
+ * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the
+ * terminal-write retry derived from the slot's time equipment and the slot's abort fuse (design D22 of
  * supervise-daemon-loops-and-embed-dashboard); each twin only builds its {@link
  * TerminalTransitions} from its own park and finish closures, so neither can retry or abort a
  * terminal write differently from the other.

@@ -37,7 +37,7 @@ final class DashboardArgumentsParser {
         ArgumentsParsingSupport.rejectUnknownOptions(args, DASHBOARD_TOKEN, ACCEPTED, Map.of());
         Path dir = clone.clonePath();
         Path out = DashboardOutputFlag.parse(args, OUT);
-        boolean watch = args.containsOption(WATCH);
+        boolean watch = SwitchFlag.isOn(args, WATCH);
         return new DashboardArguments(dir, out, watch);
     }
 }

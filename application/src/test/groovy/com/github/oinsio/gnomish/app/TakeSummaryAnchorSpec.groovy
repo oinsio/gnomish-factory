@@ -95,7 +95,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(
                 store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
-                slotWiring(assembly, git, tracker, registeredClone, ContainerTakeSupport.hostOnly(), heartbeat.tenure()),
+                slotWiring(assembly, git, tracker, registeredClone, ContainerTakeSupportFixture.hostOnly(), heartbeat.tenure()),
                 testProperties(),
                 new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 TakeoverConfirmation.UNAVAILABLE)

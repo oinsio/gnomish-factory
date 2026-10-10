@@ -5,6 +5,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 
 /**
  * Stopping and joining the supervised loop (design D4 of
@@ -63,7 +64,7 @@ class SupervisedLoopStopSpec extends Specification {
             rig.stopHere()
         }
         rig.loop.start()
-        entered.await(5, TimeUnit.SECONDS)
+        assert entered.await(5, TimeUnit.SECONDS)
 
         when:
         rig.loop.start()
@@ -94,26 +95,75 @@ class SupervisedLoopStopSpec extends Specification {
     def "a joining stop waits out the tick in progress"() {
         given:
         def entered = new CountDownLatch(1)
+        def release = new CountDownLatch(1)
         boolean finished = false
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
             entered.countDown()
-            Thread.sleep(200)
+            assert release.await(5, TimeUnit.SECONDS)
             finished = true
         }
         rig.loop.start()
-        entered.await(5, TimeUnit.SECONDS)
+        assert entered.await(5, TimeUnit.SECONDS)
 
-        when:
-        boolean joined = rig.stopAndJoinWithinBound()
+        when: 'a caller joins while the tick is held, and the tick ends only once the join is blocked'
+        def joiner = Thread.ofPlatform().start { rig.loop.stopAndJoin() }
+        new PollingConditions(timeout: 5).eventually {
+            assert joiner.state in [
+                Thread.State.WAITING,
+                Thread.State.TERMINATED
+            ]
+        }
+        boolean returnedBeforeTickEnded = !joiner.alive
+        release.countDown()
+        joiner.join(5000)
 
         then:
-        joined
+        !returnedBeforeTickEnded
+        !joiner.alive
         finished
         rig.ticks.get() == 1
     }
 
-    // FR4: a caller interrupted while joining stops waiting and keeps its interrupt.
-    def "an interrupted joining stop returns and keeps the caller's interrupt flag"() {
+    // FR4, FR7 (design D8): an interrupt does not cut a joining stop short — the write its caller
+    // makes afterwards must be the last one — and the caller keeps its interrupt flag.
+    def "an interrupted joining stop still waits out the tick, then restores the caller's interrupt flag"() {
+        given:
+        def entered = new CountDownLatch(1)
+        def release = new CountDownLatch(1)
+        boolean finished = false
+        rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
+            entered.countDown()
+            release.await(5, TimeUnit.SECONDS)
+            finished = true
+        }
+        rig.loop.start()
+        assert entered.await(5, TimeUnit.SECONDS)
+        boolean keptFlag = false
+
+        when: 'an interrupted caller joins while the tick is still running'
+        def joiner = Thread.ofPlatform().start {
+            Thread.currentThread().interrupt()
+            rig.loop.stopAndJoin()
+            keptFlag = Thread.currentThread().isInterrupted()
+        }
+        new PollingConditions(timeout: 2).eventually {
+            assert joiner.state in [
+                Thread.State.WAITING,
+                Thread.State.TERMINATED
+            ]
+        }
+        boolean returnedBeforeTickEnded = !joiner.alive
+        release.countDown()
+        joiner.join(2000)
+
+        then:
+        !returnedBeforeTickEnded
+        finished
+        keptFlag
+    }
+
+    // FR9: the wait for the loop's end is the interruptible one — its owner stops waiting at once.
+    def "an interrupted awaitEnd returns at once and keeps the caller's interrupt flag"() {
         given:
         def entered = new CountDownLatch(1)
         def release = new CountDownLatch(1)
@@ -122,15 +172,16 @@ class SupervisedLoopStopSpec extends Specification {
             release.await(5, TimeUnit.SECONDS)
         }
         rig.loop.start()
-        entered.await(5, TimeUnit.SECONDS)
+        assert entered.await(5, TimeUnit.SECONDS)
 
         when:
         Thread.currentThread().interrupt()
-        rig.loop.stopAndJoin()
+        boolean gaveUp = rig.loop.awaitEnd()
         boolean keptFlag = Thread.interrupted()
         release.countDown()
 
         then:
+        !gaveUp
         keptFlag
     }
 }

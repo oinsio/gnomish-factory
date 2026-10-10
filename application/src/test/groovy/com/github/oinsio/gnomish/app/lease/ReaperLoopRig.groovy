@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * supervise-daemon-loops-and-embed-dashboard): a real {@link StandingReaper} on a real thread
  * whose sleeper never blocks, so its interval waits and its restart backoffs both land in one
  * {@link #journal}, in the order the reaper's threads made them, next to its numbered ticks. A
- * tick body ends the run with {@link #stopHere()}; every wait on the rig is bounded, so a broken
+ * tick body ends the run with {@code #stopHere()}; every wait on the rig is bounded, so a broken
  * loop fails its feature rather than hanging it.
  *
  * <p>Lines are read from the supervised loop's own logger, which is where the reaper's loop
@@ -33,7 +33,7 @@ final class ReaperLoopRig {
     /** A failure the loop's guard cannot even describe: reporting it throws, so the thread dies. */
     static final class Unrenderable extends Error {
         @Override
-        String toString() {
+        String getMessage() {
             throw new IllegalStateException('the failure cannot be rendered')
         }
     }

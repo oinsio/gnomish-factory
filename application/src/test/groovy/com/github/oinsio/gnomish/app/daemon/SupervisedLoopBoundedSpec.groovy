@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.daemon
 
-import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.CAP
 import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.INTERVAL
 
 import ch.qos.logback.classic.Level
@@ -38,7 +37,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     // FR3 (daemon-supervision "Bounded policy gives up").
     def "a Bounded loop gives up on the sixth death within its window and respawns no more"() {
         given:
-        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), CAP, 5, Duration.ofMinutes(10), clock)
+        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             throw new SupervisedLoopHarness.Unrenderable()
         },
@@ -65,7 +64,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     // FR3, FR9: the end of a loop that was stopped is no give-up — the standalone dashboard exits 0.
     def "awaiting the end of a stopped Bounded loop answers that it did not give up"() {
         given:
-        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), CAP, 5, Duration.ofMinutes(10), clock)
+        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             rig.stopHere()
         }, policy, backoffSleeper)
@@ -82,7 +81,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     // FR3: the Bounded policy resets its backoff on a clean tick exactly as the Unbounded one does.
     def "a clean tick resets a Bounded loop's backoff too"() {
         given:
-        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), CAP, 5, Duration.ofMinutes(10), clock)
+        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             if (n in [1, 3]) throw new SupervisedLoopHarness.Unrenderable()
             if (n == 4) rig.stopHere()
@@ -102,7 +101,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     // FR3: the window slides — restarts older than it no longer count toward the bound.
     def "a Bounded loop whose deaths are spread wider than its window keeps respawning"() {
         given:
-        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), CAP, 5, Duration.ofMinutes(10), clock)
+        def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             clock.advance(Duration.ofMinutes(10))
             if (n <= 7) throw new SupervisedLoopHarness.Unrenderable()
@@ -122,7 +121,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     def "a stop arriving while the restart is decided skips the backoff and the respawn"() {
         given:
         def stopOnRead = { -> rig.stopHere(); Instant.EPOCH } as InstantSource
-        def policy = new RestartPolicy.Bounded(INTERVAL, CAP, 5, Duration.ofMinutes(10), stopOnRead)
+        def policy = new RestartPolicy.Bounded(INTERVAL, 5, Duration.ofMinutes(10), stopOnRead)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             throw new SupervisedLoopHarness.Unrenderable()
         },

@@ -11,12 +11,12 @@ import java.nio.file.Path
 import spock.lang.Specification
 
 /**
- * {@link ContainerTakeSupport#hostOnly()}: the host-only bundle's selector resolves the explicit
+ * {@link ContainerTakeSupportFixture#hostOnly()}: the host-only bundle's selector resolves the explicit
  * host default whatever the pipeline, and its support factory is never built from (FR1 of
  * add-serve-sandbox-lifecycle; FR18 of supervise-daemon-loops-and-embed-dashboard, design D22 —
  * the bundle carries the root's selector, not its four inputs).
  */
-class ContainerTakeSupportSpec extends Specification {
+class ContainerTakeSupportFixtureSpec extends Specification {
 
     private static final RegisteredClone CLONE =
     RegisteredCloneFixture.unregistered(Path.of('/srv/gnomish'), Path.of('/src/widgets'))
@@ -32,12 +32,12 @@ class ContainerTakeSupportSpec extends Specification {
 
     def "hostOnly() plans every pipeline as a host run"() {
         expect:
-        ContainerTakeSupport.hostOnly().modeSelector().plan(pipeline(), CLONE).mode() == SandboxModeSelector.Plan.Mode.HOST
+        ContainerTakeSupportFixture.hostOnly().modeSelector().plan(pipeline(), CLONE).mode() == SandboxModeSelector.Plan.Mode.HOST
     }
 
     def "hostOnly() never builds container support"() {
         when:
-        ContainerTakeSupport.hostOnly().containerSupportFactory().create(Path.of('/c'), 'T-1', [], pipeline(), [])
+        ContainerTakeSupportFixture.hostOnly().containerSupportFactory().create(Path.of('/c'), 'T-1', [], pipeline(), [])
 
         then:
         thrown(IllegalStateException)

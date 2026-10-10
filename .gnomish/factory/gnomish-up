@@ -12,6 +12,9 @@
 # in-flight slots as it does on its own and writes a last page saying it stopped, then the log
 # follower is torn down with it.
 #
+# implements FR15 of supervise-daemon-loops-and-embed-dashboard: the dashboard starts through
+# `serve --dashboard`, with no renderer process of its own (M3: renderer + daemon -> daemon only).
+#
 # The log follower is there because the daemon's console carries only WARN and above: the
 # INFO narrative — what each gnome is doing, stage by stage — only reaches the log file.
 # Without it a healthy run looks like a silent terminal.

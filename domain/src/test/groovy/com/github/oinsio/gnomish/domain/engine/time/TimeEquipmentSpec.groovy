@@ -53,4 +53,21 @@ class TimeEquipmentSpec extends Specification {
             Duration.ofSeconds(1)
         ]
     }
+
+    // FR18 of supervise-daemon-loops-and-embed-dashboard: the equipment reaches plugins through the
+    //     SPI contexts, so a missing half is refused where the value is built, not deep inside a
+    //     plugin's first remaining() call.
+    def "FR18: the equipment refuses a null half at construction, naming it"() {
+        when:
+        new TimeEquipment(clockAbsent ? null : clock, clockAbsent ? sleeper : null)
+
+        then:
+        def refused = thrown(NullPointerException)
+        refused.message == component
+
+        where:
+        clockAbsent || component
+        true || 'clock'
+        false || 'sleeper'
+    }
 }

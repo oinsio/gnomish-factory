@@ -44,7 +44,7 @@ import spock.lang.Timeout
  *
  * <p>Docker- and guard-image-gated, like every container end-to-end spec.
  *
- * <p>Implements FR18, FR19, FR22 of supervise-daemon-loops-and-embed-dashboard ("A frozen equipment
+ * <p>Implements FR18, FR19, FR22, NFR-R4 of supervise-daemon-loops-and-embed-dashboard ("A frozen equipment
  * freezes the whole run").
  */
 @Timeout(value = 420, unit = TimeUnit.SECONDS)

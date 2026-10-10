@@ -55,7 +55,7 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
      */
     Closure<TakeResult> host(
             RegisteredClone clone, TaskGit git, Tracker tracker, PipelineDefinition definition, FactoryProperties agent) {
-        def wiring = wiring(clone, git, tracker, agent, ContainerTakeSupport.hostOnly())
+        def wiring = wiring(clone, git, tracker, agent, ContainerTakeSupportFixture.hostOnly())
         routes(new HostResumeMechanics(new TakeResumeRunner(wiring), git, clone, definition), wiring)
     }
 
@@ -78,7 +78,7 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
         } as ContainerSupportFactory
         // The routes run the container mechanics directly, never the selector: the host-only one
         // stands in for it (design D22 of supervise-daemon-loops-and-embed-dashboard).
-        def support = new ContainerTakeSupport(ContainerTakeSupport.hostOnly().modeSelector(), factory)
+        def support = new ContainerTakeSupport(ContainerTakeSupportFixture.hostOnly().modeSelector(), factory)
         def wiring = wiring(clone, git, tracker, testProperties(), support)
         routes(new ContainerResumeMechanics(new TakeContainerResumeRunner(wiring), segments(definition), definition), wiring)
     }

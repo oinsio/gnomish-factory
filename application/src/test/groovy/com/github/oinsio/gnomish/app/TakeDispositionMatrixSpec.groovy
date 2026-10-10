@@ -50,7 +50,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
         new TakeDisposition(slotWiring(Stub(RunAssembly) {
             timeEquipment() >> VirtualTimeEquipment.on(new VirtualClock(NOW))
         }, git, tracker, CLONE,
-        ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+        ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
         // The claim never reaches a fresh-claim base resolution in this spec: every Ready
         // scenario is stopped at tracker.claim() itself (see disposition() call sites), so any
         // well-formed branch name does. It is a name and not the clone's checkout because

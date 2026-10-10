@@ -93,7 +93,8 @@ public record SlotWiring(
      *
      * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
      *
-     * @return the dispatch shared by every run of this slot; never null
+     * @return a new dispatch over this slot's retry and fuse — every run of the slot gets an equivalent
+     *     one, since both members are immutable and derived from this wiring; never null
      */
     TakeOutcomeDispatch outcomeDispatch() {
         return new TakeOutcomeDispatch(terminalWriteRetry(), abort);

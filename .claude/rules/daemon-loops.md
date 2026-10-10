@@ -55,14 +55,16 @@ the two tests above — "it was simpler" is not a reason.
   `signal()` cuts the wait short and surplus signals coalesce into one wake (the snapshot
   writer's `markDirty()`). One `LoopWait` belongs to one loop.
 - **Restart policy.** Ask what repeated death means — the ADR's table is the authority:
-  - `RestartPolicy.Unbounded(base, cap)` when the factory's correctness or the operator's view
+  - `RestartPolicy.Unbounded(base)` when the factory's correctness or the operator's view
     depends on the loop. It respawns forever after a doubling backoff. Pick `base` so one death
     stays inside what readers tolerate (the writer uses its interval, inside the dashboard's
     `3 × interval` staleness window).
-  - `RestartPolicy.Bounded(base, cap, maxRestarts, window, clock)` for an optional loop whose
+  - `RestartPolicy.Bounded(base, maxRestarts, window, clock)` for an optional loop whose
     repeated death means a bug a restart will not cure (the dashboard: 5 restarts in 10 minutes).
   - No supervision at all only when death is the designed degradation — that is an exemption
     (above), not a policy.
+- **Restart cap.** Nothing to choose: both policies cap the backoff at
+  `RestartBackoff.MAX_BACKOFF`, the one ceiling every loop shares.
 - **Roll-up period.** Nothing to choose: the loop derives it from its interval through
   `RollUpPeriod.forInterval`. Do not pass a period, and do not read the catalog default.
 - **Time.** Through the `TimeEquipment` the class already takes (`testing.md`, "Time is injected
@@ -84,9 +86,14 @@ edges and roll-ups, on virtual time), `SupervisedLoopWaitSpec` and `SupervisedLo
 (the waits, signal coalescing, stray interrupts), `SupervisedLoopRestartSpec` and
 `SupervisedLoopBoundedSpec` (the two policies), `SupervisedLoopStopSpec` and the two
 `SupervisedLoopStop*ConcurrencySpec`s (real threads: a stop never races a respawn). Do not
-re-test the guard per loop. One wiring spec per loop does earn its place: that the class really
-hands its tick and shape to a running loop (`SnapshotWriterSupervisionSpec` and
-`SnapshotWriterComponentMdcSpec` are the models).
+re-test the guard's semantics per loop — the order, the log edges and roll-ups, the backoff, the
+policies. One wiring spec per loop does earn its place: that the class really hands its tick and
+shape to a running loop (`SnapshotWriterSupervisionSpec` and `SnapshotWriterComponentMdcSpec` are
+the models). A failing tick is how that wiring is observed, so the loop's lifecycle spec may drive
+one: a tick that throws, and one that throws an `Error`, and the loop running again under its own
+`component` — the per-loop survival scenarios the `daemon-supervision` capability names
+(`WorktreeJanitorLifecycleSpec` and `SandboxLifecycleTickLifecycleSpec` are the models). Those
+features assert that the loop survived as itself, not how the guard did it.
 
 ## How this is checked
 

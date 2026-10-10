@@ -66,8 +66,8 @@ final class ServeArgumentsParser {
         rejectInapplicableFlags(args);
         Path dir = clone.clonePath();
         Integer slots = parseSlots(args);
-        boolean drain = args.containsOption(DRAIN);
-        boolean dashboard = dashboardConfigured || args.containsOption(DASHBOARD);
+        boolean drain = SwitchFlag.isOn(args, DRAIN);
+        boolean dashboard = SwitchFlag.isOn(args, DASHBOARD) || dashboardConfigured;
         Path dashboardOut = parseDashboardOut(args, dashboard);
         return new ServeArguments(dir, slots, drain, dashboard, dashboardOut);
     }

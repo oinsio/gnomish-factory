@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
 import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Timeout
@@ -22,8 +23,9 @@ import spock.lang.Timeout
  * {@link ServeShutdown} stops the {@link DaemonLoops} — the standing reaper, the worktree janitor
  * and the sandbox sweep tick — before its grace wait (design D9 of
  * supervise-daemon-loops-and-embed-dashboard), observed on real loop threads: each loop counts its
- * own ticks, a slot stays occupied so the shutdown sits in its grace wait, and no loop ticks again
- * while it does. {@link DaemonLoops#start} is what starts the three, as {@code ServeCommand} does.
+ * own ticks and records the thread it ticked on, a slot stays occupied so the shutdown sits in its
+ * grace wait, and every loop thread ends while it does — a dead thread ticks no more, so the proof
+ * needs no real-time window to wait out. {@link DaemonLoops#start} is what starts the three, as {@code ServeCommand} does.
  *
  * <p>Implements D9 of supervise-daemon-loops-and-embed-dashboard; FR4 of fix-reaper-idle-liveness.
  */
@@ -36,6 +38,7 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
     def reaperTicks = new AtomicInteger()
     def janitorTicks = new AtomicInteger()
     def sweepTicks = new AtomicInteger()
+    Set<Thread> loopThreads = ConcurrentHashMap.newKeySet()
     DaemonLoops loops
 
     // Sleeps for real, briefly, and honours the stop's interrupt as the production sleeper does:
@@ -51,6 +54,7 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
     def setup() {
         def time = VirtualTimeEquipment.on(new VirtualClock(), BRIEF)
         def reaper = new StandingReaper({ refs ->
+            loopThreads << Thread.currentThread()
             reaperTicks.incrementAndGet()
         } as ReaperDuty, TICK, {
             []
@@ -60,12 +64,14 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
         Files.createDirectories(clone.worktrees())
         def janitor = new WorktreeJanitor(clone, Duration.ofDays(14), { String key -> } as TaskEnvironmentDisposal, time, {
             ->
+            loopThreads << Thread.currentThread()
             janitorTicks.incrementAndGet()
             Set.of()
         } as OccupiedSlots)
         def oracle = new LivenessOracle(
                 new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1)))
         def pass = { dir, liveness ->
+            loopThreads << Thread.currentThread()
             sweepTicks.incrementAndGet(); ''
         } as SandboxLifecyclePass
         def sweep = new SandboxLifecycleTick(pass, oracle, loopsRoot, TICK, time)
@@ -82,6 +88,11 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
             janitorTicks.get(),
             sweepTicks.get()
         ]
+    }
+
+    /** Joins every thread a loop ticked on; true when all ended within the bound. */
+    private boolean loopThreadsEnded() {
+        loopThreads.every { it.join(Duration.ofSeconds(10)) }
     }
 
     private static void awaitTrue(Closure<Boolean> condition) {
@@ -110,15 +121,16 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
         when: 'the signal lands and the sequence enters its grace wait'
         def signal = Thread.ofVirtual().start { shutdown.shutdown(null) }
         awaitTrue { flag.isLost(A) }
-        Thread.sleep(50) // a tick already in progress at the stop completes (design D4)
+        // A tick already in progress at the stop completes (design D4); then its thread ends.
+        boolean ended = loopThreadsEnded()
         def atStop = ticks()
-        Thread.sleep(150) // dozens of intervals for any loop that was still running
 
-        then: 'the shutdown is still inside the grace wait — nothing killed, the slot still releasing'
+        then: 'every loop thread ended while the shutdown is still inside the grace wait'
+        ended
         signal.isAlive()
         killer.calls.get() == 0
 
-        and: 'no loop ticked during it'
+        and: 'so no loop ticks during it'
         ticks() == atStop
 
         when: 'the slot releases'
@@ -139,15 +151,19 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
         loops.start()
         awaitTrue { ticks().every { it> 0 } }
         shutdown.shutdown(null)
-        Thread.sleep(50)
+        assert loopThreadsEnded()
+        def threadsAfterFirst = loopThreads.toSet()
         def afterFirst = ticks()
 
         when:
         shutdown.shutdown(null)
+        // An absence window, not a gap closer: a loop the second pass resumed would start a new
+        //     thread and tick within it; under correct code nothing can tick, however slow the run.
         Thread.sleep(150)
 
         then: 'nothing thrown, no loop resumed, and the sequence ran to its end again'
         noExceptionThrown()
+        loopThreads == threadsAfterFirst
         ticks() == afterFirst
         killer.calls.get() == 2
     }

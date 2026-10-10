@@ -42,7 +42,7 @@ final class StatusArgumentsParser {
         ArgumentsParsingSupport.rejectUnknownOptions(args, STATUS_TOKEN, ACCEPTED, POSITIONAL_HINTS);
         Path dir = clone.clonePath();
         String task = firstPositionalAfterSubcommand(args);
-        boolean json = args.containsOption(JSON);
+        boolean json = SwitchFlag.isOn(args, JSON);
         return new StatusArguments(dir, task, json);
     }
 

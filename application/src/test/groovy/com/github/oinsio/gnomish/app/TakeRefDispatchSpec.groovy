@@ -60,7 +60,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     }
 
     private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
-        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, ContainerTakeSupport.hostOnly(),
+        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, ContainerTakeSupportFixture.hostOnly(),
                 heartbeat.tenure()), testProperties(),
                 new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 TakeoverConfirmation.UNAVAILABLE)

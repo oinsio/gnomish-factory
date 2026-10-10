@@ -57,7 +57,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     /** A failure the loop's guard cannot even describe, so it escapes the guard and ends the worker. */
     static final class Unrenderable extends Error {
         @Override
-        String toString() {
+        String getMessage() {
             throw new IllegalStateException('the failure cannot be rendered')
         }
     }

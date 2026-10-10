@@ -101,8 +101,10 @@ declared, not hidden clocks; neither gate scans for them, and routing them throu
 | `adapters/.../adapter/check/CommandProcessRunner.java`    | 2     | one check command's duration (access log)          |
 | `sandbox/docker/.../environment/DockerCli.java`           | 2     | one Docker CLI call's duration (access log)        |
 
-Seven sites in six files (`TakeDispatcher` holds two, one per entry point); each reads the start
-and, except where `WallTime` computes it, the end. The common reason: a duration must not move
+Eight sites in seven files (`TakeDispatcher` holds two, one per entry point), plus the seam's own
+read in `SystemMonotonicTime`; each site reads the start and, except where `WallTime` computes it,
+the end. `grep -rn 'System.nanoTime()' --include='*.java' */src/main */*/src/main`, comments
+aside, lists exactly these eight files. The common reason: a duration must not move
 when the wall clock is stepped mid-run — `TaskSummary` rejects a negative duration.
 
 **Deliberate wall-time intervals.** Two intervals are measured on the `InstantSource` on
@@ -112,6 +114,16 @@ loop's restart policy (`RestartPolicy.Bounded`), which counts deaths an operator
 Both tolerate a stepped clock: the worst case is one early or late roll-up line, or one restart
 counted in or out of the window.
 
+**A wait off the sleeper: `LoopWait.IntervalOrSignal`.** The snapshot writer's loop waits on a
+`Semaphore.tryAcquire` bounded by its interval, not on the equipment's `Sleeper`, so virtual time
+does not drive that wait. This is declared, not a hidden clock: the wait must end on a signal from
+another thread (`markDirty()`, a stop), which a `Sleeper` has no way to receive, and surplus
+signals coalesce into one wake through the semaphore's permits. Making the wait virtual would need
+a `Sleeper` that a second thread can cut short, which changes how signals coalesce; that is not
+done here. Its specs use a short real interval and poll for the outcome (`SupervisedLoopWaitSpec`);
+the interval it waits is still the loop's own, and every instant it stamps comes from the
+equipment's clock.
+
 ### Two gates, a declared pair
 
 - **`TimeSourceOwnerBoundarySpec`** (`:bootstrap`) scans every module's `src/main` (comments
@@ -119,9 +131,11 @@ counted in or out of the window.
   `Clock.systemDefaultZone(`, `InstantSource.system(`, `Instant.now(` (dot escaped: a declared
   `Instant now()` is not a read), `new SystemClock(`, `new ThreadSleeper(` and `.system(`. The
   allowlist is exact in both directions: `ManualRunConfiguration.java` (the equipment bean) and
-  `EgressAllowlist.java` (`HostResolver.system()`, not time). The same spec pins one producer for
-  `new TerminalWriteRetry(` (`SlotWiring.java`), `new AbortHandler(` (`SlotWiringFactory.java`)
-  and `new TakeOutcomeDispatch(` (`SlotWiring.java`), and bans `BooleanSupplier` in `application` and `bootstrap` `src/main`.
+  `EgressAllowlist.java` (`HostResolver.system()`, not time). The same spec bans
+  `BooleanSupplier` in `application` and `bootstrap` `src/main`; its sibling
+  `SlotPolicyProducerBoundarySpec` pins one producer for the construction (`new` or `::new`) of
+  `TerminalWriteRetry` (`SlotWiring.java`), `AbortHandler` (`SlotWiringFactory.java`) and
+  `TakeOutcomeDispatch` (`SlotWiring.java`).
 - **`checkTestTimeInjection`** (`TestTimeInjectionCheck`, `build-logic`) applies the same literal
   set to every test tree and to `:test-fixtures/src/main`; a legitimate use carries the in-place
   `real-time-wiring:` justification (`.claude/rules/testing.md`, "Time is injected").

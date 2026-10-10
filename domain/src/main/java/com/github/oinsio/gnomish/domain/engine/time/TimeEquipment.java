@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
+import java.util.Objects;
 
 /**
  * The <em>time equipment</em>: real time's two seams as one value — the current instant ({@link
@@ -43,6 +44,16 @@ import java.time.InstantSource;
  * @param sleeper the waiting seam, which advances {@code clock} under test; never null
  */
 public record TimeEquipment(InstantSource clock, Sleeper sleeper) {
+
+    /**
+     * Refuses a missing half where the value is built: the equipment reaches plugins through the SPI
+     * contexts, and a null half would otherwise fail late, inside a plugin's first {@link
+     * #remaining} or {@link #sleepUntil} call.
+     */
+    public TimeEquipment {
+        Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(sleeper, "sleeper");
+    }
 
     /**
      * How long is left until {@code deadline} on this equipment's clock — {@link Duration#ZERO} once

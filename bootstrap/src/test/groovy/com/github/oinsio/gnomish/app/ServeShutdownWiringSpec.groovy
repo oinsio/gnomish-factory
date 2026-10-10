@@ -14,17 +14,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
-import com.github.oinsio.gnomish.app.serve.DaemonLoopsFixture
-import com.github.oinsio.gnomish.app.serve.DirtyNotifier
-import com.github.oinsio.gnomish.app.serve.FeedAutomaton
-import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
-import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
-import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
-import com.github.oinsio.gnomish.app.serve.RecordingKiller
-import com.github.oinsio.gnomish.app.serve.ServeShutdown
-import com.github.oinsio.gnomish.app.serve.SlotLedger
-import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
+import com.github.oinsio.gnomish.app.serve.*
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -33,27 +23,10 @@ import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.logtext.MdcAwareThread
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
-import com.github.oinsio.gnomish.serveobservability.FeedPhase
-import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
-import com.github.oinsio.gnomish.serveobservability.HeartbeatState
-import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
-import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.JanitorVital
-import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
-import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.serveobservability.ReaperVital
-import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
-import com.github.oinsio.gnomish.serveobservability.Snapshot
-import com.github.oinsio.gnomish.serveobservability.TrackerHealth
-import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
+import com.github.oinsio.gnomish.serveobservability.*
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
@@ -62,23 +35,21 @@ import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.status.TaskSummary
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Files
-import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
-import java.time.InstantSource
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.util.Optional
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 /**
  * FR10, FR11, NFR-O2, M3, D9 of add-factory-serve: {@link ServeShutdownWiring}'s two entry points
  * — the drain path and the forever-loop path — each attach the drain-report/drive-the-automaton
@@ -136,7 +107,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def abortHandler = new AbortHandler(tracker, assembly.timeEquipment().clock())
         def wiring = new SlotWiring(
                 assembly, TaskGitFixture.real(), registeredClone, 'taskId', new AbortFuse(abortHandler, 3), [],
-                ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),

@@ -6,29 +6,21 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
-import com.github.oinsio.gnomish.app.ThreadSleeper
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Files
-import java.nio.file.Path
-import java.time.Duration
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Duration
+import java.util.concurrent.*
+import java.util.concurrent.atomic.AtomicInteger
 /**
  * Task 4.2 of fix-reaper-idle-liveness: the wiring proof that a real {@code take} run (through
  * {@link TakeCommand}, exactly like {@link TakeDeathAndRecoverySpecBase} and {@link
@@ -135,9 +127,8 @@ tracker:
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
         newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)], { time ->
-            TakeCommandSeams.defaults(time)
+            TakeCommandSeams.defaults(new TimeEquipment(time.clock(), budgetedRealSleeper(600)))
             .withServeProperties(serveProperties)
-            .withHeartbeatSleeper(budgetedRealSleeper(600))
             .withReaperSleeper(budgetedRealSleeper(600))
         })
     }

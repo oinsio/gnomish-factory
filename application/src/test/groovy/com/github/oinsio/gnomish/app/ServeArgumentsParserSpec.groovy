@@ -163,6 +163,25 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
         ex.message.contains('--dashboard-out requires a value')
     }
 
+    // FR8: a switch takes no value; --dashboard=false turning the dashboard ON (over a configured
+    // factory.serve.dashboard or not) would invert what the operator wrote
+    def "FR8: #flag with a value is a usage error, whatever the configured dashboard"() {
+        when:
+        parser.parse(args('serve', flag), CLONE, configured)
+
+        then:
+        UsageException ex = thrown()
+        ex.message.contains(flag.substring(0, flag.indexOf('=')))
+        ex.message.contains('takes no value')
+
+        where:
+        flag | configured
+        '--dashboard=false' | true
+        '--dashboard=false' | false
+        '--dashboard=true' | false
+        '--drain=false' | false
+    }
+
     // FR4: serve accepts none of these — --interactive included, which no command accepts any more
     def "rejects an inapplicable take-only or run-only flag"() {
         when:

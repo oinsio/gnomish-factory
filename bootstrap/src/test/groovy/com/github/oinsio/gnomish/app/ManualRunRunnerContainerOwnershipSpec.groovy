@@ -28,7 +28,7 @@ import spock.lang.TempDir
  * of collapse-composition-roots) — {@code manual} for {@code gnomish run}, {@code tracked} for
  * {@code take}/{@code serve}.
  *
- * <p>Every other spec of the take/serve path either binds {@code ContainerTakeSupport.hostOnly()}
+ * <p>Every other spec of the take/serve path either binds {@code ContainerTakeSupportFixture.hostOnly()}
  * or hand-builds a support lambda that only claims to mirror this wiring, so none of them can
  * catch the two labels being swapped or collapsed here. This one holds no stand-in for the
  * composition root: the facade is the production one, and each factory is invoked exactly as the

@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.serveobservability.writer
 
 import com.github.oinsio.gnomish.app.daemon.LatchedSleeper
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness
+import com.github.oinsio.gnomish.dashboard.DaemonSnapshotView
+import com.github.oinsio.gnomish.dashboard.SnapshotReader
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
@@ -155,8 +157,9 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
     }
 
     // FR7 (serve-observability "Writer death is not a dead daemon"): the first backoff after a clean
-    //     run is one interval (Unbounded(interval, 10 min)), so the respawned worker's startup write
-    //     lands within two intervals of the death on the writer's own virtual clock.
+    //     run is one interval (Unbounded(interval), capped at MAX_BACKOFF), so the respawned worker's
+    //     startup write lands within two intervals of the death on the writer's own virtual clock,
+    //     and the dashboard classifies the snapshot as fresh at that moment.
     def "FR7: a single writer death is followed by a write within two intervals on virtual time"() {
         given: 'a writer on a virtual clock that only the respawn backoff advances'
         def target = tempDir.resolve('snapshot.json')
@@ -188,5 +191,8 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
         and: 'within two snapshot intervals of the death'
         Duration.between(diedAt.get(), onDisk(target).writtenAt()) <= INTERVAL.multipliedBy(2)
         onDisk(target).lifecycle() instanceof LifecycleState.Running
+
+        and: 'the dashboard, reading two intervals after the death, shows no dead-daemon alarm'
+        new SnapshotReader().read(target, diedAt.get() + INTERVAL.multipliedBy(2)) instanceof DaemonSnapshotView.Fresh
     }
 }

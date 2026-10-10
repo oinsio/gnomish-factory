@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.daemon.LoopOrder;
 import com.github.oinsio.gnomish.app.daemon.LoopShape;
 import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
 import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
@@ -25,16 +26,13 @@ import java.time.InstantSource;
  * lastRunAt}; the thread, the guard, the stop and the restart belong to the {@link SupervisedLoop}
  * it holds: tick → wait on a {@link LoopWait.FixedInterval} of the configured interval, framed as
  * {@link DaemonComponent#SWEEP}, under {@link RestartPolicy.Unbounded} with the interval as the
- * first backoff, capped at 10 minutes. A failed tick, an {@code Error} included, is the loop's
+ * first backoff, capped at {@link RestartBackoff#MAX_BACKOFF}. A failed tick, an {@code Error} included, is the loop's
  * {@code DAEMON_LOOP_TICK_FAILED} with {@code component=sweep}, and the next tick tries again.
  *
  * <p>Implements FR6, NFR-P1, NFR-R3 of add-serve-sandbox-lifecycle; FR6 of
  * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SandboxLifecycleTick {
-
-    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
-    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
 
     private final SandboxLifecyclePass pass;
     private final LivenessOracle livenessOracle;
@@ -68,7 +66,7 @@ public final class SandboxLifecycleTick {
                 DaemonComponent.SWEEP,
                 LoopOrder.TICK_THEN_WAIT,
                 new LoopWait.FixedInterval(time.sleeper(), interval),
-                new RestartPolicy.Unbounded(interval, RESTART_BACKOFF_CAP));
+                new RestartPolicy.Unbounded(interval));
         this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 

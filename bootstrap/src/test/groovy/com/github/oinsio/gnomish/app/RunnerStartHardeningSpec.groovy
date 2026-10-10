@@ -198,7 +198,7 @@ tracker:
         when:
         new TakeFreshClaim(new SlotWiring(
                         assembly, TaskGitFixture.real(), registered(clone), 'taskId',
-                        new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [], ContainerTakeSupport.hostOnly(),
+                        new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [], ContainerTakeSupportFixture.hostOnly(),
                         new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                         new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))).claim(
                 new TakeOrder(new RunOrder(clone, null, pipeline(), false),

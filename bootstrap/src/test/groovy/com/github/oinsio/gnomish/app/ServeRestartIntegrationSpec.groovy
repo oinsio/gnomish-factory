@@ -87,7 +87,7 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
                 new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null, null),
                 new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { FeedAutomaton automaton ->
                     automaton.run()
-                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 LiveConsoleIO.onStderr())
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {

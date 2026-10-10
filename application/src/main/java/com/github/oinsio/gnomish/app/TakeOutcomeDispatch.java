@@ -20,12 +20,13 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
  * D12). Both callers reach this only for a non-aborted-by-revocation, non-revoked outcome; host and
  * container mode differ only in the branch name and the terminal transitions they pass in.
  *
- * <p>Built once per slot by {@link SlotWiring#outcomeDispatch()}, the one construction site (design
- * D22 of supervise-daemon-loops-and-embed-dashboard): the slot-fixed part — the root's
- * terminal-write retry and the slot's abort fuse — is held as fields, the run-fixed part — the
+ * <p>Built by {@link SlotWiring#outcomeDispatch()}, the one construction site (design D22 of
+ * supervise-daemon-loops-and-embed-dashboard), once per run it is handed to: the slot-fixed part —
+ * the terminal-write retry derived from the slot's time equipment and the slot's abort fuse — is
+ * held as fields, the run-fixed part — the
  * outcome and the run's {@link TerminalTransitions} — is the per-call job (design D7 of
  * collapse-composition-roots). <b>Lifetimes:</b> the dispatch holds nothing shorter-lived than the
- * slot — the retry is an immutable record over the root's time equipment, the fuse an immutable
+ * slot — the retry is an immutable record over the slot's time equipment, the fuse an immutable
  * record over the slot's abort handler — and the transitions are valid for one {@link #dispatch}
  * call and never retained.
  *

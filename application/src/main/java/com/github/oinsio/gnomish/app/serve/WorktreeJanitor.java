@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.daemon.LoopOrder;
 import com.github.oinsio.gnomish.app.daemon.LoopShape;
 import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
 import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -41,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * supervise-daemon-loops-and-embed-dashboard). This class owns only its tick and its {@code
  * lastRunAt}; the thread, the guard, the stop and the restart belong to the {@link SupervisedLoop}
  * it holds: tick → wait on a {@link LoopWait.FixedInterval} of {@link #TICK_INTERVAL}, framed as
- * {@link DaemonComponent#JANITOR}, under {@link RestartPolicy.Unbounded} whose 10-minute cap wins
+ * {@link DaemonComponent#JANITOR}, under {@link RestartPolicy.Unbounded} whose shared cap ({@link RestartBackoff#MAX_BACKOFF}) wins
  * over the hour from the first respawn on. A failed tick, an {@code Error} included, is the loop's
  * {@code DAEMON_LOOP_TICK_FAILED} with {@code component=janitor}, and the next tick tries again;
  * the tick's own scan and held-ref lines keep their codes.
@@ -55,9 +56,6 @@ public final class WorktreeJanitor {
 
     /** The fixed recurring cadence after the immediate startup tick (design D10). */
     static final Duration TICK_INTERVAL = Duration.ofHours(1);
-
-    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
-    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
 
     private final Path cloneWorktrees;
     private final Duration ageThreshold;
@@ -94,7 +92,7 @@ public final class WorktreeJanitor {
                 DaemonComponent.JANITOR,
                 LoopOrder.TICK_THEN_WAIT,
                 new LoopWait.FixedInterval(time.sleeper(), TICK_INTERVAL),
-                new RestartPolicy.Unbounded(TICK_INTERVAL, RESTART_BACKOFF_CAP));
+                new RestartPolicy.Unbounded(TICK_INTERVAL));
         this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 

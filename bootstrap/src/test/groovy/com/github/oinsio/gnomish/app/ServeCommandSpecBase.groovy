@@ -104,7 +104,7 @@ advancement: auto
                 testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
                 new TrackerWiring(registry, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
-                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
+                starter, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)

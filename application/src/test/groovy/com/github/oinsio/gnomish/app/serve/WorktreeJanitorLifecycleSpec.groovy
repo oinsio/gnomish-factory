@@ -43,6 +43,9 @@ class WorktreeJanitorLifecycleSpec extends Specification {
 
     RegisteredClone registeredClone
     def ticks = new AtomicInteger()
+    // Every tick that finds the worktree folder reads the held slots once: a tick counter no
+    //     disposal closure shares.
+    def heldReads = new AtomicInteger()
     def sleeper = new BlockingSleeper()
     // FR21 of supervise-daemon-loops-and-embed-dashboard: one virtual source; an aged worktree is aged
     //     against it, not against the wall clock.
@@ -67,8 +70,10 @@ class WorktreeJanitorLifecycleSpec extends Specification {
 
     private WorktreeJanitor janitorOver(Duration ageThreshold, TaskEnvironmentDisposal disposal, Sleeper waits) {
         janitor = new WorktreeJanitor(registeredClone, ageThreshold, disposal, VirtualTimeEquipment.on(clock, waits), {
-            -> Set.of()
-        })
+            ->
+            heldReads.incrementAndGet()
+            Set.of()
+        } as OccupiedSlots)
     }
 
     // The janitor's joining stop on a helper thread; false if it did not return in time.
@@ -232,7 +237,8 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     // FR4 of supervise-daemon-loops-and-embed-dashboard, design D4: stop() cuts the interval wait
     //     short and the janitor ends — no tick follows, nothing warns.
     def "stop ends the janitor during its interval wait, with no tick after it"() {
-        given:
+        given: 'a worktree folder, so every tick reads the held slots and is counted'
+        Files.createDirectories(registeredClone.worktrees())
         def waits = new LatchedSleeper()
         janitorOver(Duration.ofDays(14), { String key -> } as TaskEnvironmentDisposal, waits)
         def stopLogs = LogCaptureSupport.attach(SupervisedLoop, Level.DEBUG)
@@ -242,9 +248,10 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         assert waits.entered.await(BOUND.toMillis(), TimeUnit.MILLISECONDS)
         janitor.stop()
 
-        then: 'the wait was cut short, the thread ended, and the stop was quiet'
+        then: 'the wait was cut short, the thread ended after its startup tick alone, and the stop was quiet'
         waits.returned.await(BOUND.toMillis(), TimeUnit.MILLISECONDS)
         joinedWithinBound()
+        heldReads.get() == 1
         (stopLogs.list.toArray() as List).every {
             it == null || !it.level.isGreaterOrEqual(Level.WARN)
         }

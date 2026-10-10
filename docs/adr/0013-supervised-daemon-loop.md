@@ -73,9 +73,10 @@ blocking (`.claude/rules/lock-scope.md`); the respawn follows that rule's three-
 If something escapes the guard and the thread dies, its uncaught-exception handler asks the
 loop's `RestartPolicy`, a sealed type over `RestartBackoff` (moved from `app.lease`):
 
-- **`Unbounded(base, cap)`** respawns after a doubling backoff from `min(base, cap)`, logging
-  ERROR with the lifetime restart count. It never gives up.
-- **`Bounded(base, cap, maxRestarts, window, clock)`** respawns the same way, but a death that
+- **`Unbounded(base)`** respawns after a doubling backoff from `min(base, cap)`, logging
+  ERROR with the lifetime restart count. It never gives up. The cap is not a parameter: every
+  loop shares `RestartBackoff.MAX_BACKOFF` (ten minutes), so no owner spells its own copy.
+- **`Bounded(base, maxRestarts, window, clock)`** respawns the same way, but a death that
   would make more than `maxRestarts` restarts within `window` logs one ERROR that the loop is
   disabled, and the loop stays down.
 
@@ -99,9 +100,9 @@ stateDiagram-v2
 a failed wait), `DAEMON_LOOP_STRAY_INTERRUPT` (GF153), `DAEMON_LOOP_WORKER_DIED` (GF154),
 `DAEMON_LOOP_GAVE_UP` (GF155) and `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` (GF156). Every line carries
 the loop's `component` MDC key, so `grep component=janitor` still isolates one loop. The per-loop
-codes these replace are retired and never reused: GF067, GF068, GF069 (reaper), GF073 (sweep),
-GF077 (janitor), GF105 (snapshot writer); the observability operator guide maps each one to its
-replacement. Codes raised inside a tick stay with their sites.
+codes these replace (the reaper's, the sweep's, the janitor's and the snapshot writer's own) are
+retired and never reused; the "Retired codes" subsection of the observability operator guide
+lists each one with its replacement and its `component` filter. Codes raised inside a tick stay with their sites.
 
 ## The restart-policy choice
 

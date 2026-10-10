@@ -79,11 +79,16 @@ public final class SupervisedLoop {
 
     /**
      * Stops the loop and returns once no worker remains — including one a death handler spawned
-     * while this call was joining. Waits out a tick in progress; idempotent.
+     * while this call was joining. Waits out a tick in progress, even when the calling thread is
+     * interrupted — the flag is restored on return — so a write the caller makes afterwards is the
+     * last one (design D8 of supervise-daemon-loops-and-embed-dashboard); idempotent.
+     *
+     * @throws IllegalStateException if called from the loop's own worker, which cannot outlive
+     *     itself; the stop is requested all the same, so the loop ends after the current tick
      */
     public void stopAndJoin() {
         control.stop();
-        control.joinWorkers();
+        control.joinWorkersThroughInterrupts();
     }
 
     /**
@@ -100,6 +105,8 @@ public final class SupervisedLoop {
      * — and no worker remains, then says which. An owner whose process has nothing else to do (the
      * standalone {@code gnomish dashboard --watch}) joins its loop here and exits non-zero on a
      * give-up. If the calling thread is interrupted the wait ends early, its flag restored.
+     * Called from the loop's own worker, it throws {@link IllegalStateException} and changes
+     * nothing.
      *
      * <p>Implements FR3, FR9 of supervise-daemon-loops-and-embed-dashboard.
      *

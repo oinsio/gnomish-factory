@@ -1,8 +1,9 @@
 package com.github.oinsio.gnomish.app.daemon;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * The repeat-suppression period of a loop, derived from the loop's own interval (design D2 of
@@ -32,16 +33,8 @@ public final class RollUpPeriod {
      * @param interval the loop's wait between ticks; never null
      * @return six intervals, or the catalog default when that is longer; never null
      */
-    // @DoNotMutate: provably equivalent mutant. The two arms of the comparison return equal
-    //     durations at the boundary — when six intervals are exactly the default, `>` and `>=` both
-    //     yield the default's own value — so no covering test can distinguish the boundary
-    //     mutation (testing.md, "provably equivalent mutant"). RollUpPeriodSpec covers the method
-    //     on both sides of the boundary and on the boundary itself.
-    @DoNotMutate
     public static Duration forInterval(Duration interval) {
-        Duration sixTicks = interval.multipliedBy(TICKS_PER_ROLL_UP);
-        return sixTicks.compareTo(RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL) > 0
-                ? sixTicks
-                : RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL;
+        return Collections.max(
+                List.of(interval.multipliedBy(TICKS_PER_ROLL_UP), RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL));
     }
 }

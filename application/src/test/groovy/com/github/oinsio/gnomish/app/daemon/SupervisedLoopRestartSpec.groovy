@@ -41,7 +41,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             if (n <= 3) throw new SupervisedLoopHarness.Unrenderable()
             rig.stopHere()
-        }, new RestartPolicy.Unbounded(INTERVAL, CAP), backoffSleeper)
+        }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
         when:
         rig.runToStop()
@@ -67,7 +67,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             if (n in [1, 2, 4]) throw new SupervisedLoopHarness.Unrenderable()
             if (n == 5) rig.stopHere()
-        }, new RestartPolicy.Unbounded(INTERVAL, CAP), backoffSleeper)
+        }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
         when:
         rig.runToStop()
@@ -87,7 +87,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
             rig.stopHere()
-        }, new RestartPolicy.Unbounded(Duration.ofHours(1), CAP), backoffSleeper)
+        }, new RestartPolicy.Unbounded(Duration.ofHours(1)), backoffSleeper)
 
         when:
         rig.runToStop()
@@ -102,7 +102,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             rig.stopHere()
             throw new SupervisedLoopHarness.Unrenderable()
-        }, new RestartPolicy.Unbounded(INTERVAL, CAP), backoffSleeper)
+        }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
         when:
         rig.runToStop()
@@ -121,7 +121,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             throw new SupervisedLoopHarness.Unrenderable()
         },
-        new RestartPolicy.Unbounded(INTERVAL, CAP), stoppingSleeper)
+        new RestartPolicy.Unbounded(INTERVAL), stoppingSleeper)
 
         when:
         rig.runToStop()
@@ -140,7 +140,7 @@ class SupervisedLoopRestartSpec extends Specification {
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
             rig.stopHere()
-        }, new RestartPolicy.Unbounded(INTERVAL, CAP), failingSleeper)
+        }, new RestartPolicy.Unbounded(INTERVAL), failingSleeper)
 
         when:
         rig.runToStop()

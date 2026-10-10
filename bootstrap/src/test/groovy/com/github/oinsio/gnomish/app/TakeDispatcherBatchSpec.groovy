@@ -134,7 +134,7 @@ tracker:
         def assembly = newAssembly(testProps(), VirtualTimeEquipment.on(clock))
         def wiring = new SlotWiring(assembly, TaskGitFixture.real(), registeredClone, 'taskId',
                 new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), ABORT_THRESHOLD), [],
-                ContainerTakeSupport.hostOnly(), noopHeartbeat().tenure(),
+                ContainerTakeSupportFixture.hostOnly(), noopHeartbeat().tenure(),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeDispatcher(wiring, testProps(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), VirtualTimeEquipment.create()), confirmation)
     }

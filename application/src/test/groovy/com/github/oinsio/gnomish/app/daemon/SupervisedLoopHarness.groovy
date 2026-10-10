@@ -35,8 +35,27 @@ final class SupervisedLoopHarness {
     /** A failure the guard cannot even describe: reporting it throws, so the worker dies. */
     static final class Unrenderable extends Error {
         @Override
-        String toString() {
+        String getMessage() {
             throw new IllegalStateException('the failure cannot be rendered')
+        }
+    }
+
+    /** A fault whose own words cannot be read: its message throws, so no log line can carry it. */
+    static final class Wordless extends RuntimeException {
+        @Override
+        String getMessage() {
+            throw new IllegalStateException('the message cannot be read')
+        }
+    }
+
+    /**
+     * A failure whose rendering throws a {@link Wordless} fault: the worker dies of a cause that
+     * the death line cannot render either.
+     */
+    static final class UnrenderableTwice extends Error {
+        @Override
+        String getMessage() {
+            throw new Wordless()
         }
     }
 
@@ -78,7 +97,7 @@ final class SupervisedLoopHarness {
     }
 
     SupervisedLoop build(LoopOrder order, LoopWait wait, Closure body,
-            RestartPolicy policy = new RestartPolicy.Unbounded(INTERVAL, CAP),
+            RestartPolicy policy = new RestartPolicy.Unbounded(INTERVAL),
             Sleeper backoffSleeper = { Duration d ->
                 journal << "backoff ${d}".toString()
             } as Sleeper) {

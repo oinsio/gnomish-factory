@@ -60,9 +60,6 @@ public final class DashboardWatch {
     /** The {@code listReady} window of the page's board. */
     private static final int BOARD_READY_LIMIT = 50;
 
-    /** The longest wait before a respawn (design D7 of supervise-daemon-loops-and-embed-dashboard). */
-    private static final Duration RESTART_BACKOFF_CAP = Duration.ofMinutes(10);
-
     /** The restarts the Bounded policy allows within {@link #RESTART_WINDOW} (design D7). */
     private static final int MAX_RESTARTS = 5;
 
@@ -100,8 +97,7 @@ public final class DashboardWatch {
                 DaemonComponent.DASHBOARD,
                 LoopOrder.TICK_THEN_WAIT,
                 new LoopWait.FixedInterval(time.sleeper(), RENDER_CADENCE),
-                new RestartPolicy.Bounded(
-                        RENDER_CADENCE, RESTART_BACKOFF_CAP, MAX_RESTARTS, RESTART_WINDOW, time.clock()));
+                new RestartPolicy.Bounded(RENDER_CADENCE, MAX_RESTARTS, RESTART_WINDOW, time.clock()));
         this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 

@@ -54,8 +54,12 @@ final class TakeCommands {
 
     /** The real sleeper the take specs' background beats wait on; see {@link #beatTime}. */
     static Sleeper realSleeper() {
-        // real-time-wiring: the take lifecycle specs observe the heartbeat's and the reaper's beats on
-        //     their real cadence while a run is in flight; a virtual sleeper would spin those threads.
+        // real-time-wiring: every take spec runs a real fake-agent subprocess and real git, which
+        //     finish on the wall clock, and the heartbeat and the standing reaper wait beside that
+        //     run on their own threads: a virtual sleeper returns at once, so they would spin for
+        //     the whole round. The lifecycle specs (InMemoryTakeHeartbeatLifecycleSpec,
+        //     InMemoryTakeDeathAndRecoverySpec, TakeCommandStandingReaperWiringSpec) also observe
+        //     the beats on that real cadence while the round is in flight.
         new ThreadSleeper()
     }
 

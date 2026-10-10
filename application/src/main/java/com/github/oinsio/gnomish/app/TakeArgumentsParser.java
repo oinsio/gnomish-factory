@@ -63,8 +63,8 @@ final class TakeArgumentsParser {
         Path dir = clone.clonePath();
         List<String> refs = ArgumentsParsingSupport.allPositionalsAfterSubcommand(args, TAKE_TOKEN);
         String base = ArgumentsParsingSupport.singleValue(args, BASE);
-        boolean discardWork = args.containsOption(DISCARD_WORK);
-        boolean takeover = args.containsOption(TAKEOVER);
+        boolean discardWork = SwitchFlag.isOn(args, DISCARD_WORK);
+        boolean takeover = SwitchFlag.isOn(args, TAKEOVER);
         if (refs.isEmpty() && base != null) {
             throw new UsageException(
                     "--base cannot be combined with bare 'take': it is a start modifier for 'take <ref>' only");

@@ -5,12 +5,12 @@ import java.util.regex.Pattern
 import spock.lang.Specification
 
 /**
- * FR18, FR21 and design D17, D20, D22 of supervise-daemon-loops-and-embed-dashboard: real time
- * enters a running factory in one composition-root file, and the time-built slot policies have one
- * producer each (the terminal-write retry and the abort handler are derived from the slot's own
- * time equipment, task 3.9). The types already close most of the escape hatches — no project clock
- * port to adapt, no {@code ThreadSleeper} visible outside {@code :bootstrap}, no {@code system()}
- * factory to call — but {@code InstantSource.system()}, {@code Clock.systemUTC()} and {@code
+ * FR18, FR21, NFR-R4 and design D17, D20, D22 of supervise-daemon-loops-and-embed-dashboard: real
+ * time enters a running factory in one composition-root file, so every other component takes its
+ * time injected and a spec can drive it on virtual time; the time-built slot policies' one producer
+ * each is gated beside it, by {@link SlotPolicyProducerBoundarySpec}. The types already close most
+ * of the escape hatches — no project clock port to adapt, no {@code ThreadSleeper} visible outside
+ * {@code :bootstrap}, no {@code system()} factory to call — but {@code InstantSource.system()}, {@code Clock.systemUTC()} and {@code
  * Instant.now()} are JDK statics no type can hide, so a whole-tree text scan is the gate (the
  * {@link BaseHeadDefaultBoundarySpec} shape, in the one module that sees every layer).
  *
@@ -61,16 +61,6 @@ class TimeSourceOwnerBoundarySpec extends Specification {
         'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/http/EgressAllowlist.java': ['.system'] as Set,
     ]
 
-    /** One-producer constructions (D22): literal → the one production file allowed to spell it. */
-    private static final Map<String, String> ONE_PRODUCER = [
-        // A second producer of the time-built retry is the defect task 3.6 removed; task 3.9 moved
-        // the one producer into the wiring, which derives it from the slot's own time equipment.
-        'new TerminalWriteRetry(': 'application/src/main/java/com/github/oinsio/gnomish/app/SlotWiring.java',
-        // Task 3.9: the slot's abort handler is built over its assembly's clock in exactly one place.
-        'new AbortHandler(': 'application/src/main/java/com/github/oinsio/gnomish/app/SlotWiringFactory.java',
-        'new TakeOutcomeDispatch(': 'application/src/main/java/com/github/oinsio/gnomish/app/SlotWiring.java',
-    ]
-
     /** The factory's production sources, comments stripped later; see the class javadoc for the three exclusions. */
     static List<File> factorySources() {
         RepoSourceTree.productionSources { String path ->
@@ -80,9 +70,7 @@ class TimeSourceOwnerBoundarySpec extends Specification {
 
     /** The literals of {@link #REAL_TIME} this source spells in code, outside comments. */
     static Set<String> realTimeLiterals(String source) {
-        def code = source.readLines().collect {
-            RepoSourceTree.codeOnly(it)
-        }.join('\n')
+        def code = RepoSourceTree.stripComments(source)
         REAL_TIME.findAll { name, pattern ->
             pattern.matcher(code).find()
         }.keySet()
@@ -103,27 +91,6 @@ class TimeSourceOwnerBoundarySpec extends Specification {
 
         then: 'exactly the allowlisted files spell real time, each exactly what it is listed for'
         spelling == REAL_TIME_ALLOWED
-    }
-
-    // FR18, D22: a second construction site of a root-built policy is a second owner.
-    def "FR18, D22: #literal is spelled only in its one producer"() {
-        given:
-        def sources = factorySources()
-
-        expect: 'the scan really reached the tree'
-        sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
-
-        when:
-        def producers = sources.findAll {
-            RepoSourceTree.code(it).contains(literal)
-        }
-        .collect { RepoSourceTree.relative(it) }
-
-        then: 'nothing else constructs it, and the allowlisted producer still does'
-        producers == [ONE_PRODUCER[literal]]
-
-        where:
-        literal << ONE_PRODUCER.keySet().toList()
     }
 
     // D22: the probe seam is ContainerRuntimeProbe, the TTY seam TerminalPresence; a JDK functional
@@ -153,13 +120,22 @@ class TimeSourceOwnerBoundarySpec extends Specification {
                 'build-logic/src/main/groovy/com/github/oinsio/gnomish/build/TestTimeInjectionCheck.groovy').toFile().text
         def block = check.substring(check.indexOf('REAL_TIME = ['), check.indexOf(']', check.indexOf('REAL_TIME = [')))
 
-        when:
-        def checkPatterns = (block =~ /~\/(.+)\/,/).collect {
-            it[1] as String
-        } as Set
+        expect:
+        checkPatterns(block) == REAL_TIME.values()*.pattern() as Set
+    }
 
-        then:
-        checkPatterns == REAL_TIME.values()*.pattern() as Set
+    /** The detectors of the check's literal block; every {@code ~/} entry parsed, or the block is refused. */
+    static Set<String> checkPatterns(String block) {
+        def patterns = (block =~ /(?m)~\/(.+)\/,?\s*$/).collect {
+            it[1] as String
+        }
+        assert patterns.size() == block.count('~/'): "an entry of the check's literal block did not parse: $block"
+        patterns as Set
+    }
+
+    def "FR21: the check's literal block parses whole, its last entry with or without a comma"() {
+        expect:
+        checkPatterns('REAL_TIME = [\n    ~/a\\(/,\n    ~/b\\(/\n') == ['a\\(', 'b\\('] as Set
     }
 
     // Over a clean tree the scans find nothing but the owners, so only seeded sources tell a
@@ -181,7 +157,8 @@ class TimeSourceOwnerBoundarySpec extends Specification {
         'the real sleeper' | 'var s = new ThreadSleeper' + '();' || ['new ThreadSleeper']
         'the deleted adapter' | 'var c = new SystemClock' + '();' || ['new SystemClock']
         'a system() factory' | 'var r = TerminalWriteRetry.system' + '();' || ['.system']
-        'a javadoc mention' | ' * never {@code Instant.now' + '()} here' || []
+        'a javadoc mention' | '/**\n * never {@code Instant.now' + '()} here\n */' || []
+        'a formatter continuation line' | 'long at = base\n        * Instant.now' + '().getNano();' || ['Instant.now']
         'a trailing comment' | 'var at = clock.instant(); // not Instant.now' + '()' || []
     }
 }

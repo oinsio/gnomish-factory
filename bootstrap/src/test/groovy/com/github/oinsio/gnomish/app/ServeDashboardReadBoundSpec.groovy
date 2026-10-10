@@ -62,7 +62,7 @@ class ServeDashboardReadBoundSpec extends ServeCommandSpecBase {
                 new ServeProperties(0, null, null, null, null, null, null, null, null, null),
                 new TrackerWiring([github: new BoardReaderSplitFactory(tracker, boardReader)], MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
-                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 new ScriptedConsoleIO())
 
         when:

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.daemon
 
-import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.CAP
 import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.INTERVAL
 import static com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness.JOIN_BOUND
 
@@ -10,6 +9,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 
 /**
  * The races a stop runs against a respawn (design D4, D5 of
@@ -42,7 +42,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
             tickThreads << Thread.currentThread()
             if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
             body(n)
-        }, new RestartPolicy.Unbounded(INTERVAL, CAP), backoff)
+        }, new RestartPolicy.Unbounded(INTERVAL), backoff)
         rig
     }
 
@@ -109,7 +109,13 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
 
         when:
         def joiner = Thread.ofVirtual().start { rig.loop.stopAndJoin() }
-        boolean returnedEarly = joiner.join(Duration.ofMillis(200))
+        new PollingConditions(timeout: JOIN_BOUND.toSeconds()).eventually {
+            assert joiner.state in [
+                Thread.State.WAITING,
+                Thread.State.TERMINATED
+            ]
+        }
+        boolean returnedEarly = !joiner.alive
         finishTick.countDown()
         boolean returned = joiner.join(JOIN_BOUND)
 

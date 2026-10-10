@@ -58,8 +58,8 @@ import java.util.List;
  * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
  * argument taken from the claim, never derived per medium. A binding that changes on one side and
  * not the other would make the same task read different law in host and container mode. Both end
- * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the root's one
- * terminal-write retry and the slot's abort fuse (design D22 of
+ * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the
+ * terminal-write retry derived from the slot's time equipment and the slot's abort fuse (design D22 of
  * supervise-daemon-loops-and-embed-dashboard); each twin only builds its {@link
  * TerminalTransitions} from its own park and finish closures, so neither can retry or abort a
  * terminal write differently from the other.
@@ -73,7 +73,7 @@ import java.util.List;
  * @param registeredClone the registered clone the task's lifecycle repository is rooted at; its worktree
  *     folder holds the task's worktree (FR9 of add-project-registry); never null
  * @param dispatch the slot's outcome dispatch ({@link SlotWiring#outcomeDispatch()}): the
- *     infrastructure-abort protocol applied when the engine returns {@code Aborted}, and the root's
+ *     infrastructure-abort protocol applied when the engine returns {@code Aborted}, and the slot's
  *     terminal-write retry every park and finish runs under; never null
  * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
  *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into

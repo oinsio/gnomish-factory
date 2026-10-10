@@ -509,7 +509,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        git(), tracker, registeredClone, ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
+        git(), tracker, registeredClone, ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
 
         when:
         def result = resume(chainOver(runner, git()))

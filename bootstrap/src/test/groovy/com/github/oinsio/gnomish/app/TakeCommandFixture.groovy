@@ -42,6 +42,6 @@ trait TakeCommandFixture implements AppAssemblyFixture {
                 factoryProperties,
                 new TrackerWiring(trackerFactories, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 seams,
-                sandboxLifecyclePass, ContainerTakeSupport.hostOnly())
+                sandboxLifecyclePass, ContainerTakeSupportFixture.hostOnly())
     }
 }

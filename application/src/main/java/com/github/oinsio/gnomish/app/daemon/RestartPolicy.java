@@ -46,13 +46,15 @@ public abstract sealed class RestartPolicy permits RestartPolicy.Unbounded, Rest
         private final RestartBackoff backoff;
 
         /**
-         * @param base the first backoff after a clean run, typically the loop's interval; never null
-         * @param cap the longest backoff; when it is below {@code base}, the cap wins from the first
-         *     respawn on; never null
+         * Caps every backoff at {@link RestartBackoff#MAX_BACKOFF} (design D7): the one ceiling every
+         * supervised loop shares, so no owner spells its own.
+         *
+         * @param base the first backoff after a clean run, typically the loop's interval; when it is
+         *     above the cap, the cap wins from the first respawn on; never null
          */
-        public Unbounded(Duration base, Duration cap) {
-            this.firstBackoff = Collections.min(List.of(base, cap));
-            this.backoff = new RestartBackoff(cap);
+        public Unbounded(Duration base) {
+            this.firstBackoff = Collections.min(List.of(base, RestartBackoff.MAX_BACKOFF));
+            this.backoff = new RestartBackoff();
         }
 
         @Override
@@ -84,14 +86,13 @@ public abstract sealed class RestartPolicy permits RestartPolicy.Unbounded, Rest
         private final Deque<Instant> recentRestarts = new ArrayDeque<>();
 
         /**
-         * @param base the first backoff after a clean run; never null
-         * @param cap the longest backoff; never null
+         * @param base the first backoff after a clean run, capped like {@link Unbounded}'s; never null
          * @param maxRestarts the restarts allowed within {@code window}; the next death gives up
          * @param window the sliding period restarts are counted over; never null
          * @param clock the time source the window is measured on; never null
          */
-        public Bounded(Duration base, Duration cap, int maxRestarts, Duration window, InstantSource clock) {
-            this.respawns = new Unbounded(base, cap);
+        public Bounded(Duration base, int maxRestarts, Duration window, InstantSource clock) {
+            this.respawns = new Unbounded(base);
             this.maxRestarts = maxRestarts;
             this.window = window;
             this.clock = clock;

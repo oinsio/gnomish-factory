@@ -105,7 +105,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag())) {
         new SlotWiring(assembly, git, registeredClone, 'taskId',
                 new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), ABORT_THRESHOLD),
-                credentialEnvVarsToScrub, ContainerTakeSupport.hostOnly(), tenure,
+                credentialEnvVarsToScrub, ContainerTakeSupportFixture.hostOnly(), tenure,
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
     }
 

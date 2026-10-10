@@ -95,7 +95,7 @@ advancement: auto
                 factoryProperties,
                 new TrackerWiring([github: new FixedTrackerAdapterFactory({
                         tracker
-                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     private void seedReady(TaskRef ref, TaskDesignators designators = TaskDesignators.none()) {
