@@ -159,7 +159,7 @@ class DaemonLoopOwnerBoundarySpec extends Specification {
         where:
         shape | source
         'the current thread' | 'Thread.currentThread().interrupt();'
-        'a name containing Thread' | 'var t = new ThreadSleeper();'
+        'a name containing Thread' | 'var t = new ThreadLocal<String>();'
         'a join' | 'worker.join();'
     }
 

@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
-
 import java.io.Serial;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -36,12 +35,13 @@ final class LoopEvents {
     }
 
     /**
-     * Reports a failure of the tick or the wait. The reason is the step plus the failure's {@link
-     * FailureReason}, so a different fault restarts the streak; reading it is where a failure whose
-     * {@code getMessage} itself throws escapes the guard and ends the thread — the policy's rung
-     * then takes over.
+     * Reports a failure of the tick or the wait — an {@code Exception}; an {@code Error} never
+     * reaches here, it ends the worker (design D2 as amended). The reason is the step plus the
+     * failure's {@link FailureReason}, so a different fault restarts the streak. A failure whose
+     * reporting itself throws (a {@code getMessage} that throws) still ends the thread — the rare
+     * case now, not the only one — and the policy's rung takes over.
      */
-    void failed(String step, Throwable failure) {
+    void failed(String step, Exception failure) {
         String reason = step + " failed: " + FailureReason.of(failure);
         switch (suppressor.failed(streakKey, reason)) {
             case RepeatOccurrence.First first -> warnFailing(first.reason(), 1, failure);

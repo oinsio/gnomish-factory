@@ -54,14 +54,6 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     private static final String INSTANCE_NAME = 'factory-01' // FakeAgentSupport.propertiesFor's instance name
     private static final long GATE_SECONDS = 30
 
-    /** A failure the loop's guard cannot even describe, so it escapes the guard and ends the worker. */
-    static final class Unrenderable extends Error {
-        @Override
-        String getMessage() {
-            throw new IllegalStateException('the failure cannot be rendered')
-        }
-    }
-
     @TempDir
     Path tempDir
 
@@ -138,13 +130,13 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
 
     // FR10, NFR-R1, UX4 (factory-serve "Disabled dashboard, working daemon"), D7: Bounded 5 in 10 min.
     def "NFR-R1, UX4: a dashboard disabled by tick Errors leaves the daemon claiming and completing tasks"() {
-        given: 'a board reader whose reads throw an Error the guard cannot render, so each kills the worker'
+        given: 'a board reader whose reads throw an Error, which the loop\'s guard lets through, so each kills the worker'
         def boardReads = new AtomicInteger()
         def boardReader = new InMemoryTracker() {
                     @Override
                     List<ReadyTask> listReady(int limit) {
                         if (boardReads.incrementAndGet() <= 6) {
-                            throw new Unrenderable()
+                            throw new Error('board read died')
                         }
                         throw new IllegalStateException('board outage')
                     }

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
 import com.github.oinsio.gnomish.app.daemon.LatchedSleeper
-import com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness
 import com.github.oinsio.gnomish.dashboard.DaemonSnapshotView
 import com.github.oinsio.gnomish.dashboard.SnapshotReader
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -27,9 +26,9 @@ import spock.util.concurrent.PollingConditions
 /**
  * The final {@code stopped} snapshot against a writer death (task 5.2 of
  * supervise-daemon-loops-and-embed-dashboard, design D4, D5, D8; M5), on real threads per {@code
- * lock-scope.md} "Specs". The death is real: the write cycle throws a failure whose own rendering
- * throws ({@link SupervisedLoopHarness.Unrenderable}), so the loop's guard cannot report it, the
- * worker thread ends and its death handler waits the respawn backoff in a {@link LatchedSleeper}
+ * lock-scope.md} "Specs". The death is real: the write cycle throws an {@code Error}, which the
+ * loop's {@code Exception} guard lets through (design D2 as amended), so the worker thread ends
+ * and its death handler waits the respawn backoff in a {@link LatchedSleeper}
  * while the spec calls {@link SnapshotWriter#stopAfterFinalWrite()} from another thread. The
  * supplier is the counting writer: every write consults it exactly once, so its journal is the
  * sequence of writes. Also the serve-observability scenario "Writer death is not a dead daemon", on
@@ -69,7 +68,7 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
             }
             if (calls.incrementAndGet() == 2) {
                 writes << 'died'
-                throw new SupervisedLoopHarness.Unrenderable()
+                throw new Error('write cycle died')
             }
             writes << (stopping.get() ? 'stopped' : 'running')
             stopping.get() ? SnapshotWriterSpec.stoppedSnapshot() : SnapshotWriterSpec.fixtureSnapshot()
@@ -170,7 +169,7 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
             ->
             if (calls.incrementAndGet() == 2) {
                 diedAt.set(clock.instant())
-                throw new SupervisedLoopHarness.Unrenderable()
+                throw new Error('write cycle died')
             }
             SnapshotWriterSpec.fixtureSnapshot()
         }, new SnapshotJsonMapper(), INTERVAL, VirtualTimeEquipment.on(clock), 0)

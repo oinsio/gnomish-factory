@@ -12,15 +12,14 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import spock.lang.Specification
-import spock.lang.Timeout
-import spock.util.concurrent.PollingConditions
-
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
+import spock.lang.Specification
+import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 /**
  * Task 4.2 of fix-reaper-idle-liveness: the wiring proof that a real {@code take} run (through
  * {@link TakeCommand}, exactly like {@link TakeDeathAndRecoverySpecBase} and {@link

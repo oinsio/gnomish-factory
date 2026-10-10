@@ -10,9 +10,11 @@ import spock.lang.Timeout
 
 /**
  * The supervised loop's cycle and its level-1 guard (design D1, D2 of
- * supervise-daemon-loops-and-embed-dashboard): both orders, the {@code Throwable} guard around the
- * tick and the wait, and the failure edges it logs. Virtual time: the sleepers journal instead of
- * sleeping. The wait kinds are {@code SupervisedLoopWaitSpec}'s subject.
+ * supervise-daemon-loops-and-embed-dashboard, D2 as amended 2026-10-10): both orders, the {@code
+ * Exception} guard around the tick and the wait, the failure edges it logs, and the {@code Error}
+ * that leaves the guard for the restart policy. Virtual time: the sleepers journal instead of
+ * sleeping. The wait kinds are {@code SupervisedLoopWaitSpec}'s subject; the policies are
+ * {@code SupervisedLoopRestartSpec}'s and {@code SupervisedLoopBoundedSpec}'s.
  */
 @Timeout(10)
 class SupervisedLoopSpec extends Specification {
@@ -63,12 +65,13 @@ class SupervisedLoopSpec extends Specification {
         ]*.toString()
     }
 
-    // FR2: an Error from the tick is a WARN with the component's code and key; the loop goes on to
-    //     its wait and ticks again, and the clean tick announces the recovery.
-    def "an Error thrown by the tick is logged and the loop waits and ticks again"() {
+    // FR2 (daemon-supervision "An Exception in the work does not end the loop"): an Exception from
+    //     the tick is a WARN with the component's code and key; the loop goes on to its wait and
+    //     ticks again, and the clean tick announces the recovery.
+    def "an Exception thrown by the tick is logged and the loop waits and ticks again"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
-            if (n == 1) throw new Error('tick broke')
+            if (n == 1) throw new IllegalStateException('tick broke')
             rig.stopHere()
         }
 
@@ -83,19 +86,47 @@ class SupervisedLoopSpec extends Specification {
         ]*.toString()
         def warn = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).first()
         warn.level == Level.WARN
-        warn.formattedMessage.contains('tick failed: java.lang.Error: tick broke')
-        warn.throwableProxy.className == 'java.lang.Error'
+        warn.formattedMessage.contains('tick failed: java.lang.IllegalStateException: tick broke')
+        warn.throwableProxy.className == IllegalStateException.name
         warn.MDCPropertyMap['component'] == 'janitor'
         rig.atLevel(Level.INFO)*.formattedMessage.any {
             it.contains('recovered after 1 failure')
         }
     }
 
+    // FR2, FR3 (daemon-supervision "An Error in the work ends the worker and the restart policy
+    //     takes over"): no tick-failed WARN; the worker dies with one ERROR death line, and the
+    //     Unbounded policy respawns it after one backoff, where it ticks again.
+    def "an Error in the work ends the worker and the restart policy takes over"() {
+        given:
+        rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
+            if (n == 1) throw new Error('tick broke for good')
+            rig.stopHere()
+        }
+
+        when:
+        rig.runToStop()
+
+        then: 'the death, the backoff, then the respawned worker ticks again'
+        rig.journal == [
+            'tick1',
+            "backoff ${INTERVAL}",
+            'tick2'
+        ]*.toString()
+        rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).isEmpty()
+        def died = rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].throwableProxy.className == Error.name
+        died[0].MDCPropertyMap['component'] == 'janitor'
+        rig.loop.restartCount() == 1
+    }
+
     // FR2 (daemon-supervision "A throwing wait does not end the loop").
-    def "an Error thrown by the wait is logged and the loop ticks again"() {
+    def "an Exception thrown by the wait is logged and the loop ticks again"() {
         given:
         def wait = rig.fixedWait { n ->
-            if (n == 1) throw new Error('sleep broke')
+            if (n == 1) throw new IllegalStateException('sleep broke')
         }
         rig.build(LoopOrder.WAIT_THEN_TICK, wait) { n -> rig.stopHere() }
 
@@ -106,7 +137,7 @@ class SupervisedLoopSpec extends Specification {
         rig.journal == ["wait ${INTERVAL}", 'tick1']*.toString()
         def warns = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
         warns.size() == 1
-        warns[0].formattedMessage.contains('wait failed: java.lang.Error: sleep broke')
+        warns[0].formattedMessage.contains('wait failed: java.lang.IllegalStateException: sleep broke')
     }
 
     // FR2, NFR-O1 (daemon-supervision "Repeated failures of a loop log edges"): one WARN, DEBUG

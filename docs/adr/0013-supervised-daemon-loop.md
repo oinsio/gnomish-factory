@@ -2,7 +2,9 @@
 
 Status: accepted (2026-10-09, introduced by `supervise-daemon-loops-and-embed-dashboard`; its
 design D1–D3, D5 and D6 took these decisions, recorded here because a change's `design.md`
-archives with the change and governs nothing afterwards)
+archives with the change and governs nothing afterwards); amended 2026-10-10 (D2 of the same
+change, as amended: the guard catches `Exception`, and an `Error` ends the worker for the restart
+policy to decide)
 
 ## Context
 
@@ -43,13 +45,28 @@ loopWait, RestartPolicy policy)`, its tick and the `TimeEquipment` it already ho
   for the snapshot writer, whose `signal()` backs `markDirty()` and whose surplus wakes coalesce.
 - `DaemonComponent` names the loop: `reaper`, `janitor`, `sweep`, `snapshot`, `dashboard`.
 
-### The guard catches `Throwable`, and failures log as edges (D2)
+### The guard catches `Exception`; an `Error` ends the worker and the policy decides (D2)
 
-The tick and the wait each run inside `catch (Throwable)`; after a failed tick the loop waits,
+The tick and the wait each run inside `catch (Exception)`; after a failed tick the loop waits,
 after a failed wait it ticks. Failures go to a `RepeatSuppressor` keyed by the component: the
 first failure or a changed reason logs WARN, repeats log DEBUG with a periodic counted roll-up,
 and the first clean tick after a streak logs one INFO recovery line. A clean tick also resets the
-restart backoff.
+restart backoff. An `Error` is not caught: it leaves the guard, the worker thread dies, and the
+restart policy (D5) decides — a respawn with backoff, or a give-up. The wait stays inside the
+loop's control either way, so a throwing sleeper is an `Exception` edge and a stop never races the
+death.
+
+*Amended 2026-10-10.* The guard first caught `Throwable`, as `fix-reaper-idle-liveness` had
+settled it for the reaper, and kept the restart policy for "whatever still escapes" — which was
+only the guard's own reporting (a message that throws, a logger fault). Two mechanisms covered one
+concern, and the second was reachable only through a crack in the first; every spec of the restart
+path had to kill the worker with a message-throwing fixture, in 37 places across 15 spec files.
+The sources draw the line where it is drawn now: a worker catches what it can recover from and
+lets the rest end the thread for a handler to decide (*Java Concurrency in Practice* §7.3,
+`ThreadPoolExecutor.runWorker`, Akka's default decider), and `Error` is "serious problems that a
+reasonable application should not try to catch" (its javadoc; *Effective Java* item 70; Sonar
+S1181; CERT ERR08-J). A death is no longer silent — it is an ERROR line, a backoff and a respawn —
+so the total guard only duplicated D5 and hid it from every test.
 
 The suppressor is the loop's own. `SupervisedLoop` builds it from its equipment's clock, with a
 roll-up period from `RollUpPeriod.forInterval`: six of the loop's intervals, never less than the
@@ -70,8 +87,9 @@ blocking (`.claude/rules/lock-scope.md`); the respawn follows that rule's three-
 
 ### Restart policies (D5)
 
-If something escapes the guard and the thread dies, its uncaught-exception handler asks the
-loop's `RestartPolicy`, a sealed type over `RestartBackoff` (moved from `app.lease`):
+When an `Error` ends the worker (or, the rare case, the guard's own reporting throws), its
+uncaught-exception handler asks the loop's `RestartPolicy`, a sealed type over `RestartBackoff`
+(moved from `app.lease`):
 
 - **`Unbounded(base)`** respawns after a doubling backoff from `min(base, cap)`, logging
   ERROR with the lifetime restart count. It never gives up. The cap is not a parameter: every
@@ -83,8 +101,8 @@ loop's `RestartPolicy`, a sealed type over `RestartBackoff` (moved from `app.lea
 ```mermaid
 stateDiagram-v2
     [*] --> Running: start
-    Running --> Running: tick or wait failed (WARN edge)
-    Running --> Died: failure escaped the guard
+    Running --> Running: tick or wait threw an Exception (WARN edge)
+    Running --> Died: tick or wait threw an Error
     Died --> Backoff: policy says respawn (ERROR)
     Backoff --> Running: stopping still clear
     Died --> Disabled: Bounded budget spent (ERROR)
@@ -149,8 +167,18 @@ roll-up default read only in `RollUpPeriod.java`. Every allowlisted file is asse
 - **Per-loop operator codes passed in as parameters.** The log-contract gate requires a literal
   `OperatorEvent.X` at the site, so this needs five exemptions; per-loop logging callbacks are four
   near-identical log methods per loop, the copy this decision removes.
-- **`catch (RuntimeException)` with the wait outside the guard.** An `Error` or a throwing sleeper
-  still kills the thread — the shape `fix-reaper-idle-liveness` named a defect.
+- **`catch (RuntimeException)` with the wait outside the guard.** Rejected for the wait, not for
+  the catch type: a sleeper outside the guard kills the thread with no edge and no handler of the
+  loop's own — the shape `fix-reaper-idle-liveness` named a defect. The wait stays inside the
+  loop's control, so a throwing sleeper is an `Exception` edge.
+- **`catch (Throwable)` around tick and wait** (the original D2, 2026-10-09). Its case is real:
+  four loops once died silently from an `Error` or a throwing sleeper. But that argument predates
+  the supervisor — a death is now an ERROR line, a backoff and a respawn — so the total guard only
+  duplicated the restart policy and hid it from every test (amended 2026-10-10).
+- **Escalating `VirtualMachineError` to a process exit**, as Cassandra's `JVMStabilityInspector`
+  and Kafka's `FatalExitError` do. A different decision with a different cost for a factory
+  holding live task slots; deferred to a change of its own. Here every `Error` goes through the
+  policy.
 - **Treating any interrupt as a stop.** A stray interrupt would end the loop silently.
 - **`Unbounded` for the dashboard.** An endless ERROR stream for an optional view.
 
@@ -159,8 +187,10 @@ roll-up default read only in `RollUpPeriod.java`. Every allowlisted file is asse
 - A new daemon loop is a `LoopShape` and a tick; it inherits the guard, the stop, the restart and
   the logging, and the boundary spec fails a loop written any other way.
 - A stop waits out a tick in progress, at most one file write for the writer and the dashboard.
-- Catching `Throwable` keeps a loop alive through `OutOfMemoryError`, as the reaper already did;
-  the first occurrence still logs WARN.
+- An `OutOfMemoryError` in a tick is a death with a backoff, not a continue: one ERROR line per
+  death, bounded by the policy's cap, and a `Bounded` loop may give up on it. A JVM that is really
+  out of memory fails louder elsewhere; whether a `VirtualMachineError` should end the process is
+  deferred (Alternatives Considered).
 
 ## See also
 

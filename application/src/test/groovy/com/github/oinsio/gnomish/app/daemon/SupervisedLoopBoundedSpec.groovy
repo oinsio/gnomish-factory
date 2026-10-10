@@ -39,7 +39,7 @@ class SupervisedLoopBoundedSpec extends Specification {
         given:
         def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            throw new SupervisedLoopHarness.Unrenderable()
+            throw new Error('tick died')
         },
         policy, backoffSleeper)
 
@@ -83,7 +83,7 @@ class SupervisedLoopBoundedSpec extends Specification {
         given:
         def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n in [1, 3]) throw new SupervisedLoopHarness.Unrenderable()
+            if (n in [1, 3]) throw new Error('tick died')
             if (n == 4) rig.stopHere()
         }, policy, backoffSleeper)
 
@@ -104,7 +104,7 @@ class SupervisedLoopBoundedSpec extends Specification {
         def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             clock.advance(Duration.ofMinutes(10))
-            if (n <= 7) throw new SupervisedLoopHarness.Unrenderable()
+            if (n <= 7) throw new Error('tick died')
             rig.stopHere()
         }, policy, backoffSleeper)
 
@@ -123,7 +123,7 @@ class SupervisedLoopBoundedSpec extends Specification {
         def stopOnRead = { -> rig.stopHere(); Instant.EPOCH } as InstantSource
         def policy = new RestartPolicy.Bounded(INTERVAL, 5, Duration.ofMinutes(10), stopOnRead)
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            throw new SupervisedLoopHarness.Unrenderable()
+            throw new Error('tick died')
         },
         policy, backoffSleeper)
 

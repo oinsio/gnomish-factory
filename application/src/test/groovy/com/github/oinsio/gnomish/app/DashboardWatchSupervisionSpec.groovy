@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop
-import com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
@@ -126,7 +125,7 @@ class DashboardWatchSupervisionSpec extends Specification {
         def backoffs = Collections.synchronizedList([])
         def sleeper = { Duration d ->
             if (calls.incrementAndGet() % 2 == 1) {
-                throw new SupervisedLoopHarness.Unrenderable()
+                throw new Error('cadence wait killed the watch thread')
             }
             backoffs << d
             clock.advance(d)

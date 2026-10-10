@@ -22,8 +22,13 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * <p>Every wait on it is bounded, so a broken loop fails its feature instead of hanging it (and a
  * mutant is KILLED rather than TIMED_OUT): a loop past {@link #RUNAWAY} ticks or waits is stopped
- * and its worker killed with an {@code Unrenderable}, and {@code #close()} joins for a bounded time
+ * and its worker killed with a plain {@code Error}, and {@code #close()} joins for a bounded time
  * and fails the feature if the loop ran away.
+ *
+ * <p>Specs kill a worker with a plain {@code Error} (design D5, fixtures): the guard catches
+ * {@code Exception} only, so an {@code Error} ends the thread by the rule, not through a crack in
+ * the reporting. {@code Wordless} and {@code UnrenderableTwice} serve {@code
+ * SupervisedLoopDeathLineSpec} alone, where the death line's own rendering is the subject.
  */
 final class SupervisedLoopHarness {
 
@@ -31,14 +36,6 @@ final class SupervisedLoopHarness {
     static final Duration CAP = Duration.ofMinutes(10)
     static final int RUNAWAY = 500
     static final Duration JOIN_BOUND = Duration.ofSeconds(2)
-
-    /** A failure the guard cannot even describe: reporting it throws, so the worker dies. */
-    static final class Unrenderable extends Error {
-        @Override
-        String getMessage() {
-            throw new IllegalStateException('the failure cannot be rendered')
-        }
-    }
 
     /** A fault whose own words cannot be read: its message throws, so no log line can carry it. */
     static final class Wordless extends RuntimeException {
@@ -49,8 +46,8 @@ final class SupervisedLoopHarness {
     }
 
     /**
-     * A failure whose rendering throws a {@link Wordless} fault: the worker dies of a cause that
-     * the death line cannot render either.
+     * An {@code Error} that kills the worker and whose own message throws a {@link Wordless} fault:
+     * the death line cannot render its cause either.
      */
     static final class UnrenderableTwice extends Error {
         @Override
@@ -114,7 +111,7 @@ final class SupervisedLoopHarness {
         if (n> RUNAWAY) {
             runaway = true
             stopHere()
-            throw new Unrenderable()
+            throw new Error('loop ran away')
         }
     }
 

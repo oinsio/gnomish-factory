@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -33,7 +32,7 @@ final class DashboardCommandFixture {
     /** Kills the loop thread on every wait, the backoff's included. */
     static Sleeper killingSleeper() {
         return { Duration d ->
-            throw new SupervisedLoopHarness.Unrenderable()
+            throw new Error('wait killed the watch thread')
         } as Sleeper
     }
 
@@ -46,7 +45,7 @@ final class DashboardCommandFixture {
         return { Duration d ->
             if (calls.incrementAndGet() % 2 == 1) {
                 onCadenceWait(d)
-                throw new SupervisedLoopHarness.Unrenderable()
+                throw new Error('cadence wait killed the watch thread')
             }
         } as Sleeper
     }

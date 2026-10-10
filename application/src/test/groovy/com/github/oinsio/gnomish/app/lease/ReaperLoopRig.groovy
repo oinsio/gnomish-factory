@@ -20,7 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * whose sleeper never blocks, so its interval waits and its restart backoffs both land in one
  * {@link #journal}, in the order the reaper's threads made them, next to its numbered ticks. A
  * tick body ends the run with {@code #stopHere()}; every wait on the rig is bounded, so a broken
- * loop fails its feature rather than hanging it.
+ * loop fails its feature rather than hanging it. A tick that must kill the thread throws a plain
+ * {@code Error}: the loop's guard catches {@code Exception} only (design D2 as amended, D5).
  *
  * <p>Lines are read from the supervised loop's own logger, which is where the reaper's loop
  * events are emitted now that the loop is the component's ({@code DAEMON_LOOP_*}, design D6).
@@ -29,14 +30,6 @@ final class ReaperLoopRig {
 
     static final Duration BOUND = Duration.ofSeconds(5)
     static final int RUNAWAY = 200
-
-    /** A failure the loop's guard cannot even describe: reporting it throws, so the thread dies. */
-    static final class Unrenderable extends Error {
-        @Override
-        String getMessage() {
-            throw new IllegalStateException('the failure cannot be rendered')
-        }
-    }
 
     final List<String> journal = Collections.synchronizedList([])
     final AtomicInteger ticks = new AtomicInteger()

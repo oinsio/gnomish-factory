@@ -15,9 +15,10 @@ import spock.lang.Timeout
  * The death handler's own lines (design D5 of supervise-daemon-loops-and-embed-dashboard): the
  * handler runs in the worker's uncaught-exception handler, where the JVM drops whatever it throws,
  * so a cause the log line cannot render must neither skip the respawn nor erase the line. Each
- * feature hands the handler a {@link SupervisedLoopHarness.Wordless} fault — one whose message
- * throws — and asserts the supervision went on and the line was still written, its cause replaced
- * by a stand-in that names the fault's type.
+ * feature hands the handler a fault whose message throws — an {@link
+ * SupervisedLoopHarness.UnrenderableTwice} killing the worker, a {@link
+ * SupervisedLoopHarness.Wordless} failing the backoff wait — and asserts the supervision went on
+ * and the line was still written, its cause replaced by a stand-in that names the fault's type.
  */
 @Timeout(10)
 class SupervisedLoopDeathLineSpec extends Specification {
@@ -49,7 +50,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
         died[0].MDCPropertyMap['component'] == 'janitor'
         died[0].formattedMessage.contains('restart #1')
         died[0].throwableProxy.className == LoopEvents.UnrenderableCause.name
-        died[0].throwableProxy.message.contains(SupervisedLoopHarness.Wordless.name)
+        died[0].throwableProxy.message.contains(SupervisedLoopHarness.UnrenderableTwice.name)
     }
 
     // FR3, FR9: the give-up is recorded, and logged, even when its cause cannot be rendered.
@@ -70,7 +71,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
         gaveUp.size() == 1
         gaveUp[0].level == Level.ERROR
         gaveUp[0].throwableProxy.className == LoopEvents.UnrenderableCause.name
-        gaveUp[0].throwableProxy.message.contains(SupervisedLoopHarness.Wordless.name)
+        gaveUp[0].throwableProxy.message.contains(SupervisedLoopHarness.UnrenderableTwice.name)
     }
 
     // FR3: a backoff wait failing with an unrenderable fault is logged and the respawn goes ahead.
@@ -80,7 +81,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
             throw new SupervisedLoopHarness.Wordless()
         } as Sleeper
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
+            if (n == 1) throw new Error('tick died')
             rig.stopHere()
         }, new RestartPolicy.Unbounded(INTERVAL), failingSleeper)
 

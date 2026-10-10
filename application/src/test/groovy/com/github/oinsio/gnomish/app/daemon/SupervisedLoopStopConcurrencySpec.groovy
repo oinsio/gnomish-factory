@@ -14,7 +14,7 @@ import spock.util.concurrent.PollingConditions
 /**
  * The races a stop runs against a respawn (design D4, D5 of
  * supervise-daemon-loops-and-embed-dashboard), on real threads per {@code lock-scope.md} "Specs":
- * the worker dies for real (a failure whose rendering throws escapes the guard), its death handler
+ * the worker dies for real (an {@code Error} from the tick leaves the guard), its death handler
  * sits in a {@link LatchedSleeper} backoff, and the spec stops the loop from another thread. The
  * threads a loop starts are observed through the ticks they run. A stop that meets a tick or a
  * wait is {@code SupervisedLoopStopRunConcurrencySpec}'s subject.
@@ -40,7 +40,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
         rigs << rig
         rig.build(LoopOrder.TICK_THEN_WAIT, new LoopWait.FixedInterval(waitSleeper, INTERVAL), { n ->
             tickThreads << Thread.currentThread()
-            if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
+            if (n == 1) throw new Error('tick died')
             body(n)
         }, new RestartPolicy.Unbounded(INTERVAL), backoff)
         rig

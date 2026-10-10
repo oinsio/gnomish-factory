@@ -46,14 +46,6 @@ class VitalsSnapshotAssemblerSpec extends Specification {
     private final VirtualClock clock = new VirtualClock()
     private final AtomicBoolean dies = new AtomicBoolean(true)
 
-    /** A failure the reaper loop's guard cannot even describe: reporting it throws, so the thread dies. */
-    private static final class Unrenderable extends Error {
-        @Override
-        String toString() {
-            throw new IllegalStateException('the failure cannot be rendered')
-        }
-    }
-
     private InstanceHeartbeat newHeartbeat() {
         new InstanceHeartbeat(
                 tracker,
@@ -116,13 +108,13 @@ class VitalsSnapshotAssemblerSpec extends Specification {
     //     visible in the snapshot"): the reaper's thread dies and is respawned by its supervised
     //     loop; a snapshot assembled afterwards shows the grown vitals.reaper.restartCount.
     def "a snapshot after the reaper's thread was respawned shows a grown restartCount"() {
-        given: 'a reaper whose first tick dies past its loop guard, and whose second tick stops it'
+        given: 'a reaper whose first tick throws an Error past its loop guard, and whose second tick stops it'
         def logs = LogCaptureSupport.attach(SupervisedLoop)
         def secondTick = new CountDownLatch(1)
         StandingReaper reaper
         def duty = { Collection<TaskRef> own ->
             if (dies.getAndSet(false)) {
-                throw new Unrenderable()
+                throw new Error('duty died')
             }
             reaper.stop()
             secondTick.countDown()

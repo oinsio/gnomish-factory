@@ -10,10 +10,11 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  * in ADR 0013 ({@code docs/adr/0013-supervised-daemon-loop.md}) and the checklist for a new loop
  * in {@code .claude/rules/daemon-loops.md}.
  *
- * <p><b>Level 1, the guard (D2).</b> The tick and the wait each run inside {@code catch
- * (Throwable)}: a failure of either is reported as an edge ({@link LoopEvents}) and the loop goes
- * on — after a failed tick to its wait, after a failed wait to its tick. A clean tick ends the
- * failure streak and resets the policy's backoff.
+ * <p><b>Level 1, the guard (D2, as amended 2026-10-10).</b> The tick and the wait each run inside
+ * {@code catch (Exception)}: a failure of either is reported as an edge ({@link LoopEvents}) and
+ * the loop goes on — after a failed tick to its wait, after a failed wait to its tick. A clean tick
+ * ends the failure streak and resets the policy's backoff. An {@link Error} is not caught: it
+ * leaves the guard, the worker dies, and level 2 decides.
  *
  * <p><b>The suppressor is the loop's own (D2).</b> The loop builds its {@link RepeatSuppressor}
  * from the clock of the {@link TimeEquipment} it is given and a roll-up period derived from its wait's interval by
@@ -30,9 +31,9 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  * progress — an interrupt for a sleeper, a signal for {@link LoopWait.IntervalOrSignal}. A tick is
  * never interrupted: it completes and the loop ends at the check before its next wait.
  *
- * <p><b>Level 2, the restart (D4, D5).</b> If something escapes the guard (the failure's own
- * rendering throwing, say), the worker's uncaught-exception handler asks the {@link RestartPolicy}
- * in three phases: decide under the lock, wait the backoff with nothing held (a stop cuts it
+ * <p><b>Level 2, the restart (D4, D5).</b> When an {@code Error} ends the worker — or, the rare
+ * case, when the guard's own reporting throws — the worker's uncaught-exception handler asks the
+ * {@link RestartPolicy} in three phases: decide under the lock, wait the backoff with nothing held (a stop cuts it
  * short like any wait), then re-check {@code stopping} under the lock and spawn only if it is
  * still clear — so no respawn ever follows a stop.
  *
@@ -134,7 +135,7 @@ public final class SupervisedLoop {
     private void tickGuarded() {
         try {
             tick.run();
-        } catch (Throwable failure) {
+        } catch (Exception failure) {
             events.failed("tick", failure);
             return;
         }
@@ -155,7 +156,7 @@ public final class SupervisedLoop {
             }
             try {
                 wait.await();
-            } catch (Throwable failure) {
+            } catch (Exception failure) {
                 events.failed("wait", failure);
             } finally {
                 control.leaveWait();

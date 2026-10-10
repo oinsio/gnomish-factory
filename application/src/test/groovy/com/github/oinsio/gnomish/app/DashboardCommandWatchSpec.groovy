@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.daemon.SupervisedLoopHarness
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -84,13 +83,15 @@ class DashboardCommandWatchSpec extends Specification implements ApplicationArgu
 
     @Timeout(5)
     def "FR9: a --watch that ends without a give-up keeps its normal exit"() {
-        given: 'a loop that renders, then waits until released'
+        given: 'a loop that renders, then parks in its wait for good'
+        // The command owns the loop and exposes no stop, so this spec cannot end it: the wait parks
+        //     the worker for the rest of the JVM (a daemon virtual thread) rather than killing it,
+        //     which would spray six death lines and a give-up into the next spec's log capture.
         def waiting = new CountDownLatch(1)
-        def released = new CountDownLatch(1)
+        def parked = new CountDownLatch(1)
         def sleeper = { Duration d ->
             waiting.countDown()
-            released.await(5, TimeUnit.SECONDS)
-            throw new SupervisedLoopHarness.Unrenderable()
+            parked.await()
         } as Sleeper
         def command = newCommand(sleeper)
         def out = tempDir.resolve('watch-ended.html')
@@ -116,8 +117,5 @@ class DashboardCommandWatchSpec extends Specification implements ApplicationArgu
 
         and: 'the command returns normally: no disabled carrier, so the exit stays 0'
         failure.get() == null
-
-        cleanup: 'let the background loop die out'
-        released.countDown()
     }
 }

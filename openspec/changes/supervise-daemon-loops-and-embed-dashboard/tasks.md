@@ -632,7 +632,8 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 
       **Metrics measured (2026-10-10):** M3 — `gnomish-up` starts one factory process,
       `gnomish serve --dashboard` (plus the log follower, not a renderer): daemon only. M4 — 4 of 4
-      loops tick again after an `Error` (`StandingReaperResilienceSpec`,
+      loops are ticking again within one backoff after an `Error` kills the worker (the respawn
+      shape of D2 as amended, measured 2026-10-10 in `StandingReaperResilienceSpec`,
       `WorktreeJanitorLifecycleSpec`, `SandboxLifecycleTickLifecycleSpec`,
       `SnapshotWriterSupervisionSpec`). M6 — one type for "now" (`InstantSource`; no
       `domain…Clock`, no `java.time.Clock` import in production), one bean
@@ -656,7 +657,7 @@ reporting, and 15 spec files killed the worker with a message-throwing fixture (
 rationale). Each task runs under `verification-scope.md`: the specs named, then
 `pitestVerifyAllKilled -PpitScope=com.github.oinsio.gnomish.app.daemon.*`.
 
-- [ ] 12.1 In `app/daemon/SupervisedLoop.java` change both guards (`tickGuarded`, the wait in
+- [x] 12.1 In `app/daemon/SupervisedLoop.java` change both guards (`tickGuarded`, the wait in
       `awaitFull`) from `catch (Throwable)` to `catch (Exception)`; an `Error` leaves the guard and
       reaches `onWorkerDeath`. Update the class javadoc and `LoopEvents.failed`'s javadoc (the
       reason is `FailureReason.of`; a failure whose reporting throws still ends the thread, now as
@@ -667,7 +668,7 @@ rationale). Each task runs under `verification-scope.md`: the specs named, then
       no `DAEMON_LOOP_TICK_FAILED` line, one `DAEMON_LOOP_WORKER_DIED` line, the tick runs again
       after the backoff. Verify: `SupervisedLoopSpec`, `SupervisedLoopRestartSpec`,
       `SupervisedLoopBoundedSpec`, `SupervisedLoopDeathLineSpec` green; scoped PIT green.
-- [ ] 12.2 Replace every message-throwing kill with a plain `Error` (design D5, fixtures): delete
+- [x] 12.2 Replace every message-throwing kill with a plain `Error` (design D5, fixtures): delete
       `Unrenderable` from `app/daemon/SupervisedLoopHarness.groovy`, `app/lease/ReaperLoopRig.groovy`,
       `bootstrap/.../app/ServeDashboardIsolationSpec.groovy` and
       `serveobservability/VitalsSnapshotAssemblerSpec.groovy`, and in the files that throw it —
@@ -682,7 +683,7 @@ rationale). Each task runs under `verification-scope.md`: the specs named, then
       only. Verify: the specs listed green; `ServeDashboardIsolationSpec` green;
       `grep -rn "Unrenderable\b" application/src/test bootstrap/src/test` lists no file but
       `SupervisedLoopHarness` and `SupervisedLoopDeathLineSpec` (the `UnrenderableTwice` fixture).
-- [ ] 12.3 Rewrite the four loop-level `Error` features to the respawn shape: an `Error` from the
+- [x] 12.3 Rewrite the four loop-level `Error` features to the respawn shape: an `Error` from the
       tick logs `DAEMON_LOOP_WORKER_DIED` and the tick runs again after one backoff on virtual time
       (daemon-supervision "The worktree cleaner is respawned after an Error"; M4) in
       `StandingReaperResilienceSpec`, `WorktreeJanitorLifecycleSpec`,
@@ -690,7 +691,7 @@ rationale). Each task runs under `verification-scope.md`: the specs named, then
       meant "the loop survives a recoverable fault", throw a `RuntimeException` and keep the
       continue shape. Verify: the four specs green; the M4 line in task 10.1 updated to the respawn
       wording.
-- [ ] 12.4 Durable guidance: amend `docs/adr/0013-supervised-daemon-loop.md` — status line
+- [x] 12.4 Durable guidance: amend `docs/adr/0013-supervised-daemon-loop.md` — status line
       "amended 2026-10-10 (D2 of the same change, as amended)", D2 section ("The guard catches
       `Exception`; an `Error` ends the worker and the policy decides"), the "catch
       (RuntimeException)" alternative (rejected for the wait outside the guard, not for the catch

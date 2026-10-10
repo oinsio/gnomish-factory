@@ -33,15 +33,14 @@ import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWrit
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import org.slf4j.LoggerFactory
-import org.slf4j.MDC
-import spock.lang.Specification
-import spock.lang.TempDir
-
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.ZoneOffset
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
+import spock.lang.Specification
+import spock.lang.TempDir
 /**
  * {@link TakeSlotRunner}, task 4.3 of add-factory-serve: proves the "slot body unchanged"
  * scenario by asserting {@link TakeSlotRunner#run} delegates to the exact same {@code

@@ -13,9 +13,9 @@ keeps its own tick and its own state, and holds one `SupervisedLoop` built from 
 `LoopShape(DaemonComponent, LoopOrder, LoopWait, RestartPolicy)`, its tick and the
 `TimeEquipment` it already holds (ADR 0014). It does not start a thread, write a `while`, catch
 its own failures, build its own `RepeatSuppressor` or log its own death: the loop owns the thread,
-the order of tick and wait, the guard (`catch (Throwable)` around both), the stop, the restart,
-the operator events (`DAEMON_LOOP_*`, GF152–GF156, raised only by `LoopEvents`) and the
-`component` MDC key.
+the order of tick and wait, the guard (`catch (Exception)` around both; an `Error` ends the worker
+and the restart policy decides), the stop, the restart, the operator events (`DAEMON_LOOP_*`,
+GF152–GF156, raised only by `LoopEvents`) and the `component` MDC key.
 
 ## The failure this rule exists for
 
@@ -90,10 +90,13 @@ re-test the guard's semantics per loop — the order, the log edges and roll-ups
 policies. One wiring spec per loop does earn its place: that the class really hands its tick and
 shape to a running loop (`SnapshotWriterSupervisionSpec` and `SnapshotWriterComponentMdcSpec` are
 the models). A failing tick is how that wiring is observed, so the loop's lifecycle spec may drive
-one: a tick that throws, and one that throws an `Error`, and the loop running again under its own
-`component` — the per-loop survival scenarios the `daemon-supervision` capability names
-(`WorktreeJanitorLifecycleSpec` and `SandboxLifecycleTickLifecycleSpec` are the models). Those
-features assert that the loop survived as itself, not how the guard did it.
+one: a tick that throws an `Exception` and the loop running again under its own `component`, and
+a tick that throws an `Error` and the respawned loop ticking again after one backoff — the
+per-loop scenarios the `daemon-supervision` capability names (`WorktreeJanitorLifecycleSpec` and
+`SandboxLifecycleTickLifecycleSpec` are the models). Those features assert that the loop survived,
+or was respawned, as itself — not how the guard did it. A fixture kills a worker with a plain
+`Error`; a throwable whose message throws belongs only to `SupervisedLoopDeathLineSpec`, where the
+death line's own rendering is the subject.
 
 ## How this is checked
 

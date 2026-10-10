@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.lease
 
-import static com.github.oinsio.gnomish.app.lease.ReaperLoopRig.Unrenderable
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -16,7 +15,7 @@ import spock.lang.Timeout
  * the loop's ERROR with a rising restart count and {@code component=reaper}, and the reaper's
  * {@code restartCount()} — the {@code vitals.reaper.restartCount} source — reads that same count.
  *
- * <p>Deaths are real (see {@link ReaperLoopRig.Unrenderable}); the backoffs are read off the
+ * <p>Deaths are real (an {@code Error} from the duty leaves the loop's guard); the backoffs are read off the
  * respawn lines, and the first feature also checks them against what the reaper's one sleeper
  * actually slept.
  */
@@ -50,7 +49,7 @@ class StandingReaperSupervisionSpec extends Specification {
     def "consecutive deaths double the backoff from the interval up to the 10-minute cap"() {
         given:
         rig.build(INTERVAL, { n ->
-            if (n <= 6) throw new Unrenderable()
+            if (n <= 6) throw new Error('duty died')
             rig.stopHere()
         })
 
@@ -83,7 +82,7 @@ class StandingReaperSupervisionSpec extends Specification {
     def "a clean tick after a respawn resets the backoff to the interval"() {
         given:
         rig.build(INTERVAL, { n ->
-            if (n in [1, 2, 4]) throw new Unrenderable()
+            if (n in [1, 2, 4]) throw new Error('duty died')
             if (n == 5) rig.stopHere()
         })
 
@@ -104,7 +103,7 @@ class StandingReaperSupervisionSpec extends Specification {
     def "each respawn logs an ERROR with a rising restart count that restartCount() reports"() {
         given:
         rig.build(INTERVAL, { n ->
-            if (n <= 3) throw new Unrenderable()
+            if (n <= 3) throw new Error('duty died')
             rig.stopHere()
         })
 

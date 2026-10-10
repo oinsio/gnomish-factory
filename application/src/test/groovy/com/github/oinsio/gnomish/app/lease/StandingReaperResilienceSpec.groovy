@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.lease
 
-import static com.github.oinsio.gnomish.app.lease.ReaperLoopRig.Unrenderable
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -12,14 +11,14 @@ import spock.lang.Timeout
  * The standing reaper's thread survives abnormal faults (FR3, FR4 of fix-reaper-idle-liveness;
  * NFR-R2 of that change reduces to them), now as a supervised daemon loop (FR6 of
  * supervise-daemon-loops-and-embed-dashboard, design D6, D7): the loop waits the reaper's interval
- * and then ticks, an {@code Error} from the duty or a throwing sleeper is logged as the loop's
- * {@code DAEMON_LOOP_TICK_FAILED} and never ends it, and a thread that dies anyway is respawned.
- * Every line names the loop by {@code component=reaper}, the key that replaced the reaper's own
- * codes (GF067–GF069, retired).
+ * and then ticks, an {@code Exception} from the duty or a throwing sleeper is logged as the loop's
+ * {@code DAEMON_LOOP_TICK_FAILED} and never ends it, and an {@code Error} ends the thread, which
+ * is respawned after one backoff (design D2 as amended, D5). Every line names the loop by {@code
+ * component=reaper}, the key that replaced the reaper's own codes (GF067–GF069, retired).
  *
- * <p>The death is real: a failure whose own rendering throws escapes the loop's guard and ends
- * the thread. The loop's general behavior is {@code SupervisedLoop*Spec}'s subject; this spec pins
- * the reaper's wiring of it — order, interval, policy, component and codes.
+ * <p>The death is real: an {@code Error} from the duty leaves the loop's {@code Exception} guard
+ * and ends the thread. The loop's general behavior is {@code SupervisedLoop*Spec}'s subject; this
+ * spec pins the reaper's wiring of it — order, interval, policy, component and codes.
  */
 @Timeout(10)
 class StandingReaperResilienceSpec extends Specification {
@@ -48,9 +47,11 @@ class StandingReaperResilienceSpec extends Specification {
         rig.atOrAbove(Level.WARN).empty
     }
 
-    // FR3 of fix-reaper-idle-liveness, FR6: an Error from the duty is the loop's tick failure,
-    //     logged at WARN with component=reaper, and the next tick still reaps.
-    def "an Error from the duty is logged with the loop's code and component, and the next tick still reaps"() {
+    // FR3 of fix-reaper-idle-liveness, FR6 (daemon-supervision "An Error in the work ends the
+    //     worker and the restart policy takes over"; M4): an Error from the duty ends the thread
+    //     — no tick-failed WARN — its death is logged at ERROR with component=reaper, and after one
+    //     backoff the respawned reaper waits its interval and reaps again.
+    def "an Error from the duty ends the thread, and the respawned reaper reaps again after one backoff"() {
         given:
         rig.build(INTERVAL, { n ->
             if (n == 1) throw new AssertionError('duty exploded on the first tick' as Object)
@@ -60,13 +61,20 @@ class StandingReaperResilienceSpec extends Specification {
         when:
         rig.runToStop()
 
-        then:
-        rig.journal == [WAIT, 'tick1', WAIT, 'tick2']
-        def failed = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
-        failed.size() == 1
-        failed[0].level == Level.WARN
-        failed[0].MDCPropertyMap['component'] == 'reaper'
-        failed[0].throwableProxy.className == AssertionError.name
+        then: 'wait, death, backoff of one interval, then the fresh thread waits and ticks'
+        rig.journal == [
+            WAIT,
+            'tick1',
+            WAIT,
+            WAIT,
+            'tick2'
+        ]
+        rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).empty
+        def died = rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'reaper'
+        died[0].throwableProxy.className == AssertionError.name
     }
 
     // FR3 of fix-reaper-idle-liveness, FR6: a throwing sleeper is the loop's failure too — logged
@@ -93,7 +101,7 @@ class StandingReaperResilienceSpec extends Specification {
     def "a dead reaper thread is respawned after an interval's backoff"() {
         given:
         rig.build(INTERVAL, { n ->
-            if (n == 1) throw new Unrenderable()
+            if (n == 1) throw new Error('duty died')
             rig.stopHere()
         })
 
@@ -123,7 +131,7 @@ class StandingReaperResilienceSpec extends Specification {
     def "a backoff sleep that throws is logged with the loop's code and component, and the respawn still happens"() {
         given: 'the second sleep is the backoff after the first tick died'
         rig.build(INTERVAL, { n ->
-            if (n == 1) throw new Unrenderable()
+            if (n == 1) throw new Error('duty died')
             rig.stopHere()
         }, { n, d ->
             if (n == 2) throw new IllegalStateException('backoff sleep blew up')

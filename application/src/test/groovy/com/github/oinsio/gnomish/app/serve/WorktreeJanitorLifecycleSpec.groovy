@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff
 import com.github.oinsio.gnomish.app.daemon.SupervisedLoop
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -28,8 +29,9 @@ import spock.lang.Timeout
  * supervise-daemon-loops-and-embed-dashboard, design D1, D4, D7): one tick fires immediately (the
  * startup scan) and every {@link WorktreeJanitor#TICK_INTERVAL} thereafter, driven
  * deterministically by the rendezvous {@link BlockingSleeper} — no real sleeping, no polling. A
- * failing tick, an {@code Error} included, is reported by the loop with {@code component=janitor}
- * and the janitor runs again on its next cadence; {@code stop()} ends it. The disposal policy
+ * tick failing with an {@code Exception} is reported by the loop with {@code component=janitor}
+ * and the janitor runs again on its next cadence; an {@code Error} ends the worker, which is
+ * respawned after one backoff (design D2 as amended, D5); {@code stop()} ends it. The disposal policy
  * itself is {@link WorktreeJanitorSpec}'s concern; this spec only proves the loop around it.
  *
  * <p>Implements FR14 of add-factory-serve (design D10); FR6 of
@@ -88,8 +90,12 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     }
 
     private List tickFailures() {
+        loopEvents(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
+    }
+
+    private List loopEvents(OperatorEvent event) {
         (loopLogs.list.toArray() as List).findAll {
-            it != null && it.formattedMessage.startsWith(OperatorEvent.DAEMON_LOOP_TICK_FAILED.head())
+            it != null && it.formattedMessage.startsWith(event.head())
         }
     }
 
@@ -205,10 +211,11 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         }
     }
 
-    // FR6 of supervise-daemon-loops-and-embed-dashboard ("The worktree cleaner survives an
-    //     Error"): a run that throws an Error — which the janitor's old RuntimeException catch let
-    //     kill its thread — is guarded by the loop, and the cleaner runs again on its next cadence.
-    def "the worktree cleaner survives an Error and runs again on its next cadence"() {
+    // FR6 of supervise-daemon-loops-and-embed-dashboard (daemon-supervision "The worktree cleaner
+    //     is respawned after an Error"; M4): a run that throws an Error — which the janitor's old
+    //     RuntimeException catch let kill its thread silently — ends the worker with one ERROR line
+    //     as the janitor, and after one backoff the respawned cleaner runs again and disposes.
+    def "the worktree cleaner is respawned after an Error and runs again after one backoff"() {
         given: 'an aged environment whose first disposal throws an Error'
         agedEnvironment('task-aged')
         List<String> disposed = Collections.synchronizedList([])
@@ -220,18 +227,23 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         } as TaskEnvironmentDisposal
         janitorOver(Duration.ofDays(14), disposal, sleeper)
 
-        when: 'the first run throws the Error, and one interval elapses'
+        when: 'the first run throws the Error; the death handler waits its backoff, which elapses'
         janitor.start()
-        sleeper.awaitEntered()
+        def backoff = sleeper.awaitEntered()
         sleeper.releaseOne()
         def nextSleep = sleeper.awaitEntered()
 
-        then: 'the cleaner ran again on its cadence and disposed of the environment this time'
+        then: 'the backoff is the cap (below the janitor\'s hourly base), and the respawned cleaner disposed this time'
+        backoff == RestartBackoff.MAX_BACKOFF
         nextSleep == WorktreeJanitor.TICK_INTERVAL
         disposed == ['task-aged']
 
-        and: 'the Error was reported as the janitor\'s lost tick'
-        tickFailures().any { it.MDCPropertyMap['component'] == 'janitor' }
+        and: 'no lost tick was reported; the death was, at ERROR, as the janitor'
+        tickFailures().empty
+        def died = loopEvents(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'janitor'
     }
 
     // FR4 of supervise-daemon-loops-and-embed-dashboard, design D4: stop() cuts the interval wait

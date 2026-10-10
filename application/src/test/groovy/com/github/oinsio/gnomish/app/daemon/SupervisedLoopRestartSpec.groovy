@@ -15,9 +15,9 @@ import spock.lang.Timeout
 /**
  * The second rung of supervision under the Unbounded policy (design D4, D5 of
  * supervise-daemon-loops-and-embed-dashboard): respawn after a doubling backoff, its reset, its
- * cap, and the stops that must prevent a respawn. The death is real — a failure whose own rendering
- * throws escapes the guard's report and ends the thread — and the backoff runs on a virtual
- * sleeper. The Bounded policy is {@code SupervisedLoopBoundedSpec}'s subject.
+ * cap, and the stops that must prevent a respawn. The death is real — an {@code Error} from the
+ * tick leaves the {@code Exception} guard and ends the thread (D2 as amended) — and the backoff
+ * runs on a virtual sleeper. The Bounded policy is {@code SupervisedLoopBoundedSpec}'s subject.
  */
 @Timeout(10)
 class SupervisedLoopRestartSpec extends Specification {
@@ -39,7 +39,7 @@ class SupervisedLoopRestartSpec extends Specification {
     def "an Unbounded loop respawns after a doubling backoff with a rising restart count"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n <= 3) throw new SupervisedLoopHarness.Unrenderable()
+            if (n <= 3) throw new Error('tick died')
             rig.stopHere()
         }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
@@ -58,14 +58,14 @@ class SupervisedLoopRestartSpec extends Specification {
         died.every {
             it.level == Level.ERROR && it.MDCPropertyMap['component'] == 'janitor'
         }
-        died.every { it.throwableProxy.className == IllegalStateException.name }
+        died.every { it.throwableProxy.className == Error.name }
     }
 
     // FR3 (daemon-supervision "A clean run resets the backoff").
     def "a clean tick resets the backoff while the restart count keeps rising"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n in [1, 2, 4]) throw new SupervisedLoopHarness.Unrenderable()
+            if (n in [1, 2, 4]) throw new Error('tick died')
             if (n == 5) rig.stopHere()
         }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
@@ -85,7 +85,7 @@ class SupervisedLoopRestartSpec extends Specification {
     def "the cap wins from the first respawn when it is below the base"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
+            if (n == 1) throw new Error('tick died')
             rig.stopHere()
         }, new RestartPolicy.Unbounded(Duration.ofHours(1)), backoffSleeper)
 
@@ -101,7 +101,7 @@ class SupervisedLoopRestartSpec extends Specification {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
             rig.stopHere()
-            throw new SupervisedLoopHarness.Unrenderable()
+            throw new Error('tick died')
         }, new RestartPolicy.Unbounded(INTERVAL), backoffSleeper)
 
         when:
@@ -119,7 +119,7 @@ class SupervisedLoopRestartSpec extends Specification {
         given:
         def stoppingSleeper = { Duration d -> rig.stopHere() } as Sleeper
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            throw new SupervisedLoopHarness.Unrenderable()
+            throw new Error('tick died')
         },
         new RestartPolicy.Unbounded(INTERVAL), stoppingSleeper)
 
@@ -138,7 +138,7 @@ class SupervisedLoopRestartSpec extends Specification {
             throw new Error('backoff broke')
         } as Sleeper
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
-            if (n == 1) throw new SupervisedLoopHarness.Unrenderable()
+            if (n == 1) throw new Error('tick died')
             rig.stopHere()
         }, new RestartPolicy.Unbounded(INTERVAL), failingSleeper)
 

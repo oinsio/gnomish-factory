@@ -685,10 +685,10 @@ ADR 0013.
 
 - **Supervised daemon loop** — the factory's one shape for a long-lived thread
   that repeats work for the life of the process: a tick run on a fixed interval
-  or on an interval cut short by a signal, guarded so a failure of the tick or
-  of the wait never ends the loop, and stoppable without racing a respawn — a
-  stop ends the wait in progress, never the tick. If something still escapes
-  the guard, the loop's **restart policy** decides: *Unbounded* respawns
+  or on an interval cut short by a signal, guarded so an `Exception` from the
+  tick or from the wait never ends the loop, and stoppable without racing a
+  respawn — a stop ends the wait in progress, never the tick. An `Error` ends
+  the worker, and the loop's **restart policy** decides: *Unbounded* respawns
   forever after a doubling backoff (the reaper, the worktree janitor, the
   sandbox sweep, the snapshot writer — loops the factory's correctness or the
   operator's view depends on); *Bounded* gives up, with one ERROR line, after

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
 import static com.github.oinsio.gnomish.app.lease.ReaperLoopRig.BOUND
-import static com.github.oinsio.gnomish.app.lease.ReaperLoopRig.Unrenderable
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -157,7 +156,7 @@ class StandingReaperInterruptedStopSpec extends Specification {
     def "a stop during the restart backoff spawns no thread"() {
         given: 'the first sleep is the interval wait, the second the backoff after a death'
         def backoff = new LatchedSleeper()
-        rig.build(INTERVAL, { n -> throw new Unrenderable() }, { n, d ->
+        rig.build(INTERVAL, { n -> throw new Error('duty died') }, { n, d ->
             if (n == 2) backoff.sleep(d)
         })
 

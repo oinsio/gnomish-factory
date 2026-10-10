@@ -35,12 +35,6 @@ import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.status.TaskSummary
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-import spock.lang.Specification
-import spock.lang.TempDir
-import spock.lang.Timeout
-
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -50,6 +44,11 @@ import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import spock.lang.Specification
+import spock.lang.TempDir
+import spock.lang.Timeout
 /**
  * FR10, FR11, NFR-O2, M3, D9 of add-factory-serve: {@link ServeShutdownWiring}'s two entry points
  * — the drain path and the forever-loop path — each attach the drain-report/drive-the-automaton

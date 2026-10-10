@@ -19,9 +19,10 @@ import spock.util.concurrent.PollingConditions
 
 /**
  * The snapshot writer as a supervised daemon loop (task 5.1 of
- * supervise-daemon-loops-and-embed-dashboard, design D1–D3): a write cycle that throws past its
- * own catches — an {@code Error} — is the loop's {@code DAEMON_LOOP_TICK_FAILED} with {@code
- * component=snapshot} and the writer writes again on its next wake; a stray interrupt of the
+ * supervise-daemon-loops-and-embed-dashboard, design D1–D3, D5): a write cycle that throws past
+ * its own catches — an {@code Error} — ends the worker, logged as {@code DAEMON_LOOP_WORKER_DIED}
+ * with {@code component=snapshot}, and the respawned writer writes again after one backoff on
+ * virtual time; a stray interrupt of the
  * writer's thread is absorbed and the next write waits out a full timer period (serve-observability
  * "Interrupted writer does not spin").
  *
@@ -48,9 +49,11 @@ class SnapshotWriterSupervisionSpec extends Specification {
         }
     }
 
-    // FR6, D2: the write cycle catches every failure of its own steps, so only an Error reaches the
-    //     loop — which the old RuntimeException guard would have let kill the thread.
-    def "a write cycle that throws an Error is reported as the writer's lost tick and the writer writes again"() {
+    // FR6, D2 as amended, D5 (M4): the write cycle catches every failure of its own steps, so only
+    //     an Error reaches the loop — which the old RuntimeException guard let kill the thread
+    //     silently. Now the death is one ERROR line, and the respawned writer writes again after
+    //     one backoff on virtual time, with no transition marking it dirty.
+    def "a write cycle that throws an Error ends the worker, and the respawned writer writes again after one backoff"() {
         given:
         def calls = new AtomicInteger()
         writer = new SnapshotWriter(tempDir.resolve('snapshot.json'), {
@@ -61,21 +64,18 @@ class SnapshotWriterSupervisionSpec extends Specification {
             SnapshotWriterSpec.fixtureSnapshot()
         }, new SnapshotJsonMapper(), Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
 
-        when: 'the startup write throws, and a transition marks the writer dirty'
+        when: 'the startup write throws'
         writer.start()
-        new PollingConditions(timeout: 3).eventually {
-            assert !events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).empty
-        }
-        writer.markDirty()
 
-        then: 'the writer survived and wrote again'
+        then: 'the respawned writer wrote again, with nothing marking it dirty'
         new PollingConditions(timeout: 3).eventually { assert calls.get() == 2 }
 
-        and: 'the loss was one WARN, attributed to the snapshot writer'
-        def lost = events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
-        lost.size() == 1
-        lost[0].level == Level.WARN
-        lost[0].MDCPropertyMap['component'] == DaemonComponent.SNAPSHOT.key()
+        and: 'no lost tick was reported; the death was one ERROR, attributed to the snapshot writer'
+        events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).empty
+        def died = events(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == DaemonComponent.SNAPSHOT.key()
     }
 
     // FR5, FR6, D3 (serve-observability "Interrupted writer does not spin"): an interrupt of the

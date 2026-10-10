@@ -26,8 +26,9 @@ import spock.lang.Timeout
  * add-serve-sandbox-lifecycle (design D7), now a supervised daemon loop (task 4.2 of
  * supervise-daemon-loops-and-embed-dashboard, design D1, D4, D7): one tick fires immediately and
  * every configured interval thereafter, driven deterministically by the rendezvous {@link
- * BlockingSleeper}. A failing tick, an {@code Error} included, is reported by the loop with {@code
- * component=sweep} and the sweep runs again on its next cadence; {@code stop()} ends it.
+ * BlockingSleeper}. A tick failing with an {@code Exception} is reported by the loop with {@code
+ * component=sweep} and the sweep runs again on its next cadence; an {@code Error} ends the worker,
+ * which is respawned after one backoff (design D2 as amended, D5); {@code stop()} ends it.
  *
  * <p>Implements FR6 of add-serve-sandbox-lifecycle; FR4, FR6 of
  * supervise-daemon-loops-and-embed-dashboard.
@@ -65,8 +66,12 @@ class SandboxLifecycleTickLifecycleSpec extends Specification {
     }
 
     private List tickFailures() {
+        loopEvents(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
+    }
+
+    private List loopEvents(OperatorEvent event) {
         (loopLogs.list.toArray() as List).findAll {
-            it != null && it.formattedMessage.startsWith(OperatorEvent.DAEMON_LOOP_TICK_FAILED.head())
+            it != null && it.formattedMessage.startsWith(event.head())
         }
     }
 
@@ -135,9 +140,10 @@ class SandboxLifecycleTickLifecycleSpec extends Specification {
         }
     }
 
-    // FR6 of supervise-daemon-loops-and-embed-dashboard: an Error — which the old RuntimeException
-    //     catch let kill the thread — is guarded by the loop, and the sweep runs again on its cadence.
-    def "the sweep survives an Error and runs again on its next cadence"() {
+    // FR6 of supervise-daemon-loops-and-embed-dashboard (M4): an Error — which the old
+    //     RuntimeException catch let kill the thread silently — ends the worker with one ERROR line
+    //     as the sweep, and after one backoff the respawned sweep runs the pass again.
+    def "the sweep is respawned after an Error and runs again after one backoff"() {
         given:
         def swept = Collections.synchronizedList([])
         sweepOver({ dir, liveness ->
@@ -148,18 +154,23 @@ class SandboxLifecycleTickLifecycleSpec extends Specification {
             ''
         } as SandboxLifecyclePass, sleeper)
 
-        when:
+        when: 'the first pass throws the Error; the death handler waits its backoff, which elapses'
         sweep.start()
-        sleeper.awaitEntered()
+        def backoff = sleeper.awaitEntered()
         sleeper.releaseOne()
         def nextSleep = sleeper.awaitEntered()
 
-        then:
+        then: 'the backoff is the sweep\'s interval, and the respawned sweep ran the pass'
+        backoff == INTERVAL
         nextSleep == INTERVAL
         swept == [cloneDir]
 
-        and:
-        tickFailures().any { it.MDCPropertyMap['component'] == 'sweep' }
+        and: 'no lost tick was reported; the death was, at ERROR, as the sweep'
+        tickFailures().empty
+        def died = loopEvents(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'sweep'
     }
 
     // FR4, D4 of supervise-daemon-loops-and-embed-dashboard: stop() cuts the interval wait short
