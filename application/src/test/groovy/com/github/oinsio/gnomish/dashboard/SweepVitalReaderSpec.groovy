@@ -38,7 +38,7 @@ class SweepVitalReaderSpec extends Specification {
         view << [
             new DaemonSnapshotView.Fresh(withSweep()),
             new DaemonSnapshotView.DeadDaemon(withSweep()),
-            new DaemonSnapshotView.StoppedStale(withSweep())
+            new DaemonSnapshotView.Stopped(withSweep())
         ]
     }
 

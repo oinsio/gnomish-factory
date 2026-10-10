@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -69,7 +68,7 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
             }
         })
         reconciler.start()
-        awaitStallStarted()
+        StallingGit.awaitStall(fakeGit)
         reconciler.interrupt()
         reconciler.join(Duration.ofSeconds(30).toMillis())
         return thrown
@@ -81,32 +80,6 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
      * to produce on demand.
      */
     private Path stallingOn(String stalled) {
-        new StallingGit()
-                .stallOn(stalled)
-                .markOnStall(stallStarted())
-                .answer('fetch', '', 0)
-                .answer('update-ref', '', 0)
-                .answer('merge-base', '', 1)
-                .answer([
-                    'rev-parse',
-                    '--verify',
-                    '--quiet',
-                    'refs/remotes/origin/gnomish/PROJ-1'
-                ], 'b' * 40, 0)
-                .answer('rev-parse', 'a' * 40, 0)
-                .write(tempDir)
-    }
-
-    private Path stallStarted() {
-        tempDir.resolve('stall-started')
-    }
-
-    /** Blocks until the stalled command is in flight, so the interrupt lands on it and not before. */
-    private void awaitStallStarted() {
-        long deadline = System.nanoTime() + 20_000_000_000L
-        while (!Files.exists(stallStarted()) && System.nanoTime() <deadline) {
-            Thread.sleep(20)
-        }
-        assert Files.exists(stallStarted()): 'the stand-in git never reached the stalled command'
+        StallingGit.marked(tempDir.resolve(stalled), 'reconcile-stall')
     }
 }

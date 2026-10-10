@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -95,7 +96,7 @@ class ReentrancySpec extends Specification {
         def clock = new VirtualClock()
         new EnginePorts(run.executor, run.builtinRunner, new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), run.listener,
-                run.persistence, clock, new VirtualSleeper(clock))
+                run.persistence, VirtualTimeEquipment.on(clock))
     }
 
     void assertIsolatedSuccess(Run run) {

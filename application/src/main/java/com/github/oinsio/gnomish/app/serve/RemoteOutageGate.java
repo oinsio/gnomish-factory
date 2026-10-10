@@ -2,13 +2,12 @@ package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Random;
-import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -49,11 +48,11 @@ public final class RemoteOutageGate {
 
     private final BaseRefGit baseRefGit;
     private final Path cloneDir;
-    private final Clock clock;
+    private final InstantSource clock;
     private final RemoteOutageProbeSchedule schedule;
     private final RemoteOutageReporter reporter;
-    private final Runnable onTransition;
-    private final Consumer<RemoteOutageClosedOutage> onClosedOutage;
+    private final DirtyNotifier onTransition;
+    private final RemoteOutageLedgerSink onClosedOutage;
 
     private final RemoteOutageCounters counters = new RemoteOutageCounters();
     private volatile boolean open;
@@ -69,10 +68,18 @@ public final class RemoteOutageGate {
     private volatile @Nullable String lastError;
     private volatile @Nullable Instant lastSuccessAt;
 
-    /** Convenience overload for specs: the full constructor with {@link RemoteOutageWiring#defaults()}. */
+    /**
+     * Convenience overload for specs: the full constructor with {@link
+     * RemoteOutageWiring#defaults(InstantSource)} on the gate's own {@code clock}.
+     */
     RemoteOutageGate(
-            BaseRefGit baseRefGit, Path cloneDir, Clock clock, Random random, Duration idleInterval, Duration cap) {
-        this(baseRefGit, cloneDir, clock, random, idleInterval, cap, RemoteOutageWiring.defaults());
+            BaseRefGit baseRefGit,
+            Path cloneDir,
+            InstantSource clock,
+            Random random,
+            Duration idleInterval,
+            Duration cap) {
+        this(baseRefGit, cloneDir, clock, random, idleInterval, cap, RemoteOutageWiring.defaults(clock));
     }
 
     /**
@@ -84,7 +91,7 @@ public final class RemoteOutageGate {
     RemoteOutageGate(
             BaseRefGit baseRefGit,
             Path cloneDir,
-            Clock clock,
+            InstantSource clock,
             Random random,
             Duration idleInterval,
             Duration cap,
@@ -147,12 +154,12 @@ public final class RemoteOutageGate {
         }
         String scrubbed = LogText.forLog(reason);
         open = true;
-        openedAt = clock.now();
+        openedAt = clock.instant();
         lastError = scrubbed;
         counters.opened();
         schedule.openedFreshly();
         reporter.opened(scrubbed);
-        onTransition.run();
+        onTransition.markDirty();
     }
 
     /**
@@ -170,7 +177,7 @@ public final class RemoteOutageGate {
         if (open) {
             return;
         }
-        lastSuccessAt = clock.now();
+        lastSuccessAt = clock.instant();
         schedule.onSuccessfulRefresh();
     }
 
@@ -240,13 +247,13 @@ public final class RemoteOutageGate {
         reporter.probeFailed(reason);
         Instant since = openedAt;
         if (since != null) {
-            reporter.sustainedOpen(since, clock.now(), reason);
+            reporter.sustainedOpen(since, clock.instant(), reason);
         }
     }
 
     private void close() {
         Instant openedAtSnapshot = openedAt;
-        Instant closedAt = clock.now();
+        Instant closedAt = clock.instant();
         int probeCount = counters.failedProbeCount();
         int released = counters.releasedClaims();
         String lastErrorSnapshot = lastErrorOrUnknown(lastError);
@@ -257,10 +264,10 @@ public final class RemoteOutageGate {
         lastError = null;
         if (openedAtSnapshot != null) {
             reporter.closed(Duration.between(openedAtSnapshot, closedAt), probeCount);
-            onClosedOutage.accept(new RemoteOutageClosedOutage(
+            onClosedOutage.outageClosed(new RemoteOutageClosedOutage(
                     reporter.target(), openedAtSnapshot, closedAt, probeCount, released, lastErrorSnapshot));
         }
-        onTransition.run();
+        onTransition.markDirty();
     }
 
     // PIT documented exception: `lastError` has three writers — openOnFailure, onProbeFailed and

@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.Path
@@ -70,7 +71,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         def runner = new TakeResumeRunner(
                 slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     def "a #outcome run runs no delivery fence"() {

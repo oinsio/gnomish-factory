@@ -1,0 +1,47 @@
+# Git stand-ins that stall, so a deadline or an interrupt is the only way out (StallingGit).
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+
+[bounded-network]
+# The four network commands stall; every local command takes a second, except the clone-key
+# resolution in front of a network command (GitProcessRunnerBoundedNetworkSpec).
+push stall 600
+fetch stall 600
+ls-remote stall 600
+clone stall 600
+rev-parse,--git-common-dir answer data/common#git-dir 0
+* delay 1
+rev-parse answer data/common#git-dir 0
+status answer data/stdout-git#local-done 0
+* answer - 0
+
+[closed-stdout-stall]
+# Closes its stdout at once, so a capped read ends, then stays alive (TipStateCursorTerminationSpec).
+* close-stdout
+* stall 600
+
+[leak-credentials-then-stall]
+# Answers the clone key, then prints a PAT-bearing failure on stderr and never exits
+# (GitProcessRunnerBoundedNetworkSpec: the scrub on the kill path).
+rev-parse answer data/common#git-dir 0
+* stderr data/stderr#password-prompt-leak
+* stall 600
+
+[stall-everything]
+# Every invocation records that it began, then stalls: a read killed before it produced anything
+# (StallingReadGitFixture, GitProcessRunnerShutdownReportSpec).
+* record
+* stall 600
+
+[stall-fetch]
+# fetch stalls for a minute; everything else answers at once (ContainerHarvestFetchSpec).
+fetch stall 60
+* answer - 0
+
+[walker-stall]
+# A usage walk whose subcommand named by the per-run link is recorded and stalls
+# (UsageHistoryWalkerTerminationSpec).
+@name record
+@name stall 600
+log answer data/common#sha-a 0
+rev-parse answer data/common#sha-a 0
+* answer - 0

@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -74,8 +75,8 @@ class GithubTrackerSecretsBackendSwitchSpec extends Specification {
         def config = new TrackerConfig('github', 3, ['api-url': wireMock.baseUrl(), repo: "$OWNER/$REPO".toString()])
 
         when: 'the same factory assembles a tracker under each backend in turn'
-        def underMap = factory.create(mapBacked, config, INSTANCE_ID)
-        def underFile = factory.create(fileBacked, config, INSTANCE_ID)
+        def underMap = factory.create(new FixedTrackerAdapterContext(mapBacked, config, INSTANCE_ID))
+        def underFile = factory.create(new FixedTrackerAdapterContext(fileBacked, config, INSTANCE_ID))
 
         then: 'each backend was asked for exactly the name the adapter declares, and nothing else'
         asked == [

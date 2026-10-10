@@ -73,7 +73,7 @@ tracker:
     private TakeCommand newCommand(SandboxLifecyclePass pass) {
         newTakeCommand(
                 testProperties(instanceName: 'gnomish-factory'), registeredClone, [github: fakeFactory(tracker)],
-                TakeCommandSeams.DEFAULTS, pass)
+                { time -> TakeCommandSeams.defaults(time) }, pass)
     }
 
     def "the startup sweep pass runs once, for this invocation's own directory and liveness verdict"() {

@@ -58,12 +58,12 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
     private ContainerResumeBranch resume() {
         new ContainerResumeBranch(runner, { String taskId ->
             Optional.of(new ClaimEpoch(3L))
-        } as ClaimEpochSource)
+        } as ClaimEpochSource, VirtualTimeGitRetries.gitInfrastructure())
     }
 
     /** The manual container resume path: no tracker, no claim, so no tenure on anything. */
     private ContainerResumeBranch claimlessResume() {
-        new ContainerResumeBranch(runner, ClaimEpochSource.NONE)
+        new ContainerResumeBranch(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure())
     }
 
     def "FR6: a branch that exists nowhere reports false, not a phantom resume"() {

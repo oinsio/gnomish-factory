@@ -62,6 +62,8 @@ tasks.named('pitest') { environment '${BUILD_OWNED}', 'kept' }
 """)
         // `adversarial-gitconfig-conventions` declares this file as a test input; nothing reads it here.
         repo.write('test-fixtures/src/main/resources/adversarial-gitconfig', '# inert\n')
+        // `stand-in-conventions` declares the stand-in library as a test input; nothing reads it here.
+        repo.write('test-fixtures/src/main/resources/stand-in/stand-in.sh', '# inert\n')
         repo.write('mod-a/src/main/java/com/github/oinsio/gnomish/mini/Foo.java', '''\
 package com.github.oinsio.gnomish.mini;
 

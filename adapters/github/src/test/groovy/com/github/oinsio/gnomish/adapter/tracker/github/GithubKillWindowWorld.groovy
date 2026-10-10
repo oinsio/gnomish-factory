@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -111,21 +112,21 @@ class GithubKillWindowWorld {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'kill-window-token', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
         def labelOps = new GithubLabelOps(httpClient)
-        def markers = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, KILLER)
+        def markers = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, KILLER, new VirtualClock())
         new GithubTracker(
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
                 new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
                 FixtureSeeder.DELIVERED_LABEL, GithubDesignatorRules.none()),
-                new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
+                new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL, new VirtualClock()),
                 new GithubStateWrites(httpClient, labelOps, markers, FixtureSeeder.WORKING_LABEL,
                 FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),
                 new GithubCorrespondence(markers),
-                new GithubDecisions(httpClient, markers),
-                new GithubHeartbeat(httpClient, KILLER),
+                new GithubDecisions(httpClient, markers, new VirtualClock()),
+                new GithubHeartbeat(httpClient, KILLER, new VirtualClock()),
                 new GithubOpenQuery(cache, OWNER, REPO, labels),
                 new GithubStaleClaimRemoval(httpClient, labelOps, markers, FixtureSeeder.WORKING_LABEL,
-                FixtureSeeder.READY_LABEL),
-                new GithubIndexRepair(httpClient, labelOps, markers, labels))
+                FixtureSeeder.READY_LABEL, new VirtualClock()),
+                new GithubIndexRepair(httpClient, labelOps, markers, labels, new VirtualClock()))
     }
 
     private static RetryConfig fastRetryConfig() {

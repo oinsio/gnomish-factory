@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -102,7 +103,7 @@ class ReferenceRunSpec extends Specification {
             ScriptedJudgeVoter judgeVoter) {
         def clock = new VirtualClock()
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                new RecordingEventListener(), new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
+                new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock))
     }
 
     // M1: the whole story in two runs — decision escalation, decision-carrying resume,
@@ -166,7 +167,7 @@ class ReferenceRunSpec extends Specification {
         def clock2 = new VirtualClock()
         def sleeper2 = new VirtualSleeper(clock2)
         def ports2 = new EnginePorts(exec2, builtin2, command2, external2, judge2,
-                new RecordingEventListener(), persistence2, clock2, sleeper2)
+                new RecordingEventListener(), persistence2, VirtualTimeEquipment.on(clock2, sleeper2))
 
         and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
         // as every production decision resume does (EscalationResume, TakeDecisionResume): an

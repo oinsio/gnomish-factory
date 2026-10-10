@@ -19,9 +19,6 @@ import spock.lang.TempDir
  */
 class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGitRepoFixture {
 
-    /** Long enough that a wall-clock assertion can only pass because the deadline fired. */
-    static final String STALL_SECONDS = '600'
-
     @TempDir
     Path tempDir
 
@@ -70,14 +67,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
 
     def "FR3, NFR-S2: the partial stderr of a killed network command is still scrubbed"() {
         given: 'a git that prints a PAT-bearing remote URL to stderr and then never exits'
-        def fakeGit = tempDir.resolve('leaky-git')
-        fakeGit.toFile().text = """#!/bin/sh
-while [ "\$1" = "-c" ]; do shift 2; done
-if [ "\$1" = "rev-parse" ]; then echo ".git"; exit 0; fi
-echo "fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com'" >&2
-sleep ${STALL_SECONDS}
-"""
-        fakeGit.toFile().executable = true
+        def fakeGit = StallingGit.git('leak-credentials-then-stall')
 
         when:
         def result = new GitProcessRunner(fakeGit.toString(), Duration.ofSeconds(2)).run(tempDir, 'push')
@@ -90,11 +80,6 @@ sleep ${STALL_SECONDS}
 
     /** Stalls on the network four; every local command takes a second and then answers. */
     private Path stallingGit() {
-        new StallingGit()
-                .stallOn('push', 'fetch', 'ls-remote', 'clone')
-                .answer('rev-parse', '.git', 0)
-                .answer('status', 'local done', 0)
-                .localDelay(Duration.ofSeconds(1))
-                .write(tempDir)
+        StallingGit.git('bounded-network')
     }
 }

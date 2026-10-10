@@ -26,8 +26,8 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
 import com.github.oinsio.gnomish.gitobjects.TreeEdit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -73,17 +73,21 @@ import org.slf4j.LoggerFactory;
  * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
  * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
  * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6);
- * and the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
+ * the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
  * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
  * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
  * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
  * make-checkpoint-gate-durable) — and remove the consumed requests under {@code decisions/} in that
  * same commit, the removal owned by {@link ConsumedRequestRemoval} (a tree edit here, an index
- * removal staged after the envelope there; FR14, design D7 of make-checkpoint-gate-durable).
+ * removal staged after the envelope there; FR14, design D7 of make-checkpoint-gate-durable); and
+ * both stamp the task file's {@code createdAt} from the injected {@link java.time.InstantSource},
+ * never from a clock of their own, so the two media cannot disagree on when a task started (FR20,
+ * design D14 of supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
- * add-sandbox-core; FR10 of make-run-headless; FR3, FR7, FR9, FR14 of make-checkpoint-gate-durable.
+ * add-sandbox-core; FR10 of make-run-headless; FR3, FR7, FR9, FR14 of make-checkpoint-gate-durable;
+ * FR20 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
@@ -97,7 +101,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     private final GitObjects gitObjects;
     private final CommitIdentity identity;
-    private final Clock clock;
+    private final InstantSource clock;
     private final ClaimEpochSource epochs;
     private final LifecycleEgressCursor egressCursors;
 
@@ -109,9 +113,12 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
      * @param denialCursors where a {@code cannotExecute} park reads the position its drained
      *     denials were read up to (FR3 of fix-denial-attribution-durability);
      *     {@link DenialCursorSource#NONE} where the run has no environment to ask
+     * @param clock the source of commit timestamps and {@code createdAt} (FR20 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitObjectsTaskRepository(GitObjects gitObjects, ClaimEpochSource epochs, DenialCursorSource denialCursors) {
-        this(gitObjects, DEFAULT_IDENTITY, Clock.systemUTC(), epochs, denialCursors);
+    public GitObjectsTaskRepository(
+            GitObjects gitObjects, InstantSource clock, ClaimEpochSource epochs, DenialCursorSource denialCursors) {
+        this(gitObjects, DEFAULT_IDENTITY, clock, epochs, denialCursors);
     }
 
     /**
@@ -126,7 +133,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     public GitObjectsTaskRepository(
             GitObjects gitObjects,
             CommitIdentity identity,
-            Clock clock,
+            InstantSource clock,
             ClaimEpochSource epochs,
             DenialCursorSource denialCursors) {
         this.gitObjects = gitObjects;
@@ -157,7 +164,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                         "creating branch",
                         UntrustedText.factory("base commit \"" + lawCommit.hex() + "\" is not in this clone")));
 
-        Instant now = Instant.now(clock);
+        Instant now = clock.instant();
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);
         TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false, pin);
         writer.commit(
@@ -330,7 +337,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     }
 
     private TaskLifecycleCommitWriter writerFor() {
-        return new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
+        return new TaskLifecycleCommitWriter(gitObjects, identity, clock.instant(), epochs);
     }
 
     private static String refFor(String taskId) {

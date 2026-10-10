@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -57,7 +58,7 @@ class FeedSnapshotAssemblerSpec extends Specification {
             }] as Tracker
         SlotRunner runner = { TaskRef ref -> } as SlotRunner
         def automaton = FeedAutomatonFixture.feedAutomaton(
-                tracker, InstanceId.generate('gnome'), new SlotLedger(1), runner, sleeper, clock,
+                tracker, InstanceId.generate('gnome'), new SlotLedger(1, new VirtualClock()), runner, VirtualTimeEquipment.on(clock, sleeper),
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 
         when:
@@ -65,8 +66,8 @@ class FeedSnapshotAssemblerSpec extends Specification {
 
         then: 'the construction-time idle baseline, translated'
         snapshot.state() == FeedPhase.IDLE_EMPTY
-        snapshot.since() == clock.now()
-        snapshot.lastPollAt() == clock.now()
+        snapshot.since() == clock.instant()
+        snapshot.lastPollAt() == clock.instant()
         snapshot.openFronts() == 0
         snapshot.wipLimit() == 2
     }

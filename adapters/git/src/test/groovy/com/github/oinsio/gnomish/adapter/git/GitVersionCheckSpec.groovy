@@ -5,7 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.gittransfer.GitVersion
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -25,8 +26,6 @@ class GitVersionCheckSpec extends Specification {
 
     private LogCaptureSupport logs
 
-    private int scriptCounter = 0
-
     def setup() {
         logs = LogCaptureSupport.attach(GitVersionCheck, Level.INFO)
     }
@@ -37,7 +36,7 @@ class GitVersionCheckSpec extends Specification {
 
     def "FR10, NFR-O1: a git at or above the floor passes with one INFO line naming the typed version: #line"() {
         given: 'a git that reports the line'
-        def check = new GitVersionCheck(new GitProcessRunner(fakeGit(line).toString()))
+        def check = new GitVersionCheck(new GitProcessRunner(StandIn.git(preset).toString()))
 
         when:
         check.verify()
@@ -49,14 +48,14 @@ class GitVersionCheckSpec extends Specification {
         logs.list[0].formattedMessage.contains(GitVersion.FLOOR.toString())
 
         where:
-        line || expected
-        'git version 2.45.1' || new GitVersion(2, 45, 1)
-        'git version 2.55.0 (Apple Git-200)' || new GitVersion(2, 55, 0)
+        line | preset || expected
+        'git version 2.45.1' | 'version-2-45-1' || new GitVersion(2, 45, 1)
+        'git version 2.55.0 (Apple Git-200)' | 'version-2-55-apple' || new GitVersion(2, 55, 0)
     }
 
     def "FR10, UX2, NFR-O1: a git below the floor is refused, naming floor, installed and reason"() {
         given: 'a git one release below the floor'
-        def check = new GitVersionCheck(new GitProcessRunner(fakeGit('git version 2.44.0').toString()))
+        def check = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, 'version-2-44').toString()))
 
         when:
         check.verify()
@@ -78,7 +77,7 @@ class GitVersionCheckSpec extends Specification {
 
     def "NFR-R2: a git whose output is not a version line is refused the same way, quoting the output"() {
         given: 'a git that prints garbage'
-        def check = new GitVersionCheck(new GitProcessRunner(fakeGit('not a git at all').toString()))
+        def check = new GitVersionCheck(new GitProcessRunner(StandIn.git('version-not-git').toString()))
 
         when:
         check.verify()
@@ -99,7 +98,7 @@ class GitVersionCheckSpec extends Specification {
 
     def "NFR-R2: a git that exits non-zero is refused the same way, quoting its stderr"() {
         given: 'a git that fails to answer'
-        def check = new GitVersionCheck(new GitProcessRunner(fakeGit('', 1, 'git: broken install').toString()))
+        def check = new GitVersionCheck(new GitProcessRunner(StandIn.git('version-broken').toString()))
 
         when:
         check.verify()
@@ -107,44 +106,32 @@ class GitVersionCheckSpec extends Specification {
         then:
         def refused = thrown(GitVersionRefusedException)
         refused.message.contains('did not report a version')
-        refused.message.contains('git: broken install')
+        refused.message.contains(brokenInstall())
 
         and:
         logs.list.size() == 1
         logs.list[0].level == Level.ERROR
-        logs.list[0].formattedMessage.contains('git: broken install')
+        logs.list[0].formattedMessage.contains(brokenInstall())
     }
 
     def "NFR-R2: the check runs git once per process — a second call answers from the first"() {
         given: 'a git that records every invocation'
-        def record = tempDir.resolve('argv.log')
-        def check = new GitVersionCheck(new GitProcessRunner(fakeGit('git version 2.55.0', 0, '', record).toString()))
+        def git = StandIn.recording(tempDir, 'version-record-2-55')
+        def check = new GitVersionCheck(new GitProcessRunner(git.toString()))
 
         when:
         check.verify()
         check.verify()
 
         then: 'one subprocess, one INFO line'
-        Files.readAllLines(record) == ['--version']
+        StandInLog.blocks(git).collect {
+            StandInLog.argv(it)
+        } == [['--version']]
         logs.list.size() == 1
     }
 
-    /** An executable git stand-in printing {@code stdout}, optionally appending its argv to {@code record}. */
-    private Path fakeGit(String stdout, int exitCode = 0, String stderr = '', Path record = null) {
-        def script = tempDir.resolve("fake-git-${scriptCounter++}.sh")
-        def lines = ['#!/bin/sh']
-        if (record != null) {
-            lines.add("printf '%s\\n' \"\$@\" >> '${record}'".toString())
-        }
-        if (stdout) {
-            lines.add("echo '${stdout}'".toString())
-        }
-        if (stderr) {
-            lines.add("echo '${stderr}' 1>&2".toString())
-        }
-        lines.add("exit ${exitCode}".toString())
-        script.toFile().text = lines.join('\n') + '\n'
-        script.toFile().executable = true
-        script
+    /** The stderr of the broken-install stand-in, read from its preset rather than retyped. */
+    private static String brokenInstall() {
+        StandIn.data('stderr#git-broken-install').trim()
     }
 }

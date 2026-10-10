@@ -3,13 +3,13 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.logtext.FailureReason;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -70,7 +70,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
     private final Path cloneDir;
     private final BranchPush push;
     private final String branch;
-    private final Clock clock;
+    private final InstantSource clock;
     private final Duration minInterval;
     private final MidRoundPollLog pollLog;
 
@@ -91,7 +91,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
             TaskExecutionEnvironment environment,
             GitProcessRunner runner,
             Path cloneDir,
-            Clock clock,
+            InstantSource clock,
             Duration minInterval,
             MidRoundPollContext context) {
         this.environment = environment;
@@ -116,7 +116,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
      */
     @Override
     public void onProgress(AgentProgressEvent event) {
-        Instant now = clock.now();
+        Instant now = clock.instant();
         if (lastPollAt != null && Duration.between(lastPollAt, now).compareTo(minInterval) < 0) {
             return;
         }

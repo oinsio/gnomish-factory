@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.serveobservability
 
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -20,10 +22,7 @@ class RemoteHealthAssemblerSpec extends Specification {
 
     def "one gate assembles one entry, keyed and populated from its own health"() {
         given:
-        // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
-        //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
-        //     stamp a transition this spec never drives.
-        def gate = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30))
+        def gate = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })
 
         when:
         def result = RemoteHealthAssembler.assemble([gate])

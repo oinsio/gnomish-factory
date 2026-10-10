@@ -23,8 +23,8 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -120,7 +120,9 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         Thread.sleep(1500)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task'
-        def summary = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def summary = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null), InstantSource.system())
                 .run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the network is gone, and the pass reported the verdict that removed it'

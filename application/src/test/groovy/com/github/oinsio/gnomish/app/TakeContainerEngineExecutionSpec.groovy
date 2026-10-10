@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -61,8 +62,9 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
         new TakeContainerEngineExecution(
-                assembly, new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [], new ClaimLossFlag(),
-                LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
+                assembly,
+                new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)),
+                [], new ClaimLossFlag(), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
     }
 
     // FR18, D19: a fresh Completed outcome disposes the environment and finishes the tracker for

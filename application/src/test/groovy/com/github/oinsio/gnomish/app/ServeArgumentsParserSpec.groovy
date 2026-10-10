@@ -10,7 +10,9 @@ import spock.lang.Specification
  * falls back to {@code ServeProperties#slots()}), validates a given {@code --slots} is positive,
  * carries {@code --drain} as a plain flag, and rejects every {@code take}-only flag before the
  * tracker is ever touched; {@code --interactive}, which no command accepts (FR1 of
- * remove-interactive-console), is refused as an unknown option.
+ * remove-interactive-console), is refused as an unknown option. FR8 of
+ * supervise-daemon-loops-and-embed-dashboard: {@code --dashboard} or the configured property turns
+ * the embedded dashboard on, and {@code --dashboard-out} is accepted only while it is on.
  */
 class ServeArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
@@ -22,17 +24,19 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
     RegisteredCloneFixture.unregistered(Path.of('/tmp/gnomish-home'), Path.of('/tmp/registered-clone'))
     def "FR3: dir is the registered clone's path when --dir is absent"() {
         when:
-        def parsed = parser.parse(args('serve'), CLONE)
+        def parsed = parser.parse(args('serve'), CLONE, false)
 
         then:
         parsed.dir() == CLONE.clonePath()
         parsed.slots() == null
         !parsed.drain()
+        !parsed.dashboard()
+        parsed.dashboardOut() == null
     }
 
     def "FR3: an explicit --dir is accepted and resolves nothing — the loader already did"() {
         when:
-        def parsed = parser.parse(args('serve', '--dir=/tmp/project'), CLONE)
+        def parsed = parser.parse(args('serve', '--dir=/tmp/project'), CLONE, false)
 
         then:
         parsed.dir() == CLONE.clonePath()
@@ -40,7 +44,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "parses an explicit positive --slots override"() {
         when:
-        def parsed = parser.parse(args('serve', '--slots=4'), CLONE)
+        def parsed = parser.parse(args('serve', '--slots=4'), CLONE, false)
 
         then:
         parsed.slots() == 4
@@ -48,7 +52,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a zero --slots"() {
         when:
-        parser.parse(args('serve', '--slots=0'), CLONE)
+        parser.parse(args('serve', '--slots=0'), CLONE, false)
 
         then:
         UsageException ex = thrown()
@@ -58,7 +62,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a negative --slots"() {
         when:
-        parser.parse(args('serve', '--slots=-1'), CLONE)
+        parser.parse(args('serve', '--slots=-1'), CLONE, false)
 
         then:
         UsageException ex = thrown()
@@ -67,7 +71,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "rejects a non-numeric --slots"() {
         when:
-        parser.parse(args('serve', '--slots=many'), CLONE)
+        parser.parse(args('serve', '--slots=many'), CLONE, false)
 
         then:
         UsageException ex = thrown()
@@ -76,16 +80,112 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
 
     def "parses the --drain flag"() {
         when:
-        def parsed = parser.parse(args('serve', '--drain'), CLONE)
+        def parsed = parser.parse(args('serve', '--drain'), CLONE, false)
 
         then:
         parsed.drain()
     }
 
+    def "FR8: --dashboard turns the dashboard on with the default output path"() {
+        when:
+        def parsed = parser.parse(args('serve', '--dashboard'), CLONE, false)
+
+        then:
+        parsed.dashboard()
+        parsed.dashboardOut() == null
+    }
+
+    def "FR8: factory.serve.dashboard turns the dashboard on without the flag"() {
+        when:
+        def parsed = parser.parse(args('serve'), CLONE, true)
+
+        then:
+        parsed.dashboard()
+    }
+
+    def "FR8: --dashboard-out is carried when #how enables the dashboard"() {
+        when:
+        def parsed = parser.parse(args(*tokens), CLONE, configured)
+
+        then:
+        parsed.dashboard()
+        parsed.dashboardOut() == Path.of('pages/page.html')
+
+        where:
+        how | tokens | configured
+        'the flag' | [
+            'serve',
+            '--dashboard',
+            '--dashboard-out=pages/page.html'
+        ] | false
+        'the property' | [
+            'serve',
+            '--dashboard-out=pages/page.html'
+        ] | true
+    }
+
+    def "FR8: --dashboard-out resolves its value exactly as dashboard --out does"() {
+        given:
+        def standalone = new DashboardArgumentsParser().parse(args('dashboard', "--out=$value".toString()), CLONE)
+
+        when:
+        def parsed = parser.parse(args('serve', '--dashboard', "--dashboard-out=$value".toString()), CLONE, false)
+
+        then:
+        parsed.dashboardOut() == standalone.out()
+
+        where:
+        value << [
+            'page.html',
+            'nested/../page.html',
+            '/abs/page.html'
+        ]
+    }
+
+    // FR8, scenario "Output path without the dashboard": a usage error before anything is claimed
+    def "FR8: --dashboard-out with the dashboard disabled is a usage error"() {
+        when:
+        parser.parse(args('serve', '--dashboard-out=page.html'), CLONE, false)
+
+        then:
+        UsageException ex = thrown()
+        ex.message.contains('--dashboard-out')
+        ex.message.contains('--dashboard')
+        ex.message.contains('factory.serve.dashboard')
+    }
+
+    def "FR8: --dashboard-out without a value is a usage error"() {
+        when:
+        parser.parse(args('serve', '--dashboard', '--dashboard-out'), CLONE, false)
+
+        then:
+        UsageException ex = thrown()
+        ex.message.contains('--dashboard-out requires a value')
+    }
+
+    // FR8: a switch takes no value; --dashboard=false turning the dashboard ON (over a configured
+    // factory.serve.dashboard or not) would invert what the operator wrote
+    def "FR8: #flag with a value is a usage error, whatever the configured dashboard"() {
+        when:
+        parser.parse(args('serve', flag), CLONE, configured)
+
+        then:
+        UsageException ex = thrown()
+        ex.message.contains(flag.substring(0, flag.indexOf('=')))
+        ex.message.contains('takes no value')
+
+        where:
+        flag | configured
+        '--dashboard=false' | true
+        '--dashboard=false' | false
+        '--dashboard=true' | false
+        '--drain=false' | false
+    }
+
     // FR4: serve accepts none of these — --interactive included, which no command accepts any more
     def "rejects an inapplicable take-only or run-only flag"() {
         when:
-        parser.parse(args('serve', "--$flag".toString()), CLONE)
+        parser.parse(args('serve', "--$flag".toString()), CLONE, false)
 
         then:
         UsageException ex = thrown()

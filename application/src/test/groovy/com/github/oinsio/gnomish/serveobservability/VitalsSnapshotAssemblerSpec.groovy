@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.daemon.SupervisedLoop
 import com.github.oinsio.gnomish.app.lease.ClaimLostSink
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.HeartbeatWorkerState
@@ -13,10 +14,15 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,21 +44,22 @@ class VitalsSnapshotAssemblerSpec extends Specification {
 
     private final Tracker tracker = Stub(Tracker)
     private final VirtualClock clock = new VirtualClock()
+    private final AtomicBoolean dies = new AtomicBoolean(true)
 
     private InstanceHeartbeat newHeartbeat() {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
-                { Duration d -> } as Sleeper,
-                clock,
+                VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
                 INTERVAL,
                 ClaimLostSink.IGNORE)
     }
 
     private StandingReaper newReaper() {
         new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, INTERVAL,
-                { -> [] }, clock)
+                ReaperDuty.NONE, INTERVAL, {
+                    -> []
+                }, VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper))
     }
 
     private WorktreeJanitor newJanitor() {
@@ -60,8 +67,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
                 RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('clone')),
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
-                clock,
-                { Duration d -> } as Sleeper,
+                VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
                 { -> Set.of() })
     }
 
@@ -79,7 +85,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
                 heartbeat,
                 reaper,
                 janitor,
-                new SweepTickLog(Duration.ofDays(7), Clock.systemUTC(), 20),
+                new SweepTickLog(Duration.ofDays(7), clock, 20),
                 Duration.ofMinutes(5))
 
         then:
@@ -96,6 +102,47 @@ class VitalsSnapshotAssemblerSpec extends Specification {
 
         cleanup:
         heartbeat.unregister(ref)
+    }
+
+    // FR6 of supervise-daemon-loops-and-embed-dashboard (daemon-supervision "Reaper restarts stay
+    //     visible in the snapshot"): the reaper's thread dies and is respawned by its supervised
+    //     loop; a snapshot assembled afterwards shows the grown vitals.reaper.restartCount.
+    def "a snapshot after the reaper's thread was respawned shows a grown restartCount"() {
+        given: 'a reaper whose first tick throws an Error past its loop guard, and whose second tick stops it'
+        def logs = LogCaptureSupport.attach(SupervisedLoop)
+        def secondTick = new CountDownLatch(1)
+        StandingReaper reaper
+        def duty = { Collection<TaskRef> own ->
+            if (dies.getAndSet(false)) {
+                throw new Error('duty died')
+            }
+            reaper.stop()
+            secondTick.countDown()
+        } as ReaperDuty
+        reaper = new StandingReaper(duty, INTERVAL, {
+            -> []
+        }, VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper))
+        def heartbeat = newHeartbeat()
+
+        when:
+        reaper.start()
+        assert secondTick.await(5, TimeUnit.SECONDS)
+        def vitals = VitalsSnapshotAssembler.assemble(
+                heartbeat,
+                reaper,
+                newJanitor(),
+                new SweepTickLog(Duration.ofDays(7), clock, 20),
+                Duration.ofMinutes(5))
+
+        then:
+        vitals.reaper().restartCount() == 1
+        logs.list.any {
+            it.formattedMessage.startsWith(OperatorEvent.DAEMON_LOOP_WORKER_DIED.head()) &&
+            it.MDCPropertyMap['component'] == 'reaper'
+        }
+
+        cleanup:
+        logs?.detach()
     }
 
     // FR7, D3: every HeartbeatWorkerState value maps to the HeartbeatState of the same name —

@@ -6,8 +6,8 @@ import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLineAssembler;
 import java.io.IOException;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,14 +35,14 @@ public final class RunSummaryLedgerWriter {
 
     private final RotatingLedgerAppender appender;
     private final InstanceInfo instance;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param appender the shared ledger append point every line is written through; never null
      * @param instance this factory instance's identity, carried on the written line; never null
      * @param clock supplies the line's {@code finishedAt} on write; never null
      */
-    public RunSummaryLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, Clock clock) {
+    public RunSummaryLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, InstantSource clock) {
         this.appender = appender;
         this.instance = instance;
         this.clock = clock;

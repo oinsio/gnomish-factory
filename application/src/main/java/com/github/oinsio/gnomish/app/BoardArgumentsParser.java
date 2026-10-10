@@ -36,7 +36,7 @@ final class BoardArgumentsParser {
     BoardArguments parse(ApplicationArguments args, RegisteredClone clone) {
         ArgumentsParsingSupport.rejectUnknownOptions(args, BOARD_TOKEN, ACCEPTED, Map.of());
         Path dir = clone.clonePath();
-        boolean json = args.containsOption(JSON);
+        boolean json = SwitchFlag.isOn(args, JSON);
         int limit = parseLimit(args);
         return new BoardArguments(dir, json, limit);
     }

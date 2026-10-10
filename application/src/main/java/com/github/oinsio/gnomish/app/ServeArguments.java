@@ -9,7 +9,8 @@ import org.jspecify.annotations.Nullable;
  * {@link ServeArgumentsParser} (task 5.1 of add-factory-serve). Unlike {@link TakeArguments},
  * {@code serve} has no {@code <ref>} — it processes the whole ready queue, not one task.
  *
- * <p>Implements FR2, FR4, FR13, D3 of add-factory-serve.
+ * <p>Implements FR2, FR4, FR13, D3 of add-factory-serve; FR8 of
+ * supervise-daemon-loops-and-embed-dashboard.
  *
  * @param dir the target project directory; defaults to the current working directory when {@code
  *     --dir} is absent, matching {@link TakeArguments#dir()}; absolute and normalized (FR7 of
@@ -19,8 +20,18 @@ import org.jspecify.annotations.Nullable;
  *     configured default; the parser rejects a non-positive value before it ever reaches here
  * @param drain {@code --drain}: requests drain-mode shutdown; carried here as a plain flag —
  *     acting on it is task 5.4's job, not this record's or its parser's
+ * @param dashboard the effective dashboard switch, {@code --dashboard} or {@code
+ *     factory.serve.dashboard} (design D12 of supervise-daemon-loops-and-embed-dashboard): already
+ *     folded by the parser, so no consumer re-reads the property
+ * @param dashboardOut the {@code --dashboard-out} page path, or {@code null} for the page's
+ *     default path; never set while {@code dashboard} is off (the parser refuses it)
  */
-record ServeArguments(Path dir, @Nullable Integer slots, boolean drain) {
+record ServeArguments(
+        Path dir,
+        @Nullable Integer slots,
+        boolean drain,
+        boolean dashboard,
+        @Nullable Path dashboardOut) {
 
     ServeArguments {
         ArgumentsParsingSupport.requireAbsoluteDir(dir);

@@ -106,7 +106,7 @@ final class TakeContainerFreshClaim {
 
         var execution = new TakeContainerEngineExecution(
                 wiring.assembly(),
-                wiring.abort(),
+                wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 bound.lawBinding());

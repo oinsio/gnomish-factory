@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sample;
 
+import com.github.oinsio.gnomish.app.TrackerAdapterContext;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -19,7 +20,9 @@ import java.util.Optional;
  * <p>Note what it takes to write this: one declared dependency. The {@code :domain} value types in
  * the signatures ({@link TrackerConfig}, {@link ConfigError}) arrive transitively through the api's
  * own `api` dependency, and the credential is read through the {@link SecretsProvider} port rather
- * than any secrets implementation (NFR-S1).
+ * than any secrets implementation (NFR-S1). Every host collaborator — the secrets seam among them —
+ * arrives on the one {@link TrackerAdapterContext} its single {@code create} receives (FR23 of
+ * supervise-daemon-loops-and-embed-dashboard).
  */
 public final class SampleTrackerAdapter implements TrackerAdapterFactory, TrackerSubsectionValidator {
 
@@ -32,8 +35,8 @@ public final class SampleTrackerAdapter implements TrackerAdapterFactory, Tracke
     }
 
     @Override
-    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-        secrets.find("GNOMISH_SAMPLE_TOKEN");
+    public Tracker create(TrackerAdapterContext context) {
+        context.secrets().find("GNOMISH_SAMPLE_TOKEN");
         return new SampleTracker();
     }
 

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -565,7 +566,7 @@ advancement: auto
     /** Bootstraps a real git task branch directly (no full fresh run), as a crashed run would leave it. */
     private void bootstrapGitTask(String taskId) {
         def gitRunner = new GitProcessRunner()
-        def repository = new GitTaskRepository(gitRunner, registeredClone(), ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(gitRunner, registeredClone(), ClaimEpochSource.NONE, new VirtualClock())
         def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         repository.createTask(context, TaskStart.commit(projectRoot, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone().worktrees().resolve(taskId)

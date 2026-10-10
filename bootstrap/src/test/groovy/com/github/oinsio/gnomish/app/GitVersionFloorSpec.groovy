@@ -7,10 +7,12 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -45,8 +47,8 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
 
     def "FR10: '#subcommand' is refused below the floor before any transfer, claim or tracker write"() {
         given: 'a git one release below the floor that records every invocation'
-        def record = homeDir.resolve('argv.log')
-        def git = new GitProcessRunner(oldGit(record).toString())
+        def oldGit = StandIn.link(homeDir.resolve('old-git'), 'version-2-44')
+        def git = new GitProcessRunner(oldGit.toString())
 
         and: 'a tracker that records every interaction'
         Tracker tracker = Mock()
@@ -60,7 +62,7 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(git),
                 properties,
-                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
+                new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), VirtualTimeEquipment.create()),
                 [github: fakeFactory(tracker)],
                 new GitVersionCheck(git))
 
@@ -74,7 +76,9 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
         thrown(GitVersionRefusedException)
 
         and: 'git was asked its version and nothing else'
-        Files.readAllLines(record) == ['--version']
+        StandInLog.blocks(oldGit).collect {
+            StandInLog.argv(it)
+        } == [['--version']]
 
         and: 'the tracker saw nothing'
         0 * tracker._
@@ -94,13 +98,5 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
             '--dir=PROJECT'
         ]
         'serve' | ['serve', '--dir=PROJECT']
-    }
-
-    /** An executable git stand-in reporting 2.44.0 and appending every argv to {@code record}. */
-    private Path oldGit(Path record) {
-        def script = homeDir.resolve('old-git.sh')
-        script.toFile().text = "#!/bin/sh\nprintf '%s\\n' \"\$@\" >> '${record}'\necho 'git version 2.44.0'\n"
-        script.toFile().executable = true
-        script
     }
 }

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.util.List;
@@ -89,6 +90,17 @@ public interface RunAssembly {
      *     null
      */
     DialogConsole dialogConsole();
+
+    /**
+     * The run's time equipment — the composition root's one {@link TimeEquipment} (design D17, D20
+     * of supervise-daemon-loops-and-embed-dashboard), for the resume paths that stamp a decision
+     * before any {@link #assemble} call, the same way {@link #dialogConsole} serves their output.
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @return the equipment every run this assembly builds reads "now" from and waits on; never null
+     */
+    TimeEquipment timeEquipment();
 
     /**
      * Returns a copy of this assembly that also fans every engine event into {@code listener} (task

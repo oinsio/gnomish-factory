@@ -65,9 +65,14 @@ public final class UsageHistoryWalker {
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
 
-    public UsageHistoryWalker(GitProcessRunner runner) {
+    /**
+     * @param runner the git subprocess seam; never null
+     * @param retry the infrastructure budget the branch lookup is re-attempted under, the
+     *     composition root's own (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
+     */
+    public UsageHistoryWalker(GitProcessRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
-        this.locator = new TaskBranchLocator(runner);
+        this.locator = new TaskBranchLocator(runner, retry);
     }
 
     /**

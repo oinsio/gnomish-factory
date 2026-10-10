@@ -2,16 +2,14 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -35,7 +33,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def toolEvent = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash'))
 
-    def suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
+    def suppressor = new RepeatSuppressor(new VirtualClock(Instant.EPOCH), Duration.ofMinutes(5))
 
     def setup() {
         repo = initTaskWorkingRepo(tempDir)
@@ -243,7 +241,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     // goes quiet, which reads like a recovery.
     def "FR15: a tip resolution still failing past the roll-up interval is announced again, with its count"() {
         given: 'a suppressor on movable time, so the quiet period can elapse without waiting'
-        def suppressorClock = new MovableClock(Instant.EPOCH)
+        def suppressorClock = new VirtualClock(Instant.EPOCH)
         def rollingSuppressor = new RepeatSuppressor(suppressorClock, Duration.ofMinutes(5))
         def listener = newListener(rollingSuppressor)
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -60,8 +61,10 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
-                BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, wipLimit, new Random(1))
+        new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), 'taskId',
+        BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, wipLimit, new Random(1))
     }
 
     private TakeResult resolve(BareTakeClaimWalk subject, List<ReadyTask> readyTasks, int openFrontCount = 0) {
@@ -111,6 +114,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
                     bindTaskTier(_) >> boundTaskTier()
                 }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
@@ -143,6 +147,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
                     bindTaskTier(_) >> boundTaskTier()
                 }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
@@ -180,6 +185,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
                     bindTaskTier(_) >> boundTaskTier()
                 }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
@@ -248,8 +254,10 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
                 throw new IllegalStateException('the runner blew up')
             }
         }, Stub(TaskWorktreeGit), new ClaimEpochBook())
-        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
-                BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
+        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), 'taskId',
+        BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
 
         when:
         def result = resolve(subject, [ready('github:o/r#1')])

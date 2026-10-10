@@ -20,6 +20,8 @@ class ReportedFailureExceptionReporterSpec extends Specification {
             new TaskNotFoundException('PROJ-1'),
             new TakeExitCodeException(0),
             new ServeExitCodeException(1),
+            // FR9 of supervise-daemon-loops-and-embed-dashboard: the loop's give-up ERROR is the report
+            new DashboardDisabledException(),
             // FR7 of add-project-registry: the loader printed the report before the context existed
             new ConfigurationViolationsException([
                 'factory.x is not a known key'

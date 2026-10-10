@@ -13,8 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
@@ -67,8 +66,10 @@ public final class ManualRunAssembly implements RunAssembly {
     final ConsoleIO errorConsole;
 
     final CheckEquipment checks;
-    final SystemClock systemClock;
-    final ThreadSleeper threadSleeper;
+    // The composition root's one time equipment (design D20 of
+    // supervise-daemon-loops-and-embed-dashboard): the engine's environment ports and every
+    // instant a run stamps.
+    final TimeEquipment time;
     final FactoryProperties factoryProperties;
     final SandboxProperties sandboxProperties;
     final @Nullable EngineEventListener extraListener;
@@ -89,15 +90,13 @@ public final class ManualRunAssembly implements RunAssembly {
             SystemConsoleIO systemConsoleIO,
             ConsoleIO errorConsole,
             CheckEquipment checks,
-            SystemClock systemClock,
-            ThreadSleeper threadSleeper,
+            TimeEquipment time,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
         this.systemConsoleIO = systemConsoleIO;
         this.errorConsole = errorConsole;
         this.checks = checks;
-        this.systemClock = systemClock;
-        this.threadSleeper = threadSleeper;
+        this.time = time;
         this.factoryProperties = factoryProperties;
         this.sandboxProperties = sandboxProperties;
         this.extraListener = null;
@@ -116,8 +115,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.systemConsoleIO = base.systemConsoleIO;
         this.errorConsole = base.errorConsole;
         this.checks = base.checks;
-        this.systemClock = base.systemClock;
-        this.threadSleeper = base.threadSleeper;
+        this.time = base.time;
         this.factoryProperties = base.factoryProperties;
         this.sandboxProperties = base.sandboxProperties;
         this.extraListener = extraListener;
@@ -264,5 +262,14 @@ public final class ManualRunAssembly implements RunAssembly {
     @Override
     public DialogConsole dialogConsole() {
         return new DialogConsole(systemConsoleIO);
+    }
+
+    /**
+     * The composition root's one time equipment, the same instance every run this assembly builds
+     * reads (FR18, FR22 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    @Override
+    public TimeEquipment timeEquipment() {
+        return time;
     }
 }

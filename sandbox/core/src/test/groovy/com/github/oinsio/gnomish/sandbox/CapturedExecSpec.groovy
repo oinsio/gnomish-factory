@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.sandbox
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import java.io.InterruptedIOException
 import java.io.UncheckedIOException
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
@@ -130,7 +130,7 @@ class CannedExecHandle implements ExecHandle {
     }
 
     @Override
-    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
         throw new UnsupportedOperationException('not driven by the capture helper')
     }
 

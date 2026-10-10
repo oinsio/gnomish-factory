@@ -5,7 +5,7 @@ import java.time.Duration;
 /**
  * The engine's injected sleep seam (design D8), used by the external poll loop to wait
  * a check's interval between polls. Injecting it lets a test supply a virtual sleeper
- * that advances a virtual {@link Clock} instead of blocking, so the poll loop runs
+ * that advances a virtual {@link java.time.InstantSource} instead of blocking, so the poll loop runs
  * deterministically and instantly under test (NFR-R3).
  *
  * <p>The contract carries <em>no</em> checked exception: the production adapter is a
@@ -20,7 +20,7 @@ public interface Sleeper {
     /**
      * Sleeps for {@code duration}. The production adapter blocks the calling virtual
      * thread and handles interruption internally (no checked exception on the contract);
-     * a test adapter advances a virtual {@link Clock} by {@code duration} instead of
+     * a test adapter advances a virtual {@link java.time.InstantSource} by {@code duration} instead of
      * blocking, keeping the poll loop deterministic (NFR-R3).
      *
      * <p>Supports D8, NFR-R3 of add-stage-engine.

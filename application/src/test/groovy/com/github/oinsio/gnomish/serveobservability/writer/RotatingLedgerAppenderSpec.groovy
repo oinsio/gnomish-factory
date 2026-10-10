@@ -1,14 +1,14 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
-import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.time.LocalDate
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -29,7 +29,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
 
     def "first append picks today's UTC date-named ledger file"() {
         given:
-        def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
+        def clock = new VirtualClock(Instant.parse('2026-08-03T10:00:00Z'))
         def appender = rotatingAppender(clock)
 
         when:
@@ -43,14 +43,12 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
 
     def "a subsequent append on the same UTC day reuses the same file"() {
         given:
-        def clock = new StepClock([
-            Instant.parse('2026-08-03T10:00:00Z'),
-            Instant.parse('2026-08-03T23:59:00Z')
-        ])
+        def clock = new VirtualClock(Instant.parse('2026-08-03T10:00:00Z'))
         def appender = rotatingAppender(clock)
 
-        when:
+        when: 'one append early in the day, the next a minute before midnight'
         appender.append(lifecycleLine('started'))
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T23:59:00Z')))
         appender.append(lifecycleLine('stopped'))
 
         then:
@@ -61,14 +59,12 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
 
     def "an append after crossing the UTC day boundary retargets to the new day's file, leaving the previous day's file untouched"() {
         given:
-        def clock = new StepClock([
-            Instant.parse('2026-08-03T23:59:59Z'),
-            Instant.parse('2026-08-04T00:00:01Z')
-        ])
+        def clock = new VirtualClock(Instant.parse('2026-08-03T23:59:59Z'))
         def appender = rotatingAppender(clock)
 
-        when:
+        when: 'one append a second before midnight, the next two seconds later, on the new day'
         appender.append(lifecycleLine('started'))
+        clock.advance(Duration.ofSeconds(2))
         appender.append(lifecycleLine('stopped'))
 
         then:
@@ -82,7 +78,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         !Files.readString(dayTwo).contains('started')
     }
 
-    private RotatingLedgerAppender rotatingAppender(Clock clock) {
+    private RotatingLedgerAppender rotatingAppender(InstantSource clock) {
         // The delegate's initial target is a placeholder: rotateIfNeeded always fires on
         // the very first append (no prior UTC day recorded yet), so it is retargeted
         // before anything is ever written to it.

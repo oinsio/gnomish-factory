@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -42,7 +43,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
-        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     private void create(String taskId) {

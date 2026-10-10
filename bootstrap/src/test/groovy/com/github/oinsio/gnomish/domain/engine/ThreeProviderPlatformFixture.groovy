@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.check.LoopbackTlsFixture
 import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -90,8 +91,9 @@ class ThreeProviderPlatformFixture {
         CheckClientConfiguration.requireValidSubsections(subsections, registry, ConnectionProfiles.none())
         new ProviderDispatchingExternalCheckClient(
                 registry,
-                CheckProviderSeam.resolve(subsections, ConnectionProfiles.none()),
-                { name -> Optional.of('tok') } as SecretsProvider)
+                CheckProviderSeam.resolve(subsections, ConnectionProfiles.none()), { name ->
+                    Optional.of('tok')
+                } as SecretsProvider, VirtualTimeEquipment.create())
     }
 
     /** A SonarQube quality gate: pending on the first poll, OK on the next (FR10's poll loop). */

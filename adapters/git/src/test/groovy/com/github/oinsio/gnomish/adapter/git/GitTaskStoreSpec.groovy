@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -40,7 +41,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
     Path tempDir
 
     GitProcessRunner runner = new GitProcessRunner()
-    def store = new GitTaskStore(runner, ClaimEpochSource.NONE)
+    def store = new GitTaskStore(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     Path cloneDir
     RegisteredClone registeredClone
 
@@ -147,7 +148,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
     def "NFR-R2 of fix-envelope-medium: a read cut off before git exits is unavailability, never absence"() {
         given: 'a stand-in git that stalls on every read, so the read can only end on an interrupt'
         Path stallDir = Files.createDirectories(tempDir.resolve('stall'))
-        def stalled = new GitTaskStore(new GitProcessRunner(stallingGit(stallDir).toString()), ClaimEpochSource.NONE)
+        def stalled = new GitTaskStore(new GitProcessRunner(stallingGit(stallDir).toString()), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
 
         when:
         Throwable thrown = null
@@ -172,7 +173,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         seedTask('PROJ-7', 'Fix it')
         def worktree = worktreeFor('PROJ-7')
         Path log = tempDir.resolve('argv.log')
-        def counting = new GitTaskStore(new GitProcessRunner(recordingGit(log).toString()), ClaimEpochSource.NONE)
+        def counting = new GitTaskStore(new GitProcessRunner(recordingGit(log).toString()), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
 
         and: 'nothing of the envelope is left on disk, so no filesystem read could answer either call'
         assert runner.run(worktree, 'rm', '-r', EnvelopePaths.DIR_NAME).exitCode() == 0

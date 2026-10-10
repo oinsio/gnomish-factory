@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -53,9 +54,7 @@ class OriginRemoteSpec extends Specification implements BareGitRepoFixture {
     // git-binary seam stands in for it.
     def "a configured origin whose URL reads blank is empty to the URL reader, still configured to the precondition"() {
         given:
-        def blankUrlGit = tempDir.resolve('blank-url-git')
-        blankUrlGit.toFile().text = '#!/bin/sh\necho ""\n'
-        blankUrlGit.toFile().executable = true
+        def blankUrlGit = StandIn.git('blank-url')
         def blankOrigin = new OriginRemote(new GitProcessRunner(blankUrlGit.toString()))
 
         expect:

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -46,7 +47,7 @@ class FeedAutomatonViewSpec extends Specification {
     }
 
     private FeedAutomaton automaton(Tracker tracker, SlotLedger ledger, int wipLimit = WIP_LIMIT) {
-        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, noop(), sleeper, clock, BASE, CAP, IDLE, wipLimit, new FixedRandom())
+        FeedAutomatonFixture.feedAutomaton(tracker, INSTANCE, ledger, noop(), VirtualTimeEquipment.on(clock, sleeper), BASE, CAP, IDLE, wipLimit, new FixedRandom())
     }
 
     def "before any cycle runs, the view reports an idle state at construction time"() {
@@ -56,13 +57,13 @@ class FeedAutomatonViewSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def a = automaton(tracker, new SlotLedger(1))
+        def a = automaton(tracker, new SlotLedger(1, new VirtualClock()))
 
         expect:
         def view = a.view()
         view.state() == FeedState.IDLE_EMPTY
-        view.since() == clock.now()
-        view.lastPollAt() == clock.now()
+        view.since() == clock.instant()
+        view.lastPollAt() == clock.instant()
         view.openFronts() == 0
         view.wipLimit() == WIP_LIMIT
     }
@@ -79,7 +80,7 @@ class FeedAutomatonViewSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def a = automaton(tracker, new SlotLedger(1))
+        def a = automaton(tracker, new SlotLedger(1, new VirtualClock()))
         clock.advance(Duration.ofSeconds(5))
 
         when:
@@ -88,8 +89,8 @@ class FeedAutomatonViewSpec extends Specification {
         then:
         def view = a.view()
         view.state() == FeedState.FILLING
-        view.since() == clock.now()
-        view.lastPollAt() == clock.now()
+        view.since() == clock.instant()
+        view.lastPollAt() == clock.instant()
         view.openFronts() == 1
         view.wipLimit() == WIP_LIMIT
     }
@@ -101,10 +102,10 @@ class FeedAutomatonViewSpec extends Specification {
             }, listOpen: {
                 -> []
             }] as Tracker
-        def a = automaton(tracker, new SlotLedger(1))
+        def a = automaton(tracker, new SlotLedger(1, new VirtualClock()))
         def firstSince = a.view().since()
         clock.advance(Duration.ofSeconds(10))
-        def expectedPollAt = clock.now()
+        def expectedPollAt = clock.instant()
 
         when: 'a second cycle lands in the same Idle-empty state'
         a.step()
@@ -128,13 +129,13 @@ class FeedAutomatonViewSpec extends Specification {
                 fillingCounter++; new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def a = automaton(tracker, new SlotLedger(2))
+        def a = automaton(tracker, new SlotLedger(2, new VirtualClock()))
         a.step()
         assert a.view().state() == FeedState.FILLING
 
         when:
         clock.advance(Duration.ofSeconds(7))
-        def expectedTransitionAt = clock.now()
+        def expectedTransitionAt = clock.instant()
         a.step()
 
         then:
@@ -146,7 +147,7 @@ class FeedAutomatonViewSpec extends Specification {
     def "the view reports FULL while the automaton is blocked waiting for a free slot"() {
         given: 'a single-slot ledger already fully occupied before the automaton ever runs'
         def busy = new TaskRef('github:o/r#busy')
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(busy)
         Tracker tracker = [listReady: { int limit ->

@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -18,13 +19,13 @@ class RetryFixtures {
 
     static TerminalWriteRetry givingUpRetry() {
         def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock clock = {
+        InstantSource clock = {
             ->
             def t = ticking.get()
             ticking.set(t + Duration.ofMinutes(2))
             t
-        } as Clock
+        } as InstantSource
         Sleeper sleeper = { Duration d -> } as Sleeper
-        new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
+        new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), Duration.ofMinutes(10))
     }
 }

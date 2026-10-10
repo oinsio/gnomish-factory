@@ -11,15 +11,14 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import spock.lang.Specification
@@ -75,7 +74,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
     // gate check runs before any tracker call is attempted) — the budget turns a would-be hang into
     // a red assertion rather than a stuck spec (see BudgetedVirtualSleeper's Javadoc).
     private final BudgetedVirtualSleeper sleeper = new BudgetedVirtualSleeper(clock)
-    private final Instant start = clock.now()
+    private final Instant start = clock.instant()
     private final Instant recoversAt = start + OUTAGE_DURATION
 
     private static final List<TaskRef> REFS = [
@@ -96,7 +95,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
     }
 
     private RemoteOutageGate gate(BaseRefGit baseRefGit) {
-        def suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
+        def suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(5))
         new RemoteOutageGate(
                 baseRefGit, Path.of('.'), clock, new FixedRandom(), IDLE, PROBE_CAP,
                 new RemoteOutageWiring('origin', suppressor, SUSTAINED_OPEN_THRESHOLD, {}, { ignored -> }))
@@ -105,7 +104,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
     def "a remote dead for an hour then back: one WARN, one recovery line, zero abort facts, tasks claimable again (M4, G5)"() {
         given: 'a probe that fails until the recovery instant, then succeeds, off the SAME virtual clock the feed runs on'
         BaseRefGit baseRefGit = [probe: { Path p ->
-                !clock.now().isBefore(recoversAt)
+                !clock.instant().isBefore(recoversAt)
             }] as BaseRefGit
         def gate = gate(baseRefGit)
         def logs = LogCaptureSupport.attach(RemoteOutageGate)
@@ -124,7 +123,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
             claims.add(ref)
             allClaimed.countDown()
             allClaimed.await()
-            if (clock.now().isBefore(recoversAt)) {
+            if (clock.instant().isBefore(recoversAt)) {
                 gate.openOnFailure('origin unreachable: connection refused')
                 // The real production release (FreshClaimBaseBinding.release, mirrored here) is a
                 // documented no-op on logical state for BOTH shipped adapters (InMemoryTracker only
@@ -146,9 +145,9 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         } as SlotRunner
 
         and: 'three slots, three ready tasks, a WIP limit that never blocks this scenario'
-        def ledger = new SlotLedger(3)
+        def ledger = new SlotLedger(3, new VirtualClock())
         def automaton = new FeedAssembly(
-                sleeper, clock, new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
+                VirtualTimeEquipment.on(clock, sleeper), new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
                 .feedAutomaton(tracker, INSTANCE, ledger, runner, DirtyNotifier.NOOP, gate)
 
         when: 'the feed fills all three slots — the only claims the outage costs the tracker (G5)'

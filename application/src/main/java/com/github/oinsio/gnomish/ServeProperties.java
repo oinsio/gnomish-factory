@@ -31,7 +31,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * installation's tempo, a project file may override it for that project.
  *
  * <p>Implements FR1, FR5, FR11, FR14 of add-factory-serve; FR1, FR15 of add-serve-observability;
- * FR6 of add-project-registry.
+ * FR6 of add-project-registry; FR8 of supervise-daemon-loops-and-embed-dashboard.
  *
  * @param slots number of concurrent claim/work slots ({@code factory.serve.slots}); defaults to
  *     {@code 2} when unset (FR1, design D3); rejected if non-positive
@@ -60,6 +60,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     one-shot sustained-open ERROR fires ({@code factory.serve.remote-sustained-open-threshold},
  *     NFR-O1, NFR-O3 of add-base-ref-resolution); defaults to {@code 1h} when unset; rejected if
  *     non-positive
+ * @param dashboard whether {@code serve} renders the dashboard page in-process ({@code
+ *     factory.serve.dashboard}, FR8 of supervise-daemon-loops-and-embed-dashboard); defaults to
+ *     {@code false} when unset. The {@code --dashboard} flag turns it on for one invocation; the
+ *     effective switch is folded together in {@code app.ServeArgumentsParser} (design D12)
  */
 @ConfigurationProperties("factory.serve")
 public record ServeProperties(
@@ -71,7 +75,8 @@ public record ServeProperties(
         @ConfigLevel(Level.ANY) Integer ledgerRetentionDays,
         @ConfigLevel(Level.ANY) Duration sandboxSweepInterval,
         @ConfigLevel(Level.ANY) Duration remoteProbeIntervalCap,
-        @ConfigLevel(Level.ANY) Duration remoteSustainedOpenThreshold) {
+        @ConfigLevel(Level.ANY) Duration remoteSustainedOpenThreshold,
+        @ConfigLevel(Level.ANY) Boolean dashboard) {
 
     private static final int DEFAULT_SLOTS = 2;
     private static final Duration DEFAULT_IDLE_POLL_INTERVAL = Duration.ofSeconds(30);
@@ -96,7 +101,8 @@ public record ServeProperties(
             @Nullable Integer ledgerRetentionDays,
             @Nullable Duration sandboxSweepInterval,
             @Nullable Duration remoteProbeIntervalCap,
-            @Nullable Duration remoteSustainedOpenThreshold) {
+            @Nullable Duration remoteSustainedOpenThreshold,
+            @Nullable Boolean dashboard) {
         this.slots = defaultSlots(slots);
         this.idlePollInterval = defaultIdlePollInterval(idlePollInterval);
         this.sigtermGrace = defaultSigtermGrace(sigtermGrace);
@@ -106,6 +112,7 @@ public record ServeProperties(
         this.sandboxSweepInterval = defaultSandboxSweepInterval(sandboxSweepInterval);
         this.remoteProbeIntervalCap = defaultRemoteProbeIntervalCap(remoteProbeIntervalCap);
         this.remoteSustainedOpenThreshold = defaultRemoteSustainedOpenThreshold(remoteSustainedOpenThreshold);
+        this.dashboard = defaultDashboard(dashboard);
     }
 
     /**
@@ -241,5 +248,14 @@ public record ServeProperties(
             throw new IllegalArgumentException("factory.serve.remote-sustained-open-threshold must be positive");
         }
         return remoteSustainedOpenThreshold;
+    }
+
+    /**
+     * Resolves the unset case to {@code false}: the embedded dashboard is opt-in (FR8 of
+     * supervise-daemon-loops-and-embed-dashboard, design D12). Kept as an explicit method for the
+     * same PIT record-constructor reason as {@link #defaultSlots}.
+     */
+    private static boolean defaultDashboard(@Nullable Boolean dashboard) {
+        return Boolean.TRUE.equals(dashboard);
     }
 }

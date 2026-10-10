@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker
 
+import com.github.oinsio.gnomish.app.TrackerAdapterContext
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -141,7 +142,7 @@ class BlankTypeTrackerAdapterFactory implements TrackerAdapterFactory {
     }
 
     @Override
-    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+    Tracker create(TrackerAdapterContext context) {
         throw new UnsupportedOperationException()
     }
 

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -41,7 +42,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
 
     private BaseRefresh refresh() {
         new BaseRefresh(runner, new GitInfrastructureRetry(
-                        { Duration ignored -> } as Sleeper, GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
+                        VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
     }
 
     /** Everything the refresh promised not to move, as one comparable snapshot. */
@@ -122,7 +123,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
 
         when:
         new BaseRefresh(recording, new GitInfrastructureRetry(
-                        { Duration ignored -> } as Sleeper, 1, Duration.ofMillis(1))).refresh(clone, 'develop')
+                        VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), 1, Duration.ofMillis(1))).refresh(clone, 'develop')
 
         then:
         !recordedSubcommands(log).contains('pull')

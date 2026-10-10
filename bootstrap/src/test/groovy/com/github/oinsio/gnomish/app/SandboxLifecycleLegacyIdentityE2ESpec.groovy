@@ -28,8 +28,8 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -121,7 +121,9 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     private static List<SweepVerdict> sweep(Path cloneDir, SandboxProperties sandboxProps, LivenessVerdict liveness) {
         def collected = []
         SweepVerdictListener sink = { SweepVerdict v -> collected << v }
-        SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), Clock.systemUTC()).run(cloneDir, liveness, sink)
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), InstantSource.system()).run(cloneDir, liveness, sink)
         collected
     }
 

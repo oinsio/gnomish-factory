@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.killpoint
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
@@ -181,6 +182,6 @@ final class ReclaimKillPoints {
     private static GitTaskBranches reclaimingBranches(KillPointWorld world) {
         def reclaimerEpochs = new ClaimEpochBook()
         reclaimerEpochs.issued(world.taskId, RECLAIM_EPOCH)
-        new GitTaskBranches(new GitProcessRunner(), reclaimerEpochs)
+        new GitTaskBranches(new GitProcessRunner(), reclaimerEpochs, VirtualTimeGitRetries.gitInfrastructure())
     }
 }

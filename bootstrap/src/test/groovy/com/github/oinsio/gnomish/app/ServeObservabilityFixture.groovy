@@ -9,11 +9,9 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-
 /**
  * Shared scaffolding for {@link ServeObservabilityIntegrationSpec} and its
  * companion {@link ServeObservabilityRestartIntegrationSpec} (split apart
@@ -66,11 +64,9 @@ trait ServeObservabilityFixture {
                 clone,
                 'taskId',
                 factoryProperties,
-                new ServeProperties(1, null, null, null, null, null, null, null, null),
-                Clock.systemUTC(),
-                new SystemClock(),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new ServeProperties(1, null, null, null, null, null, null, null, null, null),
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 LiveConsoleIO.onStderr())
     }
 

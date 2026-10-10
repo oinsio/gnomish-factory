@@ -5,9 +5,9 @@ import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Path
-import java.time.Clock
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -39,8 +39,8 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
         new ReportCommands(
                 new StatusCommand(TaskGitFixture.realClaimless(), scope, console),
                 new UsageCommand(TaskGitFixture.realClaimless(), scope, console),
-                new BoardCommand(Clock.systemUTC(), properties, scope, wiringFailingOn('board'), console),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), scope, properties,
+                new BoardCommand(new VirtualClock(), properties, scope, wiringFailingOn('board'), console),
+                new DashboardCommand(VirtualTimeEquipment.create(), scope, properties,
                 wiringFailingOn('dashboard')))
     }
 
@@ -50,7 +50,7 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
                 throw new IOException("pipeline load for ${command}")
             }
         }
-        new TrackerWiring([:], MapSecretsProvider.NONE, source)
+        new TrackerWiring([:], MapSecretsProvider.NONE, source, VirtualTimeEquipment.create())
     }
 
     def "status is routed to StatusCommand and reported as handled"() {

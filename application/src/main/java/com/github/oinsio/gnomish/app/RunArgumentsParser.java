@@ -73,7 +73,7 @@ public final class RunArgumentsParser {
         String taskId = parseTaskId(args);
         String fromStage = parseFromStage(args);
         String base = singleValue(args, BASE);
-        boolean discardWork = args.containsOption(DISCARD_WORK);
+        boolean discardWork = SwitchFlag.isOn(args, DISCARD_WORK);
         GitFlagsValidator.validate(mode, resume, base, discardWork, args);
         return new RunArguments(dir, taskSource, taskId, fromStage, mode, base, resume, discardWork, decision);
     }

@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.board.ReadyRow;
 import com.github.oinsio.gnomish.board.ReadySummary;
 import com.github.oinsio.gnomish.board.WorkingRow;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
-import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
@@ -24,21 +23,23 @@ import org.jspecify.annotations.Nullable;
  * mirroring the domain's own exhaustive-switch idiom: a new variant fails to
  * compile here until its mapping is added.
  *
- * <p>{@code wipLimit} is not carried on {@code BoardModel} (it is consumed
- * transiently while {@code BoardModel.build} resolves each row's eligibility), so
- * {@link #serialize} and {@link #toDto} take it as an explicit parameter — the same
- * "pass config explicitly, don't smuggle it into the model" pattern {@code
- * EligibilityPolicy} itself follows. {@code openFrontCount} needs no such
- * parameter: it is simply {@code model.workingRows().size() +
- * model.awaitingHumanRows().size()}, the same {@code listOpen} result already on
- * the model.
+ * <p>{@code wipLimit} and {@code openFrontCount} are read from the model ({@link
+ * BoardModel#wipLimit()}, {@link BoardModel#openFrontCount()}), never taken as a parameter. An
+ * earlier version passed the limit in beside the model ("pass config explicitly, don't smuggle it
+ * into the model"); that decision is reversed (design D13 of
+ * supervise-daemon-loops-and-embed-dashboard). A second renderer, the dashboard's WIP stat, needs
+ * the same value, and a limit handed to each renderer separately is two paths for one value with
+ * no guarantee either equals the limit the WIP-held rows were judged by. The model now carries
+ * exactly that limit, taken from the {@code EligibilityInputs} its rows were resolved against, so
+ * the signature leaves no way to print another one.
  *
  * <p>Annotated {@link UntrustedExit} for the same reason the {@code status.json} mappers are
  * (design D2 of type-untrusted-text): {@code board --json} is a parser's input, so a task's
  * tracker-written title goes into it byte for byte; the human board renders the same title
  * through the console exit instead.
  *
- * <p>Implements FR6, NFR-O1, UX4 of add-board-command; FR3 of type-untrusted-text.
+ * <p>Implements FR6, NFR-O1, UX4 of add-board-command; FR3 of type-untrusted-text; FR14 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 @UntrustedExit
 public final class BoardJsonMapper {
@@ -54,13 +55,11 @@ public final class BoardJsonMapper {
      * Serializes {@code model} as pretty-printed JSON matching the v1 contract.
      *
      * @param model the board model to serialize; never null
-     * @param wipLimit the configured WIP limit the model's WIP-held rows were
-     *     resolved against
      * @return the pretty-printed JSON document
      */
-    public String serialize(BoardModel model, int wipLimit) {
+    public String serialize(BoardModel model) {
         try {
-            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(toDto(model, wipLimit));
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(toDto(model));
         } catch (JsonProcessingException e) {
             // The DTO tree is plain data with no cyclic references or unsupported
             // types, so this is unreachable in practice; wrap rather than declare
@@ -73,36 +72,32 @@ public final class BoardJsonMapper {
      * Builds the JSON-contract DTO tree from {@code model}.
      *
      * @param model the board model to map; never null
-     * @param wipLimit the configured WIP limit the model's WIP-held rows were
-     *     resolved against
      * @return the equivalent DTO tree
      */
-    public BoardReportDto toDto(BoardModel model, int wipLimit) {
+    public BoardReportDto toDto(BoardModel model) {
         Objects.requireNonNull(model, "model");
-        int openFrontCount =
-                model.workingRows().size() + model.awaitingHumanRows().size();
         return new BoardReportDto(
                 1,
                 model.generatedAt().toString(),
                 model.truncated(),
-                toReadyColumn(model.summary(), model.readyRows(), openFrontCount, wipLimit),
+                toReadyColumn(model),
                 model.workingRows().stream().map(BoardJsonMapper::toWorkingDto).toList(),
                 model.awaitingHumanRows().stream()
                         .map(BoardJsonMapper::toAwaitingHumanDto)
                         .toList());
     }
 
-    private static ReadyColumnDto toReadyColumn(
-            ReadySummary summary, List<ReadyRow> rows, int openFrontCount, int wipLimit) {
+    private static ReadyColumnDto toReadyColumn(BoardModel model) {
+        ReadySummary summary = model.summary();
         return new ReadyColumnDto(
                 summary.queuedCount(),
                 summary.eligibleNowCount(),
                 summary.inBackoffCount(),
                 summary.finishedCount(),
                 summary.wipHeldCount(),
-                openFrontCount,
-                wipLimit,
-                rows.stream().map(BoardJsonMapper::toReadyRowDto).toList());
+                model.openFrontCount(),
+                model.wipLimit(),
+                model.readyRows().stream().map(BoardJsonMapper::toReadyRowDto).toList());
     }
 
     private static ReadyRowDto toReadyRowDto(ReadyRow row) {

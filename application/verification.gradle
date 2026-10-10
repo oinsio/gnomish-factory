@@ -60,11 +60,13 @@ pitest {
         // D3's by-role rule. Their collaborators here (TakeSlotRunner, FeedAutomaton, ServeShutdown,
         // ObservabilityWiring) are final classes exposing no state for their hand-offs, so a
         // same-module spec could asserted only "method calls method" over hand-built stand-ins.
-        // ServeShutdownWiringSpec, 16 scenarios — including both halves of the truth-in-reporting
+        // ServeShutdownWiringSpec, 21 scenarios — including both halves of the truth-in-reporting
         // decision (stopped(signal) when a signal lands mid-drain vs stopped(drainComplete) after),
-        // the interrupt-status restoration, and the owned teardown order (shutdown phase marked
-        // first, a line logged during the drain still reaching the file, the second pass a no-op),
-        // all driven through this class's own ShutdownHookRegistrar seam.
+        // the interrupt-status restoration, the owned teardown order (shutdown phase marked first, a
+        // line logged during the drain still reaching the file, the second pass a no-op), and the
+        // dashboard's final render on both paths, left byte-identical by a second pass (D9 of
+        // supervise-daemon-loops-and-embed-dashboard), all driven through this class's own
+        // ShutdownHookRegistrar seam; plus ServeDashboardFinalRenderSpec on the real drain.
         'com.github.oinsio.gnomish.app.ServeShutdownWiring',
         // The ServeCommandSpecBase family, 10 scenarios — startup refusal and failure paths
         // (ServeStartupFailureSpec), --drain vs the forever loop, the --slots override and the start

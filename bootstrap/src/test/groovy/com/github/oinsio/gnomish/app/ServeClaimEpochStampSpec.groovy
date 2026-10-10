@@ -12,10 +12,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.time.Clock
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -76,11 +75,9 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
                 RegisteredCloneFixture.unregistered(homeDir, projectDir),
                 'taskId',
                 properties,
-                new ServeProperties(1, null, null, null, null, null, null, null, null),
-                Clock.systemUTC(),
-                new SystemClock(),
-                new TrackerWiring([github: claimWatcher], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new ServeProperties(1, null, null, null, null, null, null, null, null, null),
+                new TrackerWiring([github: claimWatcher], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 LiveConsoleIO.onStderr())
     }
 

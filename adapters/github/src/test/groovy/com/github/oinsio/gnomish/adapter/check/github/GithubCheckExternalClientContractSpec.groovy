@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -64,7 +65,7 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
     }
 
     private static GithubCheckExternalClient clientFor(String baseUrl) {
-        new GithubCheckExternalClient(new GithubHttpClient(baseUrl, 'tok', fastRetryConfig()), 'acme', 'widgets')
+        new GithubCheckExternalClient(new GithubHttpClient(baseUrl, 'tok', fastRetryConfig()), 'acme', 'widgets', new VirtualClock())
     }
 
     @Override

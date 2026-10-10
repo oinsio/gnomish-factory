@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
@@ -27,7 +27,7 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
     private final List<RecordingEnvironment> environments = []
 
     private ShellCommandCheckRunner runner(Duration checkTimeout) {
-        new ShellCommandCheckRunner()
+        new ShellCommandCheckRunner(new VirtualClock())
                 .withEnvironments(recordingSource())
                 .withCheckTimeout(checkTimeout)
     }
@@ -39,7 +39,7 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
      * calling thread's interrupt flag is already set.
      */
     private CheckEnvironmentSource recordingSource() {
-        def host = new HostCheckEnvironmentSource(new SystemClock(), ChildEnvAllowlist.none())
+        def host = new HostCheckEnvironmentSource(new VirtualClock(), ChildEnvAllowlist.none())
         return { check, workspace ->
             def acquired = host.acquire(check, workspace)
             def environment = new RecordingEnvironment(acquired.environment())

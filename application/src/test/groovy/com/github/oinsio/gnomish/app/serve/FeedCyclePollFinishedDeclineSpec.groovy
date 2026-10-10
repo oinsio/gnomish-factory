@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -40,16 +39,17 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
     }
 
     private static FeedCycle cycle(Tracker tracker, int wipLimit = 2) {
-        def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
+        def clock = new VirtualClock()
+        def sleeper = new BudgetedVirtualSleeper(clock)
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
         def resilience = new FeedResilience(
                 outageRetry,
-                new FinishedDecline(new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5))),
+                new FinishedDecline(new RepeatSuppressor(clock, Duration.ofMinutes(5))),
                 RemoteOutageGateFixtures.closedGate())
         new FeedCycle(
-                new FeedTracker(tracker, INSTANCE), new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
+                new FeedTracker(tracker, INSTANCE), new SlotLedger(1, new VirtualClock()), { TaskRef ref -> } as SlotRunner,
                 new FeedSelection(BASE, CAP, wipLimit, new Random(0)), new FeedStateLogger(), resilience)
     }
 

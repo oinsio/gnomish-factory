@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -12,6 +11,7 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -98,7 +98,7 @@ class InterruptedWaitExecHandle implements ExecHandle {
     }
 
     @Override
-    Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+    Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
         new Wait.Interrupted()
     }
 

@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.adapter.agent
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
 
@@ -13,7 +13,7 @@ import spock.lang.Specification
  * Covers each known event type parsed correctly, unknown types/fields silently
  * ignored with parsing continuing, non-JSON and malformed lines skipped without
  * throwing, the null-vs-present distinctions later tasks depend on
- * (parentToolUseId, modelUsage), and read-time stamping via the injected Clock
+ * (parentToolUseId, modelUsage), and read-time stamping via the injected InstantSource
  * (FR6, NFR-O3). Implements FR4, FR6, NFR-O3, D3 of add-agent-executor.
  */
 class StreamJsonParserSpec extends Specification {
@@ -34,7 +34,7 @@ class StreamJsonParserSpec extends Specification {
         events[0].event() instanceof AgentEvent.InitEvent
         events[0].event().sessionId().forLog()== 'sess-1'
         events[0].event().model().forLog()== 'claude-x'
-        events[0].readAt() == clock.now()
+        events[0].readAt() == clock.instant()
     }
 
     // FR4, D3: a system line whose subtype is not "init" is skipped, not misread as an InitEvent
@@ -192,20 +192,16 @@ class StreamJsonParserSpec extends Specification {
         events[1].event().parentToolUseId() == 'toolu_top_1'
     }
 
-    // FR6, NFR-O3, D3: each event is stamped with the Clock's reading taken as its line is read
+    // FR6, NFR-O3, D3: each event is stamped with the InstantSource's reading taken as its line is read
     def "stamps each event with the read-time instant advancing between lines"() {
-        given: 'a two-line stream and a clock advanced between reads'
+        given: 'a two-line stream whose second line arrives 100 seconds after the first'
         def first = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'
         def second = '{"type":"result","subtype":"success","session_id":"sess-1","result":"done"}'
-        def reader = readerOf(first, second)
-        def advancingClock = new AdvancingClock([
-            Instant.ofEpochSecond(100),
-            Instant.ofEpochSecond(200)
-        ])
-        def advancingParser = new StreamJsonParser(advancingClock)
+        clock.advance(Duration.ofSeconds(100))
+        def reader = arrivingAfter(Duration.ofSeconds(100), clock, first, second)
 
         when: 'the stream is parsed'
-        def events = advancingParser.parse(reader)
+        def events = parser.parse(reader)
 
         then: 'each event carries the instant the clock reported when its line was read'
         events.size() == 2
@@ -213,17 +209,27 @@ class StreamJsonParserSpec extends Specification {
         events[1].readAt() == Instant.ofEpochSecond(200)
     }
 
-    private static final class AdvancingClock implements Clock {
-        private final Iterator<Instant> readings
-
-        AdvancingClock(List<Instant> readings) {
-            this.readings = readings.iterator()
-        }
-
-        @Override
-        Instant now() {
-            readings.next()
-        }
+    /**
+     * A stream whose every line after the first arrives {@code gap} later on {@code clock} — the
+     * wait a real agent's stdout imposes between lines, played on the shared virtual clock rather
+     * than on a fake that scripts its readings.
+     */
+    private static BufferedReader arrivingAfter(Duration gap, VirtualClock clock, String... lines) {
+        def pending = (lines as List<String>).iterator()
+        boolean firstLine = true
+        new BufferedReader(new StringReader('')) {
+                    @Override
+                    String readLine() {
+                        if (!pending.hasNext()) {
+                            return null
+                        }
+                        if (!firstLine) {
+                            clock.advance(gap)
+                        }
+                        firstLine = false
+                        pending.next()
+                    }
+                }
     }
 
     // FR4: an unknown event type is silently ignored, parsing continues to subsequent lines

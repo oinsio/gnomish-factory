@@ -1,61 +1,64 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.app.daemon.LoopOrder;
+import com.github.oinsio.gnomish.app.daemon.LoopShape;
+import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
+import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
+import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * The single snapshot writer thread (design D4 of add-serve-observability): a dedicated virtual
- * thread that wakes either on the configured timer beat or on an immediate {@link #markDirty()}
- * trigger, and on every wake runs exactly one {@link SnapshotWriteCycle} — the extracted write
- * half (serialize + atomic overwrite + retention sweep), so this class owns only the thread
- * lifecycle and wake-signal coalescing. Two trigger points (timer, dirty trigger), one write point
- * (FR1): no other thread ever writes the target file, so {@link com.github.oinsio.gnomish.atomicfile.AtomicFileWriter}'s "reader never
- * sees a partial file" guarantee is never raced by a second concurrent writer.
+ * The single snapshot writer (design D4 of add-serve-observability): it writes on the configured
+ * timer beat or at once on a {@link #markDirty()} trigger, and every write is exactly one {@link
+ * SnapshotWriteCycle} — the extracted write half (serialize + atomic overwrite + retention sweep).
+ * Two trigger points (timer, dirty trigger), one write point (FR1): no other thread ever writes the
+ * target file while the loop runs, so {@link com.github.oinsio.gnomish.atomicfile.AtomicFileWriter}'s
+ * "reader never sees a partial file" guarantee is never raced by a second concurrent writer.
  *
- * <p>Rapid {@link #markDirty()} calls coalesce: the wake signal is a semaphore whose surplus
- * permits are drained after every wake, so any number of triggers landing while the writer is
- * asleep or mid-write produce at most one more write after the current wake finishes (design D4
- * Risks).
+ * <p><b>The thread is a supervised daemon loop</b> (design D1, D3, D7, D8 of
+ * supervise-daemon-loops-and-embed-dashboard). This class owns only its write cycle; the thread,
+ * the guard, the stop and the restart belong to the {@link SupervisedLoop} it holds: tick → wait on
+ * a {@link LoopWait.IntervalOrSignal} of the configured interval, framed as {@link
+ * DaemonComponent#SNAPSHOT}, under {@link RestartPolicy.Unbounded} with the shared {@link RestartBackoff#MAX_BACKOFF} cap. A failed
+ * write cycle is the loop's {@code DAEMON_LOOP_TICK_FAILED} with {@code component=snapshot}, a
+ * stray interrupt is absorbed and waited out in full, and a dead thread is respawned — so the
+ * snapshot keeps being written while the daemon runs.
  *
- * <p>Implements FR1, FR2, FR15, NFR-R1 of add-serve-observability.
+ * <p>Rapid {@link #markDirty()} calls coalesce: they are signals of the loop's wait, whose surplus
+ * is drained after every wake, so any number of triggers landing while the writer waits or writes
+ * produce at most one more write after the current one (design D4 Risks of add-serve-observability).
+ *
+ * <p>Implements FR1, FR2, FR15, NFR-R1 of add-serve-observability; FR6, FR7 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SnapshotWriter {
 
-    private static final Logger log = LoggerFactory.getLogger(SnapshotWriter.class);
-
     private final SnapshotWriteCycle writeCycle;
-    private final Duration interval;
-    // Wake-signal semaphore instead of wait/notify on a monitor: tryAcquire (non-void) cannot be
-    // dropped by PIT's VoidMethodCallMutator the way a lock.wait() call can — that mutant turned
-    // awaitNextWake into a monitor-holding busy-spin that hung wake() callers for a full interval
-    // and TIMED_OUT the CI mutation gate. Permits also never block a wake() caller: release() is
-    // non-blocking, so markDirty()/stop() stay prompt whatever state the worker is in.
-    private final Semaphore wakeSignal = new Semaphore(0);
-    private volatile boolean running;
-    private @Nullable Thread worker;
+    private final LoopWait.IntervalOrSignal wake;
+    private final SupervisedLoop loop;
+    private volatile boolean started;
 
     /**
-     * @param targetFile the snapshot file this thread exclusively writes; never null
-     * @param snapshotSupplier produces the current snapshot content on every wake; called on the
-     *     writer thread only; its self-description fields are overwritten before serialization
+     * @param targetFile the snapshot file this writer exclusively writes; never null
+     * @param snapshotSupplier produces the current snapshot content on every write; called on the
+     *     writer's thread (and once by the final write); its self-description fields are
+     *     overwritten before serialization
      * @param jsonMapper serializes the snapshot to its JSON contract; never null
      * @param interval the maximum gap between writes absent a dirty-flag trigger ({@code
      *     factory.serve.snapshot-interval}); must be positive; also the stamped {@code
      *     intervalSeconds} value (FR2)
-     * @param clock supplies the actual wall-clock time stamped as {@code writtenAt}, taken at
-     *     write time, not at supplier-call time; never null
+     * @param time the writer's one time equipment (virtual under test): its clock stamps {@code
+     *     writtenAt} at write time, ages the ledger files for the retention sweep and times the
+     *     loop's failure roll-ups; its sleeper waits the restart backoff (design D16, D20 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      * @param ledgerRetentionDays days a ledger file is kept before the sweep (FR15, design D7)
      *     deletes it, scanning {@code targetFile}'s parent directory; {@code 0} disables the sweep
      */
@@ -64,25 +67,31 @@ public final class SnapshotWriter {
             Supplier<Snapshot> snapshotSupplier,
             SnapshotJsonMapper jsonMapper,
             Duration interval,
-            Clock clock,
+            TimeEquipment time,
             int ledgerRetentionDays) {
-        this.interval = interval;
         Path directory = Objects.requireNonNull(targetFile.getParent(), "targetFile must have a parent directory");
-        LedgerRetentionSweeper retentionSweeper = new LedgerRetentionSweeper(directory, ledgerRetentionDays, clock);
-        this.writeCycle =
-                new SnapshotWriteCycle(targetFile, snapshotSupplier, jsonMapper, interval, clock, retentionSweeper);
+        LedgerRetentionSweeper retentionSweeper =
+                new LedgerRetentionSweeper(directory, ledgerRetentionDays, time.clock());
+        this.writeCycle = new SnapshotWriteCycle(
+                targetFile, snapshotSupplier, jsonMapper, interval, time.clock(), retentionSweeper);
+        this.wake = new LoopWait.IntervalOrSignal(interval);
+        LoopShape shape = new LoopShape(
+                DaemonComponent.SNAPSHOT, LoopOrder.TICK_THEN_WAIT, wake, new RestartPolicy.Unbounded(interval));
+        this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 
-    /** Starts the writer thread: an immediate first write, then timer/dirty-flag wakes. */
+    /** Starts the writer: an immediate first write, then timer and dirty-flag wakes. Idempotent. */
     public void start() {
-        running = true;
-        worker = Thread.ofVirtual().name("gnomish-snapshot-writer").start(DaemonComponent.SNAPSHOT.framing(this::loop));
+        started = true;
+        loop.start();
     }
 
-    /** Stops the writer thread after its current or next wake completes, waking it immediately. */
+    /**
+     * Stops the writer and returns at once: a wait in progress is cut short, a write in progress
+     * completes, and no respawn follows (design D4 of supervise-daemon-loops-and-embed-dashboard).
+     */
     public void stop() {
-        running = false;
-        wake();
+        loop.stop();
     }
 
     /**
@@ -90,96 +99,30 @@ public final class SnapshotWriter {
      * any thread; rapid calls coalesce into at most one extra write (design D4 Risks).
      */
     public void markDirty() {
-        wake();
+        wake.signal();
     }
 
     /**
-     * Stops the writer thread, guaranteeing the LAST bytes written to {@code targetFile} reflect
-     * the snapshot content at the moment this is called (FR4's final {@code stopped} snapshot).
-     * Unlike {@link #markDirty()} + {@link #stop()} — which races the background thread — this
-     * lets it fully exit first ({@link #stop()} then {@link Thread#join()}), then performs one
-     * last synchronous write alone. The caller must have already updated whatever state the
-     * supplier reads before calling this.
+     * Stops the writer, guaranteeing the LAST bytes written to {@code targetFile} reflect the
+     * snapshot content at the moment this is called (FR4 of add-serve-observability's final {@code
+     * stopped} snapshot; FR7 of supervise-daemon-loops-and-embed-dashboard). The loop is stopped
+     * and joined first — including a worker a death handler respawned meanwhile — and only then is
+     * one last synchronous write performed alone. If the joining thread is interrupted, the join
+     * still waits out a write in progress, the final write still happens, and the flag is restored. The caller must have already updated whatever
+     * state the supplier reads before calling this.
      *
      * @throws IllegalStateException if the writer was never {@link #start()}ed
      */
     public void stopAfterFinalWrite() {
-        Thread w = worker;
-        if (w == null) {
+        if (!started) {
             throw new IllegalStateException("SnapshotWriter was never started");
         }
-        stop();
-        try {
-            w.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        loop.stopAndJoin();
         writeCycle.writeOnce();
-    }
-
-    private void wake() {
-        wakeSignal.release();
-    }
-
-    // Package-private: lifecycle specs drive the real thread; write-content specs drive tick().
-    //
-    // task 6.3 documented exception: this catch is a second, outer safety net around tick() —
-    // writeSnapshot() and sweepLedgerRetention() below already catch and swallow every
-    // IOException/RuntimeException each of their own operations can produce (each has its own
-    // try/catch, NFR-R1), so under the current implementation tick() cannot itself let a
-    // RuntimeException escape; this line is therefore structurally unreachable by any test that
-    // exercises real (not artificially broken) sub-methods. Kept as defense in depth so the
-    // background thread survives even a future bug in tick()'s own exception handling, rather
-    // than dying silently and going unnoticed until the snapshot file goes stale.
-    void loop() {
-        while (running) {
-            try {
-                tick();
-            } catch (RuntimeException e) {
-                // log-contract-exempt: no spec can name this code (FR15 of
-                // harden-logging-observability wants one per WARN/ERROR line), because the branch
-                // is the unreachable defense-in-depth guard the comment above describes — every
-                // sub-method of tick() already catches everything its own operations raise, so
-                // reaching this line needs an artificially broken collaborator, and a spec built on
-                // one would assert "catch catches", not any behavior of the writer. The guard stays
-                // because its unreachability is a NON-LOCAL invariant: it holds only while every
-                // future step added to tick() keeps its own catch, and the cost of being wrong is a
-                // dead writer thread and a snapshot file that silently goes stale.
-                log.warn(
-                        OperatorEvent.SNAPSHOT_TICK_FAILED.head()
-                                + "snapshot writer: tick failed; will retry on the next wake",
-                        e);
-            }
-            awaitNextWake();
-        }
-    }
-
-    // Blocks until a wake() lands or the timer interval elapses, whichever first. Draining the
-    // leftover permits AFTER the acquire is what coalesces rapid markDirty() bursts into at most
-    // one extra write (design D4 Risks): permits released while the writer was mid-write satisfy
-    // the immediate next tryAcquire (one more wake), and the surplus is discarded here so the
-    // wake after THAT blocks for the full interval again.
-    private void awaitNextWake() {
-        try {
-            // Return value (acquired vs. timed out) is deliberately unused: both outcomes take the
-            // same next step (drainPermits below), so there is no decision to make on it.
-            //noinspection ResultOfMethodCallIgnored
-            wakeSignal.tryAcquire(interval.toNanos(), TimeUnit.NANOSECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
-        }
-        wakeSignal.drainPermits();
     }
 
     // Package-private: write-content specs call this directly, with no thread and no waiting.
     void tick() {
         writeCycle.run();
-    }
-
-    // Package-private: specs join the worker to observe a deterministic stop.
-    @Nullable
-    Thread worker() {
-        return worker;
     }
 }

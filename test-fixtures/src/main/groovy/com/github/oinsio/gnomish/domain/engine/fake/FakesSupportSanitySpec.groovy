@@ -87,14 +87,14 @@ class FakesSupportSanitySpec extends Specification {
         def sleeper = new VirtualSleeper(clock)
 
         expect: 'the clock starts at the epoch'
-        clock.now() == Instant.EPOCH
+        clock.instant() == Instant.EPOCH
 
         when: 'the sleeper sleeps twice'
         sleeper.sleep(Duration.ofSeconds(5))
         sleeper.sleep(Duration.ofSeconds(3))
 
         then: 'virtual time advanced by the total and each duration was recorded'
-        clock.now() == Instant.EPOCH.plusSeconds(8)
+        clock.instant() == Instant.EPOCH.plusSeconds(8)
         sleeper.slept == [
             Duration.ofSeconds(5),
             Duration.ofSeconds(3)
@@ -109,6 +109,6 @@ class FakesSupportSanitySpec extends Specification {
         clock.advance(Duration.ofMinutes(2))
 
         then: 'now reflects the advance'
-        clock.now() == Instant.EPOCH.plusSeconds(120)
+        clock.instant() == Instant.EPOCH.plusSeconds(120)
     }
 }

@@ -1,0 +1,68 @@
+# Git stand-ins that refuse one subcommand and pass the rest to the real git, or fail outright.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+
+[fail-subcommand]
+# A git probe that ran and failed: the subcommand the per-run link is named after exits 128 with an
+# empty stdout and a fatal line; everything else is the real git (FailingSubcommandGitFixture).
+@name refuse 128 data/stderr#bad-revision
+* delegate git
+
+[fetch-fsck-refused]
+# Every argv recorded; every fetch refused with git 2.55.0's validation refusal; the rest is the real
+# git (FetchRefusalOutcomeSpec); data/stderr#fetch-fsck-refusal is the one spelling of that refusal.
+* record
+fetch refuse 128 data/stderr#fetch-fsck-refusal
+* delegate git
+
+[fetch-noop]
+# A fetch that reports success and does nothing; the rest is the real git (BaseRefreshSpec).
+fetch exit 0
+* delegate git
+
+[harvest-daemon-down]
+# A container harvest fetch that fails with this stderr (ContainerHarvestFetchSpec).
+* refuse 128 data/stderr#harvest-daemon-down
+
+[harvest-fsck-refused]
+# A container harvest fetch refused by git's object validation (ContainerHarvestFetchSpec).
+* refuse 128 data/stderr#fetch-fsck-refusal
+
+[harvest-not-a-repository]
+# A container harvest fetch that fails with this stderr (ContainerHarvestFetchSpec).
+* refuse 128 data/stderr#not-a-repository
+
+[harvest-rejected]
+# A container harvest fetch that fails with this stderr (ContainerHarvestFetchSpec).
+* refuse 1 data/stderr#rejected-non-fast-forward
+
+[leak-credentials]
+# Prints a PAT-bearing URL on stdout and git's password-prompt failure on stderr, exit 128
+# (GitProcessRunnerSpec: the scrub).
+* stdout data/stdout-git#pat-url
+* refuse 128 data/stderr#password-prompt-device
+
+[refuse-discard]
+# reset and clean refused, everything else the real git (WorktreeSalvageSpec).
+reset refuse 128 data/stderr#stand-in-refuses
+clean refuse 128 data/stderr#stand-in-refuses
+* delegate git
+
+[refuse-fetch]
+# Every fetch refused as an unreachable origin; the rest, refs reads included, is the real git
+# (BaseRefreshSpec).
+fetch refuse 128 data/stderr#unable-to-access
+* delegate git
+
+[refuse-fetch-and-origin-probe]
+# refuse-fetch, and the origin probe's own `ls-remote origin HEAD` refused too, while a base refs read
+# still reaches the real git: origin gone between the two calls (BaseRefreshSpec).
+fetch refuse 128 data/stderr#unable-to-access
+ls-remote,--end-of-options,origin,HEAD refuse 128 data/stderr#unable-to-access
+* delegate git
+
+[refuse-ls-remote-recorded]
+# Every ls-remote is recorded and refused as an unreachable origin; the rest is the real git
+# (BaseRefreshSpec, RemoteDefaultBranchSpec: the re-ask budget).
+ls-remote record
+ls-remote refuse 128 data/stderr#unable-to-access
+* delegate git

@@ -4,15 +4,16 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
@@ -21,6 +22,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.*
 import spock.util.concurrent.PollingConditions
@@ -29,7 +31,7 @@ import spock.util.concurrent.PollingConditions
  * Building on task 7.1's proven Gitea + {@code act_runner} fixture, this drives the real {@link
  * GithubCheckExternalClient} adapter <em>through the engine's own verify/external-poll
  * orchestration</em> — the real {@link VerifyOrchestrator} + {@link ExternalPolling} with a
- * production {@link SystemClock}/{@link ThreadSleeper}, exactly as the engine wires them in
+ * production {@link InstantSource}/{@link ThreadSleeper}, exactly as the engine wires them in
  * production — rather than calling the adapter directly like 7.1 did. Two attempt commits are
  * pushed on distinct SHAs (the adapter matches runs by head SHA): a green workflow and a red one.
  *
@@ -158,9 +160,12 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     }
 
     private VerifyOrchestrator orchestrator() {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
-        def clock = new SystemClock()
-        def polling = new ExternalPolling(client, AttemptDelivery.assumedDelivered(), clock, new ThreadSleeper())
+        // real-time-wiring: a real Gitea Actions runner finishes on the wall clock, and the poll must
+        //     really wait for it between polls; one equipment for the whole chain.
+        def time = new TimeEquipment(InstantSource.system(), new ThreadSleeper())
+        def clock = time.clock()
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, clock)
+        def polling = new ExternalPolling(client, AttemptDelivery.assumedDelivered(), time)
         new VerifyOrchestrator(
                 new ScriptedBuiltinCheckRunner(),
                 new ScriptedCommandCheckRunner(),
@@ -180,7 +185,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     // (see setupSpec) from ever reaching the green run. Host-mode `echo ok` concludes in about a
     // second once picked up; the generous timeout only absorbs runner registration and job pickup.
     private void awaitGreenConcluded(String sha) {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
         def workspace = workspaceAt(sha)
         new PollingConditions(timeout: 300, initialDelay: 5, delay: 5).eventually {
             def status = client.poll(check(), workspace)

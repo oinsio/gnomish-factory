@@ -115,20 +115,19 @@ comment identity. *Alternative rejected:* a new tracker status for
 "advisory pending" — multiplies the tracker shape set for a state that
 blocks nothing.
 
-**D10 — Arbiter usage follows the judge convention, and the usage wire
-vocabulary is extracted first.** `arbiterUsage` is map-only
-(empty = unreported, never fabricated zeros) and joins `AttemptRecord`
-additively. The audit found judge usage already serialized by three
-independent DTO trees (state.json / status.json / usage.json); adding a
-fourth usage kind to three trees triggers the rule-of-three, so this
-change extracts one shared usage wire vocabulary consumed by all three
-documents before adding the new field. Totals stay executor-only, now
-documented at the fold site. *Rationale:* the manual-sync-pairs rule is
-explicit: a third implementation extracts the abstraction — this change
-would otherwise add the third-and-fourth copies knowingly. *Alternative
-rejected:* copying `arbiterUsage` into all three trees and declaring the
-pairs — three-way declared sync for mechanical DTO mapping is exactly
-what the rule's preference order forbids when extraction is possible.
+**D10 — Arbiter usage is a `decision` participant of the round.** The
+arbiter's consult reports usage in the shape `define-executor-contract` owns
+(D14 there): one participant entry with role `decision`, the arbiter's
+executor name, provenance, per-model tokens and optional cost, folded into
+the task's usage snapshot by the one fold (D15 there). This change adds no
+usage field, no DTO and no totals rule; it renders the role in the usage
+and status outputs the contract change already produces. *Rationale:* the
+usage accounting this change once carried (a shared wire vocabulary and an
+`arbiterUsage` slot with executor-only totals) was withdrawn on 2026-10-10:
+the contract change makes every executor invocation a participant, so a
+role-named slot would be a second shape. *Alternative rejected:* keeping
+`arbiterUsage` as an additive slot — the fourth role-named field and the
+fourth DTO tree, which the contract change removes.
 
 ## Sync surfaces (mandatory)
 
@@ -148,7 +147,7 @@ what the rule's preference order forbids when extraction is possible.
   still live and stays so).
 
 New parallel implementations: none — the arbiter adapter is a *first*
-implementation behind a new port (D2), and D7/D10 *remove* parallelism
+implementation behind a new port (D2), and D7 *removes* parallelism
 (four append sites → one owner; three usage DTO trees → one shared
 vocabulary). No new pair is declared.
 
@@ -163,6 +162,6 @@ vocabulary). No new pair is declared.
   questions; early runs may see more malformed-request feedback loops →
   the executor prompt documents the schema, and the malformed arm burns
   nothing.
-- Extracting the usage wire vocabulary (D10) widens the diff beyond the
-  arbiter itself → accepted: the alternative knowingly creates the fourth
-  copy of a hand-synced vocabulary.
+- Taking the usage shape from `define-executor-contract` (D10) sequences this
+  change after it → accepted: the alternative knowingly creates a fourth
+  role-named usage slot and a fourth copy of a hand-synced vocabulary.

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import java.lang.reflect.Modifier
 import java.time.Duration
 import spock.lang.Specification
 
@@ -27,7 +28,7 @@ class CheckClientFactorySpec extends Specification {
         }
 
         @Override
-        ExternalCheckClient create(SecretsProvider secrets, Map<String, Object> subsection) {
+        ExternalCheckClient create(CheckClientContext context) {
             { check, workspace -> new PollStatus.Pass() } as ExternalCheckClient
         }
     }
@@ -43,18 +44,26 @@ class CheckClientFactorySpec extends Specification {
     def "a provider implementing only the mandatory members is usable"() {
         expect:
         factory.provider() == 'minimal'
-        factory.create({ _ -> Optional.empty() } as SecretsProvider, [:])
+        factory.create(new FixedCheckClientContext({ _ ->
+            Optional.empty()
+        } as SecretsProvider, [:]))
         .poll(check(), Stub(Workspace)) instanceof PollStatus.Pass
     }
 
-    // NFR-S2, D5: the run-aware form defaults to the two-argument one, so a provider whose target is
-    //     fully determined by its connection implements only that one and still gets wired.
-    def "the run-aware create defaults to the connection-only one"() {
-        expect:
-        factory.create({ _ ->
-            Optional.empty()
-        } as SecretsProvider, [:], CheckRunContext.none())
-        .poll(check(), Stub(Workspace)) instanceof PollStatus.Pass
+    // FR23 of supervise-daemon-loops-and-embed-dashboard: one abstract create, taking the context,
+    //     and no default overload delegating to another — the run context and the time equipment
+    //     ride the context rather than a second signature.
+    def "FR23: the factory declares exactly one create, abstract, taking the context"() {
+        when:
+        def creates = CheckClientFactory.declaredMethods.findAll {
+            it.name == 'create'
+        }
+
+        then:
+        creates.size() == 1
+        creates[0].parameterTypes as List == [CheckClientContext]
+        Modifier.isAbstract(creates[0].modifiers)
+        !creates[0].isDefault()
     }
 
     // FR6: a provider defining no per-check params grades none — the loader asks and is told so

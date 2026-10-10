@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +56,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     private final DockerCli docker;
     private final String key;
     private final BoxGitLink link;
-    private final Clock clock;
+    private final InstantSource clock;
     private final ChildEnvAllowlist allowlist;
     private final ContainerMaterializer materializer;
 
@@ -79,7 +79,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
             String key,
             BoxGitLink link,
             TaskContainerSettings settings,
-            Clock clock,
+            InstantSource clock,
             ChildEnvAllowlist allowlist,
             ObjectOwnership ownership) {
         this.docker = docker;
@@ -113,7 +113,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         Map<String, String> env = allowlist.compose(List.of(), command.env());
         List<String> argv = DockerCommands.exec(key, WORKING_COPY, env, interactive, command.command());
         Process process = docker.start(argv, command.mergeStderr());
-        Instant startedAt = clock.now();
+        Instant startedAt = clock.instant();
         ChildProcessStdin.feed(process, command.stdin());
         // FR1 of polish-sandbox-forensics: the container handle annotates an exit 137 with the
         // container's own OOM state — advisory only, and only at this one seam every in-box

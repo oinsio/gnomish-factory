@@ -41,18 +41,13 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
      * Justified exemptions, one entry per class AND signature, each with its reason — never a
      * pattern, and never a whole class: a delegator exempted for one default stays gated on
      * every other default its interfaces declare, its same-named overloads included.
+     *
+     * <p>Empty since the one entry it held — {@code ForwardingRemoteOutageLedgerSink}'s inherited
+     * {@code Consumer.andThen} — left with the JDK functional type: the sink is now the {@code
+     * RemoteOutageLedgerSink} role interface, which declares no default to forward (clause (iii)
+     * of design D22 of supervise-daemon-loops-and-embed-dashboard).
      */
-    static final List<Map<String, String>> EXEMPT = [
-        [
-            type: 'com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink',
-            method: 'andThen',
-            params: 'Consumer',
-            reason: 'Consumer.andThen must compose on THIS forwarder, not on the delegate held at' +
-            ' the moment of composition: this stand-in exists precisely because its delegate is' +
-            ' rebound once at wiring time, and a forwarded andThen would freeze the composed' +
-            ' consumer onto the no-op the forwarder starts with'
-        ]
-    ]
+    static final List<Map<String, String>> EXEMPT = []
 
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()

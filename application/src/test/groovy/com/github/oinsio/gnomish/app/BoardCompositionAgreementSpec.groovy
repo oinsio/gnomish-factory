@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.board.BoardComposition
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -77,7 +78,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         def boardCommand = new BoardCommand(
                 clock, factoryProperties,
                 RegisteredCloneFixture.scope(RegisteredCloneFixture.unregistered(projectDir.resolveSibling('gnomish-home'), projectDir)),
-                new TrackerWiring([github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry),
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry, VirtualTimeEquipment.create()),
                 liveConsole())
 
         and: 'the board CLI\'s default readyLimit (50), stood in for as the dashboard\'s own choice too'
@@ -95,7 +96,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         PipelineDefinition definition = TakeCommandSupport.loadPipeline(projectDir, trackerValidatorRegistry)
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition)
         def dashboardModel = BoardComposition.compose(tracker, trackerConfig, factoryProperties.tracker(), clock, readyLimit)
-        String dashboardJson = new BoardJsonMapper().serialize(dashboardModel, trackerConfig.wipLimit())
+        String dashboardJson = new BoardJsonMapper().serialize(dashboardModel)
 
         then: 'both callers agree on the exact same board data, deadline included'
         dashboardJson == commandJson

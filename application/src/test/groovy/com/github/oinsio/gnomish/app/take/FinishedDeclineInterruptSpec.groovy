@@ -5,10 +5,10 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -29,7 +29,7 @@ class FinishedDeclineInterruptSpec extends Specification {
     private static final TaskRef SECOND = new TaskRef('github:o/r#2')
 
     FinishedDecline decline = new FinishedDecline(
-    new RepeatSuppressor(new MovableClock(Instant.parse('2026-09-28T10:00:00Z')), Duration.ofMinutes(5)))
+    new RepeatSuppressor(new VirtualClock(Instant.parse('2026-09-28T10:00:00Z')), Duration.ofMinutes(5)))
     LogCaptureSupport logs = LogCaptureSupport.attach(FinishedDecline)
 
     def cleanup() {

@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -87,7 +88,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         when: 'the engine runs that round and parks the task on the branch'
         def outcome = runRoundKilledBy(
                 new ExecutorFailure(new RuntimeException('round timed out after PT15M'), [denial]), context)
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(TASK_ID, outcome, TrackerWrite.OWED)
 
@@ -106,7 +107,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         taskJson.contains('kind=http method=POST')
 
         and: 'status.json rendered from that branch shows the same denial under the same escalation'
-        def result = new BranchStateReader(runner).read(cloneDir, TASK_ID)
+        def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, TASK_ID)
         def statusJson = mapper.serialize((result as BranchStateResult.Found).report())
         statusJson.contains('"type" : "cannotExecute"')
         statusJson.contains('"message" : "egress denied: paste.example.com:443"')
@@ -125,7 +126,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def ports = new EnginePorts(
                 executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
+                new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock))
         new Engine().run(
                 pipeline(), context, TaskState.atStageStart('build'), new FakeWorkspace(), ports) as TaskOutcome
     }

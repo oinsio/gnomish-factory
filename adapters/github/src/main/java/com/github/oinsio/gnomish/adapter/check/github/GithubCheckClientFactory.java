@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubCredential;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
+import com.github.oinsio.gnomish.app.CheckClientContext;
 import com.github.oinsio.gnomish.app.CheckClientFactory;
 import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
@@ -20,8 +21,9 @@ import java.util.Optional;
  * runs with an unauthenticated adapter.
  *
  * <p>One {@link CheckClientFactory} among the {@code ServiceLoader} registry, not a special case
- * (FR5, FR12 of add-plugin-architecture): a public no-arg constructor, the {@link SecretsProvider}
- * and the subsection arriving as method arguments (FR2, design D2), and the {@code
+ * (FR5, FR12 of add-plugin-architecture): a public no-arg constructor, the {@link SecretsProvider},
+ * the subsection and the time equipment arriving on the {@link CheckClientContext} (FR2, design D2;
+ * FR23 of supervise-daemon-loops-and-embed-dashboard), and the {@code
  * META-INF/services} entry in this module's jar is the only thing that makes it selectable — core
  * names this class nowhere.
  *
@@ -35,7 +37,8 @@ import java.util.Optional;
  * from every composed child environment, matching the tracker token's treatment (FR17, NFR-S1).
  *
  * <p>Implements FR26 of add-sandbox-core; FR8, NFR-S1 of add-external-check-github-actions; FR2,
- * FR4, FR5, FR15, FR17 of add-plugin-architecture.
+ * FR4, FR5, FR15, FR17 of add-plugin-architecture; FR18, FR23 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class GithubCheckClientFactory implements CheckClientFactory {
 
@@ -55,7 +58,9 @@ public final class GithubCheckClientFactory implements CheckClientFactory {
 
     /**
      * Builds the client from the {@code factory.check.github} subsection's {@code api-url} and
-     * {@code repo} keys, resolving the token through the {@link SecretsProvider} (FR26). Both keys
+     * {@code repo} keys, resolving the token through the context's {@link SecretsProvider} (FR26),
+     * and stamping on the context's time equipment — the host's time, virtual under test (FR18, FR23
+     * of supervise-daemon-loops-and-embed-dashboard), never a clock this factory builds. Both keys
      * are already graded by {@link #subsectionValidator()} at the load seam, so a malformed
      * subsection has failed startup before this is reached, so the coordinate guard here only
      * catches a caller that bypassed the load seam.
@@ -65,9 +70,11 @@ public final class GithubCheckClientFactory implements CheckClientFactory {
      *     owner/name}
      */
     @Override
-    public GithubCheckExternalClient create(SecretsProvider secrets, Map<String, Object> subsection) {
+    public GithubCheckExternalClient create(CheckClientContext context) {
+        Map<String, Object> subsection = context.subsection();
         String credential = GithubCredential.nameOr(subsection, TOKEN_ENV_VAR);
-        String token = secrets.find(credential)
+        String token = context.secrets()
+                .find(credential)
                 .orElseThrow(() -> new GithubCheckTokenException(credential
                         + " is required to use the GitHub Actions external-check adapter, but is missing or blank"));
         String apiUrl = GithubCheckSubsectionValidator.stringValue(subsection, "api-url");
@@ -77,7 +84,10 @@ public final class GithubCheckClientFactory implements CheckClientFactory {
         }
         int slash = repo.indexOf('/');
         return new GithubCheckExternalClient(
-                new GithubHttpClient(apiUrl, token), repo.substring(0, slash), repo.substring(slash + 1));
+                new GithubHttpClient(apiUrl, token),
+                repo.substring(0, slash),
+                repo.substring(slash + 1),
+                context.timeEquipment().clock());
     }
 
     /**

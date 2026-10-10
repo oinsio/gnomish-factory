@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.github.tomakehurst.wiremock.http.Fault
@@ -109,12 +110,12 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
                 new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def slotRunner = { TaskRef ref -> claimed.add(ref) } as SlotRunner
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
         def automaton = FeedAutomatonFixture.feedAutomaton(
-                tracker, INSTANCE, ledger, slotRunner, sleeper, clock,
+                tracker, INSTANCE, ledger, slotRunner, VirtualTimeEquipment.on(clock, sleeper),
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 
         when: 'the automaton polls through the outage window with no real wall-clock wait'
@@ -158,11 +159,11 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
             listReady: { int limit -> feedQuery.listReady(limit) },
             listOpen : { -> [] },
         ] as Tracker
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
         def automaton = FeedAutomatonFixture.feedAutomaton(
-                tracker, INSTANCE, ledger, { TaskRef ref -> } as SlotRunner, sleeper, clock,
+                tracker, INSTANCE, ledger, { TaskRef ref -> } as SlotRunner, VirtualTimeEquipment.on(clock, sleeper),
                 Duration.ofMinutes(2), Duration.ofHours(1), Duration.ofSeconds(30), 2, new Random(1))
 
         when:

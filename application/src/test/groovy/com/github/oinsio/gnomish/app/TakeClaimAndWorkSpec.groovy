@@ -34,6 +34,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -124,7 +125,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         def result = claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly), beat), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }, beat), tracker)
 
         then:
         result instanceof TakeResult.Skipped
@@ -160,6 +163,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
             bindTaskTier(_) >> boundTaskTier()
         }), tracker)
 
@@ -182,7 +186,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
 
         when:
-        def result = claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly)), tracker)
+        def result = claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), tracker)
 
         then: 'the take goes down the crash-abort path, which hands the claim back'
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -214,7 +220,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
 
         when:
-        claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly)), tracker)
+        claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), tracker)
 
         then: 'the existing branch was materialized and reconciled — never created'
         1 * worktrees.ensureWorktree(CLONE, 'PROJ-1', 'gnomish/PROJ-1') >> worktree
@@ -240,7 +248,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         def result = claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly)), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }), tracker)
 
         then: 'the park carries the diagnosis, and no abort was recorded against the task'
         1 * tracker.park(REF, ParkReason.INFRA, {
@@ -271,7 +281,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly), beat), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }, beat), tracker)
 
         then:
         thrown(UsageException)
@@ -300,7 +312,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), book),
-                tracker, Stub(RunAssembly), ClaimBeat.NONE, new ClaimLossFlag(), CLONE), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }, ClaimBeat.NONE, new ClaimLossFlag(), CLONE), tracker)
 
         then:
         thrown(UsageException)
@@ -322,7 +336,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         def result = claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly), beat), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }, beat), tracker)
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -357,7 +373,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 TaskDesignators.of('base', Designator.conflict(['a', 'b'])))
 
         when:
-        def result = claimAndWork(git, tracker, Stub(RunAssembly)).claimAndWork(takeOrder(conflictingTask, tracker))
+        def result = claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }).claimAndWork(takeOrder(conflictingTask, tracker))
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -382,7 +400,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
 
         when:
-        def result = claim(claimAndWork(git, tracker, Stub(RunAssembly)), tracker)
+        def result = claim(claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }), tracker)
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -408,7 +428,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 new TrackerTaskState.Ready(), facts, false)
         def git = new TaskGit(Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
-        def subject = claimAndWork(git, tracker, Stub(RunAssembly))
+        def subject = claimAndWork(git, tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        })
 
         when:
         def result = subject.claimAndWork(takeOrder(taskWithAborts, tracker))
@@ -491,7 +513,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly)), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }), tracker)
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -524,7 +548,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         when:
         claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly)), tracker)
+                tracker, Stub(RunAssembly) {
+                    timeEquipment() >> VirtualTimeEquipment.create()
+                }), tracker)
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))

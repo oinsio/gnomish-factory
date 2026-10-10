@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
-import java.util.function.Consumer;
+import java.time.InstantSource;
 
 /**
  * {@link RemoteOutageGate}'s observability collaborators (task 7.4 of add-base-ref-resolution),
@@ -28,16 +28,20 @@ record RemoteOutageWiring(
         String target,
         RepeatSuppressor suppressor,
         Duration sustainedOpenThreshold,
-        Runnable onTransition,
-        Consumer<RemoteOutageClosedOutage> onClosedOutage) {
+        DirtyNotifier onTransition,
+        RemoteOutageLedgerSink onClosedOutage) {
 
-    /** The production defaults: {@link RemoteOutageReporter#DEFAULT_TARGET}, no-op callbacks. */
-    static RemoteOutageWiring defaults() {
+    /**
+     * The defaults: {@link RemoteOutageReporter#DEFAULT_TARGET}, no-op callbacks, and a suppressor
+     * on {@code clock} — the gate's own time source, so the streak and the gate never measure on two
+     * clocks (FR18 of supervise-daemon-loops-and-embed-dashboard).
+     */
+    static RemoteOutageWiring defaults(InstantSource clock) {
         return new RemoteOutageWiring(
                 RemoteOutageReporter.DEFAULT_TARGET,
-                RepeatSuppressor.system(),
+                RepeatSuppressor.withDefaultRollUp(clock),
                 RemoteOutageReporter.DEFAULT_SUSTAINED_OPEN_THRESHOLD,
-                () -> {},
-                ignored -> {});
+                DirtyNotifier.NOOP,
+                RemoteOutageLedgerSink.NONE);
     }
 }

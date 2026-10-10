@@ -39,6 +39,7 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.app.base',
         'com.github.oinsio.gnomish.app.branch',
         'com.github.oinsio.gnomish.app.console',
+        'com.github.oinsio.gnomish.app.daemon',
         'com.github.oinsio.gnomish.app.git',
         'com.github.oinsio.gnomish.app.lease',
         'com.github.oinsio.gnomish.app.port',

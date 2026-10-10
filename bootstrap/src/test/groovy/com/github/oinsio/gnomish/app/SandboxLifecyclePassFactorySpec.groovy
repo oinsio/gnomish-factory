@@ -4,9 +4,9 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
-import java.time.Clock
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -20,7 +20,7 @@ class SandboxLifecyclePassFactorySpec extends Specification {
     @TempDir
     Path tempDir
 
-    def clock = Clock.systemUTC()
+    def clock = new VirtualClock()
 
     def "returns SandboxLifecyclePass.NONE when no sandbox image is configured"() {
         given:

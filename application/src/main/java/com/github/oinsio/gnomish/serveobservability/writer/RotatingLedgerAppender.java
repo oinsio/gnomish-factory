@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import org.jspecify.annotations.Nullable;
@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * Daily UTC rotation by name switch, layered over {@link LedgerAppender} (design D7,
  * FR14): before every {@link #append}, computes "today" in UTC from an injected {@link
- * Clock} and retargets the delegate to that day's {@code ledger-YYYY-MM-DD.jsonl} file
+ * InstantSource} and retargets the delegate to that day's {@code ledger-YYYY-MM-DD.jsonl} file
  * (via {@link ObservabilityPaths#ledgerFile}) whenever the UTC day has changed since the
  * last append. The delegate does the actual write; this class owns only "which
  * filename do new appends go to now" — the live file is never renamed, so external
@@ -37,7 +37,7 @@ public final class RotatingLedgerAppender {
 
     private final LedgerAppender delegate;
     private final Path serveDir;
-    private final Clock clock;
+    private final InstantSource clock;
     private @Nullable LocalDate currentDate;
 
     /**
@@ -50,7 +50,7 @@ public final class RotatingLedgerAppender {
      * @param clock supplies the current instant used to compute "today" in UTC on every
      *     append; never null
      */
-    public RotatingLedgerAppender(LedgerAppender delegate, Path serveDir, Clock clock) {
+    public RotatingLedgerAppender(LedgerAppender delegate, Path serveDir, InstantSource clock) {
         this.delegate = delegate;
         this.serveDir = serveDir;
         this.clock = clock;

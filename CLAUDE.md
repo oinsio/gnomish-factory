@@ -47,6 +47,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `logging.md`            | `**/*.java`                   | Level policy, throwable form, untrusted text, MDC, suppression |
 | `crash-consistency.md`  | multi-step transitions        | Kill windows, shapes, recovery owners, ordering checklist  |
 | `lock-scope.md`         | every monitor / lock          | No blocking call under a state lock; three-phase shape, exceptions |
+| `daemon-loops.md`       | every long-lived thread       | `SupervisedLoop` only; exemptions, order/wait/restart policy, the gate |
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
 | `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
 | `verification-scope.md`  | task-by-task implementation   | Per-task checks (named specs, scoped PIT); full `check` once at the end |

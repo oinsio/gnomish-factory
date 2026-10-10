@@ -7,9 +7,9 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +26,8 @@ import org.springframework.context.annotation.Configuration;
  * tracker.
  *
  * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1, FR7 of
- * collapse-composition-roots; FR3, FR9, FR10 of add-project-registry.
+ * collapse-composition-roots; FR3, FR9, FR10 of add-project-registry; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 @Configuration
 public class TrackerCommandConfiguration {
@@ -38,8 +39,8 @@ public class TrackerCommandConfiguration {
      */
     @Bean
     SandboxLifecyclePass sandboxLifecyclePass(
-            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, Clock javaTimeClock) {
-        return SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock);
+            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, InstantSource instantSource) {
+        return SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, instantSource);
     }
 
     /**
@@ -47,20 +48,20 @@ public class TrackerCommandConfiguration {
      * from once its tracker is bound (design D9 of collapse-composition-roots). The container
      * support stamps {@code tracked}: both commands claim through the tracker. The slots work in the
      * registered clone, read lazily because the bean exists only once a project was resolved (design
-     * D9 of add-project-registry).
+     * D9 of add-project-registry). It takes no time of its own: every slot's time — the abort
+     * stamp, the terminal-write retry, the resume stamps — is the assembly's, the root's one time
+     * equipment (task 3.9 of supervise-daemon-loops-and-embed-dashboard).
      */
     @Bean
     SlotWiringFactory slotWiringFactory(
             ManualRunAssembly manualRunAssembly,
             ObjectProvider<RegisteredClone> registeredClone,
-            Clock javaTimeClock,
             ContainerSupports containerSupports,
             TrackerWiring trackerWiring) {
         return new SlotWiringFactory(
                 manualRunAssembly,
                 registeredClone,
                 ManualRunRunner.TASK_ID_KEY,
-                javaTimeClock,
                 containerSupports.takeSupport(),
                 trackerWiring.pipelineSource());
     }
@@ -74,9 +75,23 @@ public class TrackerCommandConfiguration {
     ServeAssembly serveAssembly(
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
-            SystemClock systemClock,
+            TimeEquipment timeEquipment,
             ObjectProvider<RegisteredClone> registeredClone) {
-        return new ServeAssembly(factoryProperties, serveProperties, systemClock, registeredClone);
+        return new ServeAssembly(factoryProperties, serveProperties, timeEquipment, registeredClone);
+    }
+
+    /**
+     * The page inside {@code serve} (design D11, D12 of supervise-daemon-loops-and-embed-dashboard):
+     * handed the tracker wiring as its {@link BoardReaders} role only, so the credential seam
+     * behind it gains no second holder (NFR-S1).
+     */
+    @Bean
+    ServeDashboard serveDashboard(
+            TrackerWiring trackerWiring,
+            ProjectScope projectScope,
+            FactoryProperties factoryProperties,
+            TimeEquipment timeEquipment) {
+        return new ServeDashboard(trackerWiring, projectScope, factoryProperties, timeEquipment);
     }
 
     /**
@@ -88,21 +103,21 @@ public class TrackerCommandConfiguration {
             SlotWiringFactory slotWiringFactory,
             ServeAssembly serveAssembly,
             TaskGit git,
-            Clock javaTimeClock,
             SandboxLifecyclePass sandboxLifecyclePass,
-            SandboxProperties sandboxProperties) {
+            SandboxProperties sandboxProperties,
+            ServeDashboard serveDashboard) {
         return new ServeRuntimeAssembly(
-                slotWiringFactory, serveAssembly, git, javaTimeClock, sandboxLifecyclePass, sandboxProperties);
+                slotWiringFactory, serveAssembly, git, sandboxLifecyclePass, sandboxProperties, serveDashboard);
     }
 
     /**
      * {@code take}'s production seams, with the installation's {@link ServeProperties} for batch
      * mode (FR2 of add-factory-serve: "the N limit applies to batch and serve") and the process
-     * clock.
+     * time equipment.
      */
     @Bean
-    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, Clock javaTimeClock) {
-        return TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties).withClock(javaTimeClock);
+    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, TimeEquipment timeEquipment) {
+        return TakeCommandSeams.defaults(timeEquipment).withServeProperties(serveProperties);
     }
 
     /**

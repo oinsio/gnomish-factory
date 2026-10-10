@@ -21,12 +21,13 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
@@ -70,7 +71,7 @@ class TakeFinishReportSpec extends Specification {
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.finish(REF, { String summary ->
@@ -104,7 +105,7 @@ class TakeFinishReportSpec extends Specification {
         String published = null
 
         when:
-        TakeFinishReport.finish(new TaskOutcome.Completed(STATE), context, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        TakeFinishReport.finish(new TaskOutcome.Completed(STATE), context, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
@@ -134,7 +135,7 @@ class TakeFinishReportSpec extends Specification {
         String captured = null
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then:
         1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
@@ -153,7 +154,7 @@ class TakeFinishReportSpec extends Specification {
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
-        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE))
+        def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE), VirtualTimeRetries.terminalWrite())
 
         then: 'no finish is written'
         0 * tracker.finish(*_)
@@ -175,11 +176,11 @@ class TakeFinishReportSpec extends Specification {
     def "finish retries a tracker outage then delivers once the write lands"() {
         given:
         def now = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock clock = { -> now.get() } as Clock
+        InstantSource clock = { -> now.get() } as InstantSource
         Sleeper sleeper = { Duration d ->
             now.set(now.get() + d)
         } as Sleeper
-        def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
+        def retry = new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), Duration.ofMinutes(10))
         def attempts = new AtomicInteger()
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, _ as String) >> {

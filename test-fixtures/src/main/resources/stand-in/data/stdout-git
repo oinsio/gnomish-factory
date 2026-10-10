@@ -1,0 +1,44 @@
+# What git stand-ins print on stdout: versions, listings, remote answers.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[for-each-ref-noisy]
+
+refs/heads/not-gnomish/other
+refs/heads/gnomish/PROJ-1
+
+[git-version-2-44]
+git version 2.44.0
+
+[git-version-2-45-1]
+git version 2.45.1
+
+[git-version-2-55-apple]
+git version 2.55.0 (Apple Git-200)
+
+[git-version-2-55]
+git version 2.55.0
+
+[landed]
+landed
+
+[local-done]
+local done
+
+[ls-remote-hostile-symref]
+ref: refs/heads/main[31m	HEAD
+abc123	HEAD
+
+[ls-remote-landed-proj-1]
+1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ-1
+
+[ls-remote-proj-7]
+1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ-7
+
+[ls-remote-proj]
+1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ
+
+[not-a-git]
+not a git at all
+
+[pat-url]
+https://ghp_FAKETOKEN1234567890@github.com/acme/widgets.git

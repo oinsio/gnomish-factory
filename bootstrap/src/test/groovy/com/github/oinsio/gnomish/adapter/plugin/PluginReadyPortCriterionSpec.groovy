@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
 import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.lang.reflect.Modifier
 import java.time.Duration
@@ -128,7 +129,7 @@ class PluginReadyPortCriterionSpec extends Specification {
         trackerErrors*.message().join(' ').contains("unknown tracker type 'nosuchvendor'")
 
         when: 'a check selects a provider no discovered jar serves'
-        new ProviderDispatchingExternalCheckClient(checks, [:], NO_SECRETS)
+        new ProviderDispatchingExternalCheckClient(checks, [:], NO_SECRETS, VirtualTimeEquipment.create())
         .poll(new VerifyCheck.External('gate', 'nosuchvendor', Duration.ofSeconds(1),
         Duration.ofSeconds(1), VerifyCheck.TimeoutClass.QUALITY), null)
 

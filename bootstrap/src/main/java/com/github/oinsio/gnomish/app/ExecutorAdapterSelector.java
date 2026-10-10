@@ -9,8 +9,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import java.time.InstantSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -47,14 +47,14 @@ final class ExecutorAdapterSelector {
             // unconditionally IS the previous host construction when nothing was attached.
             return new CliStageExecutor(
                     assembly.factoryProperties,
-                    assembly.systemClock,
+                    assembly.time.clock(),
                     new LoggingAgentProgressListener(),
                     law,
-                    assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.systemClock, childEnv)));
+                    assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.time.clock(), childEnv)));
         }
         var cli = new CliStageExecutor(
                 assembly.factoryProperties,
-                assembly.systemClock,
+                assembly.time.clock(),
                 new LoggingAgentProgressListener(),
                 law,
                 sandbox.executorRounds());
@@ -66,13 +66,13 @@ final class ExecutorAdapterSelector {
      */
     static JudgeVoter judgeVoter(
             FactoryProperties factoryProperties,
-            SystemClock systemClock,
+            InstantSource instantSource,
             ChildEnvAllowlist childEnv,
             PipelineLaw law,
             @Nullable SandboxRunPieces sandbox) {
         return new CliJudgeVoter(
                 factoryProperties,
-                systemClock,
+                instantSource,
                 new LoggingAgentProgressListener(),
                 childEnv,
                 law,

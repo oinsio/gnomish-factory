@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.subprocess.Termination
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.time.Duration
@@ -15,26 +16,24 @@ import spock.lang.Timeout
  * classifies a binary that cannot launch and a daemon that reports itself
  * unreachable as an infrastructure outage ({@link DockerUnavailableException}),
  * and streams {@code docker exec} output with optional stderr merge — all driven
- * by a fake {@code docker} binary, so no daemon is required.
- *
- * <p>Kept in sync with {@link FakeDockerBinary}: both rely on {@code FakeDockerBinary} as the
- * one place that writes the fake binary's shell shebang and executable bit.
+ * by a fake {@code docker} binary — a committed stand-in preset (ADR 0015) — so no daemon is
+ * required.
  */
 class DockerCliSpec extends Specification {
 
     @TempDir
     Path tempDir
 
-    private DockerCli cliBackedBy(String script) {
-        new DockerCli(fakeBinary(script))
+    /** The stdout and stderr lines of the docker-speaks-both scenario, read from its data rather than retyped. */
+    private static final String OUT = StandIn.data('stdout-docker#out-network').trim()
+    private static final String ERR = StandIn.data('stderr#warn').trim()
+
+    private DockerCli cliBackedBy(String preset) {
+        new DockerCli(StandIn.docker(preset).toString())
     }
 
-    private DockerCli cliBackedBy(String script, Duration commandTimeout) {
-        new DockerCli(fakeBinary(script), commandTimeout)
-    }
-
-    private String fakeBinary(String script) {
-        FakeDockerBinary.write(tempDir, script)
+    private DockerCli cliBackedBy(String preset, Duration commandTimeout) {
+        new DockerCli(StandIn.docker(preset).toString(), commandTimeout)
     }
 
     private static String readFully(InputStream stream) {
@@ -43,7 +42,7 @@ class DockerCliSpec extends Specification {
 
     def "FR3: run captures stdout, stderr and a zero exit code separately"() {
         given:
-        def cli = cliBackedBy('echo "out:$1"; echo "warn" 1>&2; exit 0')
+        def cli = cliBackedBy('docker-speaks-both')
 
         when:
         def result = cli.run(['network', 'create'])
@@ -57,7 +56,7 @@ class DockerCliSpec extends Specification {
 
     def "FR3: a non-zero exit is returned, not thrown"() {
         given:
-        def cli = cliBackedBy('echo "boom" 1>&2; exit 7')
+        def cli = cliBackedBy('docker-exit-7')
 
         when:
         def result = cli.run(['volume', 'rm', 'gone'])
@@ -70,7 +69,7 @@ class DockerCliSpec extends Specification {
 
     def "NFR-R1: a daemon that reports itself unreachable is an infrastructure outage"() {
         given:
-        def cli = cliBackedBy('echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" 1>&2; exit 1')
+        def cli = cliBackedBy('docker-daemon-down')
 
         when:
         cli.run(['ps'])
@@ -82,12 +81,10 @@ class DockerCliSpec extends Specification {
     @Timeout(30)
     def "FR6 of bound-subprocess-commands: a killed command's partial stderr cannot testify the daemon unreachable"() {
         given: 'a fake docker that cries daemon-unreachable and then hangs past the deadline'
-        // Two seconds, not milliseconds: the first exec of a freshly written script can take
-        // hundreds of milliseconds (macOS scans new executables), and the echo must land in the
+        // Two seconds, not milliseconds: the first exec of the library's script can take hundreds
+        // of milliseconds (macOS assesses it once per checkout), and the echo must land in the
         // capture before the kill for the spec to exercise the classification at all.
-        def cli = cliBackedBy(
-                'echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" 1>&2; sleep 600',
-                Duration.ofSeconds(2))
+        def cli = cliBackedBy('docker-daemon-down-then-stall', Duration.ofSeconds(2))
 
         when:
         def result = cli.run(['ps'])
@@ -113,7 +110,7 @@ class DockerCliSpec extends Specification {
 
     def "FR4: start streams exec output, merging stderr only when asked"() {
         given:
-        def cli = cliBackedBy('echo OUT; echo ERR 1>&2; exit 0')
+        def cli = cliBackedBy('docker-speaks-both')
 
         when: 'stderr is merged'
         def merged = cli.start(['exec', 'box', 'cmd'], true)
@@ -121,8 +118,8 @@ class DockerCliSpec extends Specification {
         merged.waitFor()
 
         then:
-        mergedOut.contains('OUT')
-        mergedOut.contains('ERR')
+        mergedOut.contains(OUT)
+        mergedOut.contains(ERR)
 
         when: 'stderr is kept separate'
         def split = cli.start(['exec', 'box', 'cmd'], false)
@@ -130,8 +127,8 @@ class DockerCliSpec extends Specification {
         split.waitFor()
 
         then:
-        splitOut.contains('OUT')
-        !splitOut.contains('ERR')
+        splitOut.contains(OUT)
+        !splitOut.contains(ERR)
     }
 
     def "FR4: start of a missing docker binary throws ProcessStartException"() {

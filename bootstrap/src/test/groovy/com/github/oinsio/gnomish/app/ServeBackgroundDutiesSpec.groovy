@@ -20,16 +20,18 @@ class ServeBackgroundDutiesSpec extends ServeCommandSpecBase {
 
     // FR14, D10 (task 5.2): proves ServeCommand#run really calls WorktreeJanitor::start — not
     // merely assembles the janitor — via the only externally observable effect a fire-and-forget
-    // janitor thread has: it disposes of a real, aged, unheld worktree shortly after startup. No
-    // test seam exists for the janitor (ServeAssembly.worktreeJanitor wires a real ThreadSleeper/
-    // SystemClock), so this drives a real `git worktree add`/`git worktree remove --force` round
+    // janitor thread has: it disposes of a real, aged, unheld worktree shortly after startup. The
+    // janitor runs on the daemon's one time equipment (the root's own, the newAssembly default),
+    // so this drives a real `git worktree add`/`git worktree remove --force` round
     // trip and polls for the directory's disappearance.
     def "the worktree janitor is actually started and disposes an aged unheld worktree on startup"() {
         given: 'projectDir is a real git repo with one commit (from setup()), and a registered, aged worktree'
         def worktreePath = registeredClone.worktrees().resolve('aged-task')
         Files.createDirectories(worktreePath.parent)
         addWorktree(projectDir, worktreePath, 'task/aged-task')
-        def aged = FileTime.from(Instant.now() - Duration.ofDays(1))
+        // The epoch: aged against whatever instant the daemon's clock reads, with no wall-clock read
+        //     in the spec (FR21 of supervise-daemon-loops-and-embed-dashboard).
+        def aged = FileTime.from(Instant.EPOCH)
         Files.walk(worktreePath).filter {
             Files.isRegularFile(it)
         }.forEach {
@@ -42,7 +44,7 @@ class ServeBackgroundDutiesSpec extends ServeCommandSpecBase {
         def command = newCommand(
                 [github: fakeFactory(tracker)],
                 new CapturingStarter(),
-                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null, null, null, null))
+                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null, null, null, null, null))
 
         when:
         runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }

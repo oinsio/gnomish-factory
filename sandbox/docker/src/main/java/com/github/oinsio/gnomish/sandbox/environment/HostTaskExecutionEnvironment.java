@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -12,6 +11,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -58,7 +58,7 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
             List.of("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "SHELL");
 
     private final Path workingCopy;
-    private final Clock clock;
+    private final InstantSource clock;
     private final ChildEnvAllowlist allowlist;
 
     private @Nullable Path scratch;
@@ -74,7 +74,7 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
      *     ChildEnvAllowlist#none()} when neither passthrough nor a tracker is
      *     involved
      */
-    public HostTaskExecutionEnvironment(Path workingCopy, Clock clock, ChildEnvAllowlist allowlist) {
+    public HostTaskExecutionEnvironment(Path workingCopy, InstantSource clock, ChildEnvAllowlist allowlist) {
         this.workingCopy = workingCopy;
         this.clock = clock;
         this.allowlist = allowlist;
@@ -104,7 +104,7 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
         builder.environment().clear();
         builder.environment().putAll(allowlist.compose(BASE_ENV_NAMES, command.env()));
         Process process = start(builder, command.command());
-        Instant startedAt = clock.now();
+        Instant startedAt = clock.instant();
         ChildProcessStdin.feed(process, command.stdin());
         return new HostExecHandle(process, startedAt);
     }

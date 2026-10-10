@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,12 +46,13 @@ final class TakeDisposition {
      * @param takeoverFlag whether {@code --takeover} authorized a headless {@code Working} takeover
      *     (task 6.2, FR6): bypasses the {@code confirmation} seam
      * @param confirmation the pre-claim takeover-confirmation seam (task 6.2, FR6, design D9); never null
-     * @param clock the run's clock, used only to render the display-only last-beat age in the
-     *     takeover facts (design D9); never null
+     *     The slot's clock ({@link SlotWiring#time()}) renders the display-only last-beat age in
+     *     the takeover facts (design D9).
      */
-    TakeDisposition(SlotWiring wiring, boolean takeoverFlag, TakeoverConfirmation confirmation, Clock clock) {
+    TakeDisposition(SlotWiring wiring, boolean takeoverFlag, TakeoverConfirmation confirmation) {
         this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
-        this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
+        this.takeover = new TakeTakeover(
+                claimAndWork, confirmation, takeoverFlag, wiring.time().clock());
     }
 
     /**

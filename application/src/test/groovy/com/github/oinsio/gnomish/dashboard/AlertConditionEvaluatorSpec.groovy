@@ -50,7 +50,7 @@ class AlertConditionEvaluatorSpec extends Specification {
         'rule5 (fresh reaper, no restarts)' | snapshotWithReaper(FRESH_NOW.minusSeconds(10), 0) | new AlertCondition.ReaperDegraded() | false
     }
 
-    def "rule1 fires for DeadDaemon and not for Fresh or StoppedStale"() {
+    def "rule1 fires for DeadDaemon and not for Fresh or Stopped"() {
         given:
         def snapshot = SnapshotJsonMapperSpec.referenceSnapshot()
 
@@ -59,7 +59,7 @@ class AlertConditionEvaluatorSpec extends Specification {
                 .contains(new AlertCondition.StaleWhileNotStopped())
         !AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(snapshot), FRESH_NOW)
                 .contains(new AlertCondition.StaleWhileNotStopped())
-        AlertConditionEvaluator.evaluate(new DaemonSnapshotView.StoppedStale(snapshot), STALE_NOW).isEmpty()
+        AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Stopped(snapshot), STALE_NOW).isEmpty()
     }
 
     def "Absent view flags nothing"() {

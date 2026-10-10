@@ -6,13 +6,13 @@ import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
 
@@ -34,7 +34,8 @@ import java.util.Optional;
  * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
  * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21.
  *
- * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core; FR13 of make-checkpoint-gate-durable.
+ * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core; FR13 of make-checkpoint-gate-durable; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSource {
 
@@ -47,7 +48,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     private final String taskId;
     private final String branch;
     private final CurrentRound rounds;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param lease the run's environment lease; rounds run in the stage's leased environment
@@ -64,7 +65,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
             Path cloneDir,
             String taskId,
             CurrentRound rounds,
-            Clock clock) {
+            InstantSource clock) {
         this.lease = lease;
         this.runner = runner;
         this.cloneDir = cloneDir;
@@ -72,6 +73,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.rounds = rounds;
         this.clock = clock;
+        this.harvestSuppressor = RepeatSuppressor.withDefaultRollUp(clock);
     }
 
     /**
@@ -79,9 +81,11 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * per-round, but an environment that cannot be harvested is one fault whether it spans polls
      * of one round or rounds of one task, and a per-round suppressor would re-announce it each
      * time. Built here rather than injected — this is the owner the round's {@link
-     * MidRoundPollContext} borrows it from.
+     * MidRoundPollContext} borrows it from — on the round source's own {@code clock}, so the
+     * streak and the harvest interval measure on one time source (FR18 of
+     * supervise-daemon-loops-and-embed-dashboard).
      */
-    private final RepeatSuppressor harvestSuppressor = RepeatSuppressor.system();
+    private final RepeatSuppressor harvestSuppressor;
 
     @Override
     public Round openRound(StageExecutor.Request request) {

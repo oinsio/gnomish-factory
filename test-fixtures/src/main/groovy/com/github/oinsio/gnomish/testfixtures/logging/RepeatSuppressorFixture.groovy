@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.testfixtures.logging
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Instant
 
 /**
@@ -17,7 +17,7 @@ final class RepeatSuppressorFixture {
     }
 
     static RepeatSuppressor quiet() {
-        new RepeatSuppressor(new MovableClock(Instant.parse('2026-09-03T10:00:00Z')),
+        new RepeatSuppressor(new VirtualClock(Instant.parse('2026-09-03T10:00:00Z')),
                 RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
     }
 }

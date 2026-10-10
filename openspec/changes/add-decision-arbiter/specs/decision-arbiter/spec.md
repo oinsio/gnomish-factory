@@ -125,10 +125,14 @@ verdict SHALL be a no-op.
 
 ### Requirement: Every consult is observable and priced
 Each consult SHALL leave a structured log line (task, stage, verdict kind,
-author) and record arbiter token usage on the round beside executor and
-judge usage; unreported usage SHALL stay empty, never fabricated.
+author) and record the arbiter's usage on the round as a `decision`
+participant entry (executor name, provenance, per-model tokens and optional
+cost) in the participant list `define-executor-contract` defines; unreported
+usage SHALL stay `absent`, never fabricated, and the entry SHALL be folded
+into the task's usage snapshot like every other participant.
 <!-- implements NFR-O1 of add-decision-arbiter -->
 
 #### Scenario: Usage reaches the usage report
 - **WHEN** a consult reports token usage
-- **THEN** the round's record carries it and the usage command renders it
+- **THEN** the round's record carries a `decision` participant entry with it, the snapshot's
+  `decision` role includes it, and the usage command renders it under "arbiter"

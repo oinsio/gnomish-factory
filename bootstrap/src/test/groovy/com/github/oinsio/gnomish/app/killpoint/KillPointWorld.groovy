@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -17,8 +18,9 @@ import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-
 import java.nio.file.Path
 /**
  * One task under a kill-point run: the branch medium its transition writes to, the tracker its
@@ -56,11 +58,11 @@ class KillPointWorld implements BareGitRepoFixture {
     Path worktree
 
     /**
-     * The argv log of this medium's own git stand-in, or {@code null} for a medium whose runner is
-     * not recorded. Only a row making a cost claim reads it (NFR-P1 of fix-envelope-medium); the
-     * rest ignore it.
+     * This medium's own recording git stand-in, or {@code null} for a medium whose runner is not
+     * recorded. Only a row making a cost claim reads its record (NFR-P1 of fix-envelope-medium);
+     * the rest ignore it.
      */
-    Path gitLog
+    Path gitStandIn
 
     /**
      * The runner {@link #store} writes through — shared so a row's own git calls land in the same
@@ -103,7 +105,7 @@ class KillPointWorld implements BareGitRepoFixture {
 
     /** The classified shape's label, read through the production classifier over the real tip. */
     String shape() {
-        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE).classifyShape(repoDir, taskId).label()
+        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(repoDir, taskId).label()
     }
 
     /**
@@ -142,9 +144,11 @@ class KillPointWorld implements BareGitRepoFixture {
         tipTask()?.egressCursor()
     }
 
-    /** Every invocation {@link #gitLog} recorded, argv per line, in call order. */
+    /** Every invocation {@link #gitStandIn} recorded, argv per line, in call order. */
     List<String> gitArgv() {
-        gitLog?.toFile()?.exists() ? gitLog.toFile().readLines() : []
+        gitStandIn == null ? [] : StandInLog.blocks(gitStandIn).findResults {
+            it.argv
+        }
     }
 
     /**

@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
@@ -31,6 +32,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -69,18 +71,18 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def containerSupportFactory = { cloneDir, taskId, segments, definition, creds ->
             builtSupport
         } as ContainerSupportFactory
-        def containerTakeSupport = new ContainerTakeSupport(
-                new BindingProperties(null, [:]),
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
-                AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
-                { false },
+        def containerTakeSupport = new ContainerTakeSupport(new SandboxModeSelector(
+                        new BindingProperties(null, [:]),
+                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
+                        { -> false } as ContainerRuntimeProbe),
                 containerSupportFactory)
         def resumeRunner = new TakeContainerResumeRunner(slotWiring(
                         assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE,
                         containerTakeSupport))
         def mechanics = new ContainerResumeMechanics(
                 resumeRunner, [] as List<Segment>, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     /** {@code definition} with every stage {@code manual}: a pass leaves the task at its gate. */

@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -50,7 +50,7 @@ class FeedOutageRetryInterruptSpec extends Specification {
         def attempts = new AtomicInteger()
         def retry = new FeedOutageRetry(interruptingSleeper, {
             Duration.ofSeconds(30)
-        }, new RepeatSuppressor(new MovableClock(Instant.parse('2026-09-03T10:00:00Z')),
+        }, new RepeatSuppressor(new VirtualClock(Instant.parse('2026-09-03T10:00:00Z')),
         RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL))
         def logs = LogCaptureSupport.attach(FeedOutageRetry)
 

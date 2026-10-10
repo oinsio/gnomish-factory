@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -54,7 +55,7 @@ class HttpCheckProviderSpec extends Specification {
     def "the dispatching composite routes a provider: http check to the http client"() {
         given:
         def registry = CheckClientDiscovery.discover()
-        def composite = new ProviderDispatchingExternalCheckClient(registry, [http: [:]], NO_SECRETS)
+        def composite = new ProviderDispatchingExternalCheckClient(registry, [http: [:]], NO_SECRETS, VirtualTimeEquipment.create())
 
         when: 'a check whose auth names a credential no secrets adapter resolves'
         def status = composite.poll(httpCheck([url: 'https://ci.example.invalid/status',
@@ -70,7 +71,7 @@ class HttpCheckProviderSpec extends Specification {
     def "the composite's pin contribution for an http check is empty"() {
         given:
         def composite = new ProviderDispatchingExternalCheckClient(
-                CheckClientDiscovery.discover(), [http: [:]], NO_SECRETS)
+                CheckClientDiscovery.discover(), [http: [:]], NO_SECRETS, VirtualTimeEquipment.create())
 
         expect:
         composite.pinContributor().pinPaths(httpCheck([url: 'https://ci.example.invalid/status'])).isEmpty()

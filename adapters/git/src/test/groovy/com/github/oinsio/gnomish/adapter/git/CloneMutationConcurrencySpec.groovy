@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
@@ -42,8 +42,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
         seedRunner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
         seedRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
 
-        def logFile = tempDir.resolve('mutation.log')
-        def gitWrapper = writeLoggingGitWrapper(tempDir, logFile)
+        def gitWrapper = StandIn.recording(tempDir, 'trace-clone-mutations')
         def registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
 
         and: 'N slots, each with its own GitProcessRunner instance, coordinated to start together'
@@ -114,74 +113,28 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
             remoteTip == localTips[taskId]
         }
 
-        and: 'the mutating git calls this scenario drove were serialized: no two logged intervals overlap'
-        !intervalsOverlap(readIntervals(logFile))
+        and: 'the mutating git calls this scenario drove were serialized: no two recorded intervals overlap'
+        !StandInLog.blocks(gitWrapper).isEmpty()
+        !intervalsOverlap(StandInLog.blocks(gitWrapper))
     }
 
     /**
-     * A {@code git} stand-in: forwards every call to the real {@code git}, but for the exact
-     * repo-level mutating subcommands this task locks (fetch/push/worktree add|remove|prune) it
-     * first logs a START line, sleeps briefly to widen any race window, runs the real command, then
-     * logs an END line — both timestamped and tagged with its own PID so concurrent invocations
-     * never get confused with each other (a PID cannot be reused while its process is still alive).
+     * Whether two recorded mutations overlapped. The {@code trace-clone-mutations} stand-in records
+     * a block when a clone-mutating command (fetch, push, worktree add|remove|prune) starts and a
+     * {@code pid}/{@code exit} block when it ends, all appended to one log in the order they
+     * happened — so a start recorded while another process's command is still open is an overlap.
+     * No clock is read: the order of appends is the timeline.
      */
-    private static Path writeLoggingGitWrapper(Path dir, Path logFile) {
-        Path script = dir.resolve('logging-git.sh')
-        script.toFile().text = """#!/bin/sh
-LOG="${logFile}"
-SUB1="\$1"
-SUB2="\$2"
-DELAY=0
-case "\$SUB1" in
-  fetch|push) DELAY=1 ;;
-  worktree)
-    case "\$SUB2" in
-      add|remove|prune) DELAY=1 ;;
-    esac
-    ;;
-esac
-if [ "\$DELAY" = "1" ]; then
-  echo "START \$(date +%s.%N) \$\$ \$SUB1 \$SUB2" >> "\$LOG"
-  sleep 0.15
-fi
-git "\$@"
-rc=\$?
-if [ "\$DELAY" = "1" ]; then
-  echo "END \$(date +%s.%N) \$\$ \$SUB1 \$SUB2" >> "\$LOG"
-fi
-exit \$rc
-"""
-        Files.setPosixFilePermissions(script, PosixFilePermissions.fromString('rwxr-xr-x'))
-        script
-    }
-
-    private static Map<String, List<Double>> readIntervals(Path logFile) {
-        Map<String, List<Double>> intervals = [:].withDefault {
-            []
-        } as Map<String, List<Double>>
-        if (!Files.exists(logFile)) {
-            return intervals
-        }
-        logFile.toFile().readLines().each { line ->
-            def parts = line.trim().split(/\s+/)
-            if (parts.size() >= 3) {
-                def ts = Double.parseDouble(parts[1])
-                def pid = parts[2]
-                intervals[pid] << ts
-            }
-        }
-        intervals
-    }
-
-    /** True if any two [start, end] intervals (one per logged PID) overlap. */
-    private static boolean intervalsOverlap(Map<String, List<Double>> intervalsByPid) {
-        def ranges = intervalsByPid.values()
-                .findAll { it.size() == 2 }
-                .collect { [it.min(), it.max()] }
-                .sort { it[0] }
-        for (int i = 1; i <ranges.size(); i++) {
-            if (ranges[i][0] <ranges[i - 1][1]) {
-                return true
+    private static boolean intervalsOverlap(List<Map<String, String>> blocks) {
+        Set<String> open = []
+        for (Map<String, String> block : blocks) {
+            if (block.containsKey('exit')) {
+                open.remove(block.pid)
+            } else {
+                if (!open.isEmpty()) {
+                    return true
+                }
+                open.add(block.pid)
             }
         }
         false

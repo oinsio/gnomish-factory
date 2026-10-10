@@ -87,11 +87,72 @@ class RepoSourceTree {
         relativePath.substring(0, relativePath.indexOf(sourceSetMarker)).tokenize('/').contains('build')
     }
 
-    /** A file's source with every comment removed: what the compiler actually sees. */
+    /**
+     * A file's source with every comment removed: what the compiler actually sees. One pass over
+     * the whole file, not line by line: a line-local stripper cannot know whether a line sits inside
+     * a block comment, so it guessed from the line's first character — dropping code that follows a
+     * leading {@code /* … *\/} and every continuation line the formatter opens with a {@code *}
+     * operator (a blind spot in every gate at once), while scanning a trailing block comment and the
+     * lines of a block that do not open with {@code *}. Comment openers inside string, character and
+     * text-block literals are literal text. Line breaks are kept, so line structure survives.
+     */
     static String code(File file) {
-        file.readLines()
-                .collect { line -> codeOnly(line) }
-                .join('\n')
+        stripComments(file.text)
+    }
+
+    /** {@link #code} over a source held in memory. */
+    static String stripComments(String source) {
+        def out = new StringBuilder(source.length())
+        int i = 0
+        int n = source.length()
+        while (i <n) {
+            if (source.startsWith('//', i)) {
+                while (i <n && source.charAt(i) != '\n' as char) {
+                    i++
+                }
+            } else if (source.startsWith('/*', i)) {
+                int end = source.indexOf('*/', i + 2)
+                int stop = end < 0 ? n : end + 2
+                source.substring(i, stop).each {
+                    if (it == '\n') {
+                        out.append('\n')
+                    }
+                }
+                i = stop
+            } else if (source.startsWith('"""', i)) {
+                int end = source.indexOf('"""', i + 3)
+                int stop = end < 0 ? n : end + 3
+                out.append(source, i, stop)
+                i = stop
+            } else if (source.charAt(i) == '"' as char || source.charAt(i) == '\'' as char) {
+                int stop = literalEnd(source, i)
+                out.append(source, i, stop)
+                i = stop
+            } else {
+                out.append(source.charAt(i))
+                i++
+            }
+        }
+        out.toString()
+    }
+
+    /** The index just past the string or character literal opening at {@code start}, or the line's end. */
+    private static int literalEnd(String source, int start) {
+        char quote = source.charAt(start)
+        int i = start + 1
+        while (i <source.length()) {
+            char c = source.charAt(i)
+            if (c == '\\' as char) {
+                i += 2
+            } else if (c == quote) {
+                return i + 1
+            } else if (c == '\n' as char) {
+                return i
+            } else {
+                i++
+            }
+        }
+        source.length()
     }
 
     /**

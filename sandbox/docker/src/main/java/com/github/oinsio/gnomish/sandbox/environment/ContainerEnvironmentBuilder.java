@@ -67,11 +67,17 @@ final class ContainerEnvironmentBuilder {
         var settings = new TaskContainerSettings(
                 sandbox.image(), sandbox.runtime(), sandbox.limits(), sandbox.enforceDiskQuota());
         var environment = new ContainerTaskExecutionEnvironment(
-                docker, key, link, settings, timing.clock(), allowlist, ownership);
+                docker, key, link, settings, timing.equipment().clock(), allowlist, ownership);
         var guard = new EgressGuard(
                 docker, key, sandbox.guardImage(), sandbox.egressAllowlist(), guardConfigRoot.resolve(key), ownership);
         var selfCheck = new EnvironmentSelfCheck(
-                environment, guard, docker, key, sandbox.runtime(), sandbox.egressAllowlist(), timing.sleeper());
+                environment,
+                guard,
+                docker,
+                key,
+                sandbox.runtime(),
+                sandbox.egressAllowlist(),
+                timing.equipment().sleeper());
         return new SelfCheckedEnvironment(environment, selfCheck, guard);
     }
 

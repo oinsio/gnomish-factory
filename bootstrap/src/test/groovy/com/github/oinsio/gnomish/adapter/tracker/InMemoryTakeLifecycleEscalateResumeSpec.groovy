@@ -8,7 +8,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.time.Duration
+import java.time.Instant
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeLifecycleEscalateResumeSpecBase}
@@ -39,9 +42,13 @@ class InMemoryTakeLifecycleEscalateResumeSpec extends TakeLifecycleEscalateResum
         new InMemoryTrackerHarness(tracker as InMemoryTracker).threadAsStrings(ref)
     }
 
+    /** The human's own clock: each reply is posted strictly after the one before it (FR18 of supervise-daemon-loops-and-embed-dashboard). */
+    private final VirtualClock replyClock = new VirtualClock(Instant.parse('2026-01-01T00:00:00Z'))
+
     @Override
     void replyAndReturnToReady(TaskRef ref, String replyText) {
-        harness.reply(ref, replyText)
+        replyClock.advance(Duration.ofSeconds(1))
+        harness.reply(ref, replyText, replyClock.instant())
         harness.returnToReady(ref)
     }
 }

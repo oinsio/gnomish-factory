@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -138,7 +139,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * state.json} left by the first run.
      */
     private void markParkPending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs)
+        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs, new VirtualClock())
         repository.recordOutcome(
                 taskId, new TaskOutcome.Escalated(TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(1)), TrackerWrite.OWED)
     }
@@ -151,7 +152,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * TakePauseExit}.
      */
     private void markPausePending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs)
+        def repository = new GitTaskRepository(new GitProcessRunner(), registeredClone, orphanedHolderEpochs, new VirtualClock())
         repository.recordOutcome(taskId, new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'), TrackerWrite.OWED)
     }
 

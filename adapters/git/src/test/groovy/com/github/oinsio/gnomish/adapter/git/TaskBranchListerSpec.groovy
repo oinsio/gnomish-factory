@@ -21,7 +21,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -64,7 +66,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
     /** Creates {@code taskId} at {@code implement} stage start off the clone's current HEAD. */
     private void createTaskAtHead(RegisteredClone clone, String taskId) {
         Path repo = clone.clonePath()
-        new GitTaskRepository(runner, clone, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, clone, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('T'), UntrustedText.tracker('B'), []),
                 TaskStart.commit(repo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
@@ -244,22 +246,14 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
     // refs/heads/gnomish/*` never emits a blank line or a ref outside the prefix, so this is
     // proven against a thin fake-git wrapper script (this codebase has no Mockito and
     // GitProcessRunner is final, so GitProcessRunner's own gitBinary constructor seam — the same
-    // one GitProcessRunnerSpec's "nonexistent binary" scenario relies on — substitutes a script
-    // that injects a blank line and an out-of-prefix ref ahead of the real one for `for-each-ref`
-    // only, delegating every other subcommand to the real git binary unchanged).
+    // one GitProcessRunnerSpec's "nonexistent binary" scenario relies on — substitutes the
+    // committed `for-each-ref-noisy` stand-in, which answers `for-each-ref` with a blank line and
+    // an out-of-prefix ref ahead of the real one and delegates every other subcommand to the real
+    // git binary unchanged).
     def "FR13: blank lines and out-of-prefix refs from for-each-ref are filtered out"() {
         given:
         createLocalTask('PROJ-1')
-        def realRef = 'refs/heads/gnomish/PROJ-1'
-        def fakeGit = tempDir.resolve('fake-git.sh')
-        Files.writeString(fakeGit, """#!/bin/sh
-if [ "\$1" = "for-each-ref" ]; then
-  printf '\\nrefs/heads/not-gnomish/other\\n${realRef}\\n'
-  exit 0
-fi
-exec git "\$@"
-""")
-        fakeGit.toFile().setExecutable(true)
+        def fakeGit = StandIn.git('for-each-ref-noisy')
         def fakeRunner = new GitProcessRunner(fakeGit.toString())
         def fakeLister = new TaskBranchLister(fakeRunner)
 
@@ -273,7 +267,7 @@ exec git "\$@"
 
     def "FR16: a mixed-shape clone lists one row per branch, each carrying its shape"() {
         given: 'a delivered branch, a freshly created one, an in-flight one and a parked one'
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         createLocalTask('DELIVERED-1')
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')

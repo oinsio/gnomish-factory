@@ -89,30 +89,32 @@ The bar: excluding the suite must remove **no production line** from mutation co
 
 ## Time is injected in tests, and the build checks it
 
-Components that retry or poll take their `Sleeper` and `Clock` as constructor arguments so a
-spec can drive them on virtual time (`VirtualClock`/`VirtualSleeper`, or the ready-made
-`VirtualTimeRetries` in `:test-fixtures`). Beside each such component sits a no-argument
-`system()` factory that wires the real `ThreadSleeper`/`SystemClock` with the production bound —
-**for the composition root, not for specs**.
+The factory has one type for the current instant, `java.time.InstantSource`, and one carrier for
+real time's two halves, `TimeEquipment(InstantSource clock, Sleeper sleeper)` in `:domain`
+(ADR 0014). A component that only reads "now" takes the `InstantSource`; one that also waits — a
+retry, a poll, a loop's wait — takes the `TimeEquipment`. Real time is built in one place: the
+`timeEquipment` bean in `:bootstrap`'s `ManualRunConfiguration`, where `ThreadSleeper` lives, so
+no other module can even construct the real sleeper. No `system()` factory wiring time exists.
 
-A spec that calls `system()` does not go red. Its collaborator never reports the failure the
-retry waits on, so it never sleeps, and the call looks correct indefinitely — until some later
-change makes that collaborator report an outage. Then the spec does not fail, it *blocks*, for
-the whole production bound, once per exercise of the path; under PIT that is the "mutant hangs
-on real I/O instead of failing fast" mode recorded above. Because there is nothing red to
-notice, review is the wrong instrument for it.
+Specs build the virtual equipment: `VirtualTimeEquipment` in `:test-fixtures` (the one fake
+instant source, `VirtualClock`, with a budgeted sleeper advancing it), or `VirtualTimeRetries`,
+built on it. A spec on real time does not go red: its collaborator never reports the failure the
+retry waits on — until a later change makes it, and then the spec *blocks* for the production
+bound (under PIT, the "mutant hangs on real I/O" mode above). Nothing red, so review cannot see it.
 
-So `check` asks instead: **`checkTestTimeInjection`** (registered by `test-conventions` in every
-module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system(...)` call in a
-test source — with or without arguments, since a factory that takes collaborators and bounds
-(`RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)`) wires the real clock just the same. Satisfy it by building the component with virtual time — which keeps the production
-bound and elapses it instantly — or, where the call really is right (a spec asserting the
-production defaults themselves, a factory with no time in it), justify it in place:
+So `check` asks instead: **`checkTestTimeInjection`** (`TestTimeInjectionCheck`, registered by
+`test-conventions` over every module's test tree and by `:test-fixtures` over its own `src/main`)
+fails on any real-time literal in a test source — `Clock.systemUTC(`, `Clock.systemDefaultZone(`,
+`InstantSource.system(`, `Instant.now(`, `new SystemClock(`, `new ThreadSleeper(`, and any
+`.system(...)` call with or without arguments. The set is the one `TimeSourceOwnerBoundarySpec`
+bans in production outside the root; the two are a declared sync pair, and that spec fails when
+the sets differ. Where real time really is the subject (a fixture assembling the shipped
+composition, a real Docker daemon or remote that stamps on the wall clock), justify it in place:
 
 ```groovy
-// real-time-wiring: the production defaults ARE the subject here — the retry is only
-//     constructed and read, never run, so no sleep can happen.
-GitInfrastructureRetry.system().attempts() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+// real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+//     pass ages them against its clock; the end-to-end layer needs the same time.
+def summary = SandboxLifecyclePassFactory.create(tinyAges, factoryProperties, InstantSource.system())
 ```
 
 The marker goes on the call's own line or in the comment block directly above it, so the
@@ -188,6 +190,81 @@ Gates, both in `:bootstrap`:
 
 A new spawner that needs a variable the kept set lacks adds it to `TestChildEnvironment`, not
 at the call site.
+
+## Stand-ins are prepared, not generated
+
+A stand-in binary a spec runs in place of `git`, `docker`, the agent CLI, a hook or a supervised
+process is **committed** under `test-fixtures/src/main/resources/stand-in/` (ADR 0015): a
+**preset** — the link `links/<preset>` to the table interpreter `stand-in.sh` and the section
+`[<preset>]` of a table under `tables/` (grammar in the script's header; several presets to a table,
+each table at most 120 lines) — or, for the supervisor specs whose subject is a signal or a fork,
+one of the scripts under `process/`. The answers rows print are sections of the files under `data/`
+(`data/stderr#unable-to-access`), shell steps live under `steps/`. A spec selects a preset by name
+through `StandIn` in `:test-fixtures` (`StandIn.git('refuse-fetch')`, `StandIn.process('polite')`);
+it never writes an executable file and never carries shell text. The one per-run artefact is a
+symbolic link to a preset (`StandIn.recording`, `StandIn.link` for a name the spec chooses — a hook,
+or the value a preset takes from its link's name), for a scenario that records or reads a file the
+spec writes beside the link; the stand-in writes only there — its `<link>.log`, or a
+`<link>.<name>` a `write` row names. A stand-in that must change behaviour mid-spec is re-pointed at
+another preset (`StandIn.repoint`), not given a marker file to test.
+
+The failure this exists for: 61 inline shell scripts in about fifty specs, each written into the
+spec's temporary directory per test. macOS assesses every new executable file on its first direct
+run (1–4 s, queued across PIT's minions; the second run 10 ms), so every mutant paid it again and
+PIT spent 90 % of its minion time waiting on scripts, invisible on Linux CI and to the count-based
+cost report. The same mechanism slowed the ordinary `test` task and PIT's coverage phase.
+
+- **New behaviour is a new preset** — a link and a section in the table of its group — covered by
+  the library's data-driven spec (`StandInLibrarySpec`), never shell in a spec; a new table action is
+  a new feature there. Two presets that would differ in one word are one preset taking that word
+  from its link's name. A preset holds no absolute path and writes nothing into the library — a
+  `record`, `write`, `export-name` or `@name` row reached through the committed link is refused —
+  so parallel JVMs share it and the OS assesses the script once per checkout.
+- **A text a spec asserts is read from the library**, never retyped: `StandIn.data('stderr#name')`.
+- **The library is immutable in a build.** Rewriting a committed script in place would change it
+  under parallel JVMs and may trigger a fresh assessment.
+- **Exemptions are named in the gate**, each with its reason: scripts run inside a container
+  (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage` — Linux inside, a host link would not
+  resolve; mount the library directory instead), specs of shipped scripts (`LauncherScriptSpec`,
+  `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`), which run once per build, and
+  `StallingGitOwnerSpec`, whose detector is fed shebang text as data.
+- **The gate**: `StandInOwnerSpec` in `:bootstrap` scans every module's test tree and
+  `test-fixtures/src/main` (comments stripped) for three shapes — an executable bit set from code
+  (`executable = true`, `setExecutable(`), shebang text (`#!/`, which a directly run script needs),
+  and a `chmod` granting execute spelled as command text; the files that match must be exactly the
+  exemptions, each still matching, and the owner must be reached and clean. Permission-mode calls
+  are not a shape: specs lock directories with them, and a file made executable that way still
+  needs the shebang the gate catches.
+
+Before designing anything "per test" — a script, a configuration file, a repository — list what
+truly varies per run. Everything constant becomes a committed preset; only the remainder is
+created, by one owner. The project record of that question is `design-decisions.md`,
+"Alternative zero".
+
+## Diagnosing a slow gate
+
+A slow `test` or `pitest` is attributed before it is changed. The count-based mutation cost report
+(`expensive-mutants.txt`) answers "which mutant needed many tests", not "where the seconds went":
+on 2026-10-10 every module reported zero above threshold while PIT ran for 90 minutes.
+
+1. **Split the phases.** PIT's log gives `Calculated coverage in N seconds` (one minion, the whole
+   covering suite, single-threaded) and `Completed in N seconds`; the difference is the mutation
+   phase. Multiply its wall time by `threads` for minion-seconds.
+2. **Attribute the mutation phase.** Rerun with `--verbosity=VERBOSE` (the Gradle plugin has no
+   switch: take the `MutationCoverageReport` command line from `./gradlew :<module>:pitest --rerun
+   --info`, add the flag, run it under the build's `GIT_CONFIG_GLOBAL`). Each mutant's `Running
+   mutation …` and result line give its duration; sum them. On 2026-10-10 the sum was 500–900 s
+   of 8800 minion-seconds — the time was not in the tests.
+3. **Look at the threads.** `jcmd <minion pid> Thread.print` during the mutation phase, three
+   minions, two or three samples. A main thread in `ProcessImpl.waitFor` names the child it waits
+   on; `ps -o ppid` lists the children. That one look found the stand-in scripts.
+4. **Group by PIT's units, not by source class.** PIT runs all mutants of one *runtime* class
+   (`Outer$Inner` is its own unit) serially in one fresh minion JVM; a gap between two result
+   lines of what looks like one class may be two units. The parser mistake that produced the
+   refuted "deadline-waiting mutants" reading was exactly this.
+5. **Only then change something**, and re-measure the same five numbers (coverage seconds,
+   mutation wall, minion-seconds, summed mutant time, sampled thread state) so the task report
+   carries a before/after pair.
 
 ## Rules
 

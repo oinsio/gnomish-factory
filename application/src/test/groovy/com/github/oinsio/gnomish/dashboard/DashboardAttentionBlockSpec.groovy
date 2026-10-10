@@ -64,7 +64,7 @@ class DashboardAttentionBlockSpec extends Specification {
         def rows = [
             new AwaitingHumanRow(new TaskRef('task-7'), UntrustedText.tracker('Parked title'), reason)
         ]
-        def model = new BoardModel([], [], rows, ReadySummary.tally([]), false, GENERATED_AT)
+        def model = new BoardModel([], [], rows, ReadySummary.tally([]), 3, false, GENERATED_AT)
 
         when:
         def html = render(new BoardSectionView(model, FETCHED_AT, null))

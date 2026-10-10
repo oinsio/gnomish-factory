@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 
 /**
@@ -20,18 +20,20 @@ final class ResumeDecisionCommit {
     private ResumeDecisionCommit() {}
 
     /**
-     * Builds the {@link Decision} for {@code text}, stamped with the park's stage and "tracker": the
-     * stage named by the position — at a gate, the stage that passed (FR1 of
-     * make-checkpoint-gate-durable) — and none past the pipeline's end.
+     * Builds the {@link Decision} for {@code text}, stamped with the park's stage, "tracker" and
+     * {@code at}: the stage named by the position — at a gate, the stage that passed (FR1 of
+     * make-checkpoint-gate-durable) — and none past the pipeline's end; {@code at} is the instant
+     * the caller read from its own time source, never a clock of this class's (FR18 of
+     * supervise-daemon-loops-and-embed-dashboard).
      */
-    static Decision decisionFor(TaskState finalState, String text) {
+    static Decision decisionFor(TaskState finalState, String text, Instant at) {
         String stage =
                 switch (finalState.position()) {
                     case Position.AtStage(String name) -> name;
                     case Position.AwaitingApproval(String gate) -> gate;
                     case Position.PipelineEnd() -> null;
                 };
-        return new Decision(text, stage, "tracker", Clock.systemUTC().instant());
+        return new Decision(text, stage, "tracker", at);
     }
 
     /** Returns a copy of {@code context} with {@code decision} appended to its decision history. */

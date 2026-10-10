@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger as LogbackLogger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -17,6 +18,8 @@ import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
@@ -32,8 +35,6 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
@@ -68,10 +69,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
-    // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and over
-    //     BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to stamp the
-    //     slot's own refresh, which this spec reads back but never paces.
-    RemoteOutageGate remoteOutageGate = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30))
+    RemoteOutageGate remoteOutageGate = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -131,7 +129,6 @@ tracker:
     }
 
     private TakeSlotRunner newSlotRunner() {
-        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         // The fake agent binary (plain-round: one delivering round) instead of the default
         // `claude`: the stage's AGENT_CLI executor really spawns this binary, and CI has no real
         // claude on PATH.
@@ -139,10 +136,12 @@ tracker:
                 agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
         // The slot's git is decorated through the same owner the serve assembly point uses (D6 of
         // introduce-slot-wiring), so the gate scenario below sees the slot's real refresh.
+        def assembly = newAssembly(properties, VirtualTimeEquipment.create())
+        def abortHandler = new AbortHandler(tracker, assembly.timeEquipment().clock())
         def wiring = new SlotWiring(
-                newAssembly(properties), RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
+                assembly, RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
                 registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
-                ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
+                ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
@@ -260,20 +259,21 @@ tracker:
         given:
         tracker.fetchTask(new TaskRef('PROJ-7')) >> workingTask('PROJ-7')
         def slotRunner = newSlotRunner()
-        def slotLedger = new SlotLedger(1)
+        def slotLedger = new SlotLedger(1, new VirtualClock())
         def ref = new TaskRef('PROJ-7')
         slotLedger.assign(ref)
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def clock = new VirtualClock()
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(tempDir.resolve('placeholder'), new LedgerJsonMapper()),
-                tempDir.resolve('gnomish'), Clock.systemUTC())
-        slotRunner.attachLedgerWriter(new TaskOutcomeLedgerWriter(slotLedger, appender, instance, Clock.systemUTC()))
+                tempDir.resolve('gnomish'), clock)
+        slotRunner.attachLedgerWriter(new TaskOutcomeLedgerWriter(slotLedger, appender, instance, clock))
 
         when:
         slotRunner.run(ref)
 
         then:
-        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir.resolve('gnomish'), LocalDate.now(ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir.resolve('gnomish'), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
         def lines = Files.readString(ledgerFile).split('\n').findAll {
             !it.isBlank()
         }

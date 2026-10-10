@@ -23,6 +23,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
@@ -77,7 +78,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def memoryReport = StatusReportReferenceFixture.referenceReport()
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone.worktrees().resolve(taskId)
 
@@ -95,7 +96,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         when: 'both are rendered through the same JSON mapper'
         def memoryJson = mapper.serialize(memoryReport)
 
-        def result = new BranchStateReader(runner).read(cloneDir, taskId)
+        def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
         def stateFileJson = mapper.serialize(stateFileReport)
 
@@ -124,14 +125,14 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def memoryReport = StatusReport.build(context, state, null, null)
 
         and: 'the round committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone.worktrees().resolve(taskId)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 
         when: 'the branch is read back and both renderings go through the same mapper'
-        def result = new BranchStateReader(runner).read(cloneDir, taskId)
+        def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
 
         then: 'the denial came back with the attempt, and the attempt is still passed (FR2)'
@@ -157,12 +158,12 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def memoryReport = StatusReport.build(context, state, escalation, new Outcome.Escalated(escalation))
 
         and: 'the park committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), state)
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation), TrackerWrite.OWED)
 
         when: 'the branch is read back and both renderings go through the same mapper'
-        def result = new BranchStateReader(runner).read(cloneDir, taskId)
+        def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
 
         then: 'the escalation came back carrying its denial'

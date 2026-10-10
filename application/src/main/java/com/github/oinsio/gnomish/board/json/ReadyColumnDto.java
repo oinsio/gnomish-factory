@@ -9,13 +9,12 @@ import java.util.List;
  * wipLimit} — NFR-O1's "the WIP gate is expressed as the observed open-front
  * count against the limit, none left to be recomputed"), and the row list.
  *
- * <p>{@code openFrontCount} is {@code working.size() + awaitingHuman.size()} of
- * the same document — the {@code listOpen} result the board already fetched
- * (design D7); {@code wipLimit} is not stored on {@code BoardModel} itself (it is
- * consumed transiently while resolving each row's eligibility), so {@link
- * BoardJsonMapper#toDto} takes it as an explicit parameter, mirroring how {@code
- * BoardModel.build} itself takes it as an explicit parameter rather than reading
- * configuration.
+ * <p>Both are read from the model: {@code openFrontCount} is {@code
+ * BoardModel#openFrontCount()}, the {@code listOpen} result the board already
+ * fetched (design D7 of add-board-command), and {@code wipLimit} is {@code
+ * BoardModel#wipLimit()}, the limit eligibility judged the WIP-held rows by
+ * (design D13 of supervise-daemon-loops-and-embed-dashboard) — {@link
+ * BoardJsonMapper#toDto} takes neither as a parameter.
  *
  * <p>Implements FR3, NFR-O1 of add-board-command.
  *

@@ -124,7 +124,7 @@ class SnapshotReaderSpec extends Specification {
         reader.read(file, atThreshold) instanceof DaemonSnapshotView.Fresh
     }
 
-    def "a stale snapshot last in Stopped renders StoppedStale, not DeadDaemon"() {
+    def "a stale snapshot last in Stopped renders Stopped, not DeadDaemon"() {
         given:
         def stopped = new LifecycleState.Stopped('drainComplete')
         def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(stopped))
@@ -133,8 +133,24 @@ class SnapshotReaderSpec extends Specification {
         def view = reader.read(file, STALE_NOW)
 
         then:
-        view instanceof DaemonSnapshotView.StoppedStale
-        (view as DaemonSnapshotView.StoppedStale).snapshot().lifecycle() == stopped
+        view instanceof DaemonSnapshotView.Stopped
+        (view as DaemonSnapshotView.Stopped).snapshot().lifecycle() == stopped
+    }
+
+    // FR11 of supervise-daemon-loops-and-embed-dashboard (dashboard-page "Fresh stopped snapshot
+    //     shows the stopped state"): stopped is terminal, so its age adds nothing — the page serve
+    //     renders right after its final snapshot must not read "running".
+    def "FR11: a fresh snapshot last in Stopped renders Stopped, not Fresh"() {
+        given:
+        def stopped = new LifecycleState.Stopped('signal')
+        def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(stopped))
+
+        when:
+        def view = reader.read(file, FRESH_NOW)
+
+        then:
+        view instanceof DaemonSnapshotView.Stopped
+        (view as DaemonSnapshotView.Stopped).snapshot().lifecycle() == stopped
     }
 
     private Path writeSnapshot(Snapshot snapshot) {

@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import java.time.InstantSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  * {@link TaskState}, persisted synchronously, then emitted as {@link EngineEvent.AttemptFinished}
  * — persist strictly before the finish event and any next attempt (FR11). At the top of each
  * round — the moment the round begins, where {@link EngineEvent.AttemptStarted} is emitted — the
- * loop reads {@code clock.now()} once and threads that single instant through {@link
+ * loop reads {@code clock.instant()} once and threads that single instant through {@link
  * RoundExecution} onto the round's {@link AttemptRecord#startedAt()} (FR15 of add-manual-run,
  * design D11), so the begin time is carried in state rather than derived from a later reading. One
  * {@code StageAttemptLoop} is constructed per run from the run's {@link EnginePorts}, holding
@@ -49,7 +49,7 @@ final class StageAttemptLoop {
 
     private final RoundExecution roundExecution;
     private final AttemptJournal journal;
-    private final Clock clock;
+    private final InstantSource clock;
     private final PipelineDefinition definition;
 
     /**
@@ -67,7 +67,7 @@ final class StageAttemptLoop {
     StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PipelineDefinition definition) {
         this.roundExecution = new RoundExecution(ports.executor(), verifyOrchestrator, ports.listener());
         this.journal = new AttemptJournal(ports.listener(), ports.persistence());
-        this.clock = ports.clock();
+        this.clock = ports.time().clock();
         this.definition = definition;
     }
 
@@ -102,7 +102,7 @@ final class StageAttemptLoop {
     StageResult run(TaskContext context, TaskState state, Workspace workspace, StageDefinition stage) {
         var current = state;
         while (true) {
-            var startedAt = clock.now();
+            var startedAt = clock.instant();
             journal.started(new AttemptKey(
                     context.taskId(), stage.name(), current.attempts().size()));
             switch (roundExecution.execute(context, current, workspace, stage, startedAt)) {

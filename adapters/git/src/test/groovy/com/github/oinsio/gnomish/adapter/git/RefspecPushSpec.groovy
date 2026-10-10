@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -50,20 +52,18 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
     // own stall-detection options precede it, a push being a network command (FR4 of
     // bound-subprocess-commands); everything after them is this class's.
     def "the command is the exact explicit refspec, with no other argument"() {
-        given: 'a git stand-in that reports the argv it was handed'
-        def fakeGit = tempDir.resolve('argv-reporting-git')
-        fakeGit.toFile().text = '#!/bin/sh\necho "$@"\n'
-        fakeGit.toFile().executable = true
+        given: 'a git stand-in that records the argv it was handed'
+        def fakeGit = StandIn.recording(tempDir, 'record-argv')
 
         when:
-        def result = new RefspecPush(new GitProcessRunner(fakeGit.toString())).push(clone, BRANCH)
+        new RefspecPush(new GitProcessRunner(fakeGit.toString())).push(clone, BRANCH)
 
-        then:
-        result.stdout().forParsing().trim() == (stallDetectionArgv() + [
+        then: 'the push is the last invocation; the runner may resolve the clone key before it'
+        StandInLog.argv(StandInLog.blocks(fakeGit).last()) == stallDetectionArgv() + [
             'push',
             'origin',
-            "${BRANCH}:${BRANCH}"
-        ]).join(' ')
+            "${BRANCH}:${BRANCH}".toString()
+        ]
     }
 
     // The production shape (FR1): a host-mode lifecycle push runs from the CLONE, whose HEAD is on

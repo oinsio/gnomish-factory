@@ -45,7 +45,7 @@ final class UsageArgumentsParser {
         if (task == null) {
             throw new UsageException("a task id is required (e.g. gnomish usage --dir=/path/to/clone <task>)");
         }
-        boolean json = args.containsOption(JSON);
+        boolean json = SwitchFlag.isOn(args, JSON);
         return new UsageArguments(dir, task, json);
     }
 

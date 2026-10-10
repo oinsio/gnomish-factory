@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -13,7 +14,6 @@ import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.sandbox.SegmentPlanner;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.function.BooleanSupplier;
 
 /**
  * Decides how a git-mode run executes (the integration pass of
@@ -35,9 +35,20 @@ import java.util.function.BooleanSupplier;
  * NFR-S1 of add-project-registry), so the advice names that file by its path rather than a
  * command-line option the configuration loader would refuse.
  *
- * <p>Implements FR14, G2, UX2, D13 of add-sandbox-core; FR6, NFR-S1 of add-project-registry.
+ * <p>An instance over the four inputs of the decision — the operator's bindings, the sandbox
+ * config, the classpath-discovered binding registry and the container-runtime probe — built once
+ * by the composition root (design D22 of supervise-daemon-loops-and-embed-dashboard), so no caller
+ * supplies its own four inputs: {@code ContainerSupports} (manual runs) and {@code TakeWorkRouter}
+ * (take and serve) both ask this one object. ADR 0010's three answers: (a) without the probe the
+ * other three cannot decide fail-closed; (b) {@link #plan} resolves the bindings, reconciles stage
+ * needs and refuses; (c) "execution mode" is the glossary's term. The sandbox config has a second
+ * reader, the container support factory (the box equipment): one bound configuration record, two
+ * readers — not a duplicate to thread through here.
+ *
+ * <p>Implements FR14, G2, UX2, D13 of add-sandbox-core; FR6, NFR-S1 of add-project-registry; FR18
+ * of supervise-daemon-loops-and-embed-dashboard.
  */
-final class SandboxModeSelector {
+public final class SandboxModeSelector {
 
     /** The run's execution shape: the resolved mode and the planned segments. */
     record Plan(Mode mode, List<Segment> segments) {
@@ -48,33 +59,44 @@ final class SandboxModeSelector {
         }
     }
 
-    private SandboxModeSelector() {}
+    private final BindingProperties bindings;
+    private final SandboxProperties sandbox;
+    private final AdapterBindingRegistry registry;
+    private final ContainerRuntimeProbe runtimeProbe;
 
     /**
-     * Plans {@code definition}'s execution under the operator's bindings. {@code dockerAvailable}
-     * answers the D13 container-runtime prerequisite; the composition root binds it to the real
-     * {@code ContainerEnvironments::dockerAvailable} probe, daemon-free specs to a scripted
-     * boolean. Injected rather than defaulted here (task 4.4, FR12b of split-into-modules): naming
-     * the docker backend from a use case is exactly the adapter dependency the layering forbids,
-     * and the probe was already a seam.
-     *
-     * <p>{@code registry} carries the bindings the classpath contributed (D6 of
-     * open-adapter-binding-registry). The selector is a static utility, so "inject the registry"
-     * concretely means this parameter: the composition root passes the discovered registry, specs
-     * pass one built from providers of their own.
-     *
-     * @param clone the registered clone the run works in; its project file is the one every
-     *     refusal names as the place for the fix
-     * @throws UsageException on an unmet stage need, a mixed-binding pipeline, or a container
-     *     run without its prerequisites (image + Docker)
+     * @param bindings the operator's per-stage bindings, read from the resolved project's own
+     *     {@code project.yaml} (FR6 of add-project-registry); never null
+     * @param sandbox the operator sandbox config, read for the image prerequisite; never null
+     * @param registry the bindings the classpath contributed (D6 of open-adapter-binding-registry):
+     *     the composition root passes the discovered registry, specs one of their own; never null
+     * @param runtimeProbe answers the D13 container-runtime prerequisite: the composition root binds
+     *     the Docker adapter's probe, daemon-free specs a scripted answer. Injected rather than
+     *     defaulted here (task 4.4, FR12b of split-into-modules): naming the docker backend from a
+     *     use case is exactly the adapter dependency the layering forbids; never null
      */
-    static Plan plan(
-            PipelineDefinition definition,
+    public SandboxModeSelector(
             BindingProperties bindings,
             SandboxProperties sandbox,
             AdapterBindingRegistry registry,
-            BooleanSupplier dockerAvailable,
-            RegisteredClone clone) {
+            ContainerRuntimeProbe runtimeProbe) {
+        this.bindings = bindings;
+        this.sandbox = sandbox;
+        this.registry = registry;
+        this.runtimeProbe = runtimeProbe;
+    }
+
+    /**
+     * Plans {@code definition}'s execution under the operator's bindings.
+     *
+     * @param definition the pipeline the run advances through; never null
+     * @param clone the registered clone the run works in; its project file is the one every
+     *     refusal names as the place for the fix
+     * @return the resolved mode and the planned segments; never null
+     * @throws UsageException on an unmet stage need, a mixed-binding pipeline, or a container
+     *     run without its prerequisites (image + Docker)
+     */
+    Plan plan(PipelineDefinition definition, RegisteredClone clone) {
         Path projectFile = clone.layout().config();
         BindingResolver resolver = resolver(bindings, registry, projectFile);
         List<Segment> segments = new SegmentPlanner(resolver).plan(definition);
@@ -89,7 +111,7 @@ final class SandboxModeSelector {
                             + " still differ between pipelines)");
         }
         if (container) {
-            requireContainerPrerequisites(sandbox, dockerAvailable, projectFile);
+            requireContainerPrerequisites(projectFile);
             return new Plan(Plan.Mode.CONTAINER, segments);
         }
         return new Plan(Plan.Mode.HOST, segments);
@@ -134,8 +156,7 @@ final class SandboxModeSelector {
     }
 
     /** The D13 refusal: container is the default, and its absence names the two ways out — never silent host. */
-    private static void requireContainerPrerequisites(
-            SandboxProperties sandbox, BooleanSupplier dockerAvailable, Path projectFile) {
+    private void requireContainerPrerequisites(Path projectFile) {
         String image = sandbox.image();
         if (image == null || image.isBlank()) {
             throw new UsageException(
@@ -143,7 +164,7 @@ final class SandboxModeSelector {
                             + " sandbox image in " + projectFile + " (see docs/examples/sandbox-image/), or"
                             + hostOptOut(projectFile));
         }
-        if (!dockerAvailable.getAsBoolean()) {
+        if (!runtimeProbe.available()) {
             throw new UsageException(
                     "stages bind the container adapter (the default) but the Docker runtime is unreachable — install"
                             + " or start Docker, or" + hostOptOut(projectFile));

@@ -5,13 +5,11 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 
 /**
  * Shared {@link TakeCommand} construction for the reconcile specs: a real git-backed {@link
- * TaskGitFixture}, a fixed clock, and the accept-anything github tracker validator — the exact
+ * TaskGitFixture}, the graph's one virtual time ({@link TakeCommands#slotTime}), and the accept-anything github tracker validator — the exact
  * {@link TakeCommands#of} call that {@link TakeReconcileLifecycleSpecBase} and {@link
  * TwoInstanceTakeFixture} used to repeat verbatim aside from how each computes its {@link
  * FactoryProperties}.
@@ -32,17 +30,18 @@ trait TakeCommandFixture implements AppAssemblyFixture {
 
     TakeCommand newTakeCommand(
             FactoryProperties factoryProperties, RegisteredClone clone, Map<String, TrackerAdapterFactory> trackerFactories,
-            TakeCommandSeams seams = TakeCommandSeams.DEFAULTS,
+            Closure<TakeCommandSeams> seams = { time ->
+                TakeCommandSeams.defaults(time)
+            },
             SandboxLifecyclePass sandboxLifecyclePass = SandboxLifecyclePass.NONE) {
         TakeCommands.of(
-                newAssembly(factoryProperties),
+                newAssembly(factoryProperties, TakeCommands.slotTime()),
                 TaskGitFixture.real(),
                 clone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                new TrackerWiring(trackerFactories, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                new TrackerWiring(trackerFactories, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 seams,
-                sandboxLifecyclePass, ContainerTakeSupport.hostOnly())
+                sandboxLifecyclePass, ContainerTakeSupportFixture.hostOnly())
     }
 }

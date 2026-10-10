@@ -1,0 +1,21 @@
+import com.github.oinsio.gnomish.build.StandInLibrary
+
+// The committed stand-in library (ADR 0015, design D23 of supervise-daemon-loops-and-embed-dashboard)
+// reaches every test JVM as the `standInDir` system property, so `StandIn` in `:test-fixtures`
+// hands out committed presets from the source tree. Applied by `test-conventions`, so a module gets
+// it with the test stack, as it gets the adversarial git configuration.
+//
+// PIT's minions inherit nothing from the `test` task, so the property is also one of their JVM
+// arguments; a module that adds its own `pitest.jvmArgs` appends to the list rather than replacing
+// it.
+def library = rootProject.file(StandInLibrary.RELATIVE_PATH)
+
+tasks.withType(Test).configureEach {
+    jvmArgumentProviders.add(new StandInLibrary(directory: library))
+}
+
+pluginManager.withPlugin('info.solidsoft.pitest') {
+    pitest {
+        jvmArgs.add("-D${StandInLibrary.PROPERTY}=${library.absolutePath}".toString())
+    }
+}

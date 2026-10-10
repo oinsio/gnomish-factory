@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -33,8 +35,10 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit), new ClaimEpochBook())
-        new TakeBareAuto(slotWiring(Stub(RunAssembly), git, tracker),
-                Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, 10, new Random(1))
+        new TakeBareAuto(slotWiring(Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.on(new VirtualClock(NOW))
+        }, git, tracker),
+        Duration.ofMinutes(1), Duration.ofHours(1), 10, new Random(1))
     }
 
     private TakeResult run() {

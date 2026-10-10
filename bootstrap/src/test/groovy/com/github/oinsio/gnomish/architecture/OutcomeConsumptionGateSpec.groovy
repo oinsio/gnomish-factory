@@ -36,20 +36,15 @@ class OutcomeConsumptionGateSpec extends Specification {
 
     /** Files that must name {@code resetAttempts}, each with why. */
     private static final Map<String, String> REQUIRED = [
-        ('domain/src/main/java/com/github/oinsio/gnomish/domain/engine/TaskState.java'):
-        'the declaration',
-        ('application/src/main/java/com/github/oinsio/gnomish/app/EscalationResume.java'):
-        'run: decide resets, land writes through appendDecision or resumeFrom',
-        ('application/src/main/java/com/github/oinsio/gnomish/app/TakeDecisionResume.java'):
-        'take: every reset goes to mechanics.resumeFrom or mechanics.appendDecision',
+        ('domain/src/main/java/com/github/oinsio/gnomish/domain/engine/TaskState.java'): 'the declaration',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/EscalationResume.java'): 'run: decide resets, land writes through appendDecision or resumeFrom',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/TakeDecisionResume.java'): 'take: every reset goes to mechanics.resumeFrom or mechanics.appendDecision',
     ]
 
     /** Files that may name it without being required to: owners of the hand-off with no reset today. */
     private static final Map<String, String> PERMITTED = [
-        ('application/src/main/java/com/github/oinsio/gnomish/app/HostResumeMechanics.java'):
-        'host ResumeMechanics: wraps resumeFrom/appendDecision; receives the reset state today',
-        ('application/src/main/java/com/github/oinsio/gnomish/app/ContainerResumeMechanics.java'):
-        'container ResumeMechanics: wraps resumeFrom/appendDecision; receives the reset state today',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/HostResumeMechanics.java'): 'host ResumeMechanics: wraps resumeFrom/appendDecision; receives the reset state today',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/ContainerResumeMechanics.java'): 'container ResumeMechanics: wraps resumeFrom/appendDecision; receives the reset state today',
     ]
 
     // FR7: the attempts reset lives only where its hand-off to a lifecycle writer is visible

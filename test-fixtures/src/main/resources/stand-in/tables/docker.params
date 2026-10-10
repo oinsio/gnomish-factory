@@ -1,0 +1,38 @@
+# Stand-ins for the docker CLI (DockerCliSpec, DockerCliBoundedSpec).
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+
+[docker-daemon-down]
+# A docker client that cannot reach its daemon (DockerCliSpec).
+* refuse 1 data/stderr#docker-daemon-down
+
+[docker-daemon-down-then-stall]
+# A docker client that cries daemon-unreachable, then hangs past any deadline (DockerCliSpec).
+* stderr data/stderr#docker-daemon-down
+* stall 600
+
+[docker-exit-7]
+# A docker command that fails with exit 7 (DockerCliSpec).
+* refuse 7 data/stderr#boom
+
+[docker-inspect-exit-3]
+# A docker command that answers inside any deadline with its own exit code, 3, and a line on each
+# stream (DockerCliBoundedSpec).
+* stderr data/stderr#warn
+* answer data/stdout-docker#out-inspect 3
+
+[docker-noisy]
+# A docker command printing well past the OS pipe buffer on both streams (DockerCliBoundedSpec).
+* exec-sh steps/noisy.sh
+
+[docker-silent]
+# A docker command that succeeds silently (DockerCliBoundedSpec).
+* answer - 0
+
+[docker-speaks-both]
+# A docker command that succeeds, with a line on each stream (DockerCliSpec).
+* stderr data/stderr#warn
+* answer data/stdout-docker#out-network 0
+
+[docker-stall]
+# A docker command that never returns on its own (DockerCliBoundedSpec).
+* stall 600

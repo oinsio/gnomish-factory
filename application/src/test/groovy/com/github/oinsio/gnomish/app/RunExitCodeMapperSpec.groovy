@@ -38,6 +38,8 @@ class RunExitCodeMapperSpec extends Specification {
         new RunParkedException(new TaskOutcome.Paused(STATE, 'build'), null) | 11
         new AbortedException('persist failed') | 12
         new InternalErrorException('mismatch') | 1
+        // FR9 of supervise-daemon-loops-and-embed-dashboard: a disabled standalone watch exits 1
+        new DashboardDisabledException() | 1
     }
 
     // FR5, FR8 of remove-interactive-console: code 4 is retired — no type maps to it, so the

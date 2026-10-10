@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.Path
@@ -75,7 +76,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     private TakeResult resume(BranchShape shape) {

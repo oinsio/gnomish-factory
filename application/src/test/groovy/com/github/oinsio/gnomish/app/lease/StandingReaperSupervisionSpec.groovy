@@ -1,209 +1,123 @@
 package com.github.oinsio.gnomish.app.lease
 
+
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
-import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import spock.lang.Specification
 import spock.lang.Timeout
 
 /**
- * The supervised-restart policy (design D5, task 1.3a): the exponential backoff before a
- * respawn, its reset on a clean tick, the monotonically increasing restart counter, and the
- * ERROR-level respawn log (NFR-O1, UX2). Unlike {@code StandingReaperResilienceSpec} (which
- * proves the plain "a dead worker is respawned" contract of D4), these specs drive the backoff
- * wait itself through the injected {@link BlockingSleeper} rendezvous — no real sleeping, no
- * wall-clock timing assertions — by invoking the worker's {@code uncaughtExceptionHandler} on a
- * background thread (the handler now blocks on the backoff sleep, so it cannot run on the test
- * thread without deadlocking the rendezvous) and driving {@code awaitEntered}/{@code releaseOne}
- * for both the backoff wait and the fresh worker's own interval sleep.
+ * The standing reaper's restart policy (FR4, NFR-O1, UX2 of fix-reaper-idle-liveness, design D5),
+ * now the supervised loop's {@code Unbounded} policy with the reaper's interval as the first
+ * backoff and a 10-minute cap (FR6 of supervise-daemon-loops-and-embed-dashboard, design D7):
+ * consecutive deaths double the backoff up to the cap, a clean tick resets it, every respawn logs
+ * the loop's ERROR with a rising restart count and {@code component=reaper}, and the reaper's
+ * {@code restartCount()} — the {@code vitals.reaper.restartCount} source — reads that same count.
  *
- * FR4 of fix-reaper-idle-liveness; design D5.
+ * <p>Deaths are real (an {@code Error} from the duty leaves the loop's guard); the backoffs are read off the
+ * respawn lines, and the first feature also checks them against what the reaper's one sleeper
+ * actually slept.
  */
 @Timeout(10)
 class StandingReaperSupervisionSpec extends Specification {
 
     private static final Duration INTERVAL = Duration.ofMinutes(1)
-    private static final Duration MAX_BACKOFF = Duration.ofMinutes(10)
+    private static final Duration CAP = Duration.ofMinutes(10)
 
-    private final BlockingSleeper sleeper = new BlockingSleeper()
-    // The shared capture helper rather than a hand-rolled ListAppender block (task 2.4 of
-    // harden-logging-observability; migrated here because this spec is being touched, per NG5).
-    private LogCaptureSupport logs
-
-    def setup() {
-        logs = LogCaptureSupport.attach(StandingReaper)
-    }
+    private final ReaperLoopRig rig = new ReaperLoopRig()
 
     def cleanup() {
-        logs.detach()
+        rig.close()
     }
 
-    private static ReaperDuty countingDuty() {
-        { Collection<TaskRef> own -> } as ReaperDuty
-    }
-
-    // Kills the given worker on a background thread and drives the backoff-wait rendezvous,
-    // returning the backoff duration the handler asked for. Does NOT drive the fresh worker's
-    // own post-respawn interval sleep — callers that need the new worker do that themselves.
-    private Duration killAndAwaitBackoff(Thread worker) {
-        def handler = worker.uncaughtExceptionHandler
-        Thread.ofVirtual().start {
-            handler.uncaughtException(worker, new OutOfMemoryError('simulated unrecoverable death'))
+    // The backoff each respawn waited, as its ERROR line reports it.
+    private List<Duration> backoffs() {
+        rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED).collect {
+            it.argumentArray[1] as Duration
         }
-        sleeper.awaitEntered()
     }
 
-    // FR4, D5: consecutive deaths (no clean tick between them) double the backoff each time,
-    //     starting at the base interval, until the cap stops further growth.
-    def "consecutive deaths double the backoff up to the 10-minute cap"() {
-        given: 'a reaper parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-
-        expect: 'each consecutive death backs off double the previous, capped at 10 minutes'
-        for (expectedBackoff in [
-                    INTERVAL,
-                    INTERVAL.multipliedBy(2),
-                    INTERVAL.multipliedBy(4),
-                    INTERVAL.multipliedBy(8),
-                    MAX_BACKOFF
-                ]) {
-            def dying = reaper.worker()
-            def backoff = killAndAwaitBackoff(dying)
-            assert backoff == expectedBackoff
-
-            sleeper.releaseOne()
-            sleeper.awaitEntered()
-            assert !reaper.worker().is(dying)
+    private List<Integer> restartCounts() {
+        rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED).collect {
+            it.argumentArray[2] as Integer
         }
-
-        cleanup:
-        reaper.stop()
     }
 
-    // FR4, D5: once a respawned worker completes one full tick without dying, the backoff
-    //     resets — a later death again starts from the base interval instead of continuing to
-    //     double from where it left off.
-    def "a clean tick after a respawn resets the backoff to the base interval"() {
-        given: 'a reaper whose first worker has already died twice in a row (backoff at 2x)'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-
-        def firstDying = reaper.worker()
-        assert killAndAwaitBackoff(firstDying) == INTERVAL
-        sleeper.releaseOne()
-        sleeper.awaitEntered()
-
-        def secondDying = reaper.worker()
-        assert killAndAwaitBackoff(secondDying) == INTERVAL.multipliedBy(2)
-        sleeper.releaseOne()
-        sleeper.awaitEntered()
-
-        when: 'the third worker completes one full clean tick'
-        def cleanWorker = reaper.worker()
-        sleeper.releaseOne()
-        sleeper.awaitEntered()
-
-        and: 'that same worker then dies'
-        def backoff = killAndAwaitBackoff(cleanWorker)
-
-        then: 'the backoff restarted from the base interval, not from 4x'
-        backoff == INTERVAL
-
-        cleanup:
-        reaper.stop()
-    }
-
-    // FR4, NFR-O1, UX2: the ERROR log line for each respawn carries a monotonically increasing
-    //     restart count, the only surface a persistent fault is visible through.
-    def "each respawn logs an ERROR line with a monotonically increasing restart count"() {
+    // FR4, D5 of fix-reaper-idle-liveness; FR6: consecutive deaths double the backoff from the
+    //     reaper's interval, and the 10-minute cap stops further growth.
+    def "consecutive deaths double the backoff from the interval up to the 10-minute cap"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
+        rig.build(INTERVAL, { n ->
+            if (n <= 6) throw new Error('duty died')
+            rig.stopHere()
+        })
 
-        when: 'three consecutive deaths are driven through respawn'
-        3.times {
-            def dying = reaper.worker()
-            killAndAwaitBackoff(dying)
-            sleeper.releaseOne()
-            sleeper.awaitEntered()
+        when:
+        rig.runToStop()
+
+        then: 'every death is a wait, its tick and a backoff, which the respawn line reports'
+        def slept = rig.journal.findAll {
+            it.startsWith('sleep')
+        }.collect {
+            Duration.parse(it - 'sleep ')
         }
-
-        then: 'the ERROR lines carry restart counts 1, 2, 3 in order'
-        // FR15 of harden-logging-observability: the code is the pin, the sentence is not — the
-        // restart counter below is the one wording detail that is genuinely the subject here.
-        def errorMessages = logs.list.findAll {
-            it.level == Level.ERROR && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_WORKER_DIED.head())
-        }*.formattedMessage
-        errorMessages.size() == 3
-        errorMessages[0].contains('restart #1')
-        errorMessages[1].contains('restart #2')
-        errorMessages[2].contains('restart #3')
-
-        and: 'the vitals reader (task 2.5, FR7) reports the same lifetime count'
-        reaper.restartCount() == 3
-
-        cleanup:
-        reaper.stop()
+        slept.indices.findAll {
+            it % 2 == 1
+        }.collect {
+            slept[it]
+        } == backoffs()
+        backoffs() == [
+            INTERVAL,
+            INTERVAL.multipliedBy(2),
+            INTERVAL.multipliedBy(4),
+            INTERVAL.multipliedBy(8),
+            CAP,
+            CAP
+        ]
     }
 
-    // FR1, D4: start() is idempotent — a second call while a worker already runs is a no-op and
-    //     never leaks a second ticking worker (the first would otherwise be overwritten and leak).
-    def "a second start() while a worker already runs is a no-op"() {
-        given: 'a reaper whose worker is parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-        def firstWorker = reaper.worker()
-
-        when: 'start() is called again'
-        reaper.start()
-
-        then: 'the worker reference is unchanged — no second worker was spawned'
-        reaper.worker().is(firstWorker)
-
-        cleanup:
-        reaper.stop()
-    }
-
-    // FR4, D5: stop() racing the backoff wait (not just the interval wait) must not respawn —
-    //     the death-handling thread checks stopping again once the backoff sleep returns.
-    def "stop() during the backoff wait does not respawn"() {
+    // FR4, D5 of fix-reaper-idle-liveness; FR6: a clean tick after a respawn resets the backoff,
+    //     so a later death starts again from the interval.
+    def "a clean tick after a respawn resets the backoff to the interval"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-        def dyingWorker = reaper.worker()
-        def handler = dyingWorker.uncaughtExceptionHandler
+        rig.build(INTERVAL, { n ->
+            if (n in [1, 2, 4]) throw new Error('duty died')
+            if (n == 5) rig.stopHere()
+        })
 
-        when: 'the handler fires and parks in its backoff wait'
-        def deathThread = Thread.ofVirtual().start {
-            handler.uncaughtException(dyingWorker, new OutOfMemoryError('simulated death'))
+        when:
+        rig.runToStop()
+
+        then:
+        backoffs() == [
+            INTERVAL,
+            INTERVAL.multipliedBy(2),
+            INTERVAL
+        ]
+        restartCounts() == [1, 2, 3]
+    }
+
+    // FR4, NFR-O1, UX2 of fix-reaper-idle-liveness; FR6: each respawn logs the loop's ERROR with
+    //     component=reaper and a rising count, and restartCount() reports the same lifetime count.
+    def "each respawn logs an ERROR with a rising restart count that restartCount() reports"() {
+        given:
+        rig.build(INTERVAL, { n ->
+            if (n <= 3) throw new Error('duty died')
+            rig.stopHere()
+        })
+
+        expect: 'a reaper that never died has restarted zero times'
+        rig.reaper.restartCount() == 0
+
+        when:
+        rig.runToStop()
+
+        then:
+        restartCounts() == [1, 2, 3]
+        rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED).every {
+            it.level == Level.ERROR && it.MDCPropertyMap['component'] == 'reaper'
         }
-        sleeper.awaitEntered()
-
-        and: 'stop() is called while parked there, then the backoff wait releases'
-        reaper.stop()
-        sleeper.releaseOne()
-        deathThread.join(5000)
-
-        then: 'no respawn happened: the worker reference is unchanged'
-        reaper.worker().is(dyingWorker)
+        rig.reaper.restartCount() == 3
     }
 }

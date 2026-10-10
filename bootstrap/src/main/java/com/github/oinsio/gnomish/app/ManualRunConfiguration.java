@@ -23,10 +23,9 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.time.Clock;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Random;
 import org.springframework.beans.factory.ObjectProvider;
@@ -46,7 +45,7 @@ import org.springframework.context.annotation.Primary;
  * ManualRunAssembly} builds those imperatively once that context exists, using the beans here as
  * building blocks.
  *
- * <p>{@link Random} and {@link Clock} beans are the two collaborators {@link
+ * <p>{@link Random} and {@link InstantSource} beans are the two collaborators {@link
  * AdHocTaskSynthesizer} needs — kept unseeded/system-real here since a manual run always wants a
  * genuine timestamp and a genuine random suffix; tests construct their own seeded instances
  * directly rather than through this configuration (see {@code AdHocTaskSynthesizerSpec}).
@@ -70,8 +69,9 @@ public class ManualRunConfiguration {
      * along, so the value threaded here holds for every check of every mode.
      */
     @Bean
-    public ShellCommandCheckRunner shellCommandCheckRunner(FactoryProperties factoryProperties) {
-        return new ShellCommandCheckRunner().withCheckTimeout(factoryProperties.checkCommandTimeout());
+    public ShellCommandCheckRunner shellCommandCheckRunner(
+            FactoryProperties factoryProperties, InstantSource instantSource) {
+        return new ShellCommandCheckRunner(instantSource).withCheckTimeout(factoryProperties.checkCommandTimeout());
     }
 
     @Bean
@@ -138,20 +138,27 @@ public class ManualRunConfiguration {
      * from the same backend and shares the one runner above.
      */
     @Bean
-    public TaskGit taskGit(GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook) {
+    public TaskGit taskGit(
+            GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook, TimeEquipment timeEquipment) {
+        // FR18, FR22 of supervise-daemon-loops-and-embed-dashboard: one infrastructure retry, built
+        // on the root's one time equipment, and the one time source for every git collaborator
+        // below — none builds its own.
+        GitInfrastructureRetry retry = new GitInfrastructureRetry(
+                timeEquipment, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF);
+        InstantSource instantSource = timeEquipment.clock();
         return new TaskGit(
-                new GitTaskStore(gitProcessRunner, claimEpochBook),
-                new GitTaskBranches(gitProcessRunner, claimEpochBook),
+                new GitTaskStore(gitProcessRunner, claimEpochBook, retry, instantSource),
+                new GitTaskBranches(gitProcessRunner, claimEpochBook, retry),
                 new GitTaskWorktrees(gitProcessRunner, claimEpochBook),
                 // The mid-round push decoration (FR1, design D3 of wire-host-mid-round-push),
                 // built in exactly this one place: git-mode host control flows attach it via
                 // RunAssembly.withHostGitPush, and the selector applies it to the host rounds.
                 // The operator is stateless; per-task state (the shared poll suppressor) lives
                 // in the MidRoundPushRounds instance each application creates.
-                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner),
+                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner, instantSource),
                 // FR5, FR6 of add-base-ref-resolution: default-branch discovery and the narrow base
                 // refresh, under the production git infrastructure retry.
-                new GitBaseRefs(gitProcessRunner, GitInfrastructureRetry.system()),
+                new GitBaseRefs(gitProcessRunner, retry),
                 // FR4, design D2 of fix-claim-epoch-fence: the same book the three writers above
                 // stamp from travels inside the bundle, so the claiming commands wrap their
                 // resolved tracker with the record their own writers read.
@@ -194,14 +201,30 @@ public class ManualRunConfiguration {
                 profiles);
     }
 
+    /**
+     * The installation's one time equipment (design D20 of
+     * supervise-daemon-loops-and-embed-dashboard): the only place real time enters production —
+     * the system instant source and the real sleeper, built together once. Every component that
+     * reads the current instant or waits receives this bean, the {@link #instantSource} derived from
+     * it, or a retry or suppressor the composition root built on it.
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     */
     @Bean
-    public SystemClock systemClock() {
-        return new SystemClock();
+    public TimeEquipment timeEquipment() {
+        return new TimeEquipment(InstantSource.system(), new ThreadSleeper());
     }
 
+    /**
+     * The installation's one time source (design D16, D17 of
+     * supervise-daemon-loops-and-embed-dashboard): the clock half of {@link #timeEquipment}, the
+     * same instance, for the components that read the current instant and never wait.
+     *
+     * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
+     */
     @Bean
-    public ThreadSleeper threadSleeper() {
-        return new ThreadSleeper();
+    public InstantSource instantSource(TimeEquipment timeEquipment) {
+        return timeEquipment.clock();
     }
 
     /**
@@ -239,24 +262,19 @@ public class ManualRunConfiguration {
             SystemConsoleIO systemConsoleIO,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO,
             CheckEquipment checkEquipment,
-            SystemClock systemClock,
-            ThreadSleeper threadSleeper,
+            TimeEquipment timeEquipment,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties) {
         return new ManualRunAssembly(
-                systemConsoleIO,
-                errorConsoleIO,
-                checkEquipment,
-                systemClock,
-                threadSleeper,
-                factoryProperties,
-                sandboxProperties);
+                systemConsoleIO, errorConsoleIO, checkEquipment, timeEquipment, factoryProperties, sandboxProperties);
     }
 
     /**
      * The installation's check equipment (design D11 and the {@code CheckEquipment} row of
      * collapse-composition-roots): the two built-in check runners, the discovered check-client
-     * registry and the credential seam, which every run's check ports are built from.
+     * registry, the credential seam and the time equipment every check provider is handed on its
+     * context (design D21 of supervise-daemon-loops-and-embed-dashboard), which every run's check
+     * ports are built from.
      */
     @Bean
     public CheckEquipment checkEquipment(
@@ -264,13 +282,15 @@ public class ManualRunConfiguration {
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
             SecretsProvider secretsProvider,
-            FactoryProperties factoryProperties) {
+            FactoryProperties factoryProperties,
+            TimeEquipment timeEquipment) {
         return new CheckEquipment(
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 checkClientRegistry,
                 secretsProvider,
-                factoryProperties);
+                factoryProperties,
+                timeEquipment);
     }
 
     /**
@@ -326,17 +346,12 @@ public class ManualRunConfiguration {
     }
 
     @Bean
-    public Clock javaTimeClock() {
-        return Clock.systemUTC();
-    }
-
-    @Bean
     public Random taskIdRandom() {
         return new Random();
     }
 
     @Bean
-    public AdHocTaskSynthesizer adHocTaskSynthesizer(Clock javaTimeClock, Random taskIdRandom) {
-        return new AdHocTaskSynthesizer(javaTimeClock, taskIdRandom);
+    public AdHocTaskSynthesizer adHocTaskSynthesizer(InstantSource instantSource, Random taskIdRandom) {
+        return new AdHocTaskSynthesizer(instantSource, taskIdRandom);
     }
 }

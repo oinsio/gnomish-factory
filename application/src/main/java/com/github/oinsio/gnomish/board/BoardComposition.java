@@ -5,8 +5,8 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 
 /**
@@ -44,7 +44,7 @@ public final class BoardComposition {
             Tracker tracker,
             TrackerConfig trackerConfig,
             FactoryProperties.Tracker trackerProperties,
-            Clock clock,
+            InstantSource clock,
             int readyLimit) {
         List<ReadyTask> ready = tracker.listReady(readyLimit);
         List<OpenTask> open = tracker.listOpen();

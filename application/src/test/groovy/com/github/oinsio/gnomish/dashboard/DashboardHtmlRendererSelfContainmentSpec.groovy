@@ -86,7 +86,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
             new ReadyRow(new TaskRef('task-canary'), UntrustedText.tracker(canary), false, null)
         ]
         def board = new BoardSectionView(
-                new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), false, GENERATED_AT),
+                new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), 3, false, GENERATED_AT),
                 GENERATED_AT,
                 null)
 
@@ -134,7 +134,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
         def awaitingRows = [
             new AwaitingHumanRow(new TaskRef('task-3'), UntrustedText.tracker('Parked title'), ParkReason.ESCALATION)
         ]
-        def model = new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), false, GENERATED_AT)
+        def model = new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), 3, false, GENERATED_AT)
         new BoardSectionView(model, GENERATED_AT, null)
     }
 }

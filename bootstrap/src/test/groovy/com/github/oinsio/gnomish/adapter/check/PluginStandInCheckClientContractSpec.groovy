@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.app.FixedCheckClientContext
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -15,16 +17,16 @@ import java.time.Duration
  * outside this build satisfies the port by satisfying this suite.
  *
  * <p>The client under test is reached the way production reaches one: through the SPI factory's
- * {@code create(secrets, subsection)}, not by constructing the client directly.
+ * {@code create(context)}, not by constructing the client directly.
  */
 class PluginStandInCheckClientContractSpec extends ExternalCheckClientContract {
 
     @Override
     protected Optional<PollStatus> arrange(PollVariant variant) {
         def factory = new PluginStandInCheckClientFactory(scripted: scripted(variant))
-        def client = factory.create({ _ ->
+        def client = factory.create(new FixedCheckClientContext({ _ ->
             Optional.of('secret')
-        }, [endpoint: 'https://plugin.example'])
+        } as SecretsProvider, [endpoint: 'https://plugin.example']))
         Optional.of(client.poll(
                         new VerifyCheck.External(
                                 'ci', PluginStandInCheckClientFactory.PROVIDER, Duration.ofSeconds(1),

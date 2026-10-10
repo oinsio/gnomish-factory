@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import java.nio.file.Files
 import java.nio.file.Path
@@ -22,7 +23,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
 
     private static final Duration SHORT_TIMEOUT = Duration.ofMillis(300)
 
-    def runner = new ShellCommandCheckRunner().withCheckTimeout(SHORT_TIMEOUT)
+    def runner = new ShellCommandCheckRunner(new VirtualClock()).withCheckTimeout(SHORT_TIMEOUT)
 
     @Timeout(30)
     def "FR12, UX4: a check that never exits is a quality failure carrying the tail captured so far"() {
@@ -49,7 +50,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         and: 'a roomier deadline than the shared 300 ms one, so the child records its pid before the kill'
         // The first exec of a freshly written script can take hundreds of milliseconds (macOS
         // scans new executables); this feature tests the tree kill, not the bound's tightness.
-        def treeKillRunner = new ShellCommandCheckRunner().withCheckTimeout(Duration.ofSeconds(2))
+        def treeKillRunner = new ShellCommandCheckRunner(new VirtualClock()).withCheckTimeout(Duration.ofSeconds(2))
 
         when:
         def verdict = treeKillRunner.run(check, workspace())

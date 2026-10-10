@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -26,7 +25,8 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -35,7 +35,6 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -126,14 +125,18 @@ tracker:
                 agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
     }
 
+    /** The invocation's one virtual time source, the slot assembly's: the abort fuse and the dispatcher read the same instant (FR21). */
+    private final VirtualClock clock = new VirtualClock()
+
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
         // The invocation's one slot wiring, as TakeCommand#run builds it: the listener-free assembly,
         // an abort fuse of ABORT_THRESHOLD over this spec's tracker, and a beat-less heartbeat's tenure.
-        def wiring = new SlotWiring(newAssembly(testProps()), TaskGitFixture.real(), registeredClone, 'taskId',
-                new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD), [],
-                ContainerTakeSupport.hostOnly(), noopHeartbeat().tenure(),
+        def assembly = newAssembly(testProps(), VirtualTimeEquipment.on(clock))
+        def wiring = new SlotWiring(assembly, TaskGitFixture.real(), registeredClone, 'taskId',
+                new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), ABORT_THRESHOLD), [],
+                ContainerTakeSupportFixture.hostOnly(), noopHeartbeat().tenure(),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
-        new TakeDispatcher(wiring, testProps(), Clock.systemUTC(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()), confirmation)
+        new TakeDispatcher(wiring, testProps(), new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), VirtualTimeEquipment.create()), confirmation)
     }
 
     /** What the batch invocation bound: the spec's pipeline, tracker and pass-through adapter. */
@@ -144,9 +147,9 @@ tracker:
 
     private static TakeHeartbeat noopHeartbeat() {
         def standingReaper =
-                new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), {
+                new StandingReaper(ReaperDuty.NONE, Duration.ofMinutes(1), {
                     []
-                }, new SystemClock())
+                }, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> }))
         new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper,
                 new LivenessOracle(new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1))))
     }
@@ -157,7 +160,7 @@ tracker:
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
 

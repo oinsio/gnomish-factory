@@ -1,0 +1,52 @@
+# What stand-ins print on stderr: refusals and failures, each exactly as the tool under test prints it.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[bad-revision]
+fatal: bad revision
+
+[boom]
+boom
+
+[cannot-lock-ref]
+error: cannot lock ref
+
+[docker-daemon-down]
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+
+[fetch-fsck-refusal]
+error: object 4fac338eb7ab83e161dedf7bd70faca576de5c41: missingEmail: invalid author/committer line - missing email
+fatal: fsck error in packed object
+fatal: index-pack failed
+
+[git-broken-install]
+git: broken install
+
+[harvest-daemon-down]
+docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+
+[lock-index]
+fatal: could not lock the index
+
+[no-further-push]
+no further push may happen
+
+[not-a-repository]
+fatal: '/gnomish/work' does not appear to be a git repository
+
+[password-prompt-device]
+fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com': Device not configured
+
+[password-prompt-leak]
+fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com'
+
+[rejected-non-fast-forward]
+! [rejected] gnomish/task-1 -> gnomish/task-1 (non-fast-forward)
+
+[stand-in-refuses]
+fatal: stand-in git refuses
+
+[unable-to-access]
+fatal: unable to access origin
+
+[warn]
+warn

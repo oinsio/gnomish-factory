@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -12,53 +14,36 @@ import java.nio.file.Path
  * and <em>failed</em>, so its empty output stream would read as a fact — an untouched state
  * directory, an unmoved tip, an empty branch listing — unless the caller checks the exit code.
  *
- * <p>Sibling of {@link StallingReadGitFixture}, which drives the other half of the same rule:
- * a probe that never ran to its own exit at all.
+ * <p>The stand-in is the committed preset {@code fail-subcommand}, reached through a per-run link
+ * named after the subcommand it fails; healing re-points that link at {@code delegate-git} (ADR
+ * 0015). Sibling of
+ * {@link StallingReadGitFixture}, which drives the other half of the same rule: a probe that
+ * never ran to its own exit at all.
  */
 trait FailingSubcommandGitFixture {
 
     /** The stderr the stand-in emits, and the evidence a caller is expected to carry through. */
-    static final String GIT_FAILURE_STDERR = 'fatal: bad revision'
-
-    /**
-     * The marker whose appearance heals {@code subcommand} again, for specs asserting what an
-     * operator is told when a failing probe starts answering — see {@link #healGit}.
-     */
-    Path healthMarker(Path dir, String subcommand) {
-        dir.resolve("failing-git-${subcommand}.healed")
-    }
+    static final String GIT_FAILURE_STDERR = StandIn.data('stderr#bad-revision').trim()
 
     /** Ends the outage: from here on the stand-in delegates {@code subcommand} to the real git. */
     void healGit(Path dir, String subcommand) {
-        healthMarker(dir, subcommand).toFile().text = ''
+        StandIn.repoint(failingLink(dir, subcommand), 'delegate-git')
     }
 
     /**
-     * Writes a stand-in {@code git} into {@code dir} that fails only on {@code subcommand}, and
-     * only until {@link #healGit} is called for it.
+     * The stand-in {@code git} of {@code dir} — one per subcommand — that fails only on {@code subcommand}, and only until
+     * {@link #healGit} is called for it.
      *
-     * @param dir where the stand-in binary is written
+     * @param dir where the stand-in's per-run link is created
      * @param subcommand the git subcommand to fail, matched after any leading {@code -c} pairs
      * @return the stand-in binary's path, for {@code new GitProcessRunner(path.toString())}
      */
     Path gitFailingOn(Path dir, String subcommand) {
-        Path fakeGit = dir.resolve("failing-git-${subcommand}")
-        fakeGit.toFile().text = """#!/bin/sh
-subcommand_of() {
-  while [ \$# -gt 0 ]; do
-    case "\$1" in
-      -c) shift 2 ;;
-      *) echo "\$1"; return ;;
-    esac
-  done
-}
-if [ "\$(subcommand_of "\$@")" = "${subcommand}" ] && [ ! -f "${healthMarker(dir, subcommand)}" ]; then
-  echo "${GIT_FAILURE_STDERR}" >&2
-  exit 128
-fi
-exec git "\$@"
-"""
-        fakeGit.toFile().executable = true
-        return fakeGit
+        Path link = failingLink(dir, subcommand)
+        Files.isSymbolicLink(link) ? link : StandIn.link(link, 'fail-subcommand')
+    }
+
+    private static Path failingLink(Path dir, String subcommand) {
+        Files.createDirectories(dir.resolve('failing-git')).resolve(subcommand)
     }
 }

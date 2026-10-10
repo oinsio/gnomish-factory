@@ -35,6 +35,7 @@ class RawOptionReadBoundarySpec extends Specification {
         'BoardArgumentsParser',
         'DashboardArgumentsParser',
         'ArgumentsParsingSupport',
+        'SwitchFlag',
         'GitFlagsValidator'
     ].collect { APP + it + '.java' } as Set
 

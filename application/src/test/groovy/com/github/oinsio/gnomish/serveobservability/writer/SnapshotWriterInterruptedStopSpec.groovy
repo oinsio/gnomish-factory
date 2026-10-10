@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
+import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonReader
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -15,8 +18,12 @@ import spock.util.concurrent.PollingConditions
 
 /**
  * {@link SnapshotWriter#stopAfterFinalWrite}: an {@link InterruptedException} while joining the
- * background worker thread must not abort the final write — the calling thread's interrupt
- * status is restored (never swallowed) and the final synchronous write still happens (FR4).
+ * worker thread of the supervised loop must neither abort the final write nor cut the join short — the join
+ * still waits the worker's tick out, so the final {@code stopped} write is the last one on disk
+ * (FR7 of supervise-daemon-loops-and-embed-dashboard), and the calling thread's interrupt status is
+ * restored (never swallowed). The join is the supervised loop's ({@code SupervisedLoop#stopAndJoin},
+ * design D4 of supervise-daemon-loops-and-embed-dashboard); a stray interrupt of the writer's own
+ * thread is {@link SnapshotWriterSupervisionSpec}'s subject.
  *
  * <p>Implements FR4 of add-serve-observability.
  */
@@ -32,11 +39,14 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
     // (already-interrupted) caller enters join — a dead thread makes join() return without ever
     // calling wait(), so the catch (and its interrupt-restore) would never run. A supplier blocked
     // on a latch pins the worker mid-tick, guaranteeing it is alive at join() and the catch path is
-    // exercised deterministically (otherwise the interrupt-restore mutant flakily survives).
-    def "still performs the final write when the join is interrupted, and restores the interrupt flag"() {
+    // exercised deterministically. The worker's pinned tick read the `running` state before the
+    // stop; the tick is released only once the caller is back inside its join (or has returned), so
+    // a join cut short by the interrupt lets that stale write land after the final one.
+    def "an interrupted join still waits out the tick in progress, so the final write is the last, and the flag is restored"() {
         given:
         def target = tempDir.resolve('snapshot.json')
         def calls = new AtomicInteger()
+        Thread worker = null
         def firstCallStarted = new CountDownLatch(1)
         def releaseTick = new CountDownLatch(1)
         // Only the worker's first tick blocks (pinning it alive); stopAfterFinalWrite's own final
@@ -44,56 +54,43 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
         def writer = new SnapshotWriter(target, {
             ->
             if (calls.incrementAndGet() == 1) {
+                worker = Thread.currentThread()
                 firstCallStarted.countDown()
                 releaseTick.await()
+                return SnapshotWriterSpec.fixtureSnapshot()
             }
-            SnapshotWriterSpec.fixtureSnapshot()
-        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
+            SnapshotWriterSpec.stoppedSnapshot()
+        }, mapper, Duration.ofSeconds(30), VirtualTimeEquipment.create(), 0)
         writer.start()
         assert firstCallStarted.await(2, TimeUnit.SECONDS) // worker now pinned mid-tick
+        def restored = new AtomicBoolean()
 
-        when: 'the caller is interrupted and stops while the worker is provably still alive'
-        Thread.currentThread().interrupt()
-        writer.stopAfterFinalWrite()
-
-        then: 'the final write still landed on disk'
-        Files.exists(target)
-
-        and: 'the interrupt status was restored on this thread, not swallowed'
-        Thread.currentThread().isInterrupted()
-
-        cleanup:
-        Thread.interrupted() // clear the flag so it doesn't leak into other tests
+        when: 'an interrupted caller stops while the worker is provably still alive'
+        def caller = Thread.ofPlatform().start {
+            Thread.currentThread().interrupt()
+            writer.stopAfterFinalWrite()
+            restored.set(Thread.currentThread().isInterrupted())
+        }
+        new PollingConditions(timeout: 2).eventually {
+            assert caller.state in [
+                Thread.State.WAITING,
+                Thread.State.TERMINATED
+            ]
+        }
         releaseTick.countDown()
-        writer.worker()?.join(2000)
-    }
+        caller.join(2000)
+        worker.join(2000)
 
-    // The background loop's own wait — awaitNextWake()'s lock.wait(remainingMillis) — must
-    // also tolerate an interrupt without dying: it restores the interrupt flag and returns,
-    // and the outer loop() keeps running rather than exiting (FR1: only stop() ends the loop).
-    def "the worker thread keeps looping after its wait is interrupted mid-sleep"() {
-        given:
-        def calls = new AtomicInteger()
-        def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'), {
-                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
-                },
-                mapper,
-                Duration.ofSeconds(30),
-                Clock.systemUTC(),
-                0)
-        writer.start()
-        new PollingConditions(timeout: 3).eventually { assert calls.get() >= 1 }
-        Thread.sleep(50) // let the worker settle into its long lock.wait()
+        then: 'the caller returned only after the tick, and the final stopped write is the last on disk'
+        !caller.alive
+        !worker.alive
+        new SnapshotJsonReader().read(Files.readString(target)).lifecycle() instanceof LifecycleState.Stopped
 
-        when: 'the worker thread is interrupted while asleep, well before the 30s timer'
-        writer.worker().interrupt()
-
-        then: 'the loop survives the interrupt and keeps ticking rather than exiting'
-        new PollingConditions(timeout: 3).eventually { assert calls.get() >= 2 }
+        and: 'the interrupt status was restored on the caller, not swallowed'
+        restored.get()
 
         cleanup:
-        writer.stop()
-        writer.worker()?.join(2000)
+        releaseTick.countDown()
+        worker?.join(2000)
     }
 }

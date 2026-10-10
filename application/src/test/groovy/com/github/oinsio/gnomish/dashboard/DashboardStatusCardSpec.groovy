@@ -11,8 +11,13 @@ import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.nev
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
+import com.github.oinsio.gnomish.serveobservability.Snapshot
+import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
+import spock.lang.TempDir
 import spock.lang.Unroll
 
 /**
@@ -28,6 +33,9 @@ import spock.lang.Unroll
 class DashboardStatusCardSpec extends Specification {
 
     def renderer = new DashboardHtmlRenderer()
+
+    @TempDir
+    Path tempDir
 
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
 
@@ -45,7 +53,29 @@ class DashboardStatusCardSpec extends Specification {
         'no snapshot ever written' | new DaemonSnapshotView.Absent() | 'Daemon has not run here' | ' status--down'
         'a fresh snapshot reads as running' | new DaemonSnapshotView.Fresh(snapshot(new LifecycleState.Running())) | 'Daemon running' | ''
         'a dead daemon reads as not updating' | new DaemonSnapshotView.DeadDaemon(snapshot(new LifecycleState.Running())) | 'Snapshot not updating' | ' status--down'
-        'a clean stop is not an alarm' | new DaemonSnapshotView.StoppedStale(snapshot(new LifecycleState.Stopped('signal'))) | 'Daemon stopped (signal)' | ' status--stopped'
+        'a clean stop is not an alarm' | new DaemonSnapshotView.Stopped(snapshot(new LifecycleState.Stopped('signal'))) | 'Daemon stopped (signal)' | ' status--stopped'
+    }
+
+    // FR11 of supervise-daemon-loops-and-embed-dashboard (dashboard-page "Fresh stopped snapshot shows
+    //     the stopped state"): the page serve renders right after its final snapshot reads that
+    //     snapshot as stopped, with its reason and the stopped dot — and vitals frozen at the stop
+    //     raise no alarm, though the same failure count on a running daemon would.
+    def "FR11: a fresh stopped snapshot read from disk shows the stopped state, its reason, and no alarm"() {
+        given: 'a stopped snapshot written a minute ago, carrying a failure count that alarms a running daemon'
+        def base = snapshotWithTrackerFailures()
+        def stopped = new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
+                new LifecycleState.Stopped('drainComplete'), base.feed(), base.slots(), base.vitals(), base.tracker(), [:])
+        def file = tempDir.resolve('snapshot.json')
+        Files.writeString(file, new SnapshotJsonMapper().serialize(stopped))
+
+        when:
+        def view = new SnapshotReader().read(file, NOW)
+        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
+
+        then:
+        html.contains('<div class="status__state">Daemon stopped (drainComplete)</div>')
+        html.contains('class="card status status--stopped"')
+        !markup(html).contains('class="status__alert"')
     }
 
     def "a snapshot carries the instance, its writtenAt as a time element, and both stats"() {

@@ -4,28 +4,31 @@ import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import spock.lang.Specification
 
 /**
- * FR2, UX2, M5 of kill-expensive-mutants (design D4): a stalling stand-in {@code git} has one
- * owner, the {@code StallingGit} builder in {@code :test-fixtures}.
+ * FR2, UX2, M5 of kill-expensive-mutants (design D4); FR24 of
+ * supervise-daemon-loops-and-embed-dashboard (design D23): a stalling stand-in {@code git} has one
+ * owner — the stand-in library's script spells the one {@code sleep}, its committed presets state
+ * what stalls, and {@code StallingGit} in {@code :test-fixtures} hands them out.
  *
  * <p>The defect this gate exists for had a green build: nine hand-written stalling scripts, each
  * sleeping on every subcommand, so the clone-key resolution a production read runs first sat out
  * the whole stall and a feature cost a minute instead of milliseconds. Nothing failed — each copy
  * was correct for the spec that wrote it. The builder answers local commands at once; this
  * whole-tree scan ({@link ClaimlessGitBoundarySpec} is the precedent) keeps a tenth copy from
- * appearing beside it. {@link StallingScriptRule} decides what a script that sleeps is.
+ * appearing beside it. Since design D23 no Groovy source spells a stall at all: the builder that
+ * wrote one per test became a selector over committed presets. {@link StallingScriptRule} decides what a script that sleeps is.
  *
- * <p>The allowlists are paths, not patterns, and each is asserted reached: a renamed consumer or
- * a stale exemption fails loudly instead of widening the gate silently.
+ * <p>The consumer list is paths, not patterns, and each is asserted reached: a renamed consumer
+ * fails loudly instead of dropping out of the gate silently.
  */
 class StallingGitOwnerSpec extends Specification {
 
     private static final String GIT_TESTS = 'adapters/git/src/test/groovy/com/github/oinsio/gnomish/adapter/git/'
     private static final String FIXTURES = 'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/'
 
-    /** The owner: the one source whose literals may spell a stall freely. */
-    private static final String OWNER = FIXTURES + 'StallingGit.groovy'
+    /** The owner: the stand-in library's one script, where the one shell {@code sleep} lives. */
+    private static final String OWNER = 'test-fixtures/src/main/resources/stand-in/stand-in.sh'
 
-    /** The eight consumers of design D4's single-owner table: each builds its stand-in through the owner. */
+    /** The eight consumers of design D4's single-owner table: each selects its stand-in through the owner. */
     private static final List<String> CONSUMERS = [
         GIT_TESTS + 'ContainerHarvestFetchSpec.groovy',
         GIT_TESTS + 'GitProcessRunnerBoundedNetworkSpec.groovy',
@@ -37,30 +40,9 @@ class StallingGitOwnerSpec extends Specification {
         FIXTURES + 'StallingReadGitFixture.groovy',
     ]
 
-    /**
-     * The scripts that sleep and stay hand-written (design D4 disposition table), each because
-     * the script's own shape is the subject:
-     *
-     * <ul>
-     *   <li>{@code GitProcessRunnerBoundedNetworkSpec}: the leaky-git script — the credential-
-     *       bearing stderr line printed before the stall is what the scrub feature asserts on. The
-     *       file is also a consumer; the exemption is file-level, so its builder-built stand-in
-     *       and this one script share the row.
-     *   <li>{@code TipStateCursorTerminationSpec}: closes stdout, then stalls — the closed pipe is
-     *       the subject.
-     *   <li>{@code CloneMutationConcurrencySpec}: not a stand-in at all — a tracing wrapper over
-     *       the real {@code git} that sleeps briefly between its START and END lines.
-     * </ul>
-     */
-    private static final List<String> EXEMPTIONS = [
-        GIT_TESTS + 'CloneMutationConcurrencySpec.groovy',
-        GIT_TESTS + 'GitProcessRunnerBoundedNetworkSpec.groovy',
-        GIT_TESTS + 'TipStateCursorTerminationSpec.groovy',
-    ]
-
     // FR2, UX2: a stalling script outside the owner is the tenth copy — the shape that sat out a
     //     minute-long stall on the key resolution while every spec stayed green.
-    def "FR2, UX2: no source outside the owner and the named exemptions writes a script that sleeps"() {
+    def "FR2, UX2: no Groovy source writes a script that sleeps; the owner spells the one sleep"() {
         given: 'every Groovy source of the two governed trees'
         def sources = governedSources()
         def sleeping = sources.findAll {
@@ -69,18 +51,18 @@ class StallingGitOwnerSpec extends Specification {
             RepoSourceTree.relative(it)
         }
 
-        expect: 'the scan reached the owner and every exemption, and each still sleeps'
-        ([OWNER] + EXEMPTIONS).findAll { !sleeping.contains(it) } == []
+        expect: 'no source writes a script that sleeps'
+        // The three hand-written exemptions design D4 kept — a tracing wrapper, a leaky stall and a
+        // closed-stdout stall — became committed presets with design D23.
+        sleeping.sort() == []
 
-        and: 'no other source writes a script that sleeps'
-        sleeping.findAll {
-            it != OWNER && !EXEMPTIONS.contains(it)
-        }.sort() == []
+        and: 'the owner is where the sleep is spelled'
+        StallingScriptRule.SHELL_SLEEP.matcher(RepoSourceTree.repoRoot().resolve(OWNER).toFile().text).find()
     }
 
     // FR2, M5: a consumer renamed or moved away must fail here, not drop out of the scan silently.
-    def "FR2, M5: the scan reached all eight consumers, and each builds through the owner"() {
-        given: 'the consumers the scan reached that build through the owner'
+    def "FR2, M5: the scan reached all eight consumers, and each selects through the owner"() {
+        given: 'the consumers the scan reached that select through the owner'
         def reached = governedSources().findAll {
             CONSUMERS.contains(RepoSourceTree.relative(it)) && StallingScriptRule.buildsThroughOwner(it)
         }.collect {

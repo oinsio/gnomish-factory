@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Clock
 /**
  * Shared fixture for {@link TakeResumeRunner} specs (task 5.6): adds tracker stubbing and
  * {@link TakeResumeRunner}-specific helpers on top of {@link ResumeSpecFixtureBase}'s
@@ -94,7 +93,8 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
     /**
      * The {@link SlotWiring} the take specs over this fixture run with: this fixture's registered
      * clone, MDC key {@code taskId}, an abort fuse of {@link #ABORT_THRESHOLD} over {@link
-     * #tracker}, a host-only container seam, and a trusted base whose default branch is the
+     * #tracker} on the assembly's own clock (the slot's one time, task 3.9 of
+     * supervise-daemon-loops-and-embed-dashboard), a host-only container seam, and a trusted base whose default branch is the
      * clone's actual current branch — read lazily, since {@code cloneDir} only exists once {@code
      * setup()} has run.
      */
@@ -104,8 +104,8 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
             List<String> credentialEnvVarsToScrub = [],
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag())) {
         new SlotWiring(assembly, git, registeredClone, 'taskId',
-                new AbortFuse(new AbortHandler(tracker, Clock.systemUTC()), ABORT_THRESHOLD),
-                credentialEnvVarsToScrub, ContainerTakeSupport.hostOnly(), tenure,
+                new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), ABORT_THRESHOLD),
+                credentialEnvVarsToScrub, ContainerTakeSupportFixture.hostOnly(), tenure,
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
     }
 

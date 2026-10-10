@@ -18,7 +18,7 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
 
     def "FR3, NFR-R1, M1: a child that stalls holding its output open cannot outlive its deadline"() {
         given: 'a binary that produces no exit and holds stdout open through a child of its own'
-        Path binary = fakeBinary(dir, 'stall', 'sleep 600')
+        Path binary = fakeBinary('stall')
         Process process = new ProcessBuilder(binary.toString()).start()
 
         and: 'a supervisor with a two-second deadline — the child would run for ten minutes'
@@ -44,7 +44,7 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
 
     def "FR6: a command that exits on its own is untouched by the deadline"() {
         given: 'a binary that exits promptly, well inside the deadline'
-        Path binary = fakeBinary(dir, 'quick', 'exit 3')
+        Path binary = fakeBinary('quick')
         Process process = new ProcessBuilder(binary.toString()).start()
 
         when:
@@ -56,7 +56,7 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
 
     def "NG3: a command supervised without a deadline waits as long as it takes"() {
         given: 'a binary that exits after a beat — the local-command shape, deliberately unbounded'
-        Path binary = fakeBinary(dir, 'local', 'sleep 0.2; exit 7')
+        Path binary = fakeBinary('local')
         Process process = new ProcessBuilder(binary.toString()).start()
 
         when:

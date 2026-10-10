@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
 import com.github.oinsio.gnomish.subprocess.Supervision;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 
 /**
  * The host adapter's {@link ExecHandle}: a thin wrapper over a started local
@@ -59,10 +59,10 @@ public final class HostExecHandle implements ExecHandle {
     }
 
     @Override
-    public Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+    public Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
         Supervision supervision = supervisor.await(process, timeout);
         return switch (supervision.termination()) {
-            case EXITED -> new Wait.Exited(Duration.between(startedAt, clock.now()));
+            case EXITED -> new Wait.Exited(Duration.between(startedAt, clock.instant()));
             case TIMED_OUT -> new Wait.TimedOut();
             case INTERRUPTED -> new Wait.Interrupted();
         };

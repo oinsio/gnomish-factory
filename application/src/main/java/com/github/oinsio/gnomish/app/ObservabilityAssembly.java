@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshotAssembler;
@@ -20,8 +21,8 @@ import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 
@@ -70,7 +71,9 @@ final class ObservabilityAssembly {
      * @param dirtyNotifier the caller's {@link ForwardingDirtyNotifier}, already handed to the
      *     slot ledger and the feed automaton at their own construction; {@link
      *     ForwardingDirtyNotifier#bind} is called here once the real writer exists
-     * @param clock the wall-clock time source for every write point; never null
+     * @param time the time equipment of every write point: its clock stamps the snapshot, the
+     *     lifecycle and the ledger, and the snapshot writer's loop runs on the whole of it (design
+     *     D16, D20 of supervise-daemon-loops-and-embed-dashboard); never null
      * @param sources the live collaborators every snapshot is read from (design D2 of
      *     collapse-composition-roots); its slot ledger also backs the task-outcome ledger writer;
      *     never null
@@ -81,8 +84,9 @@ final class ObservabilityAssembly {
             InstanceId instanceId,
             Path serveDir,
             ForwardingDirtyNotifier dirtyNotifier,
-            Clock clock,
+            TimeEquipment time,
             SnapshotSources sources) {
+        InstantSource clock = time.clock();
         InstanceInfo instance = new InstanceInfo(
                 instanceId.value(), resolveHost(), FactoryVersion.current().value());
         Instant startedAt = clock.instant();
@@ -93,7 +97,7 @@ final class ObservabilityAssembly {
                 () -> sources.snapshot(instance, lifecycleTracker, startedAt, serveProperties.sandboxSweepInterval()),
                 new SnapshotJsonMapper(),
                 serveProperties.snapshotInterval(),
-                clock,
+                time,
                 serveProperties.ledgerRetentionDays());
         // Breaks the construction-order cycle documented in the class Javadoc: only now, with the
         // writer built, can the state holders' stand-in notifier be rebound to the real one.

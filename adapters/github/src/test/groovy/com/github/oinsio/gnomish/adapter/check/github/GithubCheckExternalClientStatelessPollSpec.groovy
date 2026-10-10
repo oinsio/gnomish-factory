@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.tomakehurst.wiremock.WireMockServer
 import java.time.Duration
@@ -57,11 +58,11 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
 
     def "a second instance polling after a simulated crash-and-takeover reaches the same verdict with no shared state"() {
         given: 'the first instance polls the attempt commit before a simulated crash'
-        def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets')
+        def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets', new VirtualClock())
         def firstPoll = firstInstance.poll(sampleCheck(), sampleWorkspace())
 
         when: 'a second, independently constructed instance resumes the poll after takeover'
-        def secondInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets')
+        def secondInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets', new VirtualClock())
         def secondPoll = secondInstance.poll(sampleCheck(), sampleWorkspace())
 
         then: 'both instances observe the same run set and reach the same verdict'

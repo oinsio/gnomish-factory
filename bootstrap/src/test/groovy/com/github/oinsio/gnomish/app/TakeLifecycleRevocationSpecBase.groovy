@@ -10,11 +10,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -132,13 +130,12 @@ tracker:
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
         TakeCommands.of(
-                newAssembly(factoryProperties),
+                newAssembly(factoryProperties, TakeCommands.slotTime()),
                 TaskGitFixture.real(),
                 registeredClone,
                 'taskId',
                 factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
     def "ready -> claim -> work -> human closes mid-run -> revoked: salvage, push, note, release; branch and worktree kept"() {

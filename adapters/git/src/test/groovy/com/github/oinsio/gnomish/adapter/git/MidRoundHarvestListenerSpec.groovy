@@ -2,12 +2,11 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -44,13 +43,10 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
 
     Path clone
     Path origin
-    Instant now = Instant.parse('2026-08-08T10:00:00Z')
-    def clock = { -> now } as Clock
+    /** One virtual time source for the listener and its suppressor, so the roll-up elapses instantly. */
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-08-08T10:00:00Z'))
 
-    /** The suppressor's own time source: virtual, so the roll-up interval elapses instantly. */
-    MovableClock suppressorClock = new MovableClock(now)
-
-    RepeatSuppressor suppressor = new RepeatSuppressor(suppressorClock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
+    RepeatSuppressor suppressor = new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
 
     def setup() {
         clone = initWorkingRepo(tempDir, 'factory-clone')
@@ -103,16 +99,16 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
 
         when: 'three events land within the interval'
         l.onProgress(toolEvent)
-        now = now.plusSeconds(5)
+        clock.advance(Duration.ofSeconds(5))
         l.onProgress(toolEvent)
-        now = now.plusSeconds(5)
+        clock.advance(Duration.ofSeconds(5))
         l.onProgress(toolEvent)
 
         then: 'only the first polled'
         harvests == 1
 
         when: 'the interval elapses'
-        now = now.plusSeconds(30)
+        clock.advance(Duration.ofSeconds(30))
         l.onProgress(toolEvent)
 
         then:
@@ -126,7 +122,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
 
         when: 'the second event lands exactly minInterval after the first poll'
         l.onProgress(toolEvent)
-        now = now.plusSeconds(30)
+        clock.advance(Duration.ofSeconds(30))
         l.onProgress(toolEvent)
 
         then: 'elapsed == minInterval already satisfies the rate limit'
@@ -164,8 +160,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         when: 'five polls, each a minute apart — inside the roll-up interval'
         5.times {
             l.onProgress(toolEvent)
-            now = now.plusSeconds(60)
-            suppressorClock.advance(Duration.ofMinutes(1))
+            clock.advance(Duration.ofMinutes(1))
         }
 
         then: 'the console carries the fault once, with the throwable on it'
@@ -201,8 +196,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         when: 'two polls, a minute apart — well inside the roll-up interval'
         2.times {
             l.onProgress(toolEvent)
-            now = now.plusSeconds(60)
-            suppressorClock.advance(Duration.ofMinutes(1))
+            clock.advance(Duration.ofMinutes(1))
         }
 
         then: 'each fault is announced on its own — the second is news, not more of the first'
@@ -234,8 +228,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         when: 'five polls inside the roll-up interval, then one past it'
         5.times {
             l.onProgress(toolEvent)
-            now = now.plusSeconds(60)
-            suppressorClock.advance(Duration.ofMinutes(1))
+            clock.advance(Duration.ofMinutes(1))
         }
         l.onProgress(toolEvent)
 
@@ -247,7 +240,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         rollUps[0].level == Level.WARN
         rollUps[0].formattedMessage.contains('6x')
         // The streak opened on the first poll and the sixth lands five minutes later, which is
-        // exactly the roll-up interval — the arithmetic a MovableClock would otherwise hide.
+        // exactly the roll-up interval.
         rollUps[0].formattedMessage.contains('over PT5M')
         rollUps[0].formattedMessage.contains('taskId=PROJ-9')
         rollUps[0].throwableProxy.className == HarvestRefusedException.name
@@ -271,8 +264,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         LogCaptureSupport.capture(MidRoundHarvestListener, Level.WARN) {
             listener(failing).onProgress(toolEvent)
         }
-        now = now.plusSeconds(60)
-        suppressorClock.advance(Duration.ofMinutes(1))
+        clock.advance(Duration.ofMinutes(1))
 
         when: 'an unrelated round on the other branch fails for the first time'
         def events = LogCaptureSupport.capture(MidRoundHarvestListener, Level.DEBUG) {
@@ -299,8 +291,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         when:
         l.onProgress(toolEvent)
         refuse = false
-        now = now.plusSeconds(120)
-        suppressorClock.advance(Duration.ofMinutes(2))
+        clock.advance(Duration.ofMinutes(2))
         l.onProgress(toolEvent)
 
         then: 'one INFO ends the streak the WARN opened'

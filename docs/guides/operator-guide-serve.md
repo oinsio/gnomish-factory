@@ -28,14 +28,17 @@ already-claimed tasks to slots, instead of an operator naming refs.
 gnomish serve                        # daemon: feed the queue forever, N slots, until SIGTERM
 gnomish serve --drain                # daemon: feed the queue until empty, then exit 0
 gnomish serve --slots=4              # override the configured slot count for this run
+gnomish serve --dashboard            # daemon that also keeps the dashboard page up to date
 gnomish take 42 43 44                # batch: work three named refs, up to N concurrently
 ```
 
-| Flag           | Applies to | Meaning                                                                  |
-|----------------|------------|--------------------------------------------------------------------------|
-| `--dir=<path>` | `serve`    | project clone directory and `.gnomish/` location; defaults to `.`        |
-| `--slots=<n>`  | `serve`    | overrides `factory.serve.slots` for this run; must be a positive integer |
-| `--drain`      | `serve`    | stop-on-empty instead of running forever (see "Drain mode" below)        |
+| Flag                     | Applies to | Meaning                                                                          |
+|--------------------------|------------|----------------------------------------------------------------------------------|
+| `--dir=<path>`           | `serve`    | project clone directory and `.gnomish/` location; defaults to `.`                |
+| `--slots=<n>`            | `serve`    | overrides `factory.serve.slots` for this run; must be a positive integer         |
+| `--drain`                | `serve`    | stop-on-empty instead of running forever (see "Drain mode" below)                |
+| `--dashboard`            | `serve`    | render the dashboard page inside the daemon (see "The embedded dashboard" below) |
+| `--dashboard-out=<path>` | `serve`    | where the embedded page is written; needs the dashboard on                       |
 
 `serve` has no `<ref>` and none of `take`'s single-task
 flags (`--mode`, `--task`/`--task-file`/`--task-id`, `--resume`, `--from-stage`,
@@ -62,11 +65,11 @@ apply per ref — plus:
 `serve`'s own exit code (not the per-task outcome, which is the tracker's
 story) is:
 
-| Code | Meaning                                                                                                                                      |
-|------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                             |
-| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                           |
-| 2    | usage error — malformed flags, an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
+| Code | Meaning                                                                                                                                                                                           |
+|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                                                                                  |
+| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                                                                                |
+| 2    | usage error — malformed flags (including `--dashboard-out` with the dashboard off), an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
 
 Batch `take` reuses the single-`take` exit-code table (see "`take` CLI
 Reference" in `operator-guide.md`) per ref, then aggregates: exit 0 only if
@@ -101,6 +104,7 @@ sequenceDiagram
     Op->>D: SIGTERM
     D->>D: stop claiming immediately (feed thread interrupted)
     D->>S: flag claims lost (round-boundary stop signal)
+    D->>D: stop reaper, janitor and sweep tick
     S->>S: finish current round, if within grace window
     S->>Gh: release claim (label stays; reaper restores Ready after the claim TTL)
     D->>D: wait up to sigterm-grace for all slots to release
@@ -124,6 +128,13 @@ the ordinary lease path (TTL, reaper, resume from the branch) — no new
 mechanism is invented for it. Because a 30-second default grace rarely
 catches an hour-long round's boundary, a *planned* stop should prefer
 `--drain` (below) over sending SIGTERM to a daemon mid-round.
+
+Right after flagging the in-flight claims, and before the grace wait, the
+daemon stops its three background loops together: the standing reaper, the
+worktree janitor and the sandbox sweep tick. Stopping them before the wait
+means no janitor disposal or sweep starts against a slot that is still
+releasing its environment. Each stop is safe to repeat, so a second shutdown
+pass changes nothing (design D9 of `supervise-daemon-loops-and-embed-dashboard`).
 
 The last two steps are the daemon's own, not the framework's: Spring's
 automatic shutdown hook is disabled and Logback registers none, so a single
@@ -216,13 +227,14 @@ file `~/.gnomish/factory.yaml`, the project file
 (`--factory.<key>=<value>`) — every `factory.serve.*` key is accepted in all
 three — with a CLI override where one exists:
 
-| Property                               | CLI override | Default | Meaning                                                                           |
-|----------------------------------------|--------------|---------|-----------------------------------------------------------------------------------|
-| `factory.serve.slots`                  | `--slots`    | `2`     | N — concurrent claim/work slots for this instance                                 |
-| `factory.serve.idle-poll-interval`     | —            | `30s`   | shared Idle-empty/Idle-blocked poll interval                                      |
-| `factory.serve.sigterm-grace`          | —            | `30s`   | how long SIGTERM handling waits for in-flight slots before moving on              |
-| `factory.serve.worktree-age-threshold` | —            | `14d`   | minimum **host worktree** inactivity before the janitor disposes of it            |
-| `factory.serve.sandbox-sweep-interval` | —            | `5m`    | cadence of the sandbox sweep+reap tick (one immediate tick at startup, then this) |
+| Property                               | CLI override  | Default | Meaning                                                                           |
+|----------------------------------------|---------------|---------|-----------------------------------------------------------------------------------|
+| `factory.serve.slots`                  | `--slots`     | `2`     | N — concurrent claim/work slots for this instance                                 |
+| `factory.serve.idle-poll-interval`     | —             | `30s`   | shared Idle-empty/Idle-blocked poll interval                                      |
+| `factory.serve.sigterm-grace`          | —             | `30s`   | how long SIGTERM handling waits for in-flight slots before moving on              |
+| `factory.serve.worktree-age-threshold` | —             | `14d`   | minimum **host worktree** inactivity before the janitor disposes of it            |
+| `factory.serve.sandbox-sweep-interval` | —             | `5m`    | cadence of the sandbox sweep+reap tick (one immediate tick at startup, then this) |
+| `factory.serve.dashboard`              | `--dashboard` | `false` | render the dashboard page inside the daemon; the flag or the property turns it on |
 
 The last two govern **two disjoint populations with two disjoint cleaners**, and
 neither ever touches the other's objects: the janitor disposes of instance-local
@@ -440,6 +452,77 @@ writes and no inbound port. See
 [`docs/operator-guide-observability.md`](operator-guide-observability.md)
 for the file formats and a ready-to-adapt cron script that turns snapshot
 staleness and invariant checks into an outbound dead-man's-switch alert.
+
+## The embedded dashboard (`--dashboard`)
+
+<!-- implements FR8, FR9, FR10, FR11, UX1, UX2, UX5 of supervise-daemon-loops-and-embed-dashboard -->
+
+`serve` can keep the dashboard page up to date itself, so a wall display needs
+one process instead of a daemon plus a separate `gnomish dashboard --watch`.
+What the page shows, block by block, is described in
+[`operator-guide-dashboard.md`](operator-guide-dashboard.md); this section
+covers only how `serve` runs it.
+
+```bash
+gnomish serve --dashboard                                  # page in the default location
+gnomish serve --dashboard --dashboard-out=/srv/wall/acme.html
+```
+
+**Turning it on.** Pass `--dashboard`, or set `factory.serve.dashboard: true` in
+the host file, the project file or on the command line (see "Instance knobs vs.
+protocol constants" above). Either one turns it on; it is off by default.
+
+**Where the page goes.** By default the page is `dashboard.html` in the
+instance's serve directory, `~/.gnomish/projects/<name>/serve/<instance>/` —
+the same file `gnomish dashboard` writes by default.
+`--dashboard-out=<path>` overrides it and is read exactly like
+`gnomish dashboard --out`: the path is taken as given, relative to the working
+directory. `--dashboard-out` with the dashboard off is a usage error (exit 2):
+`--dashboard-out needs the dashboard on: pass --dashboard or set factory.serve.dashboard: true`.
+
+**What you see at start.** Once the snapshot writer is running, `serve` prints
+the page's absolute path on the console (stderr), before any task is claimed:
+
+```text
+gnomish serve: dashboard -> /home/you/.gnomish/projects/widgets/serve/host-1/dashboard.html
+```
+
+The `serve started` log line carries the same facts as
+`dashboard=<true|false>, dashboardOut=<path|none>`, so the log of any past run
+says whether it rendered a page and where.
+
+**How it runs.** The page is re-rendered every 10 s, and the tracker board it
+shows is fetched at most once every 60 s — the same cadences as
+`dashboard --watch`. The board is read by a separate, read-only tracker client
+built from the configuration `serve` read from origin's default branch (not
+from your working checkout), under its own reader identity. Its failures
+degrade only the page's board blocks; they never count against the daemon's
+own tracker health or its claims.
+
+**When the page keeps failing.** The render loop is a supervised daemon loop
+with a bounded restart policy: each death is restarted after a backoff, but
+once it would need more than five restarts within ten minutes it gives up and
+logs one ERROR line coded `GF155` (`DAEMON_LOOP_GAVE_UP`), tagged
+`component=dashboard`. A tracker outage or a failed file write is not a death —
+it degrades a block or logs a warning — so only a real defect disables the page. The daemon keeps claiming and working tasks; only the
+page stops updating, and the open browser tab shows that through its own
+"renderer silent" strip. Restart `serve` to get the page back.
+
+**When `serve` stops.** On drain completion, SIGTERM or `Ctrl-C`, `serve`
+writes its final `stopped` snapshot and then renders the page one last time
+from it, so the open tab reads `Daemon stopped (<reason>)` — for example
+`Daemon stopped (drainComplete)` — instead of a live-looking "running". A
+stopped snapshot reads as stopped however old it is. The last render makes no
+tracker call: its board blocks show the board as of the last fetch, so a
+tracker that is down cannot hold up the stop. If that render fails, `serve`
+logs one WARN line coded `GF157` (`DASHBOARD_FINAL_RENDER_FAILED`) and stops
+normally; the page keeps its previous render.
+
+**One file, one writer.** `serve --dashboard` and a standalone
+`gnomish dashboard --watch` pointed at the same file both write it and
+overwrite each other's renders; nothing detects or prevents this. Run one or
+the other per file — with `serve --dashboard` in place, the standalone
+`--watch` is no longer needed.
 
 ## Autonomy gate and CI hygiene
 

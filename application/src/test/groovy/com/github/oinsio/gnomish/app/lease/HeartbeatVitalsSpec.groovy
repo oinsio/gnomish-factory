@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
@@ -38,7 +39,7 @@ class HeartbeatVitalsSpec extends Specification {
     // A parked sleeper: the auto-started worker blocks in its first sleep, so tick() is only
     // ever driven directly below — mirrors InstanceHeartbeatSpec's construction.
     private final InstanceHeartbeat hb =
-    new InstanceHeartbeat(tracker, progress, new BlockingSleeper(), clock, INTERVAL, ClaimLostSink.IGNORE)
+    new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, new BlockingSleeper()), INTERVAL, ClaimLostSink.IGNORE)
 
     def cleanup() {
         hb.unregister(A)
@@ -103,7 +104,7 @@ class HeartbeatVitalsSpec extends Specification {
             }
             base.sleep(d)
         } as Sleeper
-        def dying = new InstanceHeartbeat(tracker, progress, dyingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
+        def dying = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, dyingSleeper), INTERVAL, ClaimLostSink.IGNORE)
 
         when: 'the claim registers and the worker dies on its second sleep'
         dying.register(A)
@@ -133,7 +134,7 @@ class HeartbeatVitalsSpec extends Specification {
     def "reports IDLE, not DIED, after a normal stop with no held claims"() {
         given:
         def sleeper = new BlockingSleeper()
-        def normal = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
+        def normal = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, sleeper), INTERVAL, ClaimLostSink.IGNORE)
 
         when: 'the only claim is dropped and the loop finds the held set empty'
         normal.register(A)

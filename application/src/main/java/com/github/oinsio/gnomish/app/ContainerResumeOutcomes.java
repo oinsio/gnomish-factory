@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.StatusReport;
-import java.time.Clock;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -30,7 +29,7 @@ import org.jspecify.annotations.Nullable;
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR4, FR5 of make-run-headless; FR4,
- * FR7, FR18 of make-checkpoint-gate-durable.
+ * FR7, FR18 of make-checkpoint-gate-durable; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class ContainerResumeOutcomes {
 
@@ -89,7 +88,8 @@ final class ContainerResumeOutcomes {
         var escalated = new TaskOutcome.Escalated(state, report);
 
         var console = runner.assembly.dialogConsole();
-        var resumption = new EscalationResume(console, Clock.systemUTC(), returnPath(order, taskJson))
+        var resumption = new EscalationResume(
+                        console, runner.assembly.timeEquipment().clock(), returnPath(order, taskJson))
                 .decide(taskJson.context(), escalated, decision);
 
         // The kept box carried the park, and its clone cannot learn of the park's outcome commit —

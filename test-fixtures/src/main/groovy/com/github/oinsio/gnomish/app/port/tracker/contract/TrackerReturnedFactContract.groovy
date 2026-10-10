@@ -139,7 +139,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         seedWorkingWithClaim(adapter, ref, 'instance-a')
 
         when: 'the abort protocol records an abort and returns the task to Ready, and listReady is called'
-        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('infra hiccup'), 'instance-a', Instant.now()))
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('infra hiccup'), 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
         List<ReadyTask> result = adapter.listReady(10)
 
         then: 'the entry reports returned = false — an abort marker is not a returned marker'

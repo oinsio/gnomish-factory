@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
@@ -42,7 +44,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(TakeRefDispatchSpec)
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null, null)
 
     Tracker tracker = Mock(Tracker)
     TrackerAdapterFactory factory = Stub(TrackerAdapterFactory)
@@ -58,14 +60,14 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     }
 
     private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
-        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, ContainerTakeSupport.hostOnly(),
-                heartbeat.tenure()), testProperties(), FIXED_CLOCK,
-                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, ContainerTakeSupportFixture.hostOnly(),
+                heartbeat.tenure()), testProperties(),
+                new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs) {
-        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, { Duration d -> } as Sleeper)
+        def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper))
         TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
                 new TakeArguments(CLONE_DIR, refs, null, false, false),
                 new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),

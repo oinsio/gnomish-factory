@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
@@ -48,7 +49,7 @@ class InstanceHeartbeatFencingSpec extends Specification {
     }
 
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
-    tracker, new HeartbeatProgress(), new BlockingSleeper(), clock, new BeatTiming(INTERVAL, LOST_DETECTION),
+    tracker, new HeartbeatProgress(), VirtualTimeEquipment.on(clock, new BlockingSleeper()), new BeatTiming(INTERVAL, LOST_DETECTION),
     sink, HeartbeatStateListener.IGNORE)
 
     def cleanup() {

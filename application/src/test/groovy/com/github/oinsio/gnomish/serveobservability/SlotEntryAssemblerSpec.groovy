@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.Position
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import spock.lang.Specification
 
 /**
@@ -21,7 +21,7 @@ import spock.lang.Specification
  */
 class SlotEntryAssemblerSpec extends Specification {
 
-    def clock = new SystemClock()
+    def clock = new VirtualClock()
 
     def "no occupied slots produce no entries"() {
         given:

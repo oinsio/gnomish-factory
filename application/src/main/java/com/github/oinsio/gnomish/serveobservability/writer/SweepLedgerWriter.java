@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
 import com.github.oinsio.gnomish.serveobservability.SweepCounts;
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
 import java.io.IOException;
-import java.time.Clock;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,14 +38,14 @@ public final class SweepLedgerWriter implements SweepVerdictListener, SweepTickL
 
     private final RotatingLedgerAppender appender;
     private final InstanceInfo instance;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param appender the shared ledger append point every line is written through; never null
      * @param instance this factory instance's identity, carried on every written line; never null
      * @param clock supplies each line's {@code at} instant; never null
      */
-    public SweepLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, Clock clock) {
+    public SweepLedgerWriter(RotatingLedgerAppender appender, InstanceInfo instance, InstantSource clock) {
         this.appender = appender;
         this.instance = instance;
         this.clock = clock;

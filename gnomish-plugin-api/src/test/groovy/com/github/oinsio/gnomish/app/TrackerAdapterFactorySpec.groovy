@@ -1,22 +1,17 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import java.lang.reflect.Modifier
 import java.time.Duration
 import spock.lang.Specification
 
 /**
- * TrackerAdapterFactory's epoch-aware creation seam (FR13 of
- * harden-task-branch-contract): the composition root always calls the
- * four-argument form, and an adapter that does not stamp epochs is still built
- * by it — epoch stamping is adapter-optional, so the default routes to the
- * three-argument form and returns exactly what it built.
- *
- * FR13: the tenure record reaches the adapters that stamp it, without forcing
- * every adapter to take one.
+ * TrackerAdapterFactory's creation seam (FR23, design D21 of
+ * supervise-daemon-loops-and-embed-dashboard): one abstract {@code create} taking the host-built
+ * {@link TrackerAdapterContext}, and no overload chain an implementor could override the wrong link
+ * of. The context reaches the adapter whole.
  */
 class TrackerAdapterFactorySpec extends Specification {
 
@@ -24,12 +19,13 @@ class TrackerAdapterFactorySpec extends Specification {
         new TrackerConfig('stand-in', 3, Duration.ofMinutes(5), 3, 1, Map.of())
     }
 
-    /** An adapter that implements only the three-argument form — the "does not stamp epochs" case. */
-    private static class EpochUnawareFactory implements TrackerAdapterFactory {
+    /** The minimum an adapter implements: a discriminator, a tracker, a ref expansion. */
+    private static class MinimalFactory implements TrackerAdapterFactory {
 
         final Tracker built
+        TrackerAdapterContext received
 
-        EpochUnawareFactory(Tracker built) {
+        MinimalFactory(Tracker built) {
             this.built = built
         }
 
@@ -39,7 +35,8 @@ class TrackerAdapterFactorySpec extends Specification {
         }
 
         @Override
-        Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+        Tracker create(TrackerAdapterContext context) {
+            received = context
             built
         }
 
@@ -49,34 +46,41 @@ class TrackerAdapterFactorySpec extends Specification {
         }
     }
 
-    def "the default four-argument create builds through the three-argument form and returns its tracker"() {
+    // FR23: one abstract create, taking the context, and no default overload delegating to another.
+    def "FR23: the factory declares exactly one create, abstract, taking the context"() {
+        when:
+        def creates = TrackerAdapterFactory.declaredMethods.findAll {
+            it.name == 'create'
+        }
+
+        then:
+        creates.size() == 1
+        creates[0].parameterTypes as List == [TrackerAdapterContext]
+        Modifier.isAbstract(creates[0].modifiers)
+        !creates[0].isDefault()
+    }
+
+    // FR23: the adapter receives the very context the host built — every collaborator in one value.
+    def "FR23: create hands the adapter the host's context and returns its tracker"() {
         given:
-        def factory = new EpochUnawareFactory(Stub(Tracker))
+        def factory = new MinimalFactory(Stub(Tracker))
+        def context = FixedTrackerAdapterContext.of(config(), 'gnomish-factory-x7k2q1')
 
         when:
-        def tracker = factory.create(Stub(SecretsProvider), config(), 'gnomish-factory-x7k2q1', ClaimEpochSource.NONE)
+        def tracker = factory.create(context)
 
-        then: 'the very tracker the adapter built — not null, not a substitute'
+        then:
         tracker.is(factory.built)
+        factory.received.is(context)
     }
 
     // FR3 of add-base-ref-resolution: an adapter that declares no extraction rule declares no
     //     designator kind, so the trusted-tier allowed-bases check has nothing to object to
     def "an adapter that declares no extraction rule reports no designator kinds"() {
         given:
-        def factory = new EpochUnawareFactory(Stub(Tracker))
+        def factory = new MinimalFactory(Stub(Tracker))
 
         expect:
         factory.configuredDesignatorKinds(config()).isEmpty()
-    }
-
-    def "an adapter that does not stamp epochs is built the same whichever form the caller uses"() {
-        given:
-        def factory = new EpochUnawareFactory(Stub(Tracker))
-        def secrets = Stub(SecretsProvider)
-
-        expect:
-        factory.create(secrets, config(), 'gnomish-factory-x7k2q1', ClaimEpochSource.NONE)
-                .is(factory.create(secrets, config(), 'gnomish-factory-x7k2q1'))
     }
 }

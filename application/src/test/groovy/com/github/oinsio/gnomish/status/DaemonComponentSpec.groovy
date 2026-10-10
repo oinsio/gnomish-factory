@@ -4,7 +4,7 @@ import org.slf4j.MDC
 import spock.lang.Specification
 
 /**
- * {@link DaemonComponent}: a serve run's five long-lived workers name themselves in every line
+ * {@link DaemonComponent}: a serve run's six long-lived workers name themselves in every line
  * they emit (FR8, design D10 of harden-logging-observability).
  *
  * <p>This spec owns the vocabulary and the framing itself: the key appears inside the frame and
@@ -22,14 +22,15 @@ class DaemonComponentSpec extends Specification {
     }
 
     // FR8: the vocabulary is closed and matches the workers `.claude/rules/logging.md` names
-    def "the component vocabulary is exactly the five daemon workers"() {
+    def "the component vocabulary is exactly the six daemon workers"() {
         expect:
         DaemonComponent.values()*.key() as Set == [
             'janitor',
             'reaper',
             'snapshot',
             'sweep',
-            'heartbeat'
+            'heartbeat',
+            'dashboard'
         ] as Set
     }
 

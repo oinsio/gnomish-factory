@@ -43,7 +43,7 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
             }],
         (Subcommand.SERVE) : [tokens: ['serve'], dirRequired: false,
             parse : { ApplicationArguments a ->
-                new ServeArgumentsParser().parse(a, CLONE)
+                new ServeArgumentsParser().parse(a, CLONE, false)
             }],
         (Subcommand.BOARD) : [tokens: ['board'], dirRequired: false,
             parse : { ApplicationArguments a ->

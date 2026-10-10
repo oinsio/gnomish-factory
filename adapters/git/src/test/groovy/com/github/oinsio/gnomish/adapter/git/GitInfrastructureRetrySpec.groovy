@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
@@ -19,7 +20,7 @@ class GitInfrastructureRetrySpec extends Specification {
     def "FR6: a settled first result is returned without sleeping or re-running"() {
         given:
         def runs = 0
-        def retry = new GitInfrastructureRetry(sleeper, 3, Duration.ofMillis(500))
+        def retry = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper), 3, Duration.ofMillis(500))
 
         when:
         def result = retry.until({ runs++; 'settled' }, { it == 'settled' })
@@ -33,7 +34,7 @@ class GitInfrastructureRetrySpec extends Specification {
     def "FR6: an unsettled result is re-attempted up to the budget, with the backoff doubling"() {
         given:
         def runs = 0
-        def retry = new GitInfrastructureRetry(sleeper, 3, Duration.ofMillis(500))
+        def retry = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper), 3, Duration.ofMillis(500))
         def logs = LogCaptureSupport.attach(GitInfrastructureRetry, Level.DEBUG)
 
         when:
@@ -59,7 +60,7 @@ class GitInfrastructureRetrySpec extends Specification {
     def "FR6: the loop stops at the first attempt that settles the question"() {
         given:
         def runs = 0
-        def retry = new GitInfrastructureRetry(sleeper, 3, Duration.ofMillis(500))
+        def retry = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper), 3, Duration.ofMillis(500))
 
         when:
         def result = retry.until({
@@ -79,7 +80,7 @@ class GitInfrastructureRetrySpec extends Specification {
         def runs = 0
 
         when:
-        def result = new GitInfrastructureRetry(sleeper, 1, Duration.ofMillis(500))
+        def result = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn(sleeper), 1, Duration.ofMillis(500))
                 .until({ runs++; 'unsettled' }, { false })
 
         then:
@@ -92,10 +93,25 @@ class GitInfrastructureRetrySpec extends Specification {
         expect:
         GitInfrastructureRetry.DEFAULT_ATTEMPTS == 3
         GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF == Duration.ofMillis(500)
-        // real-time-wiring: the production defaults ARE the subject here — the retry is only
-        //     constructed and read, never run, so no sleep can happen.
-        GitInfrastructureRetry.system().attempts() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
-        // real-time-wiring: same — a field read of the production defaults, never a run.
-        GitInfrastructureRetry.system().initialBackoff() == GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF
+    }
+
+    def "FR22 of supervise-daemon-loops-and-embed-dashboard: the backoff waits on the sleeper of the equipment it is given"() {
+        given: 'a virtual equipment whose sleeper advances its clock'
+        def time = VirtualTimeEquipment.create()
+        def start = time.clock().instant()
+
+        when:
+        new GitInfrastructureRetry(time, 3, Duration.ofMillis(500)).until({
+            'unsettled'
+        }, {
+            false
+        })
+
+        then: 'the two backoffs elapsed on that equipment, and no real time was needed'
+        time.sleeper().slept == [
+            Duration.ofMillis(500),
+            Duration.ofSeconds(1)
+        ]
+        time.clock().instant() == start.plusMillis(1500)
     }
 }

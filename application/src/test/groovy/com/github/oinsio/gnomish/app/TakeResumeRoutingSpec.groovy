@@ -33,6 +33,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -117,7 +118,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     /** The shared routing table (TakeDispositionResume) over HOST mechanics — design D8. */
     private TakeDispositionResume chainOver(TakeResumeRunner runner, TaskGit git) {
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false, TrackerTask task = heldByUs(),
@@ -508,7 +509,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        git(), tracker, registeredClone, ContainerTakeSupport.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
+        git(), tracker, registeredClone, ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
 
         when:
         def result = resume(chainOver(runner, git()))

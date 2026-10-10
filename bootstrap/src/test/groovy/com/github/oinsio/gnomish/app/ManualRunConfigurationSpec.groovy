@@ -8,13 +8,15 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource
+import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import java.nio.file.Path
+import java.time.InstantSource
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.ConfigurableApplicationContext
 import spock.lang.Shared
@@ -50,10 +52,10 @@ class ManualRunConfigurationSpec extends Specification {
     InMemoryAttemptPersistence attemptPersistence
 
     @Shared
-    SystemClock systemClock
+    InstantSource instantSource
 
     @Shared
-    ThreadSleeper threadSleeper
+    TimeEquipment timeEquipment
 
     @Shared
     SystemConsoleIO systemConsoleIO
@@ -78,8 +80,8 @@ class ManualRunConfigurationSpec extends Specification {
         filesExistCheckRunner = context.getBean(FilesExistCheckRunner)
         shellCommandCheckRunner = context.getBean(ShellCommandCheckRunner)
         attemptPersistence = context.getBean(InMemoryAttemptPersistence)
-        systemClock = context.getBean(SystemClock)
-        threadSleeper = context.getBean(ThreadSleeper)
+        instantSource = context.getBean('instantSource', InstantSource)
+        timeEquipment = context.getBean(TimeEquipment)
         systemConsoleIO = context.getBean(SystemConsoleIO)
         pipelineStartup = context.getBean(PipelineStartup)
         runExitCodeMapper = context.getBean(RunExitCodeMapper)
@@ -98,9 +100,19 @@ class ManualRunConfigurationSpec extends Specification {
         filesExistCheckRunner != null
         shellCommandCheckRunner != null
         attemptPersistence != null
-        systemClock != null
-        threadSleeper != null
+        instantSource != null
+        timeEquipment != null
         systemConsoleIO != null
+    }
+
+    def "FR22 of supervise-daemon-loops-and-embed-dashboard: real time is one equipment, and the instant source bean is its clock"() {
+        expect: 'the instant source bean is the very clock of the one time equipment'
+        instantSource.is(timeEquipment.clock())
+
+        and: 'the equipment waits on the real sleeper, and no other sleeper bean exists to inject'
+        timeEquipment.sleeper() instanceof ThreadSleeper
+        context.getBeansOfType(Sleeper).isEmpty()
+        context.getBeansOfType(TimeEquipment).size() == 1
     }
 
     def "the runner-level components (task 7.1-7.9) are present in the same context"() {

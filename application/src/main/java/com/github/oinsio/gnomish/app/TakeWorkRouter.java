@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.branch.BranchRepairAction;
 import com.github.oinsio.gnomish.app.branch.BranchRepairLog;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 
@@ -18,7 +19,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle;
  * FR6, NFR-O1 of harden-task-branch-contract; FR5 of introduce-slot-wiring; FR9 of
- * add-project-registry.
+ * add-project-registry; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 final class TakeWorkRouter {
 
@@ -94,22 +95,16 @@ final class TakeWorkRouter {
                         new HostResumeMechanics(resumeRunner, wiring.git(), wiring.registeredClone(), definition);
                     case CONTAINER -> new ContainerResumeMechanics(containerResumeRunner, plan.segments(), definition);
                 };
-        return routingTable(mechanics, wiring.git()).resumeExisting(order, shape);
+        return routingTable(mechanics, wiring.git(), wiring.terminalWriteRetry())
+                .resumeExisting(order, shape);
     }
 
     private static <B extends ResumedBranch> TakeDispositionResume<B> routingTable(
-            ResumeMechanics<B> mechanics, TaskGit git) {
-        return new TakeDispositionResume<>(mechanics, new TakeDecisionResume<>(mechanics), git);
+            ResumeMechanics<B> mechanics, TaskGit git, TerminalWriteRetry retry) {
+        return new TakeDispositionResume<>(mechanics, new TakeDecisionResume<>(mechanics), git, retry);
     }
 
     private SandboxModeSelector.Plan plan(PipelineDefinition definition) {
-        ContainerTakeSupport containerTakeSupport = wiring.containerTakeSupport();
-        return SandboxModeSelector.plan(
-                definition,
-                containerTakeSupport.bindingProperties(),
-                containerTakeSupport.sandboxProperties(),
-                containerTakeSupport.bindingRegistry(),
-                containerTakeSupport.dockerProbe(),
-                wiring.registeredClone());
+        return wiring.containerTakeSupport().modeSelector().plan(definition, wiring.registeredClone());
     }
 }

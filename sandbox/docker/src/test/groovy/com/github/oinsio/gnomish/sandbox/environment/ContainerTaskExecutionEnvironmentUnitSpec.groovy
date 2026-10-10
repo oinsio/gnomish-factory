@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -9,7 +9,6 @@ import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -28,7 +27,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
 
     def docker = new RecordingDockerCli()
-    def clock = { -> Instant.now() } as Clock
+    def clock = new VirtualClock()
     List<List<String>> harvests = []
     def harvester = { String container, String branch ->
         harvests << [container, branch]

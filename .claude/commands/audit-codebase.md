@@ -71,8 +71,12 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
   subprocess, network call, file I/O, sleep or caller-supplied callback inside one is a
   finding unless the class's javadoc claims the resource-serializing exception and answers
   its three bar items (the harm is waiter starvation, not carrier pinning, which JEP 491
-  removed). Attach/set-after-construction across threads is a finding even without a proven
-  race.
+  removed). Daemon loops: every long-lived repeating thread against `daemon-loops.md` — a
+  thread, a `while` around a sleep or wait, or a scheduler not built on `SupervisedLoop` is a
+  finding unless it is one of that rule's exemptions, including the cases
+  `DaemonLoopOwnerBoundarySpec` cannot see (a loop on a caller's thread, a loop outside
+  `application/src/main`). Attach/set-after-construction across threads is a finding even
+  without a proven race.
 - **crash-consistency** — take every multi-step durable transition (commit+push,
   push+tracker write, effect+receipt, create+delete) in `adapters/git` and the take/serve
   paths; check it against the `crash-consistency.md` checklist: kill windows named, each
@@ -103,7 +107,13 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
 - **test-quality** — every `@DoNotMutate`, `excludedClasses`, `excludedTestClasses` entry
   still meets its written bar in `testing.md` (the named covering suite exists and covers
   the claimed scenarios); exemption count trend; per `traceability.md`, every FR/NFR of
-  *active* changes has an implementing entity (grep).
+  *active* changes has an implementing entity (grep). Stand-ins (`testing.md`, "Stand-ins are
+  prepared, not generated"; ADR 0015): any test-source site outside the `StandIn` owner and the
+  gate's exemptions that writes an executable file or carries shebang (`#!/`) text is a finding; any
+  Docker-, Gitea- or jar-driven suite missing from its module's `excludedTestClasses` while
+  meeting the bar is a finding; a suite listed there whose module classes have no in-process
+  twin is the opposite finding. A `pitest` or `test` task that got slower is attributed per
+  "Diagnosing a slow gate" before any recommendation is written.
 - **docs-drift** — `docs/glossary.md` vs code naming (banned synonyms absent, domain terms
   match), ADRs vs implementation, `README.md`/operator guides vs actual CLI commands and
   flags, Mermaid diagrams vs current architecture.

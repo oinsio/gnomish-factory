@@ -1,0 +1,73 @@
+# The fake agent CLI and the paid-smoke recorder in front of the real one.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+
+[agent]
+# The fake agent CLI playing the scenario its per-run link is named after (FakeAgentSupport): one
+# preset for every scenario under fake-agent/scenarios/.
+* export-name GNOMISH_FAKE_SCENARIO
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-capturing-stdin]
+# The fake agent CLI playing the scenario its link is named after, every round prompt (its stdin)
+# captured in the per-run log (FakeAgentSupport.binaryCapturingStdin).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_CAPTURE_STDIN @log
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-gnome-mid-round-commit]
+# A gnome that commits in its cwd between two tool events, then waits for the pushed tip on the bare
+# remote the spec named and records what it saw before closing the round (GitModeMidRoundPushSpec).
+* export GNOME_BARE_REPO @bare-repo
+* export GNOME_COMMITTED_TIP @committed-tip
+* export GNOME_OBSERVED_TIP @observed-tip
+* exec-sh steps/gnome-mid-round-commit.sh
+
+[agent-judged-by-claude-fake-judge-1]
+# The fake agent CLI: an invocation whose --model is claude-fake-judge-1 plays judge-verdict-pass, every other one
+# the scenario its link is named after (FakeAgentSupport).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_JUDGE_MODEL claude-fake-judge-1
+* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-judged-by-claude-fake-judge-1-capturing]
+# The fake agent CLI: an invocation whose --model is claude-fake-judge-1 plays judge-verdict-pass, every other one
+# the scenario its link is named after; every argv is captured in the per-run log (FakeAgentSupport).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_JUDGE_MODEL claude-fake-judge-1
+* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
+* export GNOMISH_FAKE_CAPTURE_ARGV @log
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-judged-by-judge-model]
+# The fake agent CLI: an invocation whose --model is judge-model plays judge-verdict-pass, every other one
+# the scenario its link is named after (FakeAgentSupport).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_JUDGE_MODEL judge-model
+* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-judged-by-judge-model-capturing]
+# The fake agent CLI: an invocation whose --model is judge-model plays judge-verdict-pass, every other one
+# the scenario its link is named after; every argv is captured in the per-run log (FakeAgentSupport).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_JUDGE_MODEL judge-model
+* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
+* export GNOMISH_FAKE_CAPTURE_ARGV @log
+* exec-sh ../fake-agent/fake-agent.sh
+
+[agent-reporting-home]
+# The fake agent CLI playing the scenario its link is named after, first recording whether HOME
+# reached it — the credential a scrub must remove (TakeCommandCredentialScrubSpec,
+# CliStageExecutorCredentialScrubSpec).
+* record HOME
+* export-name GNOMISH_FAKE_SCENARIO
+* exec-sh ../fake-agent/fake-agent.sh
+
+[argv-recorder]
+# The paid smoke layer's recorder in front of the real claude CLI: each round's argv and stream-json
+# transcript are captured beside the per-run link; the real binary's path is what the spec wrote
+# beside it (ArgvRecorder).
+* export ARGV_RECORDER_REAL @real-binary
+* export ARGV_RECORDER_CAPTURES @captures
+* exec-sh steps/argv-recorder.sh

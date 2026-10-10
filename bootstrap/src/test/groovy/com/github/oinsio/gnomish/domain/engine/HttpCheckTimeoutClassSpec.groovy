@@ -8,9 +8,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Path
 import spock.lang.Shared
@@ -61,8 +60,9 @@ class HttpCheckTimeoutClassSpec extends Specification {
         def polling = new ExternalPolling(
                 platform.checkClient(LOOPBACK_ALLOWLIST),
                 AttemptDelivery.assumedDelivered(),
-                new SystemClock(),
-                new ThreadSleeper())
+                // FR21 of supervise-daemon-loops-and-embed-dashboard: the poll's timeout elapses on
+                //     virtual time, each wait advancing the clock.
+                VirtualTimeEquipment.create())
         def ref = ClosedRounds.at(ThreeProviderPlatformFixture.GREEN_SHA)
 
         when:

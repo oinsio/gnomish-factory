@@ -39,7 +39,7 @@ class DashboardInProgressBlockSpec extends Specification {
         def readyRows = [
             new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, backoff)
         ]
-        def model = new BoardModel(readyRows, workingRows, [], ReadySummary.tally(readyRows), false, GENERATED_AT)
+        def model = new BoardModel(readyRows, workingRows, [], ReadySummary.tally(readyRows), 3, false, GENERATED_AT)
 
         when:
         def html = render(new BoardSectionView(model, FETCHED_AT, null))
@@ -73,7 +73,7 @@ class DashboardInProgressBlockSpec extends Specification {
         def readyRows = [
             new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, null)
         ]
-        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), false, GENERATED_AT)
+        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), 3, false, GENERATED_AT)
 
         when:
         def html = render(new BoardSectionView(model, FETCHED_AT, null))
@@ -87,7 +87,7 @@ class DashboardInProgressBlockSpec extends Specification {
         def readyRows = [
             new ReadyRow(new TaskRef('task-1'), UntrustedText.tracker('Ready title'), false, null)
         ]
-        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), true, GENERATED_AT)
+        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), 3, true, GENERATED_AT)
 
         when:
         def html = render(new BoardSectionView(model, FETCHED_AT, null))

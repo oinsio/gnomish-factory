@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -13,7 +14,6 @@ import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.HostBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
-import java.util.function.BooleanSupplier
 import spock.lang.Specification
 
 /**
@@ -61,25 +61,42 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
                 ], BindingTrustTable.firstParty())
     }
 
+    /**
+     * Plans over a selector built for this one call: the four inputs are the selector's
+     * construction (FR18, design D22 of supervise-daemon-loops-and-embed-dashboard), the
+     * pipeline and the clone its per-call job; the runtime probe answers {@code dockerAvailable}.
+     */
+    private static SandboxModeSelector.Plan plan(
+            PipelineDefinition definition,
+            BindingProperties bindings,
+            SandboxProperties sandbox,
+            AdapterBindingRegistry registry,
+            boolean dockerAvailable) {
+        new SandboxModeSelector(bindings, sandbox, registry, {
+            -> dockerAvailable
+        } as ContainerRuntimeProbe)
+        .plan(definition, CLONE)
+    }
+
     private static AdapterBindingRegistry hostOnlyRegistry() {
         AdapterBindingRegistry.ratified([new HostBindingProvider()], BindingTrustTable.firstParty())
     }
 
     def "an explicit host default plans a host run with one segment"() {
         when:
-        def plan = SandboxModeSelector.plan(
+        def result = plan(
                 pipeline(stage('a'), stage('b')), new BindingProperties('host', [:]), sandbox(null),
-                registry(), { false } as BooleanSupplier, CLONE)
+                registry(), false)
 
         then:
-        plan.mode() == SandboxModeSelector.Plan.Mode.HOST
-        plan.segments().size() == 1
+        result.mode() == SandboxModeSelector.Plan.Mode.HOST
+        result.segments().size() == 1
     }
 
     def "D13: the container default without an image refuses naming both ways out, never silent host"() {
         when:
-        SandboxModeSelector.plan(pipeline(stage('a')), new BindingProperties(null, [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier, CLONE)
+        plan(pipeline(stage('a')), new BindingProperties(null, [:]), sandbox(null),
+        registry(), false)
 
         then:
         def e = thrown(UsageException)
@@ -92,8 +109,8 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         def needy = stage('a', new Sandbox(['egress-control'], false))
 
         when:
-        SandboxModeSelector.plan(pipeline(needy), new BindingProperties('host', [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier, CLONE)
+        plan(pipeline(needy), new BindingProperties('host', [:]), sandbox(null),
+        registry(), false)
 
         then:
         def e = thrown(UsageException)
@@ -104,11 +121,11 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
 
     def "mixed host and container bindings within one pipeline are refused honestly"() {
         when:
-        SandboxModeSelector.plan(
+        plan(
                 pipeline(stage('a'), stage('b')),
                 new BindingProperties('host', [b: 'container']),
                 sandbox('img:1'),
-                registry(), { false } as BooleanSupplier, CLONE)
+                registry(), false)
 
         then:
         def e = thrown(UsageException)
@@ -118,8 +135,8 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
 
     def "an unknown binding name is a usage error naming the configuration and its file"() {
         when:
-        SandboxModeSelector.plan(pipeline(stage('a')), new BindingProperties('vm', [:]), sandbox(null),
-        registry(), { false } as BooleanSupplier, CLONE)
+        plan(pipeline(stage('a')), new BindingProperties('vm', [:]), sandbox(null),
+        registry(), false)
 
         then:
         def e = thrown(UsageException)
@@ -131,23 +148,23 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     // bindings plan a CONTAINER run over the planned segments — a real plan, never null.
     def "the container default with an image and a reachable runtime plans a container run"() {
         when:
-        def plan = SandboxModeSelector.plan(
+        def result = plan(
                 pipeline(stage('a'), stage('b')),
                 new BindingProperties(null, [:]),
                 sandbox('img:1'),
-                registry(), { true } as BooleanSupplier, CLONE)
+                registry(), true)
 
         then:
-        plan.mode() == SandboxModeSelector.Plan.Mode.CONTAINER
-        plan.segments().size() == 1
+        result.mode() == SandboxModeSelector.Plan.Mode.CONTAINER
+        result.segments().size() == 1
     }
 
     // D13: a blank (whitespace-only) image is as absent as a null one — same fail-closed refusal.
     def "D13: a blank container image refuses naming factory.sandbox.image, never silent host"() {
         when:
-        SandboxModeSelector.plan(
+        plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('   '),
-                registry(), { true } as BooleanSupplier, CLONE)
+                registry(), true)
 
         then:
         def e = thrown(UsageException)
@@ -157,9 +174,9 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     // D13, G2: an unreachable Docker runtime refuses naming both ways out — never a host fallback.
     def "D13: an unreachable Docker runtime refuses naming both ways out"() {
         when:
-        SandboxModeSelector.plan(
+        plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('img:1'),
-                registry(), { false } as BooleanSupplier, CLONE)
+                registry(), false)
 
         then:
         def e = thrown(UsageException)
@@ -175,9 +192,9 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         def needy = stage('a', new Sandbox(['docker-inside'], false))
 
         when: 'the default (container) bindings are planned'
-        SandboxModeSelector.plan(
+        plan(
                 pipeline(needy), new BindingProperties(null, [:]), sandbox('img:1'),
-                registry(), { true } as BooleanSupplier, CLONE)
+                registry(), true)
 
         then: 'the refusal names the stage, the bound adapter and the unmet need — before any stage runs'
         def e = thrown(UsageException)
@@ -191,9 +208,9 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     // options and both ways out named, never a silent fallback to host.
     def "M3: the container default with the backend module absent refuses naming the options"() {
         when: 'a registry without the container binding is planned against'
-        SandboxModeSelector.plan(
+        plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('img:1'),
-                hostOnlyRegistry(), { true } as BooleanSupplier, CLONE)
+                hostOnlyRegistry(), true)
 
         then: 'the refusal names the missing default, what was discovered, and the explicit opt-out'
         def e = thrown(UsageException)

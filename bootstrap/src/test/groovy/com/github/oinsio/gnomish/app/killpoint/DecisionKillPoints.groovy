@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.time.Instant
 
 /**
  * The human decision as a kill-point table row (FR12, design D5/D13 of
@@ -54,7 +55,7 @@ final class DecisionKillPoints {
                             UntrustedText.agent('b')
                         ])), TrackerWrite.OWED)
         world.store.confirmTerminalWrite(world.taskId)
-        world.trackerHarness.reply(world.ref, REPLY)
+        world.trackerHarness.reply(world.ref, REPLY, Instant.parse('2026-01-01T00:00:00Z'))
         world
     }
 

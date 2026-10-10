@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -51,12 +52,10 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
         new RemoteAttemptDelivery(runner, clone, BRANCH)
     }
 
-    /** Installs a pre-receive hook on the bare origin; hooks run with cwd = the bare repo. */
-    private void installPreReceiveHook(String script) {
-        def hook = origin.resolve('hooks').resolve('pre-receive').toFile()
-        hook.parentFile.mkdirs()
-        hook.text = "#!/bin/sh\n" + script + "\n"
-        hook.setExecutable(true)
+    /** Installs a committed pre-receive hook preset on the bare origin (ADR 0015). */
+    private void installPreReceiveHook(String preset) {
+        Path hooks = Files.createDirectories(origin.resolve('hooks'))
+        StandIn.link(hooks.resolve('pre-receive'), preset)
     }
 
     def "an already-pushed attempt commit is confirmed from the remote tip without another push"() {
@@ -122,7 +121,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     def "a push failing once is re-attempted and delivers"() {
         given: 'a remote that rejects exactly the first push'
         def sha = commitChange('one')
-        installPreReceiveHook('if [ ! -f rejected-once ]; then : > rejected-once; exit 1; fi; exit 0')
+        installPreReceiveHook('hook-reject-once')
 
         when:
         def outcome = delivery().ensureDelivered(workspaceAt(sha))

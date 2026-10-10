@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -135,7 +135,9 @@ class OomAnnotatedExecHandleSpec extends Specification {
         def stream = new ByteArrayInputStream('real-bytes'.bytes)
         def startedAt = Instant.parse('2026-08-07T09:59:00Z')
         def outcome = new ExecHandle.Wait.Exited(Duration.ofSeconds(3))
-        def clock = { -> Instant.parse('2026-08-07T10:00:00Z') } as Clock
+        def clock = {
+            -> Instant.parse('2026-08-07T10:00:00Z')
+        } as InstantSource
         def subject = handle()
 
         when:

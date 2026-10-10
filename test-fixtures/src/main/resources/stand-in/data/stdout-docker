@@ -1,0 +1,8 @@
+# What docker stand-ins print on stdout.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[out-inspect]
+out:inspect
+
+[out-network]
+out:network

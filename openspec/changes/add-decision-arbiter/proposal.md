@@ -26,7 +26,8 @@ weakening any verification gate.
   application-side owner replaces today's four scattered append sites.
 - ADDED: advisory ("notify") verdict flavor — work continues, a tracker
   comment informs the human, veto is a defined transition.
-- ADDED: arbiter token usage accounting beside executor and judge usage.
+- MODIFIED: arbiter usage is recorded as the round's `decision` participant in the
+  shape `define-executor-contract` owns; no usage field of its own.
 
 ## Capabilities
 
@@ -149,8 +150,8 @@ weakening any verification gate.
 
 - NFR-O1: Every consult leaves a structured log line (task, stage, request,
   verdict kind, author) and the verdict lands in the escalation/status
-  surfaces; arbiter tokens are reported per round beside executor and judge
-  usage.
+  surfaces; arbiter tokens and cost are reported per round as a `decision`
+  participant entry (shape owned by `define-executor-contract`).
 
 ### Non-Functional Cost
 
@@ -183,3 +184,5 @@ weakening any verification gate.
   paid-smoke experience.
 - Q2: Should cannot-decide verdicts count against `maxDecisions`? Proposal:
   yes (each consult spends budget) — revisit if it under-asks in practice.
+- Sequencing: after `define-executor-contract` (the participant usage shape and the
+  usage snapshot this change renders are defined there).

@@ -85,7 +85,9 @@ tracker:
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry, ServeProperties serveProperties) {
-        newTakeCommand(testProps(), registeredClone, registry, TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
+        newTakeCommand(testProps(), registeredClone, registry, { time ->
+            TakeCommandSeams.defaults(time).withServeProperties(serveProperties)
+        })
     }
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref
@@ -117,7 +119,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -145,7 +147,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -195,7 +197,7 @@ tracker:
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:
@@ -236,7 +238,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:

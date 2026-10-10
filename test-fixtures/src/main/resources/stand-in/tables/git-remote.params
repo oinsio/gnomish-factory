@@ -1,0 +1,74 @@
+# Git stand-ins playing a remote that lies, refuses or diverges (TaskBranchLocatorSpec, ReplicaPairReconcilerSpec).
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+
+[locator-fetch-refused]
+# Every fetch recorded and refused, while ls-remote answers a real ref (TaskBranchLocatorSpec).
+fetch record
+fetch refuse 128 data/stderr#unable-to-access
+ls-remote answer data/stdout-git#ls-remote-proj 0
+rev-parse exit 1
+remote answer data/common#url 0
+* exit 1
+
+[locator-lying-fetch]
+# A fetch that reports success and creates no ref, while ls-remote answers the branch
+# (TaskBranchLocatorSpec).
+fetch exit 0
+ls-remote answer data/stdout-git#ls-remote-proj 0
+rev-parse exit 1
+remote answer data/common#url 0
+* exit 1
+
+[locator-stall-network]
+# fetch and ls-remote stall; the clone key answers, every other rev-parse fails, remote refuses
+# (TaskBranchLocatorSpec).
+fetch stall 600
+ls-remote stall 600
+rev-parse,--git-common-dir answer data/common#git-dir 0
+rev-parse exit 1
+remote exit 128
+* answer - 0
+
+[reconcile-diverged-fails]
+# Two diverged tips whose ref swap wins but whose working-tree subcommand named by the per-run link
+# fails (ReplicaPairReconcilerSpec).
+@name refuse 1 data/stderr#lock-index
+reset exit 0
+clean exit 0
+update-ref exit 0
+fetch exit 0
+merge-base exit 1
+rev-parse,--verify,--quiet,refs/remotes/* answer data/common#sha-b 0
+rev-parse answer data/common#sha-a 0
+* exit 1
+
+[reconcile-stall]
+# A reconcile whose subcommand named by the per-run link is recorded and stalls; every command before
+# it answers (ReplicaPairReconcilerTerminationSpec).
+@name record
+@name stall 600
+fetch exit 0
+update-ref exit 0
+merge-base exit 1
+rev-parse,--verify,--quiet,refs/remotes/origin/gnomish/PROJ-1 answer data/common#sha-b 0
+rev-parse answer data/common#sha-a 0
+* answer - 0
+
+[reconcile-swap-loses]
+# Two unrelated tips whose update-ref always loses, each attempt recorded (ReplicaPairReconcilerSpec).
+update-ref record
+update-ref refuse 1 data/stderr#cannot-lock-ref
+merge-base exit 1
+rev-parse,--verify,--quiet,refs/remotes/* answer data/common#sha-b 0
+rev-parse answer data/common#sha-a 0
+fetch exit 0
+* exit 1
+
+[reconcile-swap-loses-silently]
+# Two unrelated tips whose ref swap loses without a word (ReplicaPairReconcilerSpec).
+update-ref exit 1
+merge-base exit 1
+rev-parse,--verify,--quiet,refs/remotes/* answer data/common#sha-b 0
+rev-parse answer data/common#sha-a 0
+fetch exit 0
+* exit 1

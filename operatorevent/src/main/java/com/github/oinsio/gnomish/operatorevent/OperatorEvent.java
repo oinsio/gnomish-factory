@@ -98,17 +98,23 @@ public enum OperatorEvent {
     REAPER_SWEEP_LISTING_FAILED("GF064"),
     REAPER_FOREIGN_BRANCH_UNOWNED("GF065"),
     REAPER_REPAIR_FAILED("GF066"),
-    STANDING_REAPER_TICK_FAILED("GF067"),
-    STANDING_REAPER_WORKER_DIED("GF068"),
-    STANDING_REAPER_BACKOFF_SLEEP_FAILED("GF069"),
+    // GF067, GF068 and GF069 are retired (supervise-daemon-loops-and-embed-dashboard, design D6):
+    // the standing reaper's own tick-failed, worker-died and backoff-sleep-failed lines are now
+    // the supervised loop's DAEMON_LOOP_TICK_FAILED, DAEMON_LOOP_WORKER_DIED and
+    // DAEMON_LOOP_BACKOFF_SLEEP_FAILED with component=reaper. A retired code stays retired — the
+    // gap is not filled.
     DIRTY_NOTIFIER_FAILED("GF070"),
     FEED_CANDIDATE_OCCUPIES_SLOT("GF071"),
     FEED_TRACKER_OUTAGE_SUSPECTED("GF072"),
-    SANDBOX_LIFECYCLE_TICK_FAILED("GF073"),
+    // GF073 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the sandbox
+    // lifecycle tick's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED
+    // with component=sweep. A retired code stays retired — the gap is not filled.
     SLOT_SKIPPED("GF074"),
     SLOT_STOPPED_BY_SHUTDOWN("GF075"),
     SLOT_CRASHED_UNCAUGHT("GF076"),
-    WORKTREE_JANITOR_TICK_FAILED("GF077"),
+    // GF077 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the worktree
+    // janitor's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED with
+    // component=janitor. A retired code stays retired — the gap is not filled.
     WORKTREE_JANITOR_SCAN_FAILED("GF078"),
     WORKTREE_JANITOR_REF_UNSANITARY("GF079"),
     INFRASTRUCTURE_ABORT("GF080"),
@@ -138,7 +144,9 @@ public enum OperatorEvent {
     RUN_SUMMARY_LEDGER_APPEND_FAILED("GF102"),
     SNAPSHOT_WRITE_FAILED("GF103"),
     SNAPSHOT_RETENTION_SWEEP_FAILED("GF104"),
-    SNAPSHOT_TICK_FAILED("GF105"),
+    // GF105 is retired (supervise-daemon-loops-and-embed-dashboard, design D6): the snapshot
+    // writer's own tick-failed line is now the supervised loop's DAEMON_LOOP_TICK_FAILED with
+    // component=snapshot. A retired code stays retired — the gap is not filled.
     SWEEP_LEDGER_APPEND_FAILED("GF106"),
     TASK_OUTCOME_SLOT_MISSING("GF107"),
     TASK_OUTCOME_LEDGER_APPEND_FAILED("GF108"),
@@ -222,7 +230,25 @@ public enum OperatorEvent {
     // checkpoint approval (make-checkpoint-gate-durable, design D2, NFR-O1): the approval write was
     // asked to open a gate the branch tip is not at — another gate, a stage, the pipeline end — or
     // to move it onto another gate; it refuses, writing nothing, and names the tip's position.
-    CHECKPOINT_APPROVAL_REFUSED("GF151");
+    CHECKPOINT_APPROVAL_REFUSED("GF151"),
+    // supervised daemon loop (supervise-daemon-loops-and-embed-dashboard, design D6): the five
+    // events of the one component that runs every long-lived daemon loop. The loop is named by the
+    // `component` MDC key every line carries, not by the code, so each code has exactly one site.
+    // They replace the per-loop GF067, GF068, GF069, GF073, GF077 and GF105 (retired, never reused).
+    // A tick or its wait threw: logged as an edge (repeats suppressed), and the loop goes on.
+    DAEMON_LOOP_TICK_FAILED("GF152"),
+    // An interrupt reached the loop while no stop was requested: absorbed, the loop goes on.
+    DAEMON_LOOP_STRAY_INTERRUPT("GF153"),
+    // The loop's thread ended abnormally: respawned after the policy's backoff (restart count).
+    DAEMON_LOOP_WORKER_DIED("GF154"),
+    // A bounded policy exceeded its restarts within its window: the loop is disabled, no respawn.
+    DAEMON_LOOP_GAVE_UP("GF155"),
+    // The backoff sleep before a respawn failed: the respawn proceeds without further delay.
+    DAEMON_LOOP_BACKOFF_SLEEP_FAILED("GF156"),
+    // dashboard final render (supervise-daemon-loops-and-embed-dashboard, design D9, NFR-R1): the
+    // render on serve's stop path failed; swallowed so the teardown after it still runs, and the
+    // page keeps its last render.
+    DASHBOARD_FINAL_RENDER_FAILED("GF157");
 
     private final String code;
     private final String head;

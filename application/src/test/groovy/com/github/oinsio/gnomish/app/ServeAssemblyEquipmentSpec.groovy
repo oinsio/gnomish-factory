@@ -10,10 +10,12 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.InterruptOnlySleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -23,7 +25,7 @@ import spock.lang.TempDir
 
 /**
  * {@link ServeAssembly}'s builders over the daemon's fixed equipment (design D7 of
- * collapse-composition-roots): each builder that reads the properties or the engine clock takes
+ * collapse-composition-roots): each builder that reads the properties or the clock takes
  * them from the instance, so each scenario proves the built collaborator carries the instance's
  * own equipment.
  *
@@ -33,11 +35,10 @@ import spock.lang.TempDir
 class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes {
 
     private static final Instant NOW = Instant.parse('2026-09-27T10:00:00Z')
-    private static final com.github.oinsio.gnomish.domain.engine.port.Clock ENGINE_CLOCK = {
-        -> NOW
-    }
+    /** The one time source every builder and every collaborator of a scenario reads (FR21). */
+    private final VirtualClock clock = new VirtualClock(NOW)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null, null)
     private static final String INSTANCE_NAME = 'gnomish-equipment-test'
 
     @TempDir
@@ -51,7 +52,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
 
     private ServeAssembly assemblyFor(String project, String instanceName) {
         def clone = RegisteredCloneFixture.unregistered(homeDir, homeDir.resolve("clones/${project}"), project)
-        new ServeAssembly(testProperties(instanceName: instanceName), SERVE_PROPERTIES, ENGINE_CLOCK,
+        new ServeAssembly(testProperties(instanceName: instanceName), SERVE_PROPERTIES, VirtualTimeEquipment.on(clock, new InterruptOnlySleeper()),
         RegisteredCloneFixture.provider(clone))
     }
 
@@ -59,8 +60,8 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
         new SnapshotSources(null, slotLedger, 1, null, null, null, null, null, null, null)
     }
 
-    // FR8, D12 of add-serve-observability: the decorator records health on the instance's engine clock.
-    def "the tracker-health decorator stamps a success on the engine clock"() {
+    // FR8, D12 of add-serve-observability: the decorator records health on the instance's clock.
+    def "the tracker-health decorator stamps a success on the assembly's clock"() {
         given:
         def tracker = Mock(Tracker)
 
@@ -91,15 +92,14 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     // registered project's serve directory, named after the instance's own factory properties.
     def "the observability wiring writes its ledger in the project's serve directory, for the configured instance"() {
         given:
-        def clock = Clock.fixed(NOW, ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(1, ENGINE_CLOCK)
+        def slotLedger = new SlotLedger(1, clock)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)
         def sources = sourcesOver(slotLedger)
 
         when:
-        def observability = builders.observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sources)
+        def observability = builders.observability(INSTANCE, new ForwardingDirtyNotifier(), sources)
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(
                         new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done'))
 
@@ -115,16 +115,15 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
 
     def "FR10 of add-project-registry: two projects with the default instance name write to separate serve directories"() {
         given: 'daemons for projects widgets and gateway, both with the default instance name'
-        def clock = Clock.fixed(NOW, ZoneOffset.UTC)
         def ref = new TaskRef('github:o/r#1')
         def delivered = new TakeResult.Delivered(new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done')
-        def widgetsLedger = new SlotLedger(1, ENGINE_CLOCK)
-        def gatewayLedger = new SlotLedger(1, ENGINE_CLOCK)
+        def widgetsLedger = new SlotLedger(1, clock)
+        def gatewayLedger = new SlotLedger(1, clock)
         [widgetsLedger, gatewayLedger].each { it.acquire(); it.assign(ref) }
         def widgets = assemblyFor('widgets', null)
-                .observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sourcesOver(widgetsLedger))
+                .observability(INSTANCE, new ForwardingDirtyNotifier(), sourcesOver(widgetsLedger))
         def gateway = assemblyFor('gateway', null)
-                .observability(INSTANCE, new ForwardingDirtyNotifier(), clock, sourcesOver(gatewayLedger))
+                .observability(INSTANCE, new ForwardingDirtyNotifier(), sourcesOver(gatewayLedger))
 
         when: 'each records one outcome'
         widgets.taskOutcomeLedgerWriter().write(ref, delivered)

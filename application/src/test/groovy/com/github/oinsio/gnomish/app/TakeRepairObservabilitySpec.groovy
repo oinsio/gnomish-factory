@@ -22,6 +22,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -76,8 +77,10 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
 
     /** Drives one claimed pickup of a branch classifying to {@code shape}, capturing its repair log. */
     private List<ILoggingEvent> pickup(Tracker tracker, BranchShape shape, AbortFacts facts, TaskStoreGit store) {
-        def subject = claimAndWork(gitClassifying(shape, store), tracker, Stub(RunAssembly), ClaimBeat.NONE,
-                new ClaimLossFlag(), CLONE)
+        def subject = claimAndWork(gitClassifying(shape, store), tracker, Stub(RunAssembly) {
+            timeEquipment() >> VirtualTimeEquipment.create()
+        }, ClaimBeat.NONE,
+        new ClaimLossFlag(), CLONE)
         return capture {
             subject.claimAndWork(takeOrder(taskWith(facts), tracker))
         }

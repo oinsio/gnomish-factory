@@ -42,7 +42,7 @@ class ClaimlessGitDetectorSpec extends Specification {
 
         where:
         shape | commented
-        'javadoc line' | ' * wired to {@link ClaimEpochSource#NONE} ClaimEpochSource.NONE, so nothing stamps.'
+        'javadoc line' | '/**\n * wired to {@link ClaimEpochSource#NONE} ClaimEpochSource.NONE, so nothing stamps.\n */'
         'line comment' | '// was ClaimEpochSource.NONE before task 5.1'
         'trailing comment' | 'var git = taskGit; // not ClaimEpochSource.NONE any more'
     }

@@ -89,7 +89,7 @@ public final class DashboardHtmlRenderer {
         appendHead(out, renderCadence);
         appendBodyOpen(out, generatedAt, renderCadence);
         appendFreshnessStrip(out, generatedAt);
-        statusCard.append(out, daemonView, hygieneView, generatedAt);
+        statusCard.append(out, daemonView, boardView, hygieneView, generatedAt);
         attentionCard.append(out, boardView);
         inProgressCard.append(out, boardView);
         outcomesCard.append(out, historyView);

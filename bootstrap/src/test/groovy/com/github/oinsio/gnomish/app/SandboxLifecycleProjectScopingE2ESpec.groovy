@@ -23,8 +23,8 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -133,7 +133,9 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def boxB = materializeRunningBox(projectB, taskB, tinyMinAge, OwnershipMode.TRACKED)
 
         when: 'project A alone runs a sweep tick, its oracle omitting every task (worst case for both)'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), InstantSource.system())
         pass.run(projectA, new LivenessVerdict.Live(Set.of()))
 
         then: 'A stopped its own unowned running box'
@@ -156,7 +158,9 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def box = materializeRunningBox(project, taskId, tinyMinAge, OwnershipMode.MANUAL)
 
         when: 'a sweep tick evaluates the host with an empty liveness verdict'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null), InstantSource.system())
         pass.run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the manual box is untouched — its own 24h age threshold governs it, not the oracle'

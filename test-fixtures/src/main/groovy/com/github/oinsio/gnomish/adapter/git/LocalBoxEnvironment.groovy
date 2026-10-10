@@ -33,6 +33,13 @@ import org.jspecify.annotations.Nullable
  */
 class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixture {
 
+    /**
+     * The start stamp every exec reports: a fixed instant, not the wall clock (FR21 of
+     * supervise-daemon-loops-and-embed-dashboard). A spec whose executor measures a round's wall
+     * time against it sets that executor's virtual clock ahead of this instant.
+     */
+    static final Instant EXEC_STAMP = Instant.parse('2026-01-01T00:00:00Z')
+
     private final GitProcessRunner runner = new GitProcessRunner()
     private final Path cloneDir
     private final Path boxRoot
@@ -81,7 +88,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixtu
         } else {
             process.outputStream.close()
         }
-        new HostExecHandle(process, Instant.now())
+        new HostExecHandle(process, EXEC_STAMP)
     }
 
     @Override

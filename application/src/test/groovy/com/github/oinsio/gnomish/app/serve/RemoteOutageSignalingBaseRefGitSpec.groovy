@@ -76,7 +76,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         then:
         outcome.is(refreshed)
         !gate.isOpen()
-        gate.health().lastSuccessAt() == (confirms ? clock.now() : null)
+        gate.health().lastSuccessAt() == (confirms ? clock.instant() : null)
 
         where:
         contact | confirms
@@ -170,7 +170,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         probes.get() == 2
 
         when: 'time passes and the base read that follows is served by the clone alone'
-        def closedAt = clock.now()
+        def closedAt = clock.instant()
         clock.advance(Duration.ofSeconds(5))
         git.refresh(CLONE, 'main')
 

@@ -3,20 +3,8 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
-import com.github.oinsio.gnomish.board.BoardComposition;
-import com.github.oinsio.gnomish.board.BoardModel;
-import com.github.oinsio.gnomish.dashboard.BoardSectionView;
-import com.github.oinsio.gnomish.dashboard.DashboardBoardCache;
-import com.github.oinsio.gnomish.dashboard.DashboardRenderCycle;
-import com.github.oinsio.gnomish.dashboard.DashboardWatchLoop;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import java.io.IOException;
-import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.function.Supplier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
 
@@ -25,42 +13,29 @@ import org.springframework.stereotype.Component;
  * renders the self-contained HTML dashboard page. Resolves the pipeline and {@code tracker:}
  * section from {@code --dir} exactly as {@link BoardCommand} does, mints a throwaway {@link
  * InstanceId} for the same reason {@link BoardCommand} does (design D8 — never written anywhere),
- * and hands the board's fetch call — not its result — to the render path: a one-shot render fetches
- * it once via a fresh {@link DashboardBoardCache} (task 4.3); {@code --watch} hands it to {@link
- * DashboardWatchLoop}, which re-fetches only on its own slower cadence (task 4.4, FR9).
+ * and hands the resulting {@link BoardSource} to one {@link DashboardWatch} per invocation — the one
+ * dashboard assembly, which owns the output path ({@code --out}, or the page's file in the
+ * instance's serve directory), the ready window, the board fetch and the render loop (design D10 of
+ * supervise-daemon-loops-and-embed-dashboard). A one-shot run renders once through it; {@code
+ * --watch} starts its supervised loop and joins it, ending with {@link DashboardDisabledException}
+ * — exit status 1 — if the loop kept dying and was disabled (FR9).
  *
- * <p>The instance's serve directory is computed here, once per invocation, from the registered
- * clone the configuration loader resolved and the configured instance name — {@code
- * projects/<name>/serve/<instance>} (design D1 of add-project-registry) — and handed whole to the
- * render cycle. The default output path is {@code dashboard.html} in that directory (design D8);
- * {@code --out} overrides it. Every write goes through {@link AtomicFileWriter} (task 4.2, NFR-R2)
- * via {@link DashboardRenderCycle}'s callers.
- *
- * <p>Implements FR1, FR3, FR7, FR9, NFR-R2 of add-dashboard-page. Implements FR3, FR10 of
- * add-project-registry.
+ * <p>Implements FR1, FR3, FR7, FR9, NFR-R2 of add-dashboard-page; FR3, FR10 of
+ * add-project-registry; FR9, FR14 of supervise-daemon-loops-and-embed-dashboard.
  */
 @Component
 final class DashboardCommand {
 
-    static final String DEFAULT_FILE_NAME = "dashboard.html";
-    private static final int BOARD_READY_LIMIT = 50;
-
     private final DashboardArgumentsParser argumentsParser = new DashboardArgumentsParser();
-    private final Clock clock;
-    private final Sleeper sleeper;
+    private final TimeEquipment time;
     // The clone the configuration loader resolved from --dir (design D9 of add-project-registry).
     private final ProjectScope scope;
     private final FactoryProperties factoryProperties;
     private final TrackerWiring trackerWiring;
 
     DashboardCommand(
-            Clock javaTimeClock,
-            Sleeper sleeper,
-            ProjectScope scope,
-            FactoryProperties factoryProperties,
-            TrackerWiring trackerWiring) {
-        this.clock = javaTimeClock;
-        this.sleeper = sleeper;
+            TimeEquipment time, ProjectScope scope, FactoryProperties factoryProperties, TrackerWiring trackerWiring) {
+        this.time = time;
         this.scope = scope;
         this.factoryProperties = factoryProperties;
         this.trackerWiring = trackerWiring;
@@ -73,32 +48,27 @@ final class DashboardCommand {
      * @throws PipelineLoadFailedException if {@code .gnomish/} fails to load
      * @throws IOException if {@code .gnomish/} cannot be read (a genuine I/O fault), or the
      *     one-shot render cannot write its output file
+     * @throws DashboardDisabledException if the {@code --watch} loop gave up (FR9 of
+     *     supervise-daemon-loops-and-embed-dashboard)
      */
     void run(ApplicationArguments args) throws IOException {
         RegisteredClone clone = scope.registeredClone();
         DashboardArguments dashboardArguments = argumentsParser.parse(args, clone);
-        TrackerWiring.ReadOnlyTrackerResolution resolution =
+        ReadOnlyTrackerResolution resolution =
                 trackerWiring.resolveReadOnly(dashboardArguments.dir(), scope.mintInstanceId());
-        TrackerConfig trackerConfig = resolution.trackerConfig();
-        Path serveDir = clone.layout().serveDir(factoryProperties.instanceName());
-        DashboardRenderCycle renderCycle = new DashboardRenderCycle(serveDir);
-        Path outputFile =
-                dashboardArguments.out() != null ? dashboardArguments.out() : serveDir.resolve(DEFAULT_FILE_NAME);
-        Supplier<BoardModel> boardFetch = () -> BoardComposition.compose(
-                resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, BOARD_READY_LIMIT);
-
-        if (dashboardArguments.watch()) {
-            new DashboardWatchLoop(renderCycle, sleeper, clock).run(outputFile, boardFetch);
+        DashboardWatch watch = new DashboardWatch(
+                clone.layout(),
+                factoryProperties.instanceName(),
+                dashboardArguments.out(),
+                new BoardSource(resolution.tracker(), resolution.trackerConfig(), factoryProperties.tracker()),
+                time);
+        if (!dashboardArguments.watch()) {
+            watch.renderOnce();
             return;
         }
-        renderOnce(renderCycle, outputFile, boardFetch);
-    }
-
-    private void renderOnce(DashboardRenderCycle renderCycle, Path outputFile, Supplier<BoardModel> boardFetch)
-            throws IOException {
-        Instant now = clock.instant();
-        BoardSectionView boardView = new DashboardBoardCache().refresh(boardFetch, now);
-        String html = renderCycle.render(boardView, now, null);
-        AtomicFileWriter.write(outputFile, html);
+        watch.start();
+        if (watch.awaitEnd()) {
+            throw new DashboardDisabledException();
+        }
     }
 }

@@ -22,6 +22,29 @@ terms) live in `.claude/rules/process-invariants.md`.
   state file. *Never:* issue, ticket (those are tracker-adapter internals).
 - **Tracker** — the external task coordination system behind the tracker port
   (GitHub built, in-memory reference for tests, Jira planned).
+- **Instant source** — the one source of the current instant every component
+  reads "now" through: the JDK's `java.time.InstantSource`, never a
+  project-owned type. Production builds exactly one, in the composition root
+  (it is the clock of the **time equipment**); specs build the virtual one
+  (`VirtualClock`). A component that stamps state and measures an interval
+  about that state does both on the same instant source. Wall time only:
+  elapsed time measured for its own sake reads the monotonic source
+  (`System.nanoTime()`, `MonotonicTime`). Introduced by
+  `supervise-daemon-loops-and-embed-dashboard` (design D16, D17); the
+  reasoning is ADR 0014. Type: `InstantSource`. *Not:* `java.time.Clock`,
+  whose zone and tick surface no component needs. *Never:* clock port,
+  domain clock.
+- **Time equipment** — real time's two seams as one value: the current instant
+  (a `java.time.InstantSource`) and waiting (the `Sleeper` port), with the two
+  computations only the pair can do — the time *remaining* until a deadline and
+  a sleep *until* one. Every policy built from time (a retry, a loop's wait, a
+  poll deadline, a box's exec stamp) takes it whole. The composition root builds
+  the real one exactly once, and only `:bootstrap` can construct the real
+  sleeper; specs build the virtual one (`VirtualTimeEquipment`), whose sleeper
+  advances its clock. Introduced by `supervise-daemon-loops-and-embed-dashboard`
+  (design D20); the reasoning is ADR 0014. Type: `TimeEquipment`. *Not:* a clock alone — a component that
+  only reads the instant and never waits takes the `InstantSource`. *Never:*
+  clock and sleeper pair, system defaults.
 
 ## Task coordination
 
@@ -92,6 +115,14 @@ terms) live in `.claude/rules/process-invariants.md`.
   the nullable by hand; handed whole to the **abort fuse**, the one entry into
   the abort protocol from a take run. Type: `AbortTrigger`. *Not:* the
   abort's outcome (release or park) — that is the protocol's decision.
+- **Terminal transitions** — one run's park and finish steps as one value: the
+  branch-side steps of a park and of a completion, built together by the
+  run's engine execution from that run's closures and handed together to the
+  slot's outcome dispatch, which routes each terminal outcome into one of
+  them. Valid for one dispatch; the dispatch never keeps it. Introduced by
+  `supervise-daemon-loops-and-embed-dashboard` (design D22). Type:
+  `TerminalTransitions`. *Not:* the dispatch itself, which is fixed for the
+  slot's lifetime.
 - **Resume** — any instance continuing a task from its branch and state file;
   requires no hand-off from the previous holder.
 - **Order** — the resolved description of the work one invocation performs,
@@ -110,10 +141,15 @@ terms) live in `.claude/rules/process-invariants.md`.
   one place the claimed task's identity (its ref and task id) is derived.
   Built only after the claimed task is fetched. Type: `TakeOrder`.
 - **Slot wiring** — the equipment one take slot works with: the run assembly,
-  the task-git capability set, the worktrees root, the task-id MDC key, the
+  the task-git capability set, the registered clone, the task-id MDC key, the
   **abort fuse**, the credential variable names to scrub, the container
-  support seam, the **claim tenure** and the trusted base tier. Type:
-  `SlotWiring`. Its lifetime is what separates it from the order: an order
+  support seam, the **claim tenure**, the trusted base tier and the root's
+  terminal-write retry. Its one method beyond accessors,
+  `outcomeDispatch()`, builds the slot's outcome dispatch (`TakeOutcomeDispatch`)
+  over its own retry and abort fuse — the dispatch's only construction site,
+  shared by every run of the slot, which hands it its **terminal
+  transitions** per run (`supervise-daemon-loops-and-embed-dashboard`,
+  design D22). Type: `SlotWiring`. Its lifetime is what separates it from the order: an order
   describes one invocation's job and is passed as a parameter, while the
   wiring is fixed for as long as the slot exists — built once per `take`
   invocation, or once per `serve` daemon and shared by all its slots — and is
@@ -131,7 +167,7 @@ terms) live in `.claude/rules/process-invariants.md`.
   is not equipment — it is what the wiring and the dispatch chain are built
   over. *Not:* the order, and not the slot wiring.
 - **Feed assembly** — the serve feed's assembly object: holds the feed's
-  timing equipment (sleeper, clock, idle timing, WIP limit) as fields and
+  timing equipment (the **time equipment**, idle timing, WIP limit) as fields and
   builds one feed automaton per `serve` daemon from the per-daemon values
   (tracker, instance id, slot ledger, slot runner, dirty notifier, outage
   gate), constructing the feed's cycle and view tracker on the way. The one
@@ -167,8 +203,8 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
 - **Agent round equipment** — what every agent round is launched with: the
-  installation's agent settings (CLI binary, tail drain grace), the clock
-  that stamps the round, the live-progress subscriber and the extractor that
+  installation's agent settings (CLI binary, tail drain grace), the instant
+  source that stamps the round, the live-progress subscriber and the extractor that
   shapes the round's essential result. Built once per owner (the stage
   executor, the judge voter) and taken whole by that owner's round
   execution, so the group is assembled in one place rather than re-listed at
@@ -529,13 +565,29 @@ trusted/task tier split, and the law-root rule.
   about who may bind or loosen a sandbox adapter, not about Docker object
   cleanup.
 - **Container supports** — the installation's container-mode equipment (the
-  check providers, the factory, sandbox and binding settings, the discovered
-  adapter bindings, the Docker probe and the process's claim-epoch book) and
+  check providers, the factory and sandbox settings, the **execution mode**
+  selector, the process's claim-epoch book and the **time equipment**) and
   the constructions made from it: the container support for `gnomish run`,
   stamping `manual`, and for `take` / `serve`, stamping `tracked` — the same
   construction differing only in the **ownership mode** — plus a manual run's
-  execution-mode plan. Type: `ContainerSupports`. *Not:* one run's container
+  execution-mode plan, which it asks the selector for. The binding settings,
+  the discovered adapter bindings and the container-runtime probe are the
+  selector's inputs, not its own (`supervise-daemon-loops-and-embed-dashboard`,
+  design D22). Type: `ContainerSupports`. *Not:* one run's container
   support (`ContainerRunSupport`), which it builds.
+- **Execution mode** — whether a run's stages execute on the host or in a
+  container (`host` | `container`): the fail-closed decision one selector makes
+  over the operator's per-stage bindings, the sandbox settings, the
+  classpath-discovered binding registry and the container-runtime probe. It
+  refuses a mixed-binding pipeline and a container run without its
+  prerequisites (the image and a reachable runtime) rather than fall back to
+  the host. Built once by the composition root and asked by both manual runs
+  and `take` / `serve`, so no caller supplies its own inputs. Introduced by
+  `supervise-daemon-loops-and-embed-dashboard` (design D22). Type:
+  `SandboxModeSelector`, its probe `ContainerRuntimeProbe`. *Not:* the
+  `gnomish run --mode git|in-place` choice (the "run modes" of the manual-run
+  capability), which decides whether a run uses a task branch, not where its
+  stages execute. *Never:* sandbox flag.
 - **Container environment factory** — the installation's box equipment, held
   once per **ownership mode**: the operator sandbox settings, the **box
   timing**, the guard config root and the ownership mode itself — what the
@@ -569,9 +621,10 @@ trusted/task tier split, and the law-root rule.
   neither names a thing without the other — a seed source with no way back is
   a leak, a harvest into nothing has no destination. Type: `BoxGitLink`; the
   environment harvests through it rather than reading the fetch back out.
-- **Box timing** — the timing equipment every box operation runs on: the clock
-  that stamps exec starts, the pause the self-check waits with, and the
-  deadline every `docker` management command is bounded by. All three are
+- **Box timing** — the timing equipment every box operation runs on: the **time
+  equipment**, whose clock stamps exec starts and whose sleeper the self-check's
+  pause waits on, and the deadline every `docker` management command is bounded
+  by. All of it is
   about time; a host directory such as the guard config root is deliberately
   not in it. Type: `BoxTiming`.
 - **Project identity** — the label scoping a sweep to its own project: a
@@ -624,6 +677,49 @@ trusted/task tier split, and the law-root rule.
   forced kill, so git and docker can remove their lock and temporary files on a
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
   returns early.
+
+## Test stand-ins
+
+- **Stand-in** — a committed binary under `test-fixtures/src/main/resources/stand-in/`
+  that a spec hands production in place of a real one (`git`, `docker`, the
+  agent CLI, a hook, a supervised process): either a preset — a link to the one
+  table interpreter `stand-in.sh` — or one of the process-shaped scripts under
+  `process/` whose signal and fork behaviour is the subject itself. Written
+  once, spec'd once; a spec never writes one, and `StandIn` in `:test-fixtures`
+  is the one owner that hands them out (ADR 0015). *Never:* "fake git" written
+  inline in a spec, "stub script" — both name the generated-per-test shape the
+  term replaces.
+- **Preset** — one committed stand-in behaviour: the symbolic link
+  `links/<preset>` to `stand-in.sh` and the section `[<preset>]` of a table under
+  `tables/`, several presets to a table; the answers its rows print are sections
+  of the files under `data/` (`data/stderr#unable-to-access`). It holds no
+  absolute path and writes only beside a per-run link — its `$0.log`, or a
+  `$0.<name>` a `write` row names — never into the library. A preset that would
+  differ from another in one word takes that word from its per-run link's name
+  instead (`@name`, `export-name`). *Not:* a template a test fills in — a preset
+  is complete as committed; not the fake agent's *scenario*, which a preset may
+  play.
+
+## Daemon loops
+
+Introduced by `supervise-daemon-loops-and-embed-dashboard`; the reasoning is
+ADR 0013.
+
+- **Supervised daemon loop** — the factory's one shape for a long-lived thread
+  that repeats work for the life of the process: a tick run on a fixed interval
+  or on an interval cut short by a signal, guarded so an `Exception` from the
+  tick or from the wait never ends the loop, and stoppable without racing a
+  respawn — a stop ends the wait in progress, never the tick. An `Error` ends
+  the worker, and the loop's **restart policy** decides: *Unbounded* respawns
+  forever after a doubling backoff (the reaper, the worktree janitor, the
+  sandbox sweep, the snapshot writer — loops the factory's correctness or the
+  operator's view depends on); *Bounded* gives up, with one ERROR line, after
+  more than N restarts within a window (an optional loop such as the
+  dashboard, whose repeated death means a bug). Owned by
+  `app.daemon.SupervisedLoop`, built from a `LoopShape`. *Not:* a finite thread
+  (one per claim, a batch, a stream drain), nor the claim heartbeat, whose
+  death is the designed degradation and is never restarted. *Never:*
+  background worker, scheduler thread.
 
 ## Observability
 
@@ -742,6 +838,14 @@ trusted/task tier split, and the law-root rule.
   (`.github/ISSUE_TEMPLATE/plugin-announcement.yml`) asking for a row in the
   community plugin registry; its five fields are the registry's columns. It
   needs no pull request from the plugin author.
+- **SPI context** — the one value a plugin factory's single `create` receives,
+  carrying every collaborator the host hands it: `TrackerAdapterContext`
+  (secrets, configuration, instance id, claim epochs, time equipment) and
+  `CheckClientContext` (secrets, provider subsection, run context, time
+  equipment), interfaces in `gnomish-plugin-api` that the host implements. A
+  collaborator the host adds later is a new accessor on the context, never a
+  second `create`. Introduced by `supervise-daemon-loops-and-embed-dashboard`
+  (design D21).
 
 ## Operator configuration
 

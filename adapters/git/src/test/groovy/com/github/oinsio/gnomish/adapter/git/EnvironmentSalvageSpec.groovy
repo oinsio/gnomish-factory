@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -251,12 +253,8 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         gitOutput(work, 'add', '-A')
         gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
 
-        and: 'a gnome-planted post-checkout hook that would betray itself outside the working copy'
-        def marker = tempDir.resolve('hook-ran')
-        def hook = work.resolve('.git/hooks/post-checkout')
-        Files.writeString(hook, "#!/bin/sh\ntouch '" + marker + "'\n")
-        Files.setPosixFilePermissions(hook, EnumSet.of(
-                        PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE))
+        and: 'a gnome-planted post-checkout hook that records each run beside itself, which no salvage step cleans'
+        def hook = StandIn.link(work.resolve('.git/hooks/post-checkout'), 'hook-record')
 
         and: 'a dying round left a dirty state.json and gnome work behind, so the restore checkout runs'
         Files.writeString(work.resolve('.gnomish-task/state.json'), '{ truncated')
@@ -266,7 +264,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-HOOK')
 
         then: 'the salvage succeeded without ever running the hook'
-        Files.notExists(marker)
+        StandInLog.blocks(hook).isEmpty()
         gitOutput(cloneDir, 'show', 'refs/heads/' + BRANCH + ':work.txt') == 'interrupted round'
     }
 

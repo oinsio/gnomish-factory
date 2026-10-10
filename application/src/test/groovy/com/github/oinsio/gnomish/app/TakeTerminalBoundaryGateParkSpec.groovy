@@ -22,6 +22,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Path
 import spock.lang.Specification
@@ -57,8 +58,9 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         takeOrder(heldByUs(), tracker, runOrder(CheckpointMechanicsFixtures.gatedPipeline()))
     }
 
-    private AbortFuse fuse() {
-        new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)
+    /** The slot's outcome dispatch both twins end on (design D22 of supervise-daemon-loops-and-embed-dashboard). */
+    private TakeOutcomeDispatch dispatch() {
+        new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3))
     }
 
     /** The Engine's answer for the gate: the stage that passed, and the recorded state unchanged. */
@@ -81,7 +83,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         def git = new TaskGit(store, branches, Mock(TaskWorktreeGit), new ClaimEpochBook())
         def bootstrap = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), null, null, worktree,
                 'gnomish/PROJ-1', 'abc123', false, BasePin.UNPINNED)
-        def execution = new TakeEngineExecution(assemblyRunning(executor), git, CLONE, fuse(), [], new ClaimLossFlag(),
+        def execution = new TakeEngineExecution(assemblyRunning(executor), git, CLONE, dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
         when:
@@ -113,7 +115,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
             workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
-        def execution = new TakeContainerEngineExecution(assemblyRunning(executor), fuse(), [], new ClaimLossFlag(),
+        def execution = new TakeContainerEngineExecution(assemblyRunning(executor), dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
         when:

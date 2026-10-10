@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +66,7 @@ final class OomAnnotatedExecHandle implements ExecHandle {
     }
 
     @Override
-    public Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+    public Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
         // Deliberately unannotated: `Wait.Exited` carries no exit code, so there is nothing here
         // to annotate — `waitForExit()` is the one seam that surfaces one (design D1).
         return delegate.waitForExitOrTimeout(timeout, clock);

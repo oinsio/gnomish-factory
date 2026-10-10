@@ -43,6 +43,7 @@ final class TakeResumeRunner {
     private final RegisteredClone clone;
     private final TakeResumeBootstrap resumeBootstrap;
     private final TakeResumeExecution execution;
+    private final RunAssembly assembly;
 
     /**
      * @param wiring the slot's equipment (D2 of introduce-slot-wiring): the shared engine/ports
@@ -62,6 +63,7 @@ final class TakeResumeRunner {
         this.clone = wiring.registeredClone();
         this.resumeBootstrap = new TakeResumeBootstrap(git, clone, wiring.taskIdMdcKey());
         this.execution = new TakeResumeExecution(wiring);
+        this.assembly = wiring.assembly();
     }
 
     /**
@@ -151,7 +153,10 @@ final class TakeResumeRunner {
      */
     TaskContext appendDecision(ResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         var taskRepository = git.store().taskRepository(clone);
-        var decision = ResumeDecisionCommit.decisionFor(finalState, text);
+        // FR18 of supervise-daemon-loops-and-embed-dashboard: the decision stamp reads the run
+        // assembly's one time source, the root's.
+        var decision = ResumeDecisionCommit.decisionFor(
+                finalState, text, assembly.timeEquipment().clock().instant());
         taskRepository.appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
     }

@@ -19,7 +19,11 @@ import spock.lang.TempDir
  * change names in NFR-R2, and it loses none but the ones that requirement sanctions. FR3, FR10 of
  * add-project-registry: {@code projectScope} joins (the clone every project-scoped command works
  * in), {@code takeCommandSeams} joins (take's clock moved into its seams), and {@code
- * runArgumentsParser} leaves (the run drive builds its parser over the clone).
+ * runArgumentsParser} leaves (the run drive builds its parser over the clone). FR18 of
+ * supervise-daemon-loops-and-embed-dashboard (design D22): {@code containerRuntimeProbe} and
+ * {@code sandboxModeSelector} join (the execution-mode decision is built once by the root); FR9,
+ * FR10 (design D11, D12): {@code serveDashboard} joins (the page inside serve, holding the tracker
+ * wiring only as its board-reader role).
  */
 class ApplicationBeanInventorySpec extends Specification {
 
@@ -47,6 +51,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration',
         'com.github.oinsio.gnomish.adapter.sandbox.SandboxBindingConfiguration',
         'com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration',
+        'containerRuntimeProbe',
         'containerSupports',
         'dashboardCommand',
         'errorConsoleIO',
@@ -58,7 +63,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'filesExistCheckRunner',
         'gitProcessRunner',
         'gitVersionCheck',
-        'javaTimeClock',
+        'instantSource',
         'manualRunAssembly',
         'manualRunConfiguration',
         'manualRunDrive',
@@ -71,23 +76,24 @@ class ApplicationBeanInventorySpec extends Specification {
         'reportCommands',
         'runExitCodeMapper',
         'sandboxLifecyclePass',
+        'sandboxModeSelector',
         'secretsProvider',
         'serveAssembly',
         'serveCommand',
+        'serveDashboard',
         'serveExitCodeExceptionMapper',
         'serveRuntimeAssembly',
         'shellCommandCheckRunner',
         'slotWiringFactory',
         'statusCommand',
         'subcommandDispatch',
-        'systemClock',
         'systemConsoleIO',
         'takeCommand',
         'takeCommandSeams',
         'takeExitCodeExceptionMapper',
         'taskGit',
         'taskIdRandom',
-        'threadSleeper',
+        'timeEquipment',
         'trackerAdapterRegistry',
         'trackerCommandConfiguration',
         'trackerSubsectionValidatorRegistry',

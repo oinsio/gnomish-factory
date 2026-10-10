@@ -165,9 +165,9 @@ public final class Engine {
         var verifyOrchestrator = new VerifyOrchestrator(
                 ports.builtinRunner(),
                 ports.commandRunner(),
-                new ExternalPolling(ports.externalClient(), ports.attemptDelivery(), ports.clock(), ports.sleeper()),
+                new ExternalPolling(ports.externalClient(), ports.attemptDelivery(), ports.time()),
                 new JudgeVoting(ports.judgeVoter()),
-                ports.clock(),
+                ports.time().clock(),
                 ports.listener());
         var loop = new StageAttemptLoop(ports, verifyOrchestrator, definition);
         var currentState = state;

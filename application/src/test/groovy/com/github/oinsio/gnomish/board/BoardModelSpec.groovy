@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.BackoffPolicy
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
@@ -16,11 +17,20 @@ import spock.lang.Specification
  * BoardModel: the board's single immutable model, built from exactly one
  * listReady result and one listOpen result, three columns preserving
  * adapter list order (design D5). Implements FR2-FR5, NFR-P1 of
- * add-board-command.
+ * add-board-command; FR12, FR14 of supervise-daemon-loops-and-embed-dashboard
+ * (the model carries its WIP limit and derives its open-front count, D13).
  */
 class BoardModelSpec extends Specification {
 
     private static final Instant GENERATED_AT = Instant.parse('2026-08-05T09:00:00Z')
+
+    /** A limit no scenario here reaches, so every fresh row stays eligible. */
+    private static final int WIP_LIMIT = 10
+
+    private static BoardModel build(List<ReadyTask> ready, List<OpenTask> open, boolean truncated) {
+        BoardModel.build(ready, open, truncated, GENERATED_AT,
+                new EligibilityInputs(BackoffPolicy.DEFAULT_BASE, BackoffPolicy.DEFAULT_CAP, open.size(), WIP_LIMIT))
+    }
 
     private static ReadyTask ready(String id, boolean returned = false) {
         new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, false, UntrustedText.tracker("title-$id"))
@@ -43,7 +53,7 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build(readyTasks, [], false, GENERATED_AT)
+        def model = build(readyTasks, [], false)
 
         then: 'the Ready column carries both rows and the summary counts the fetched window'
         model.readyRows().size() == 2
@@ -62,7 +72,7 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build(readyTasks, [], false, GENERATED_AT)
+        def model = build(readyTasks, [], false)
 
         then: 'the row order matches the input order exactly'
         model.readyRows()*.ref()*.id() == [
@@ -82,7 +92,7 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build([], openTasks, false, GENERATED_AT)
+        def model = build([], openTasks, false)
 
         then: 'the Working column contains only Working entries, in listOpen order'
         model.workingRows()*.ref()*.id() == [
@@ -102,7 +112,7 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build([], openTasks, false, GENERATED_AT)
+        def model = build([], openTasks, false)
 
         then: 'the AwaitingHuman column contains only AwaitingHuman entries, in listOpen order, with reasons'
         model.awaitingHumanRows()*.ref()*.id() == [
@@ -124,16 +134,16 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build([], openTasks, false, GENERATED_AT)
+        def model = build([], openTasks, false)
 
         then: 'the row carries the holder and claim version'
         model.workingRows()[0].holder() == 'factory-a'
         model.workingRows()[0].claimVersion() == version
 
         when: 'a Working task carries no live claim marker'
-        def modelMissingMarker = BoardModel.build([], [
+        def modelMissingMarker = build([], [
             working('github:o/r#2', 'factory-b')
-        ], false, GENERATED_AT)
+        ], false)
 
         then: 'the row carries a null claim version'
         modelMissingMarker.workingRows()[0].claimVersion() == null
@@ -148,29 +158,53 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        def model = BoardModel.build(readyTasks, [], false, GENERATED_AT)
+        def model = build(readyTasks, [], false)
 
         then: 'the returned distinction is preserved per row'
         model.readyRows()[0].returned()
         !model.readyRows()[1].returned()
     }
 
-    // FR2: the four-argument build overload defaults every ready row to eligible (no eligibility params supplied)
-    def "defaults every ready row to eligible when built without eligibility parameters"() {
-        given: 'a ready task'
-        def readyTasks = [ready('github:o/r#1')]
+    // FR12, FR14 of supervise-daemon-loops-and-embed-dashboard: the model keeps the very WIP limit
+    // its rows' eligibility was judged against, and derives the open front from its own columns
+    def "carries the WIP limit eligibility was judged by and counts the open front from its columns"() {
+        given: 'one fresh ready task and an open front of two working and one awaiting task'
+        def openTasks = [
+            working('github:o/w#1', 'factory-a'),
+            awaitingHuman('github:o/h#1', ParkReason.ESCALATION),
+            working('github:o/w#2', 'factory-b')
+        ]
 
-        when: 'the model is built'
-        def model = BoardModel.build(readyTasks, [], false, GENERATED_AT)
+        when: 'the model is built against a limit the open front reaches'
+        def model = BoardModel.build([ready('github:o/r#1')], openTasks, false, GENERATED_AT,
+        new EligibilityInputs(BackoffPolicy.DEFAULT_BASE, BackoffPolicy.DEFAULT_CAP, 3, 3))
 
-        then: 'the row carries no eligibility reason yet'
-        model.readyRows()[0].eligibilityReason() == null
+        then: 'the row is WIP-held by exactly the limit the model carries'
+        model.readyRows()[0].eligibilityReason() == new EligibilityReason.WipHeld()
+        model.wipLimit() == 3
+
+        and: 'the open-front count is the working plus the awaiting rows'
+        model.openFrontCount() == 3
+    }
+
+    // FR12 of supervise-daemon-loops-and-embed-dashboard: the open front sums both columns, not one
+    def "counts working and awaiting rows separately into the open front"() {
+        when:
+        def model = build([], [
+            working('github:o/w#1', 'factory-a'),
+            awaitingHuman('github:o/h#1', ParkReason.INFRA),
+            awaitingHuman('github:o/h#2', ParkReason.CHECKPOINT)
+        ], false)
+
+        then:
+        model.openFrontCount() == 3
+        model.wipLimit() == WIP_LIMIT
     }
 
     // FR6, NFR-O1: truncated and generatedAt are passed through unchanged from the caller
     def "passes truncated and generatedAt through unchanged"() {
         when: 'a model is built with an explicit truncated flag and generation instant'
-        def model = BoardModel.build([ready('github:o/r#1')], [], true, GENERATED_AT)
+        def model = build([ready('github:o/r#1')], [], true)
 
         then: 'both fields reflect the caller-supplied values exactly'
         model.truncated()
@@ -180,7 +214,7 @@ class BoardModelSpec extends Specification {
     // NFR-P1: the model is built from exactly the two supplied lists, with no other data source
     def "builds an empty model from empty ready and open results"() {
         when: 'the model is built from empty inputs'
-        def model = BoardModel.build([], [], false, GENERATED_AT)
+        def model = build([], [], false)
 
         then: 'all three columns are empty and the summary counts zero'
         model.readyRows().isEmpty()
@@ -198,7 +232,7 @@ class BoardModelSpec extends Specification {
         ]
 
         when: 'the model is built'
-        BoardModel.build([], openTasks, false, GENERATED_AT)
+        build([], openTasks, false)
 
         then: 'the build fails loudly, naming the offending ref and its state'
         def e = thrown(IllegalStateException)
@@ -216,7 +250,7 @@ class BoardModelSpec extends Specification {
     // FR2-FR5: BoardModel rows are exposed as unmodifiable, defensively-copied lists
     def "exposes columns as unmodifiable"() {
         given: 'a built model'
-        def model = BoardModel.build([ready('github:o/r#1')], [], false, GENERATED_AT)
+        def model = build([ready('github:o/r#1')], [], false)
 
         when: 'a caller tries to mutate the exposed Ready column'
         model.readyRows().add(new ReadyRow(new TaskRef('github:o/r#2'), UntrustedText.tracker('x'), false, null))

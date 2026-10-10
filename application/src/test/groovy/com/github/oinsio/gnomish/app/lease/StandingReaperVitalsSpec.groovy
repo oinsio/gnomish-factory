@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.lease
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.time.Duration
 import spock.lang.Specification
 
@@ -18,13 +19,15 @@ class StandingReaperVitalsSpec extends Specification {
 
     private final VirtualClock clock = new VirtualClock()
     private final StandingReaper reaper =
-    new StandingReaper(ReaperDuty.NONE, { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
-    INTERVAL, { -> [] }, clock)
+    new StandingReaper(ReaperDuty.NONE,
+    INTERVAL, {
+        -> []
+    }, VirtualTimeEquipment.on(clock, { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper))
 
     // FR7: before any tick, lastRunAt is the construction instant.
     def "lastRunAt starts at construction time"() {
         expect:
-        reaper.lastRunAt() == clock.now()
+        reaper.lastRunAt() == clock.instant()
     }
 
     // FR7: every completed tick stamps lastRunAt from the injected clock.
@@ -34,7 +37,7 @@ class StandingReaperVitalsSpec extends Specification {
         reaper.tick()
 
         then:
-        reaper.lastRunAt() == clock.now()
+        reaper.lastRunAt() == clock.instant()
     }
 
     // FR7: restartCount starts at zero and never resets — a growing count is reaping

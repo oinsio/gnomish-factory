@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.logtext
 
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
+import java.time.InstantSource
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -200,25 +198,37 @@ class RepeatSuppressorSpec extends Specification {
         ]
     }
 
-    def "the production wiring carries the documented quiet period"() {
-        expect:
-        // real-time-wiring: the production defaults ARE the subject here — the suppressor is only
-        //     constructed and its constant read, no time is ever elapsed on it.
-        RepeatSuppressor.system() != null
+    // FR18 of supervise-daemon-loops-and-embed-dashboard: the default-period factory measures on the
+    //     source it is handed, at the documented quiet period.
+    def "the default-period factory rolls up after the documented quiet period on the given source"() {
+        given:
+        def clock = new MovableClock(Instant.parse('2026-10-09T10:00:00Z'))
+        def suppressor = RepeatSuppressor.withDefaultRollUp(clock)
+        suppressor.failed('k', 'down')
+
+        when:
+        clock.advance(RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL.minusSeconds(1))
+        def early = suppressor.failed('k', 'down')
+        clock.advance(Duration.ofSeconds(1))
+        def late = suppressor.failed('k', 'down')
+
+        then:
         RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL == Duration.ofMinutes(5)
+        early instanceof RepeatOccurrence.Repeat
+        late instanceof RepeatOccurrence.RollUp
     }
 
     /**
-     * A {@link Clock} the spec moves by hand — the suppressor's contract is entirely about elapsed
-     * time, so no feature here may sleep.
+     * An {@link InstantSource} the spec moves by hand — the suppressor's contract is entirely about
+     * elapsed time, so no feature here may sleep.
      *
-     * <p>A deliberate copy of {@code com.github.oinsio.gnomish.testfixtures.time.MovableClock},
+     * <p>A deliberate copy of {@code com.github.oinsio.gnomish.domain.engine.fake.VirtualClock},
      * forced by the layering rather than overlooked: {@code :test-fixtures} depends on
-     * {@code :logtext}, so this leaf cannot reach back for the shared one without a cycle. The
-     * shared copy carries the same note at its end. Both are the same handful of lines over
-     * {@code java.time.Clock}; if they ever diverge, this one is the one to delete.
+     * {@code :logtext}, so this leaf cannot reach back for the shared one without a cycle. Both are
+     * the same handful of lines over {@code java.time.InstantSource}; if they ever diverge, this
+     * one is the one to delete.
      */
-    static class MovableClock extends Clock {
+    static class MovableClock implements InstantSource {
 
         private Instant now
 
@@ -233,16 +243,6 @@ class RepeatSuppressorSpec extends Specification {
         @Override
         Instant instant() {
             now
-        }
-
-        @Override
-        ZoneId getZone() {
-            ZoneOffset.UTC
-        }
-
-        @Override
-        Clock withZone(ZoneId zone) {
-            this
         }
     }
 }

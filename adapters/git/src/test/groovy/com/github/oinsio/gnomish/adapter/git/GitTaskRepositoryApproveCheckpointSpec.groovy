@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -46,7 +47,7 @@ class GitTaskRepositoryApproveCheckpointSpec extends Specification implements Ba
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
-        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
     }
 
     /** The state a passing {@code manual} round leaves: at the gate, its passing round recorded. */

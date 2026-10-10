@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -30,7 +31,7 @@ class RequiredTaskJsonSpec extends Specification implements BareGitRepoFixture {
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         repository = new GitTaskRepository(
-                runner, RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE)
+                runner, RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE, new VirtualClock())
     }
 
     def "a lifecycle rewrite on a tip with no envelope reports git's own diagnosis, not just its absence"() {

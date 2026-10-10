@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app.take
 
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -12,7 +13,7 @@ import spock.lang.Specification
 
 /**
  * FR10, D10, NFR-R3 of add-claim-heartbeat: the bounded terminal-write retry. Time is injected as a
- * virtual {@link Sleeper} advancing a virtual {@link Clock}, so the ~10-minute bound and the
+ * virtual {@link Sleeper} advancing a virtual {@link InstantSource}, so the ~10-minute bound and the
  * exponential backoff are exercised deterministically and instantly — no real sleeping. An outage
  * ({@link TrackerUnavailableException}) retries; a give-up past the bound is DEFERRED; a non-outage
  * fault surfaces at once (a bug must never loop for ten minutes).
@@ -25,7 +26,7 @@ class TerminalWriteRetrySpec extends Specification {
     AtomicInteger slept = new AtomicInteger()
     List<Duration> sleptDurations = new CopyOnWriteArrayList<>()
 
-    Clock clock = { -> now.get() } as Clock
+    InstantSource clock = { -> now.get() } as InstantSource
     Sleeper sleeper = { Duration d ->
         slept.incrementAndGet()
         sleptDurations.add(d)
@@ -33,7 +34,7 @@ class TerminalWriteRetrySpec extends Specification {
     } as Sleeper
 
     private TerminalWriteRetry retry() {
-        new TerminalWriteRetry(sleeper, clock, BOUND)
+        new TerminalWriteRetry(VirtualTimeEquipment.on(clock, sleeper), BOUND)
     }
 
     // FR10: a write that lands on the first attempt confirms without sleeping.
@@ -78,14 +79,14 @@ class TerminalWriteRetrySpec extends Specification {
     def "gives up as DEFERRED once the bound elapses with the tracker still down"() {
         given: 'a clock that ticks forward two minutes each read, so the bound is reached in a bounded number of polls'
         def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock advancingClock = {
+        InstantSource advancingClock = {
             ->
             def t = ticking.get()
             ticking.set(t + Duration.ofMinutes(2))
             t
-        } as Clock
+        } as InstantSource
         def attempts = new AtomicInteger()
-        def retry = new TerminalWriteRetry(sleeper, advancingClock, BOUND)
+        def retry = new TerminalWriteRetry(VirtualTimeEquipment.on(advancingClock, sleeper), BOUND)
 
         when:
         def result = retry.confirm({

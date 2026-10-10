@@ -10,8 +10,8 @@ import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Clock;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Random;
 import org.slf4j.MDC;
@@ -33,7 +33,7 @@ record BareTakeClaimWalk(
         String taskIdMdcKey,
         Duration backoffBase,
         Duration backoffCap,
-        Clock clock,
+        InstantSource clock,
         int wipLimit,
         Random random) {
 

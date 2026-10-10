@@ -8,10 +8,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
@@ -96,7 +95,7 @@ advancement: auto
     protected ServeCommand newCommand(
             Map<String, TrackerAdapterFactory> registry,
             FeedAutomatonStarter starter,
-            ServeProperties serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null)) {
+            ServeProperties serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null, null)) {
         ServeCommands.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 TaskGitFixture.real(),
@@ -104,10 +103,8 @@ advancement: auto
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
                 serveProperties,
-                Clock.systemUTC(),
-                new SystemClock(),
-                new TrackerWiring(registry, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
-                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
+                new TrackerWiring(registry, MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
+                starter, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)

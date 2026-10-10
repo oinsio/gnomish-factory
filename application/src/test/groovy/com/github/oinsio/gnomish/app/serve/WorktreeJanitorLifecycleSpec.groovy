@@ -2,9 +2,13 @@ package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff
+import com.github.oinsio.gnomish.app.daemon.SupervisedLoop
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -12,19 +16,26 @@ import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
 
 /**
- * {@link WorktreeJanitor#start}/{@link WorktreeJanitor#loop}, task 7.1 of add-factory-serve
- * (design D10, FR14): one tick fires immediately (the startup scan) and every {@link
- * WorktreeJanitor#TICK_INTERVAL} thereafter, driven deterministically by the rendezvous {@link
- * BlockingSleeper} — no real sleeping, no polling. The disposal policy itself is {@link
- * WorktreeJanitorSpec}'s concern; this spec only proves the scheduling cadence.
+ * {@link WorktreeJanitor#start}/{@link WorktreeJanitor#stop}, task 7.1 of add-factory-serve
+ * (design D10, FR14), now a supervised daemon loop (task 4.1 of
+ * supervise-daemon-loops-and-embed-dashboard, design D1, D4, D7): one tick fires immediately (the
+ * startup scan) and every {@link WorktreeJanitor#TICK_INTERVAL} thereafter, driven
+ * deterministically by the rendezvous {@link BlockingSleeper} — no real sleeping, no polling. A
+ * tick failing with an {@code Exception} is reported by the loop with {@code component=janitor}
+ * and the janitor runs again on its next cadence; an {@code Error} ends the worker, which is
+ * respawned after one backoff (design D2 as amended, D5); {@code stop()} ends it. The disposal policy
+ * itself is {@link WorktreeJanitorSpec}'s concern; this spec only proves the loop around it.
  *
- * <p>Implements FR14 of add-factory-serve (design D10).
+ * <p>Implements FR14 of add-factory-serve (design D10); FR6 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 @Timeout(10)
 class WorktreeJanitorLifecycleSpec extends Specification {
@@ -34,11 +45,76 @@ class WorktreeJanitorLifecycleSpec extends Specification {
 
     RegisteredClone registeredClone
     def ticks = new AtomicInteger()
+    // Every tick that finds the worktree folder reads the held slots once: a tick counter no
+    //     disposal closure shares.
+    def heldReads = new AtomicInteger()
     def sleeper = new BlockingSleeper()
-    def clock = { -> Instant.now() } as Clock
+    // FR21 of supervise-daemon-loops-and-embed-dashboard: one virtual source; an aged worktree is aged
+    //     against it, not against the wall clock.
+    def clock = new VirtualClock(Instant.parse('2026-08-01T00:00:00Z'))
+
+    private static final Duration BOUND = Duration.ofSeconds(2)
+
+    // The loop reports its failures on its own logger (design D6), with component=janitor.
+    def loopLogs = LogCaptureSupport.attach(SupervisedLoop)
+    WorktreeJanitor janitor
 
     def setup() {
         registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('my-project'))
+    }
+
+    def cleanup() {
+        if (janitor != null) {
+            joinedWithinBound()
+        }
+        loopLogs.detach()
+    }
+
+    private WorktreeJanitor janitorOver(Duration ageThreshold, TaskEnvironmentDisposal disposal, Sleeper waits) {
+        janitor = new WorktreeJanitor(registeredClone, ageThreshold, disposal, VirtualTimeEquipment.on(clock, waits), {
+            ->
+            heldReads.incrementAndGet()
+            Set.of()
+        } as OccupiedSlots)
+    }
+
+    // The janitor's joining stop on a helper thread; false if it did not return in time.
+    private boolean joinedWithinBound() {
+        Thread.ofVirtual().start { janitor.stopAndJoin() }.join(BOUND)
+    }
+
+    private Path agedEnvironment(String key) {
+        def dir = Files.createDirectories(registeredClone.worktrees().resolve(key))
+        Files.setLastModifiedTime(dir, FileTime.from(clock.instant() - Duration.ofDays(30)))
+        dir
+    }
+
+    private List tickFailures() {
+        loopEvents(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
+    }
+
+    private List loopEvents(OperatorEvent event) {
+        (loopLogs.list.toArray() as List).findAll {
+            it != null && it.formattedMessage.startsWith(event.head())
+        }
+    }
+
+    /** A sleeper that blocks until interrupted, restoring the flag as production does. */
+    private static final class LatchedSleeper implements Sleeper {
+        final CountDownLatch entered = new CountDownLatch(1)
+        final CountDownLatch returned = new CountDownLatch(1)
+
+        @Override
+        void sleep(Duration duration) {
+            entered.countDown()
+            try {
+                new CountDownLatch(1).await(BOUND.toMillis() * 5, TimeUnit.MILLISECONDS)
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt()
+            } finally {
+                returned.countDown()
+            }
+        }
     }
 
     // FR14, D10: the daemon-startup tick runs before any sleep — a fresh instance cleans up
@@ -48,9 +124,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         def disposal = { String key ->
             ticks.incrementAndGet()
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
-            -> Set.of()
-        })
+        janitorOver(Duration.ofDays(14), disposal, sleeper)
 
         when: 'the janitor starts'
         janitor.start()
@@ -60,21 +134,18 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         slept == WorktreeJanitor.TICK_INTERVAL
     }
 
-    // FR14, D10: loop() must actually invoke tick(), not merely reach the sleep call — proven here
+    // FR14, D10: the loop must actually invoke tick(), not merely reach the sleep call — proven here
     //     by an observable effect only tick() produces: an aged, unheld environment gets disposed
     //     of by the time the thread reaches its first sleep, with no tick() call ever made
     //     directly by the test.
     def "the startup tick actually runs and disposes an aged unheld environment"() {
         given: 'a real aged, unheld worktree directory on disk, and a disposal seam that records keys'
-        Path projectDir = Files.createDirectories(registeredClone.worktrees().resolve('task-aged'))
-        Files.setLastModifiedTime(projectDir, FileTime.from(Instant.now() - Duration.ofDays(30)))
+        agedEnvironment('task-aged')
         List<String> disposedKeys = Collections.synchronizedList(new ArrayList<String>())
         def disposal = { String key ->
             disposedKeys << key
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
-            -> Set.of()
-        })
+        janitorOver(Duration.ofDays(14), disposal, sleeper)
 
         when: 'the janitor starts and reaches its first sleep'
         janitor.start()
@@ -90,9 +161,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         def disposal = { String key ->
             ticks.incrementAndGet()
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(registeredClone, Duration.ofDays(14), disposal, clock, sleeper, {
-            -> Set.of()
-        })
+        janitorOver(Duration.ofDays(14), disposal, sleeper)
         janitor.start()
         sleeper.awaitEntered()
 
@@ -107,18 +176,17 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         thirdSleep == WorktreeJanitor.TICK_INTERVAL
     }
 
-    // FR14, D10: a tick that throws (e.g. the disposal seam itself fails) does not kill the
-    //     janitor thread — the next tick, one interval later, tries again.
+    // FR14, D10; FR6, D2 of supervise-daemon-loops-and-embed-dashboard: a tick that throws (the
+    //     disposal seam itself fails) does not kill the janitor — the loop reports it as its own
+    //     coded WARN with component=janitor, and the next tick, one interval later, tries again.
     def "a failing tick does not kill the janitor thread"() {
         given: 'one aged, unheld environment whose disposal always throws'
-        Files.createDirectories(registeredClone.worktrees().resolve('boom'))
+        agedEnvironment('boom')
         def disposal = { String key ->
+            ticks.incrementAndGet()
             throw new IllegalStateException('disposal boom')
         } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(registeredClone, Duration.ofSeconds(0), disposal, clock, sleeper, {
-            -> Set.of()
-        })
-        def logs = LogCaptureSupport.attach(WorktreeJanitor)
+        janitorOver(Duration.ofSeconds(0), disposal, sleeper)
 
         when: 'the janitor starts, ticks once (throwing), and reaches the next sleep regardless'
         janitor.start()
@@ -133,15 +201,91 @@ class WorktreeJanitorLifecycleSpec extends Specification {
 
         then: 'the thread survived the failing tick and looped back around for another'
         secondSleep == WorktreeJanitor.TICK_INTERVAL
+        ticks.get() == 2
 
-        and: 'FR15 of harden-logging-observability: every lost tick leaves its own coded WARN'
-        def lostTicks = logs.list.findAll {
-            it.formattedMessage.startsWith(OperatorEvent.WORKTREE_JANITOR_TICK_FAILED.head())
+        and: 'the loss is reported by the loop, as the janitor'
+        def lost = tickFailures()
+        !lost.empty
+        lost.every {
+            it.level == Level.WARN && it.MDCPropertyMap['component'] == 'janitor'
         }
-        lostTicks.size() >= 2
-        lostTicks.every { it.level == Level.WARN }
+    }
+
+    // FR6 of supervise-daemon-loops-and-embed-dashboard (daemon-supervision "The worktree cleaner
+    //     is respawned after an Error"; M4): a run that throws an Error — which the janitor's old
+    //     RuntimeException catch let kill its thread silently — ends the worker with one ERROR line
+    //     as the janitor, and after one backoff the respawned cleaner runs again and disposes.
+    def "the worktree cleaner is respawned after an Error and runs again after one backoff"() {
+        given: 'an aged environment whose first disposal throws an Error'
+        agedEnvironment('task-aged')
+        List<String> disposed = Collections.synchronizedList([])
+        def disposal = { String key ->
+            if (ticks.incrementAndGet() == 1) {
+                throw new Error('disposal error')
+            }
+            disposed << key
+        } as TaskEnvironmentDisposal
+        janitorOver(Duration.ofDays(14), disposal, sleeper)
+
+        when: 'the first run throws the Error; the death handler waits its backoff, which elapses'
+        janitor.start()
+        def backoff = sleeper.awaitEntered()
+        sleeper.releaseOne()
+        def nextSleep = sleeper.awaitEntered()
+
+        then: 'the backoff is the cap (below the janitor\'s hourly base), and the respawned cleaner disposed this time'
+        backoff == RestartBackoff.MAX_BACKOFF
+        nextSleep == WorktreeJanitor.TICK_INTERVAL
+        disposed == ['task-aged']
+
+        and: 'no lost tick was reported; the death was, at ERROR, as the janitor'
+        tickFailures().empty
+        def died = loopEvents(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'janitor'
+    }
+
+    // FR4 of supervise-daemon-loops-and-embed-dashboard, design D4: stop() cuts the interval wait
+    //     short and the janitor ends — no tick follows, nothing warns.
+    def "stop ends the janitor during its interval wait, with no tick after it"() {
+        given: 'a worktree folder, so every tick reads the held slots and is counted'
+        Files.createDirectories(registeredClone.worktrees())
+        def waits = new LatchedSleeper()
+        janitorOver(Duration.ofDays(14), { String key -> } as TaskEnvironmentDisposal, waits)
+        def stopLogs = LogCaptureSupport.attach(SupervisedLoop, Level.DEBUG)
+
+        when: 'the janitor ticks at startup, enters its wait, and is stopped'
+        janitor.start()
+        assert waits.entered.await(BOUND.toMillis(), TimeUnit.MILLISECONDS)
+        janitor.stop()
+
+        then: 'the wait was cut short, the thread ended after its startup tick alone, and the stop was quiet'
+        waits.returned.await(BOUND.toMillis(), TimeUnit.MILLISECONDS)
+        joinedWithinBound()
+        heldReads.get() == 1
+        (stopLogs.list.toArray() as List).every {
+            it == null || !it.level.isGreaterOrEqual(Level.WARN)
+        }
 
         cleanup:
-        logs.detach()
+        stopLogs.detach()
+    }
+
+    // FR4, D4: the joining stop the lifecycle specs rely on is itself a stop — it cuts the wait
+    //     short and returns only once the janitor's thread has left it.
+    def "a joining stop during the interval wait returns only after the wait ended"() {
+        given:
+        def waits = new LatchedSleeper()
+        janitorOver(Duration.ofDays(14), { String key -> } as TaskEnvironmentDisposal, waits)
+
+        when:
+        janitor.start()
+        assert waits.entered.await(BOUND.toMillis(), TimeUnit.MILLISECONDS)
+        boolean joined = joinedWithinBound()
+
+        then:
+        joined
+        waits.returned.count == 0
     }
 }

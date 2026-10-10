@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -66,7 +67,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), index)
-        repository = new GitObjectsTaskRepository(gitObjects, ClaimEpochSource.NONE, DenialCursorSource.NONE)
+        repository = new GitObjectsTaskRepository(gitObjects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
     protected static StageDefinition stage() {
@@ -128,7 +129,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         String ref = 'refs/heads/' + TaskIdSanitizer.branchName(taskId)
         def tip = gitObjects.resolveRef(ref).get()
         def identity = new CommitIdentity('test', 'test@localhost')
-        def now = Instant.now()
+        def now = Instant.parse('2026-01-01T00:00:00Z')
         gitObjects.commit(new CommitRequest(ref, Optional.of(tip), tip,
                 [
                     new TreeEdit.PutFile(path, bytes)
@@ -167,7 +168,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     /** Hand-commits task.json (the crash-window shapes recordOutcome never leaves behind). */
     protected void commitTaskJson(String taskId, TaskOutcome outcome, EscalationReport lastEscalation) {
         def dto = TaskJsonMapper.toDto(
-                context(taskId), gitOutput(cloneDir, 'rev-parse', 'HEAD').trim(), Instant.now(),
+                context(taskId), gitOutput(cloneDir, 'rev-parse', 'HEAD').trim(), Instant.parse('2026-01-01T00:00:00Z'),
                 outcome, lastEscalation, false, BasePin.UNPINNED)
         def bytes = TaskStateJson.mapper().writeValueAsString(dto).getBytes('UTF-8')
         commitOnBranch(taskId, '.gnomish-task/task.json', bytes, 'outcome')

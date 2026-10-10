@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -27,10 +28,8 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
     }
 
     private void plantFailingPreCommitHook() {
-        Path hook = cloneDir.resolve('.git').resolve('hooks').resolve('pre-commit')
-        Files.createDirectories(hook.parent)
-        Files.writeString(hook, '#!/bin/sh\nexit 1\n')
-        hook.toFile().setExecutable(true)
+        Path hooks = Files.createDirectories(cloneDir.resolve('.git').resolve('hooks'))
+        StandIn.link(hooks.resolve('pre-commit'), 'hook-refuse')
     }
 
     private int commitWithExitCode(Path cwd, String file, String message) {

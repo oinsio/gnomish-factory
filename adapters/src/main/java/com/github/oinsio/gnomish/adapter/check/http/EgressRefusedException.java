@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
 import java.io.IOException;
+import java.io.Serial;
 
 /**
  * Raised instead of performing an exchange the {@link EgressAllowlist} refuses (NFR-S2, UX2 of
@@ -17,6 +18,7 @@ import java.io.IOException;
  */
 final class EgressRefusedException extends IOException {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final transient EgressRefusal refusal;

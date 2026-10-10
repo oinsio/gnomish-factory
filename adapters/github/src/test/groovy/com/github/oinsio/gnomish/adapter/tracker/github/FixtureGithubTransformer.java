@@ -191,7 +191,9 @@ record FixtureGithubTransformer(FixtureIssueRegistry registry) implements Respon
     private ResponseDefinition createCommentResponse(int number, String requestBody) {
         String rawBody = extractBodyField(requestBody);
         long id = registry.nextCommentId();
-        registry.issueFor(number).appendComment(rawBody, id);
+        // The server's creation stamp is drawn from the registry's synthetic, monotonic sequence, never
+        // the wall clock (FR21 of supervise-daemon-loops-and-embed-dashboard).
+        registry.issueFor(number).appendComment(rawBody, id, registry.nextUpdatedAt());
         return json(201, "{\"id\":%d,\"body\":%s}".formatted(id, quote(rawBody)));
     }
 

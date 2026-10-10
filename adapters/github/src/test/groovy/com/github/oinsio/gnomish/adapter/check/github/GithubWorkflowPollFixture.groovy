@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.adapter.check.github
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubFastRetryConfig
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 
@@ -27,6 +27,6 @@ class GithubWorkflowPollFixture {
         new GithubWorkflowRunPoll(
                 new GithubWorkflowRunQuery(cache, 'acme', 'widgets'),
                 new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'),
-                new RepeatSuppressor(new MovableClock(Instant.EPOCH), ROLL_UP))
+                new RepeatSuppressor(new VirtualClock(Instant.EPOCH), ROLL_UP))
     }
 }

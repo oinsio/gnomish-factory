@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
@@ -31,7 +32,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
     }
 
     private TaskLifecycleStore decorated(TaskLifecycleStore delegate) {
-        new PushBestEffortTaskLifecycleStore(delegate, git, cloneDir)
+        new PushBestEffortTaskLifecycleStore(delegate, git, cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
     def "the confirm-terminal-write commit reaches origin"() {

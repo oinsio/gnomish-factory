@@ -21,11 +21,14 @@ import org.slf4j.LoggerFactory;
  * {@link DaemonSnapshotView.Absent} rather than throw — the daemon section
  * must never fail the render of the history or board sections composed
  * alongside it (FR3). {@code now} is an explicit parameter rather than an
- * injected clock port: no such seam exists elsewhere for a plain read-only
- * value computation like this one, and a parameter keeps the class a pure
- * function of its inputs, trivial to test without fakes.
+ * injected {@code InstantSource}: the caller already holds the instant it
+ * renders for, and a parameter keeps this plain read-only value computation
+ * a pure function of its inputs, trivial to test without fakes.
  *
- * <p>Implements FR3, FR4 of add-dashboard-page.
+ * <p>A snapshot whose lifecycle is {@code stopped} is {@link DaemonSnapshotView.Stopped} at any
+ * age; staleness classifies only the non-stopped states (fresh, or a dead daemon).
+ *
+ * <p>Implements FR3, FR4 of add-dashboard-page; FR11 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class SnapshotReader {
 
@@ -86,12 +89,14 @@ public final class SnapshotReader {
             return new DaemonSnapshotView.Absent();
         }
 
-        if (!isStale(snapshot, now)) {
-            return new DaemonSnapshotView.Fresh(snapshot);
+        // Stopped is terminal: its age adds nothing, so the page serve renders right after its final
+        // snapshot reads "stopped", never "running" (FR11 of supervise-daemon-loops-and-embed-dashboard).
+        if (snapshot.lifecycle() instanceof LifecycleState.Stopped) {
+            return new DaemonSnapshotView.Stopped(snapshot);
         }
-        return snapshot.lifecycle() instanceof LifecycleState.Stopped
-                ? new DaemonSnapshotView.StoppedStale(snapshot)
-                : new DaemonSnapshotView.DeadDaemon(snapshot);
+        return isStale(snapshot, now)
+                ? new DaemonSnapshotView.DeadDaemon(snapshot)
+                : new DaemonSnapshotView.Fresh(snapshot);
     }
 
     private static boolean isStale(Snapshot snapshot, Instant now) {

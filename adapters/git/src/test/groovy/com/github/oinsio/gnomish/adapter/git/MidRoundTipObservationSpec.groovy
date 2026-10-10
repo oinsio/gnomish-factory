@@ -2,11 +2,10 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -30,10 +29,8 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
     Path tempDir
 
     def toolEvent = new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash'))
-    Instant now = Instant.parse('2026-08-08T10:00:00Z')
-    def clock = { -> now } as Clock
-    MovableClock suppressorClock = new MovableClock(now)
-    RepeatSuppressor suppressor = new RepeatSuppressor(suppressorClock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
+    VirtualClock clock = new VirtualClock(Instant.parse('2026-08-08T10:00:00Z'))
+    RepeatSuppressor suppressor = new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
 
     Path clone
     Path origin
@@ -90,8 +87,7 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
         when: 'four polls of the round, each a minute apart'
         4.times {
             listener.onProgress(toolEvent)
-            now = now.plusSeconds(60)
-            suppressorClock.advance(Duration.ofMinutes(1))
+            clock.advance(Duration.ofMinutes(1))
         }
 
         then: 'one WARN for the streak, the rest diagnosis-only with the running count'
@@ -112,8 +108,7 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
         and: 'two polls of the round while the resolution is failing'
         2.times {
             listener.onProgress(toolEvent)
-            now = now.plusSeconds(60)
-            suppressorClock.advance(Duration.ofMinutes(1))
+            clock.advance(Duration.ofMinutes(1))
         }
 
         when: 'git starts answering again, and the next poll resolves the tip'

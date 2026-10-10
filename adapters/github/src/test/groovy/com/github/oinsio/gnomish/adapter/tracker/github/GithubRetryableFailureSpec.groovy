@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -133,15 +134,15 @@ class GithubRetryableFailureSpec extends Specification {
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
                 new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
                 GithubDesignatorRules.none()),
-                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
+                new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working', new VirtualClock()),
                 newStateWrites(httpClient, labelOps),
                 new GithubCorrespondence(markerWriter(httpClient)),
-                new GithubDecisions(httpClient, markerWriter(httpClient)),
-                new GithubHeartbeat(httpClient, 'gnomish-factory-a1'),
+                new GithubDecisions(httpClient, markerWriter(httpClient), new VirtualClock()),
+                new GithubHeartbeat(httpClient, 'gnomish-factory-a1', new VirtualClock()),
                 new GithubOpenQuery(cache, 'acme', 'widgets', labels),
                 new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient),
-                'gnomish:working', 'gnomish:ready'),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient), labels))
+                'gnomish:working', 'gnomish:ready', new VirtualClock()),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient), labels, new VirtualClock()))
     }
 
     private GithubStateWrites newStateWrites(GithubHttpClient httpClient = newHttpClient(),
@@ -162,7 +163,7 @@ class GithubRetryableFailureSpec extends Specification {
     }
 
     private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, 'gnomish-factory-a1')
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, 'gnomish-factory-a1', new VirtualClock())
     }
 
     private void stubLabels() {

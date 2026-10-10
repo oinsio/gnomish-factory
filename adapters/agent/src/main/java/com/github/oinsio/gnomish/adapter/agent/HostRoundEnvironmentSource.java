@@ -2,12 +2,12 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
 import java.nio.file.Path;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,7 +30,7 @@ import java.util.Optional;
  * @param clock the exec start-instant source; never null
  * @param childEnv the run's layered child-env allowlist (D6, FR9); never null
  */
-record HostRoundEnvironmentSource(DecisionFileTransport transport, Clock clock, ChildEnvAllowlist childEnv)
+record HostRoundEnvironmentSource(DecisionFileTransport transport, InstantSource clock, ChildEnvAllowlist childEnv)
         implements RoundEnvironmentSource {
 
     @Override

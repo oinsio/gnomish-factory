@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -14,6 +12,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -86,31 +86,27 @@ tracker:
     }
 
     /**
-     * A wrapper script standing in for the {@code claude} CLI binary: reports whether {@code
-     * CREDENTIAL_VAR} (this test JVM's own {@code HOME}, already present in this JVM's
-     * environment and therefore in whatever {@link ProcessBuilder} inherits by default) is
-     * still visible to the spawned process — i.e. whether the task environment's scrub removed it
-     * before this wrapper (the spawned child) ever ran — then execs the real fake-agent plain-round
-     * scenario. Deliberately does NOT export the var itself: that would only prove the wrapper's
-     * own shell can set a variable, not that the launcher's scrub actually ran on the inherited
-     * environment.
+     * The committed {@code agent-reporting-home} stand-in for the {@code claude} CLI
+     * binary, through a per-run link: it records whether {@code CREDENTIAL_VAR} (this test JVM's
+     * own {@code HOME}, already present in this JVM's environment and therefore in whatever
+     * {@link ProcessBuilder} inherits by default) is still visible to the spawned process — i.e.
+     * whether the task environment's scrub removed it before the spawned child ever ran — then
+     * plays the fake-agent plain-round scenario. It deliberately does NOT export the var itself:
+     * that would only prove the stand-in's own shell can set a variable, not that the launcher's
+     * scrub actually ran on the inherited environment.
      */
-    private Path credentialReportPath
+    private Path agentStandIn
     private FactoryProperties fakeAgentProperties() {
-        credentialReportPath = tempDir.resolve('credential-report.txt')
-        def wrapper = File.createTempFile('fake-agent-wrapper-cred-scrub', '.sh')
-        wrapper.text = """#!/bin/sh
-export GNOMISH_FAKE_SCENARIO='plain-round'
-if [ -n "\${${CREDENTIAL_VAR}:-}" ]; then
-    echo 'present' >> '${credentialReportPath}'
-else
-    echo 'absent' >> '${credentialReportPath}'
-fi
-exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
-"""
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        testProperties(instanceName: INSTANCE_NAME, agentCliBinary: wrapper.absolutePath)
+        assert CREDENTIAL_VAR == 'HOME': 'the reporting preset records HOME'
+        agentStandIn = StandIn.link(tempDir.resolve('plain-round'), 'agent-reporting-home')
+        testProperties(instanceName: INSTANCE_NAME, agentCliBinary: agentStandIn.toString())
+    }
+
+    /** What the agent saw of {@code CREDENTIAL_VAR}, one entry per spawned round: present or absent. */
+    private List<String> credentialReports() {
+        StandInLog.blocks(agentStandIn).collect {
+            it[CREDENTIAL_VAR] == 'unset' ? 'absent' : 'present'
+        }
     }
 
     /** Declares CREDENTIAL_VAR via TrackerAdapterFactory#credentialEnvVars (design D17). */
@@ -120,7 +116,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 
@@ -141,7 +137,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         tracker
                     }
 
@@ -176,10 +172,10 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         thrown(TakeExitCodeException)
 
         and: 'the wrapper actually ran and reported (a real positive control: the report exists)'
-        credentialReportPath.toFile().exists()
+        !credentialReports().isEmpty()
 
         and: 'but the spawned CLI process never saw it — the launcher scrubbed it before start'
-        credentialReportPath.toFile().text.trim() == 'absent'
+        credentialReports() == ['absent']
     }
 
     // Positive control for the test above: with nothing declared to scrub (the default
@@ -206,6 +202,6 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 
         then:
         thrown(TakeExitCodeException)
-        credentialReportPath.toFile().text.trim() == 'present'
+        credentialReports() == ['present']
     }
 }

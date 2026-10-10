@@ -11,7 +11,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
+import java.time.InstantSource;
 
 /**
  * Decorates a {@link TaskRepository} with the best-effort push every lifecycle commit owes the
@@ -48,11 +50,19 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
      * @param runner the git subprocess seam the push runs over; never null
      * @param cloneDir the factory clone the push runs from — the branch ref lives in its shared
      *     ref store whether the commit was written through a worktree or as bare objects
+     * @param retry the infrastructure budget the first push re-reads origin under; never null
+     * @param clock the time source the first push's failure suppressor measures on (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public PushBestEffortTaskRepository(TaskRepository delegate, GitProcessRunner runner, Path cloneDir) {
+    public PushBestEffortTaskRepository(
+            TaskRepository delegate,
+            GitProcessRunner runner,
+            Path cloneDir,
+            GitInfrastructureRetry retry,
+            InstantSource clock) {
         this.delegate = delegate;
         this.push = new LifecyclePush(runner);
-        this.firstPush = new FirstPush(runner);
+        this.firstPush = new FirstPush(runner, retry, RepeatSuppressor.withDefaultRollUp(clock));
         this.cloneDir = cloneDir;
     }
 

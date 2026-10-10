@@ -31,6 +31,7 @@ being self-sufficient, that module stops compiling and `check` goes red.
 | Tracker SPI | `app.TrackerAdapterFactory` — constructs a live `Tracker` for one `tracker.type`, expands short refs, declares its credential env vars |
 | Check SPI | `app.CheckClientFactory` — constructs an `ExternalCheckClient` for one `provider`, declares its credential env vars, contributes pin paths |
 | Config-validation SPI | `app.TrackerSubsectionValidator`, `app.CheckSubsectionValidator` — grade your adapter-owned `tracker.<type>` / `factory.check.<provider>` config subsection; `app.CheckParamsValidator` grades a manifest check's `params` |
+| SPI contexts | `app.TrackerAdapterContext`, `app.CheckClientContext` — everything the host hands a factory's one `create`: secrets, configuration, instance id and claim epochs (tracker) or run context (check), and the host's `TimeEquipment` |
 | Run context | `app.CheckRunContext` — the closed set of run-scoped values (`task.id`, `task.branch`, `stage.name`) a check may interpolate |
 | Secrets port | `app.port.secrets.SecretsProvider` — the only way an adapter reaches a credential (NFR-S1) |
 | Check + workspace ports | `domain.engine.port.ExternalCheckClient`, `domain.engine.port.Workspace` — reached transitively through `:domain` |
@@ -83,6 +84,17 @@ Breaking releases so far — pre-1.0, a break is a MINOR bump:
 | Version | Break |
 |---|---|
 | 0.2.0 | `AttemptRecord` and both `ExecutionResult` variants gained a `denials` component, replacing their old canonical constructors (fix-denial-report-attachment). |
+| 0.3.0 | `ClaimResult.Acquired` and `ClaimVersion` gained the claim epoch, replacing their old canonical constructors (harden-task-branch-contract, FR13). |
+| 0.4.0 | `Tracker` gained `repairIndex`; `removeStaleClaim` takes the observed `ClaimFacts`; `OpenTask` and `ReadyTask` gained their raw facts (harden-task-branch-contract, FR19). |
+| 0.5.0 | `EscalationReport.CannotExecute` gained a `denials` component (fix-denial-attribution-durability). |
+| 0.6.0 | `BranchShape.StaleEpoch`, `RecoveryDisposition.DISCARD` and the epoch components of `BranchTipFacts` were removed; `ClaimEpoch` is no longer `Comparable` (fix-claim-epoch-fence). |
+| 0.8.0 | Tracker- and check-controlled free text is carried as `UntrustedText` rather than `String` (`TaskSnapshot`, `AbortRecord`, `Verdict.CannotVerify` and the records carrying the same text) (type-untrusted-text). |
+| 0.9.0 | `PipelineValidator.validate` takes the configured check providers beside the model (remove-interactive-console). |
+| 0.10.0 | `AttemptRecord` gained `stop`, `RoundOutcome.NeedsDecision` lost its question and options, `BranchTipFacts` gained the recorded position, and `Position` gained `AwaitingApproval` (make-checkpoint-gate-durable). |
+| 0.11.0 | `TrackerAdapterFactory` and `CheckClientFactory` each have one `create`, taking a host-built `TrackerAdapterContext` / `CheckClientContext`; the overload chains are gone. The `:domain` `Clock` port gave way to `java.time.InstantSource` and real time travels as `TimeEquipment` (supervise-daemon-loops-and-embed-dashboard). |
+
+0.7.0 was a non-breaking bump: no signature changed, but the `untrustedtext` and `operatorevent`
+leaves entered the published jar graph (split-logtext-leaves).
 
 `japicmp` guards the surface as a **failing gate**, wired into `check`: a
 binary-incompatible change to this module — or to a `:domain` type it re-exposes
@@ -110,6 +122,12 @@ instead of the committed jars.
 ## Writing an adapter
 
 Implement `TrackerAdapterFactory` (and `TrackerSubsectionValidator` if your
-adapter owns config keys), take a `SecretsProvider` for credentials, and return
-your `Tracker`. `gnomish-plugin-api/sample/src/main/java/...` is a complete,
+adapter owns config keys) and return your `Tracker` from its one
+`create(TrackerAdapterContext)`. The context carries everything the host hands
+you: the `SecretsProvider` for credentials, your validated config, the instance
+id, the claim-epoch record, and the host's `TimeEquipment` — stamp and wait on
+that, never on a clock of your own. A check provider does the same through
+`CheckClientFactory.create(CheckClientContext)`. When the host gains a
+collaborator to hand you, it becomes a new accessor on the context, never a
+second `create`. `gnomish-plugin-api/sample/src/main/java/...` is a complete,
 compiling skeleton of exactly that.

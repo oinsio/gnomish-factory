@@ -6,30 +6,20 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
-
 /**
  * Task 4.2 of fix-reaper-idle-liveness: the wiring proof that a real {@code take} run (through
  * {@link TakeCommand}, exactly like {@link TakeDeathAndRecoverySpecBase} and {@link
@@ -118,7 +108,7 @@ tracker:
                         'github'
                     }
 
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerAdapterContext context) {
                         t
                     }
 
@@ -135,11 +125,11 @@ tracker:
     }
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
-        newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)],
-        TakeCommandSeams.DEFAULTS
-        .withServeProperties(serveProperties)
-        .withHeartbeatSleeper(budgetedRealSleeper(600))
-        .withReaperSleeper(budgetedRealSleeper(600)))
+        newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)], { time ->
+            TakeCommandSeams.defaults(new TimeEquipment(time.clock(), budgetedRealSleeper(600)))
+            .withServeProperties(serveProperties)
+            .withReaperSleeper(budgetedRealSleeper(600))
+        })
     }
 
     /**
@@ -154,7 +144,7 @@ tracker:
      * death that the heartbeat's own supervision is designed to absorb.
      */
     private static Sleeper budgetedRealSleeper(int budget) {
-        def real = new ThreadSleeper()
+        def real = TakeCommands.realSleeper()
         def sleeps = new AtomicInteger()
         return { Duration d ->
             if (sleeps.incrementAndGet() > budget) {
@@ -172,7 +162,7 @@ tracker:
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
         Future<?> run = executor.submit({
@@ -217,7 +207,7 @@ tracker:
         harness.seed(x1, new TaskSnapshot(x1.id(), UntrustedText.tracker('Add widgets'), UntrustedText.tracker('please')), new TrackerTaskState.Ready(), AbortFacts.none())
         harness.seed(x2, new TaskSnapshot(x2.id(), UntrustedText.tracker('Add gadgets'), UntrustedText.tracker('please')), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
         Future<?> run = executor.submit({

@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -26,7 +28,7 @@ import spock.lang.TempDir
  * of collapse-composition-roots) — {@code manual} for {@code gnomish run}, {@code tracked} for
  * {@code take}/{@code serve}.
  *
- * <p>Every other spec of the take/serve path either binds {@code ContainerTakeSupport.hostOnly()}
+ * <p>Every other spec of the take/serve path either binds {@code ContainerTakeSupportFixture.hostOnly()}
  * or hand-builds a support lambda that only claims to mirror this wiring, so none of them can
  * catch the two labels being swapped or collapsed here. This one holds no stand-in for the
  * composition root: the facade is the production one, and each factory is invoked exactly as the
@@ -90,7 +92,14 @@ class ManualRunRunnerContainerOwnershipSpec extends Specification implements Bar
     // FR1, FR2 of add-serve-sandbox-lifecycle: the production facade over the settings this spec's
     // ownership assertion needs — a container image and the container (non-host) binding mode.
     private ContainerSupports newSupports() {
+        def sandbox = sandbox()
+        // The root's selector over a scripted probe and the virtual equipment (design D22 of
+        // supervise-daemon-loops-and-embed-dashboard): no constructor of the supports names Docker.
+        def selector = new SandboxModeSelector(
+                new BindingProperties(null, [:]), sandbox, DiscoveredBindings.real(), {
+                    -> true
+                } as ContainerRuntimeProbe)
         new ContainerSupports([(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()], testProperties(),
-        sandbox(), new BindingProperties(null, [:]), DiscoveredBindings.real(), TaskGitFixture.real())
+        sandbox, selector, TaskGitFixture.real(), VirtualTimeEquipment.create())
     }
 }

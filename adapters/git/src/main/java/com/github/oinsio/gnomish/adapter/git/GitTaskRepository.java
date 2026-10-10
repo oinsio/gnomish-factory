@@ -26,7 +26,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Instant;
+import java.time.InstantSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,17 +64,20 @@ import org.slf4j.LoggerFactory;
  * revised 2026-09-10); and both make no commit from {@link #recordOutcome} when the rewritten
  * {@code task.json} is byte for byte what the tip already carries, deciding that through {@link
  * CommittedTaskJson#carries} before any commit step (design D8 of make-run-headless, task 2.6);
- * and the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
+ * the three outcome-clearing writes ({@code appendDecision}, {@code approveCheckpoint},
  * {@code resumeFrom}) land the same {@code task.json}/{@code state.json} fields in one commit and
  * refuse on the same tip conditions — the fields composed by {@link OutcomeClearingTaskJson}, the
  * refusals decided by {@link CheckpointApprovalCheck} and {@link ResumedWriteCheck} (design D6 of
  * make-checkpoint-gate-durable) — and remove the consumed requests under {@code decisions/} in that
  * same commit, the removal owned by {@link ConsumedRequestRemoval} (an index removal staged after
- * the envelope here, a tree edit there; FR14, design D7 of make-checkpoint-gate-durable).
+ * the envelope here, a tree edit there; FR14, design D7 of make-checkpoint-gate-durable); and
+ * both stamp the task file's {@code createdAt} from the injected {@link java.time.InstantSource},
+ * never from a clock of their own, so the two media cannot disagree on when a task started (FR20,
+ * design D14 of supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
  * harden-task-branch-contract; FR9 of add-project-registry; FR10 of make-run-headless; FR3, FR7, FR14
- * of make-checkpoint-gate-durable.
+ * of make-checkpoint-gate-durable; FR20 of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
 
@@ -85,6 +88,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     private final TaskBranchCreator branchCreator;
     private final TaskWorktreeManager worktreeManager;
     private final ClaimEpochSource epochs;
+    private final InstantSource clock;
 
     /**
      * @param runner the git subprocess runner
@@ -92,13 +96,17 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      *     per-task worktrees are materialized in its own worktree folder
      * @param epochs the tenure every lifecycle commit is stamped with (FR13 of
      *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
+     * @param clock the source of the task file's {@code createdAt} (FR20 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskRepository(GitProcessRunner runner, RegisteredClone clone, ClaimEpochSource epochs) {
+    public GitTaskRepository(
+            GitProcessRunner runner, RegisteredClone clone, ClaimEpochSource epochs, InstantSource clock) {
         this.runner = runner;
         this.cloneDir = clone.clonePath();
         this.branchCreator = new TaskBranchCreator(runner);
         this.worktreeManager = new TaskWorktreeManager(runner, clone);
         this.epochs = epochs;
+        this.clock = clock;
     }
 
     @Override
@@ -124,7 +132,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                 };
 
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null, false, pin);
+        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, clock.instant(), null, null, false, pin);
         StateFileWrite.write(runner, worktree, taskId, initialState, TaskLifecycleEvent.STARTED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.STARTED);
     }

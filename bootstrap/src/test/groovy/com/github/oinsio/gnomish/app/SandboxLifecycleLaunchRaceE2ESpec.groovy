@@ -23,7 +23,7 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -104,7 +104,9 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         assert ContainerE2eDocker.containerRunning(boxName)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task entirely'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), InstantSource.system())
         pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the launching box is untouched — still running, nothing stopped or disposed'

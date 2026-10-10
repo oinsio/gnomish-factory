@@ -60,10 +60,21 @@ class ClaimlessGitBoundarySpec extends Specification {
      * parameter now, so the caller supplies the tenure and the type carries the constraint the
      * exemption used to. Their rows were kept by a reach check that asked only whether the path
      * still existed, which is the staleness this gate's own javadoc promises to catch.
+     *
+     * <p>Two rows hand the empty tenure to a tracker adapter rather than a git layer, since the
+     * plugin SPI carries the tenure on one context (design D21 of
+     * supervise-daemon-loops-and-embed-dashboard): {@code TrackerWiring.resolveReadOnly} builds the
+     * reader {@code board} and {@code dashboard} use, which never claims (the claiming funnel,
+     * {@code resolveTracker}, hands the bundle's book); and {@code FixedTrackerAdapterContext}
+     * defaults the tenure to empty for the single-adapter specs of the adapter test trees, which
+     * never claim through a bundle. Before D21 both spelled no token only because the tenureless
+     * {@code create} overload picked the empty source inside the adapter.
      */
     private static final List<String> CLAIMLESS_PRODUCTION = [
+        'application/src/main/java/com/github/oinsio/gnomish/app/TrackerWiring.java',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeededCloneFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/TaskSeedFixture.groovy',
+        'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/FixedTrackerAdapterContext.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/TaskGitFixture.groovy',
     ]
 
@@ -79,7 +90,7 @@ class ClaimlessGitBoundarySpec extends Specification {
      * {@code take}, {@code serve}, or a tracker-backed resume) moves onto the bundle's tenure
      * record; a spec that never claims is listed here with the reason it never does.
      *
-     * <p>Four reasons, and no others:
+     * <p>Five reasons, and no others:
      *
      * <ul>
      *   <li><b>The read-only commands.</b> {@code status} and {@code usage} read a branch and write
@@ -103,9 +114,15 @@ class ClaimlessGitBoundarySpec extends Specification {
      *   <li><b>Claimless branch readers.</b> The two kill-point worlds build a {@code
      *       GitTaskBranches} only to classify a tip. Classification takes no epoch at all since FR1,
      *       and these readers never write, so there is no tenure for them to stamp from.
+     *   <li><b>The board-reader discriminator.</b> {@code BoardReaderSplitFactory} builds no git
+     *       layer and hands out no tenure: it only compares the context it receives with the empty
+     *       source, the one fact that tells the embedded dashboard's reader from the claiming
+     *       daemon (design D11 of supervise-daemon-loops-and-embed-dashboard), so the serve specs
+     *       can break the page without touching the daemon's tracker.
      * </ul>
      */
     private static final List<String> CLAIMLESS_SPECS = [
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/BoardReaderSplitFactory.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerContinuationMedium.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerGitModeRunnerSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerLifecycleCoverageGapsE2ESpec.groovy',

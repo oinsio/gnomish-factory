@@ -25,7 +25,6 @@ import spock.lang.TempDir
 class ParkDeliveryFenceTerminationSpec extends Specification implements StallingGitFixture {
 
     private static final String TASK_ID = 'PROJ-1'
-    private static final String BRANCH = 'gnomish/PROJ-1'
 
     @TempDir
     Path tempDir
@@ -47,7 +46,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         }
 
         then: 'the push was attempted once, not twice — a shutdown is not a transient rejection'
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
 
         and: 'the operator is told delivery is unknown, never that origin is behind'
         verdict instanceof ParkDeliveryVerdict.Undelivered
@@ -66,18 +65,16 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
 
     def "FR7, M3: a timed-out push whose commit did arrive is confirmed delivered by the re-check"() {
         given: 'a push that stalls only after the remote has taken the tip — the kill lands too late'
-        pushHook(tempDir).toFile().text =
-                "printf '%s\\trefs/heads/${BRANCH}\\n' ${STALLED_TIP} > ${lsRemoteOut(tempDir)}\n"
         ParkDeliveryVerdict verdict = null
 
         when:
         def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
-            verdict = fence().ensureDelivered(tempDir, TASK_ID)
+            verdict = fence('stall-push-lands').ensureDelivered(tempDir, TASK_ID)
         }
 
         then: 'origin itself answers that it carries the park, so the park report says nothing'
         verdict instanceof ParkDeliveryVerdict.Delivered
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
 
         and: 'FR12 of harden-logging-observability: a recovered transient is INFO, not a WARN —'
         // the delivery happened; there is nothing here for an operator to act on.
@@ -101,7 +98,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         (verdict as ParkDeliveryVerdict.Undelivered).note().contains('origin is behind this park')
 
         and: 'still one push: the deadline proved the remote unresponsive, a second wait proves nothing'
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
             it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_BEHIND.head()
             + 'park delivery push timed out, origin confirmed behind')
@@ -110,12 +107,11 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
 
     def "FR7, UX2: an unanswerable re-check reports that delivery could not be verified"() {
         given: 'the remote stops answering ls-remote too, so nothing about origin can be established'
-        pushHook(tempDir).toFile().text = "echo 128 > ${lsRemoteExit(tempDir)}\n"
         ParkDeliveryVerdict verdict = null
 
         when:
         def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
-            verdict = fence().ensureDelivered(tempDir, TASK_ID)
+            verdict = fence('stall-push-origin-gone').ensureDelivered(tempDir, TASK_ID)
         }
 
         then:
@@ -126,14 +122,15 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         !note.contains('origin is behind')
 
         and:
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
             it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_SILENT.head()
             + 'park delivery push timed out and origin did not answer the re-check')
         }
     }
 
-    private ParkDeliveryFence fence() {
-        new ParkDeliveryFence(new GitProcessRunner(stallingGit(tempDir).toString(), Duration.ofSeconds(2)))
+    /** A fence over the stalling stand-in {@code preset}, its push killed on a two-second deadline. */
+    private ParkDeliveryFence fence(String preset = 'stall-push') {
+        new ParkDeliveryFence(new GitProcessRunner(stallingGit(tempDir, preset).toString(), Duration.ofSeconds(2)))
     }
 }

@@ -163,8 +163,8 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
     }
 
     private static StageExecutor agentOver(SandboxRoundEnvironmentSource source) {
-        // Ahead of the wall clock the local box stamps process starts with, so wall time is positive.
-        new CliStageExecutor(FakeAgentSupport.propertiesFor('decision-needed'), new VirtualClock(Instant.now().plusSeconds(3600)),
+        // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
+        new CliStageExecutor(FakeAgentSupport.propertiesFor('decision-needed'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
                 { e -> } as AgentProgressListener, LAW, source)
     }
 
@@ -174,7 +174,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
     }
 
     private GitObjectsTaskRepository repositoryOver(Path factoryClone) {
-        new GitObjectsTaskRepository(objectsOf(factoryClone), ClaimEpochSource.NONE, DenialCursorSource.NONE)
+        new GitObjectsTaskRepository(objectsOf(factoryClone), new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
     private GitObjects objectsOf(Path factoryClone) {

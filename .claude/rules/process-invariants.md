@@ -103,6 +103,23 @@ that needs part of a facade takes a role interface the facade implements, never 
 back out through accessors; a facade carrying a credential seam exposes no accessor for it,
 and the seam's reach (the files declaring it) is pinned by an architecture spec.
 
+**Three clauses for where a dependency goes** (provenance: design D22 of
+`supervise-daemon-loops-and-embed-dashboard`, after the limit pushed real time into hidden
+fields; after van Deursen and Seemann's *DI Principles, Practices, and Patterns* and GOOS):
+
+1. **Field or parameter?** A constructor takes the collaborators and configuration stable for the
+   object's lifetime; a method takes the data of one operation. A relay that only hands members
+   on is the defect, not the count (`TakeOutcomeDispatch` holds the slot's retry and abort fuse
+   as fields and takes one run's `TerminalTransitions` per call).
+2. **A shorter constructor supplies only a Local Default** — a no-op or a Null Object of its own
+   module, never another module's adapter (a Foreign Default, Seemann's *Bastard Injection*). A
+   "test constructor" is that defect by another name; `grep -rn "test constructor"
+   --include='*.java'` lists the survivors, each removed when its class is next touched.
+3. **A seam a spec fakes is a role interface in the owning module**, never a JDK functional type
+   ("only mock types you own"): `ContainerRuntimeProbe` and `TerminalPresence` replaced two
+   `BooleanSupplier` seams, and `TimeSourceOwnerBoundarySpec` bans `BooleanSupplier` in
+   `application/src/main` and `bootstrap/src/main`.
+
 ## Immutable after construction
 
 An object is fully initialized by its constructor: no `init()`, `start()`-before-use without

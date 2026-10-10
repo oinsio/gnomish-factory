@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.util.function.UnaryOperator
@@ -37,7 +38,9 @@ class ContainerResumeMechanicsCheckpointSpec extends Specification implements Ru
     private ContainerResumeMechanics mechanics() {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
-        def runner = new TakeContainerResumeRunner(slotWiring(Stub(RunAssembly), git, Stub(Tracker)))
+        def runner = new TakeContainerResumeRunner(slotWiring([timeEquipment: {
+                -> VirtualTimeEquipment.create()
+            }] as RunAssembly, git, Stub(Tracker)))
         // The mechanics' own bound pipeline is deliberately NOT the gated one: the approval must
         // resolve the gate against the order's pinned definition.
         new ContainerResumeMechanics(runner, [] as List<Segment>, pipeline())

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
@@ -32,7 +33,7 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
     //     bounded latch/join, not a fixed delay.
     def "a slot reaching its round boundary within grace is released; one that does not is left alone, and claiming stops immediately"() {
         given: 'two occupied slots'
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         ledger.acquire()
@@ -40,7 +41,7 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofMillis(300)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
         def released = new ConcurrentLinkedQueue<TaskRef>()
 
         and: "slot A's fake round checks the flag frequently and reacts as soon as it is set"
@@ -122,13 +123,13 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
     //     awaitDrainedQuietly, not on the test's own thread.
     def "restores the interrupt status when interrupted while awaiting drain, and still completes shutdown"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofSeconds(10)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
         def interruptedAfterShutdown = new AtomicInteger(-1)
         def shutdownReturned = new CountDownLatch(1)
 

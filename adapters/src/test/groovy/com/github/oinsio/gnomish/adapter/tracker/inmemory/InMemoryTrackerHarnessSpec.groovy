@@ -217,7 +217,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         def harness = new InMemoryTrackerHarness(tracker)
         def ref = new TaskRef('fixture:thread-abort-ack')
         harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('t'), UntrustedText.tracker('b')), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
-        harness.reply(ref, 'go ahead')
+        harness.reply(ref, 'go ahead', Instant.parse('2026-01-01T00:00:00Z'))
 
         when: 'the task is released, then acknowledged, then aborted'
         tracker.release(ref)

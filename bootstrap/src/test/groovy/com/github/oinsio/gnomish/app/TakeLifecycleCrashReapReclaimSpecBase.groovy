@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -156,7 +157,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
     private void crashInstanceA(ClaimEpoch epochA) {
         def book = new ClaimEpochBook()
         book.issued(TASK_ID, epochA)
-        def repository = new GitTaskRepository(gitRunner, registeredClone, book)
+        def repository = new GitTaskRepository(gitRunner, registeredClone, book, new VirtualClock())
         // The base A pins is the clone's real branch name, as a fresh take's resolution would pin
         // it — not the literal 'HEAD', which origin holds no ref by, so B's resume could never
         // resolve it (FR13, D15 of add-base-ref-resolution).

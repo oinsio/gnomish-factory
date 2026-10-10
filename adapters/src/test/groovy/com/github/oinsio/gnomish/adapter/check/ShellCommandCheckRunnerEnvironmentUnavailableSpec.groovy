@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -24,7 +25,7 @@ class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification im
         def source = { check, workspace ->
             throw new CheckEnvironmentUnavailableException('fresh-box environment could not be materialized: boom')
         } as CheckEnvironmentSource
-        def runner = new ShellCommandCheckRunner().withEnvironments(source)
+        def runner = new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(source)
 
         when:
         def verdict = runner.run(command('true'), workspace())

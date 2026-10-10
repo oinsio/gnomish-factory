@@ -3,10 +3,8 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -15,6 +13,7 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -55,7 +54,7 @@ import org.slf4j.LoggerFactory;
  */
 public record ShellCommandCheckRunner(
         CommandProcessRunner processRunner,
-        Clock clock,
+        InstantSource clock,
         ChildEnvAllowlist childEnv,
         CheckEnvironmentSource environments)
         implements CommandCheckRunner {
@@ -77,11 +76,20 @@ public record ShellCommandCheckRunner(
      */
     static final long FINDINGS_READ_CAP_BYTES = 256 * 1024;
 
-    public ShellCommandCheckRunner() {
-        this(new CommandProcessRunner("sh"), new SystemClock(), ChildEnvAllowlist.none());
+    /**
+     * The {@code sh}-backed runner with an empty child-environment allowlist.
+     *
+     * <p>Implements FR18 of supervise-daemon-loops-and-embed-dashboard.
+     *
+     * @param clock the time source every check's measured wall time is read from — the
+     *     composition root's one; never null
+     */
+    public ShellCommandCheckRunner(InstantSource clock) {
+        this(new CommandProcessRunner("sh", clock), clock, ChildEnvAllowlist.none());
     }
 
-    private ShellCommandCheckRunner(CommandProcessRunner processRunner, Clock clock, ChildEnvAllowlist childEnv) {
+    private ShellCommandCheckRunner(
+            CommandProcessRunner processRunner, InstantSource clock, ChildEnvAllowlist childEnv) {
         this(processRunner, clock, childEnv, new HostCheckEnvironmentSource(clock, childEnv));
     }
 
@@ -90,9 +98,10 @@ public record ShellCommandCheckRunner(
      * nonexistent shell executable).
      *
      * @param shell the shell executable to invoke via {@code -c <command>}
+     * @param clock the time source the measured wall time is read from; never null
      */
-    ShellCommandCheckRunner(String shell) {
-        this(new CommandProcessRunner(shell), new SystemClock(), ChildEnvAllowlist.none());
+    ShellCommandCheckRunner(String shell, InstantSource clock) {
+        this(new CommandProcessRunner(shell, clock), clock, ChildEnvAllowlist.none());
     }
 
     /**

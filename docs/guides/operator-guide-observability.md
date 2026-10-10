@@ -192,7 +192,7 @@ grep 'taskId=42' ~/.gnomish/projects/widgets/logs/default.log
 
 `stage` and `attempt` narrow it to one pipeline step. `component` names the
 long-lived daemon worker that wrote the line — one of `janitor`, `reaper`,
-`snapshot`, `sweep`, `heartbeat` — and is what separates estate-wide work
+`snapshot`, `sweep`, `heartbeat`, `dashboard` — and is what separates estate-wide work
 from task work in a busy file (`grep 'component=reaper'`). Task lines leave it
 empty; daemon lines leave the task triple empty unless the work is on behalf
 of one task.
@@ -214,6 +214,25 @@ would make every diagnostic line a versioned interface. The full code list is
 the `OperatorEvent` enum in `:operatorevent`; codes worth knowing by heart are
 few, and the second command above is the practical way to find the ones a given
 incident produced.
+
+**Retired codes.** A code that is retired keeps its number forever: no later
+line reuses it, so an alert rule or a saved grep keyed on it simply stops
+matching. Where the line itself lives on under a shared code, the table below
+gives the replacement and the `component` filter that narrows the shared code
+back to the old line. Every daemon loop now runs on the shared codes, so the
+table is complete.
+
+| Retired code                                  | Replacement code                         | `component` filter   |
+|-----------------------------------------------|------------------------------------------|----------------------|
+| GF067 `STANDING_REAPER_TICK_FAILED`           | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=reaper`   |
+| GF068 `STANDING_REAPER_WORKER_DIED`           | GF154 `DAEMON_LOOP_WORKER_DIED`          | `component=reaper`   |
+| GF069 `STANDING_REAPER_BACKOFF_SLEEP_FAILED`  | GF156 `DAEMON_LOOP_BACKOFF_SLEEP_FAILED` | `component=reaper`   |
+| GF073 `SANDBOX_LIFECYCLE_TICK_FAILED`         | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=sweep`    |
+| GF077 `WORKTREE_JANITOR_TICK_FAILED`          | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=janitor`  |
+| GF105 `SNAPSHOT_TICK_FAILED`                  | GF152 `DAEMON_LOOP_TICK_FAILED`          | `component=snapshot` |
+
+So an old `grep '\[GF067\]'` becomes
+`grep 'component=reaper' "$LOG" | grep '\[GF152\]'`.
 
 **Do not build alerting on the log.** It rolls, it can be truncated by a
 `kill -9` outside the owned stop sequence, and its wording is not a contract

@@ -1,53 +1,54 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.daemon.LoopOrder;
+import com.github.oinsio.gnomish.app.daemon.LoopShape;
+import com.github.oinsio.gnomish.app.daemon.LoopWait;
+import com.github.oinsio.gnomish.app.daemon.RestartBackoff;
+import com.github.oinsio.gnomish.app.daemon.RestartPolicy;
+import com.github.oinsio.gnomish.app.daemon.SupervisedLoop;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The single worktree cleaner component (design D10, FR14): a virtual thread that, at {@code
- * serve} startup and thereafter every hour, scans its registered clone's own worktree folder
- * ({@link RegisteredClone#worktrees()}, {@code projects/<name>/worktrees/<clone>}) for task
- * environments and {@link TaskEnvironmentDisposal#dispose disposes} of every one whose most recent
- * file activity is older than the configured age threshold — except any environment currently
- * occupying a slot of THIS instance ({@code neverTouches}), which is skipped unconditionally
- * regardless of age. There is no separate "is this task ended" check against the tracker
- * (delivered/escalated/revoked, FR14's three named categories all stop touching their worktree
- * once reached): age since last activity, combined with "not currently held here", is the whole
- * policy — deliberately simple, since a disposed-too-early worktree only costs a re-clone on
- * resume (design D10 risk note), never correctness. Worktrees are instance-local, so no
- * cross-instance coordination is needed or attempted. Another clone's folder — of this project or
- * another — is never listed, so a janitor never disposes a sibling clone's worktree (FR9, NFR-R2 of
- * add-project-registry).
+ * The single worktree cleaner component (design D10, FR14): at {@code serve} startup and every
+ * hour after, it scans its registered clone's own worktree folder ({@link
+ * RegisteredClone#worktrees()}) and {@link TaskEnvironmentDisposal#dispose disposes} of every task
+ * environment whose most recent file activity is older than the age threshold — except one
+ * occupying a slot of THIS instance, skipped regardless of age. Held tasks are read fresh on every
+ * tick ({@code heldRefs}, typically {@code SlotLedger::occupiedRefs}), so a task claimed after the
+ * janitor started is still protected. There is no "is this task ended" check against the tracker:
+ * age plus "not held here" is the whole policy, deliberately simple, since a disposal too early
+ * only costs a re-clone on resume (design D10 risk note). Worktrees are instance-local, and another
+ * clone's folder is never listed (FR9, NFR-R2 of add-project-registry).
  *
- * <p>Held tasks are read fresh on every tick via {@code heldRefs}, typically {@code
- * SlotLedger::occupiedRefs} — never a snapshot taken once at construction, since a task claimed
- * after the janitor started must still be protected.
+ * <p><b>The thread is a supervised daemon loop</b> (design D1, D7 of
+ * supervise-daemon-loops-and-embed-dashboard). This class owns only its tick and its {@code
+ * lastRunAt}; the thread, the guard, the stop and the restart belong to the {@link SupervisedLoop}
+ * it holds: tick → wait on a {@link LoopWait.FixedInterval} of {@link #TICK_INTERVAL}, framed as
+ * {@link DaemonComponent#JANITOR}, under {@link RestartPolicy.Unbounded} whose shared cap ({@link RestartBackoff#MAX_BACKOFF}) wins
+ * over the hour from the first respawn on. A failed tick, an {@code Error} included, is the loop's
+ * {@code DAEMON_LOOP_TICK_FAILED} with {@code component=janitor}, and the next tick tries again;
+ * the tick's own scan and held-ref lines keep their codes.
  *
- * <p>Implements FR14 of add-factory-serve (design D10); FR9, NFR-R2 of add-project-registry.
- *
- * <p>Kept in sync with {@link SandboxLifecycleTick}: both must keep the same
- * immediate-then-cadence daemon shape — {@code start()} framing a {@code loop()} of {@code
- * while (true) { try tick(); catch RuntimeException log.warn and retry next tick } sleeper.sleep(interval)},
- * with a volatile {@code lastRunAt} stamped after every completed tick.
+ * <p>Implements FR14 of add-factory-serve (design D10); FR9, NFR-R2 of add-project-registry; FR6
+ * of supervise-daemon-loops-and-embed-dashboard.
  */
 public final class WorktreeJanitor {
 
@@ -59,9 +60,9 @@ public final class WorktreeJanitor {
     private final Path cloneWorktrees;
     private final Duration ageThreshold;
     private final TaskEnvironmentDisposal disposal;
-    private final Clock clock;
-    private final Sleeper sleeper;
-    private final Supplier<Set<TaskRef>> heldRefs;
+    private final InstantSource clock;
+    private final OccupiedSlots heldRefs;
+    private final SupervisedLoop loop;
     private volatile Instant lastRunAt;
 
     /**
@@ -69,59 +70,61 @@ public final class WorktreeJanitor {
      * @param ageThreshold the minimum time since an environment's last file activity before it is
      *     eligible for disposal ({@code factory.serve.worktree-age-threshold}, design D10)
      * @param disposal the dispose-shaped seam an eligible environment's key is handed to
-     * @param clock the source of "now" the age comparison reads
-     * @param sleeper the tick-interval sleeper (virtual under test)
-     * @param heldRefs supplies, fresh on every tick, the tasks currently occupying a slot of this
+     * @param time the time equipment (virtual under test): its clock is the source of "now" the age
+     *     comparison reads and times the loop's failure roll-ups, its sleeper waits the tick interval
+     *     and the restart backoff (design D2, D20 of supervise-daemon-loops-and-embed-dashboard)
+     * @param heldRefs answers, fresh on every tick, the tasks currently occupying a slot of this
      *     instance — never disposed regardless of age
      */
     public WorktreeJanitor(
             RegisteredClone clone,
             Duration ageThreshold,
             TaskEnvironmentDisposal disposal,
-            Clock clock,
-            Sleeper sleeper,
-            Supplier<Set<TaskRef>> heldRefs) {
+            TimeEquipment time,
+            OccupiedSlots heldRefs) {
         this.cloneWorktrees = clone.worktrees();
         this.ageThreshold = ageThreshold;
         this.disposal = disposal;
-        this.clock = clock;
-        this.sleeper = sleeper;
+        this.clock = time.clock();
         this.heldRefs = heldRefs;
-        this.lastRunAt = clock.now();
+        this.lastRunAt = clock.instant();
+        LoopShape shape = new LoopShape(
+                DaemonComponent.JANITOR,
+                LoopOrder.TICK_THEN_WAIT,
+                new LoopWait.FixedInterval(time.sleeper(), TICK_INTERVAL),
+                new RestartPolicy.Unbounded(TICK_INTERVAL));
+        this.loop = new SupervisedLoop(shape, this::tick, time);
     }
 
     /**
-     * Starts the janitor thread: one immediate tick (the startup scan, FR14) followed by a tick
-     * every {@link #TICK_INTERVAL} thereafter, for the daemon's whole lifetime. A tick failure is
-     * logged and never kills the thread — the next tick, an hour later, tries again.
+     * Starts the janitor: one immediate tick (the startup scan, FR14) followed by a tick every
+     * {@link #TICK_INTERVAL} thereafter, for the daemon's whole lifetime. Idempotent.
      */
     public void start() {
-        Thread.ofVirtual().name("gnomish-worktree-janitor").start(DaemonComponent.JANITOR.framing(this::loop));
+        loop.start();
     }
 
-    // Package-private: lifecycle specs drive this on their own thread with a controllable sleeper.
-    void loop() {
-        while (true) {
-            try {
-                tick();
-            } catch (RuntimeException e) {
-                log.warn(
-                        OperatorEvent.WORKTREE_JANITOR_TICK_FAILED.head()
-                                + "worktree janitor tick failed; will retry next tick",
-                        e);
-            }
-            sleeper.sleep(TICK_INTERVAL);
-        }
+    /**
+     * Stops the janitor and returns at once: an interval wait in progress is cut short, a tick in
+     * progress completes, and no respawn follows (design D4). Idempotent.
+     */
+    public void stop() {
+        loop.stop();
+    }
+
+    // Package-private: lifecycle specs stop the loop and await its thread before they assert.
+    void stopAndJoin() {
+        loop.stopAndJoin();
     }
 
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
-        lastRunAt = clock.now();
+        lastRunAt = clock.instant();
         if (!Files.isDirectory(cloneWorktrees)) {
             return;
         }
         Set<String> held = heldEnvironmentKeys();
-        Instant now = clock.now();
+        Instant now = clock.instant();
         try (Stream<Path> children = Files.list(cloneWorktrees)) {
             children.filter(Files::isDirectory).forEach(dir -> disposeIfAged(dir, held, now));
         } catch (IOException e) {
@@ -133,13 +136,10 @@ public final class WorktreeJanitor {
     }
 
     /**
-     * The last time a tick completed (whether or not the clone's worktree folder existed
-     * yet), or this janitor's construction instant if it has never ticked (task 2.5,
-     * add-serve-observability FR7).
+     * The last time a tick ran (whether or not the clone's worktree folder existed yet), or the
+     * construction instant if it never has. Implements FR7 of add-serve-observability.
      *
-     * <p>Implements FR7 of add-serve-observability.
-     *
-     * @return the last completed-tick instant; never null
+     * @return the last tick instant; never null
      */
     public Instant lastRunAt() {
         return lastRunAt;
@@ -150,7 +150,7 @@ public final class WorktreeJanitor {
         if (held.contains(key)) {
             return;
         }
-        Duration age = Duration.between(lastActivity(dir), now);
+        Duration age = Duration.between(WorktreeActivity.lastActivity(dir), now);
         if (age.compareTo(ageThreshold) < 0) {
             return;
         }
@@ -164,7 +164,7 @@ public final class WorktreeJanitor {
 
     private Set<String> heldEnvironmentKeys() {
         Set<String> keys = new HashSet<>();
-        for (TaskRef ref : heldRefs.get()) {
+        for (TaskRef ref : heldRefs.occupiedRefs()) {
             try {
                 keys.add(TaskIdSanitizer.sanitize(ref.id()));
             } catch (InvalidTaskIdException e) {
@@ -180,31 +180,5 @@ public final class WorktreeJanitor {
             }
         }
         return keys;
-    }
-
-    /**
-     * The instant of the most recently modified regular file anywhere under {@code dir}, or
-     * {@code dir}'s own last-modified time if it contains none — task activity (writes under
-     * {@code .gnomish-task/}, gnome edits) touches nested files, not necessarily the top-level
-     * worktree directory entry itself, so the whole tree is walked rather than reading one
-     * directory timestamp.
-     */
-    private static Instant lastActivity(Path dir) {
-        try (Stream<Path> all = Files.walk(dir)) {
-            return all.filter(Files::isRegularFile)
-                    .map(WorktreeJanitor::modifiedInstant)
-                    .max(Instant::compareTo)
-                    .orElseGet(() -> modifiedInstant(dir));
-        } catch (IOException e) {
-            throw new UncheckedIOException("worktree janitor: failed to read " + dir, e);
-        }
-    }
-
-    private static Instant modifiedInstant(Path path) {
-        try {
-            return Files.getLastModifiedTime(path).toInstant();
-        } catch (IOException e) {
-            throw new UncheckedIOException("worktree janitor: failed to stat " + path, e);
-        }
     }
 }

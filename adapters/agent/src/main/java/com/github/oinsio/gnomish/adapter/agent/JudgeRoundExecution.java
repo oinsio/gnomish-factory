@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -13,6 +12,7 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -58,7 +58,7 @@ final class JudgeRoundExecution {
             TaskExecutionEnvironment environment,
             String prompt) {
         FactoryProperties factoryProperties = equipment.factoryProperties();
-        Clock clock = equipment.clock();
+        InstantSource clock = equipment.clock();
         var invocationFlags = AgentInvocationOptions.renderForJudge(check.model(), check.settings());
         List<String> command = AgentCommandLine.fromRenderedFlags(
                 AgentRole.JUDGE, factoryProperties.agentCliBinary(), invocationFlags);
@@ -98,7 +98,7 @@ final class JudgeRoundExecution {
             }
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
-            Instant roundEnd = clock.now();
+            Instant roundEnd = clock.instant();
             AgentRoundResult roundResult = equipment.resultExtractor().extract(events, roundEnd, drain.bytesRead());
             Verdict verdict = verdictExtractor.extract(roundResult.result());
             return new Vote(verdict, roundResult.usage().tokensByModel());

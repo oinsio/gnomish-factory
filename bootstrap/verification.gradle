@@ -1,5 +1,5 @@
-// How `:bootstrap` verifies itself: the `test` task's E2E wiring, this module's
-// mutation scope, and the two manual layers that run outside `check`. Split out
+// How `:bootstrap` verifies itself: the `test` task's E2E wiring and the two manual layers
+// that run outside `check`; this module's mutation scope is `mutation-scope.gradle`. Split out
 // of `bootstrap/build.gradle` to keep that file within the project file-size cap
 // (FR6, M2, task 9.2 of split-into-modules) — the build file states what this
 // module *is* (its plugins, dependencies and permitted reach), this one states
@@ -70,64 +70,6 @@ tasks.named('test') {
     // below, so `./gradlew build`/`check` never requires Ollama nor spends a cent.
     exclude 'com/github/oinsio/gnomish/e2e/ollama/**'
     exclude 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
-}
-
-// PIT exclusions documented for THIS module; the engine configuration (versions, threads,
-// thresholds, timeout budget, the pitestVerifyAllKilled fail-closed gate) lives in
-// `pitest-conventions`, what to mutate this build (`targetClasses`) in `pitest-scope-conventions`,
-// and the two exemption categories and their bars in `.claude/rules/testing.md`. Task 8.1 bound
-// each module's mutation scope to its own production packages, so exclusions naming classes and
-// specs owned by `:adapters` and `:application` live in those modules' build files.
-pitest {
-    // PIT's minions are separate JVM launches that inherit nothing from the `test` task, so the
-    // two deterministic on-disk locations are handed to them explicitly (see the rules file):
-    // `fakeAgentDir` for the fake-agent suites, `repoRoot` for SecretsPortBoundarySpec's
-    // credential-name scan. `e2e.jarPath` is deliberately NOT supplied — those specs spawn the
-    // packaged jar per mutant, which is what the `e2e.*` exclusion below is for.
-    jvmArgs = [
-        "-DfakeAgentDir=${rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath}".toString(),
-        "-DrepoRoot=${rootProject.projectDir.absolutePath}".toString(),
-    ]
-    // FR6 documented exception: the bootstrap class is only main() wiring — one hand-off to
-    // Entrypoint, which owns the --version branch, unreachable by unit tests by design
-    // (design D5, D10). Everything else must reach 100%.
-    excludedClasses = [
-        'com.github.oinsio.gnomish.FactoryApplication',
-    ]
-    // Out-of-process suites, per `.claude/rules/testing.md` ("Excluded test classes"). Each
-    // removes no production line from mutation coverage — every class they exercise also has fast,
-    // in-process unit specs feeding the gate.
-    excludedTestClasses = [
-        // Spawn the packaged jar via `java -jar`, reading `e2e.jarPath`, which only the `test`
-        // task wires from the bootJar output (M1/M4; task 9.1 of add-manual-run, and
-        // FactoryApplicationSpec's "bootJar stays headless" feature, task 6.5 of add-tracker-port).
-        'com.github.oinsio.gnomish.e2e.*',
-        'com.github.oinsio.gnomish.FactoryApplicationSpec',
-        // Specs over build outputs only `test` wires, shell scripts and workflow files
-        // (add-release-pipeline 3.1-3.4, 4.0, 4.2): no production Java class is reached.
-        'com.github.oinsio.gnomish.distribution.*',
-        // Drive a real Docker daemon — real containers, volumes, networks — and a real Gitea
-        // remote through subprocess `docker`/`git` (add-sandbox-core tasks 4.5-9.4). The sibling
-        // suites of this family live in `:adapters` and are excluded by that module (task 8.1).
-        'com.github.oinsio.gnomish.app.ContainerModePipelineE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerModeIsolationE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerModeResumeE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerModeAgentCredentialE2ESpec',
-        // Same family, added for add-serve-sandbox-lifecycle (task 8.3): each drives a real Docker
-        // daemon (and, where noted, a real Gitea remote) per scenario/mutant, which is minutes of
-        // real container lifecycle per mutant rather than milliseconds — the "hangs on real I/O"
-        // failure mode `.claude/rules/testing.md` describes. The one production line that had no
-        // other coverage (`ContainerRunSupport.revocationSalvageAndPush`) is `@DoNotMutate` for the
-        // identical reason, so excluding these specs removes no line from the mutation gate. (The
-        // second such line, `ManualRunRunner`'s container-support lambda, is gone: its construction
-        // is `ContainerRunSupportFactory.create`, covered in-process — collapse-composition-roots.)
-        'com.github.oinsio.gnomish.app.TakeContainerLifecycleE2ESpec',
-        'com.github.oinsio.gnomish.app.SandboxLifecycleZombieE2ESpec',
-        'com.github.oinsio.gnomish.app.SandboxLifecycleLaunchRaceE2ESpec',
-        'com.github.oinsio.gnomish.app.SandboxLifecycleProjectScopingE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerLifecycleCoverageGapsE2ESpec',
-        'com.github.oinsio.gnomish.app.serve.TakeSlotRunnerContainerConcurrencySpec',
-    ]
 }
 
 // Ollama E2E harness (task 11.1, M1, D11): real `claude` CLI pointed at a local Ollama instance

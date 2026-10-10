@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
 import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.FixedCheckClientContext
 import spock.lang.Specification
 
 /**
@@ -26,7 +27,7 @@ class HttpCheckClientFactorySpec extends Specification implements HttpCheckFixtu
 
     def "builds a client over the production exchange from an empty subsection"() {
         expect:
-        new HttpCheckClientFactory().create(providing([:]), [:]) instanceof HttpExternalCheckClient
+        new HttpCheckClientFactory().create(new FixedCheckClientContext(providing([:]), [:])) instanceof HttpExternalCheckClient
     }
 
     def "exposes its own params and subsection validators"() {
@@ -72,7 +73,7 @@ class HttpCheckClientFactorySpec extends Specification implements HttpCheckFixtu
     //     the factory builds is guarded by it — a target on no entry never reaches a socket.
     def "the client it builds is guarded by the operator's egress allowlist"() {
         given:
-        def client = new HttpCheckClientFactory().create(providing([:]), [allowlist: ['sonar.example.com']])
+        def client = new HttpCheckClientFactory().create(new FixedCheckClientContext(providing([:]), [allowlist: ['sonar.example.com']]))
 
         when:
         def status = client.poll(check([url: 'https://evil.example.net/exfil']), null)
@@ -86,20 +87,20 @@ class HttpCheckClientFactorySpec extends Specification implements HttpCheckFixtu
     //     call are separate acts.
     def "a subsection with no allowlist permits nothing"() {
         given:
-        def client = new HttpCheckClientFactory().create(providing([:]), [:])
+        def client = new HttpCheckClientFactory().create(new FixedCheckClientContext(providing([:]), [:]))
 
         expect:
         client.poll(check([url: 'https://sonar.example.com/api']), null).reason().contains('missing allowlist entry')
     }
 
     // NFR-S2: without a run context nothing is interpolatable, so an interpolating check fails closed.
-    def "the run-aware form supplies the run's variables to the client it builds"() {
+    def "the context's run context supplies the run's variables to the client it builds"() {
         given:
         def runContext = { name ->
             Optional.of('gnomish/PROJ-42')
         } as com.github.oinsio.gnomish.app.CheckRunContext
         def client = new HttpCheckClientFactory()
-                .create(providing([:]), [allowlist: ['sonar.example.com']], runContext)
+                .create(new FixedCheckClientContext(providing([:]), [allowlist: ['sonar.example.com']], runContext))
 
         expect:
         client.runContext().value('task.branch').get() == 'gnomish/PROJ-42'

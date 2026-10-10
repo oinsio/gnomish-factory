@@ -1,22 +1,19 @@
 package com.github.oinsio.gnomish.subprocess
 
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Path
 
 /**
- * Writes throwaway {@code /bin/sh} scripts to stand in for the real binaries the supervisor is
- * pointed at. Real processes, not fakes: the whole subject here is what the OS does with a
- * subprocess that stalls, forks, ignores a signal, or keeps a pipe open, and none of that survives
- * being mocked.
+ * Hands out the committed process-shaped fakes the supervisor is pointed at (the stand-in library's
+ * {@code process/} scripts, ADR 0015). Real processes, not fakes: the whole subject here is what
+ * the OS does with a subprocess that stalls, forks, ignores a signal, or keeps a pipe open, and
+ * none of that survives being mocked. Each script is committed and reviewed once; a spec names it.
  */
 trait FakeBinaries {
 
-    /** Writes an executable {@code sh} script named {@code name} into {@code dir}. */
-    Path fakeBinary(Path dir, String name, String body) {
-        Path script = dir.resolve(name)
-        Files.writeString(script, "#!/bin/sh\n${body}\n")
-        script.toFile().setExecutable(true)
-        return script
+    /** The committed fake {@code name}, run as it is; its header says what it does with its arguments. */
+    Path fakeBinary(String name) {
+        StandIn.process(name)
     }
 
     /**

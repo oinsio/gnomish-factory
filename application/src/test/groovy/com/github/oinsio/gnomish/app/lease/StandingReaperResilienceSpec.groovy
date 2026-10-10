@@ -1,263 +1,150 @@
 package com.github.oinsio.gnomish.app.lease
 
+
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
-import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.Timeout
 
 /**
- * StandingReaper's THREADED loop resilience (design D4; FR3, FR4 of
- * fix-reaper-idle-liveness — "the reaper thread survives abnormal faults"). Unlike
- * {@code StandingReaperSpec}, which drives the synchronous {@code tick()} seam directly, these
- * specs drive the real worker thread through {@code loop()} with a {@link BlockingSleeper}
- * rendezvous: {@code loop()} is assumed to sleep the interval, THEN run one reap tick, both
- * wrapped in a single {@code catch (Throwable)} (mirroring {@code InstanceHeartbeat.loop()}'s
- * sleep-then-tick pacing, but widened per D4 from {@code RuntimeException} to {@code Throwable}
- * and to cover the sleep call too). An {@code Error} from the duty or a throwing sleeper must
- * therefore be logged at WARN (NFR-O1's "ordinary tick failures") and never stop the loop; only
- * {@code stop()} (a {@code volatile stopping} flag plus an interrupt) may exit it, cleanly and
- * without an abnormal-death log. Because {@code catch (Throwable)} leaves nothing that can
- * realistically escape it, "a truly dead thread is respawned" (FR4) is proven the way the task
- * brief prescribes: by invoking the worker {@code Thread}'s
- * {@code uncaughtExceptionHandler} directly with a synthetic fatal {@link Throwable}, mirroring
- * {@code InstanceHeartbeatLifecycleSpec}'s closest precedent but at the level of the handler's
- * contract rather than forcing an escape from the guarded loop.
+ * The standing reaper's thread survives abnormal faults (FR3, FR4 of fix-reaper-idle-liveness;
+ * NFR-R2 of that change reduces to them), now as a supervised daemon loop (FR6 of
+ * supervise-daemon-loops-and-embed-dashboard, design D6, D7): the loop waits the reaper's interval
+ * and then ticks, an {@code Exception} from the duty or a throwing sleeper is logged as the loop's
+ * {@code DAEMON_LOOP_TICK_FAILED} and never ends it, and an {@code Error} ends the thread, which
+ * is respawned after one backoff (design D2 as amended, D5). Every line names the loop by {@code
+ * component=reaper}, the key that replaced the reaper's own codes (GF067–GF069, retired).
  *
- * FR3, FR4 of fix-reaper-idle-liveness; design D4 (D5's backoff progression is task 1.3a's own
- * spec, not asserted here). Together FR3/FR4 are what NFR-R2 ("reaping stays available for the
- * life of the process after any single abnormal reaper fault") reduces to, so this spec is also
- * NFR-R2's implementing evidence.
+ * <p>The death is real: an {@code Error} from the duty leaves the loop's {@code Exception} guard
+ * and ends the thread. The loop's general behavior is {@code SupervisedLoop*Spec}'s subject; this
+ * spec pins the reaper's wiring of it — order, interval, policy, component and codes.
  */
 @Timeout(10)
 class StandingReaperResilienceSpec extends Specification {
 
     private static final Duration INTERVAL = Duration.ofMinutes(5)
+    private static final String WAIT = "sleep ${INTERVAL}".toString()
 
-    private final BlockingSleeper sleeper = new BlockingSleeper()
-    private final AtomicInteger ticks = new AtomicInteger()
-    // The shared capture helper rather than a hand-rolled ListAppender block (task 2.4 of
-    // harden-logging-observability; migrated here because this spec is being touched, per NG5).
-    private LogCaptureSupport logs
-
-    def setup() {
-        logs = LogCaptureSupport.attach(StandingReaper)
-    }
+    private final ReaperLoopRig rig = new ReaperLoopRig()
 
     def cleanup() {
-        logs.detach()
+        rig.close()
     }
 
-    private ReaperDuty countingDuty() {
-        { Collection<TaskRef> own -> ticks.incrementAndGet() } as ReaperDuty
-    }
-
-    // FR3, D4: an Error escaping the duty on one tick is caught, logged at WARN, and the loop's
-    //     very next sleep/tick round still reaps — proving one bad tick cannot end reaping.
-    def "an Error from the duty is logged at WARN and the next tick still reaps"() {
-        given: 'a duty that throws once, then reaps normally'
-        def calls = new AtomicInteger()
-        def duty = { Collection<TaskRef> own ->
-            if (calls.incrementAndGet() == 1) {
-                throw new AssertionError('duty exploded on the first tick' as Object)
-            }
-            ticks.incrementAndGet()
-        } as ReaperDuty
-        def reaper = new StandingReaper(duty, sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-
-        when: 'the reaper starts, sleeps once, then the first tick throws'
-        reaper.start()
-        sleeper.awaitEntered()
-        sleeper.releaseOne()
-
-        then: 'the throw was logged at WARN and the loop reached a second sleep instead of dying'
-        sleeper.awaitEntered()
-        calls.get() == 1
-        // FR15 of harden-logging-observability: the level alone is not the contract — the catalog
-        // code is, so a demotion or a re-worded sentence is caught here.
-        logs.list.any {
-            it.level == Level.WARN && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_TICK_FAILED.head())
-        }
-
-        when: 'that second sleep releases and the following tick runs'
-        sleeper.releaseOne()
-
-        then: 'a third sleep entry proves the second, succeeding tick completed'
-        sleeper.awaitEntered()
-        calls.get() == 2
-        ticks.get() == 1
-
-        // stop()'s interrupt reliably wakes the worker parked in this third sleep on its own
-        // (proven by "stop() exits the loop cleanly" below), so no further releaseOne() is
-        // needed or safe here: once the interrupt cancels the parked take(), a later
-        // releaseOne() has no worker left to rendezvous with and blocks forever.
-        cleanup:
-        reaper.stop()
-    }
-
-    // FR3, D4: a sleeper that throws (mimicking an Error surfacing from the interval wait) is
-    //     likewise caught and logged, and the loop reaches a further sleep rather than dying.
-    def "a throwing sleeper is logged at WARN and the loop still reaches the next tick"() {
-        given: 'a sleeper that throws once, then defers to the rendezvous sleeper'
-        def base = new BlockingSleeper()
-        def calls = new AtomicInteger()
-        def flaky = { Duration d ->
-            if (calls.incrementAndGet() == 1) {
-                throw new IllegalStateException('sleeper blew up')
-            }
-            base.sleep(d)
-        } as Sleeper
-        def reaper = new StandingReaper(countingDuty(), flaky, INTERVAL, {
-            []
-        }, new SystemClock())
-
-        when: 'the reaper starts; the first sleep call throws before any tick runs'
-        reaper.start()
-
-        then: 'the throw was logged at WARN and the loop reached a second sleep call instead of dying'
-        base.awaitEntered()
-        calls.get() == 2
-        ticks.get() == 0
-        logs.list.any {
-            it.level == Level.WARN && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_TICK_FAILED.head())
-        }
-
-        when: 'that sleep releases, letting the tick run'
-        base.releaseOne()
-
-        then: 'a third sleep entry proves the tick completed and the loop kept going'
-        base.awaitEntered()
-        ticks.get() == 1
-
-        // See the analogous cleanup comment above: stop()'s interrupt alone reliably
-        // unblocks the parked third sleep; a trailing releaseOne() would deadlock.
-        cleanup:
-        reaper.stop()
-    }
-
-    // FR4, D4: stop() sets the volatile stopping flag and interrupts the worker; the loop exits
-    //     cleanly on the next check, and — unlike a genuinely abnormal death — this is never
-    //     logged as an ERROR and never triggers a respawn.
-    def "stop() exits the loop cleanly with no abnormal-death log"() {
+    // FR6: the reaper waits its interval before its first tick and between ticks (wait → tick).
+    def "the reaper waits its interval before every tick"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
+        rig.build(INTERVAL, { n ->
+            if (n == 2) rig.stopHere()
+        })
 
-        when: 'the reaper starts and parks in its first interval sleep'
-        reaper.start()
-        sleeper.awaitEntered()
-        def worker = reaper.worker()
+        when:
+        rig.runToStop()
 
-        and: 'stop() is called while the worker is parked there'
-        reaper.stop()
-        worker.join(5000)
-
-        then: 'the worker terminated cleanly, having never ticked and never logged an abnormal death'
-        !worker.isAlive()
-        ticks.get() == 0
-        logs.list.every { it.level != Level.ERROR }
+        then:
+        rig.journal == [WAIT, 'tick1', WAIT, 'tick2']
+        rig.atOrAbove(Level.WARN).empty
     }
 
-    // FR4, D4, D5: because catch (Throwable) leaves no realistic escape from the guarded loop, a
-    //     "truly dead thread" is modeled — as the task brief prescribes — by invoking the
-    //     worker's uncaughtExceptionHandler directly with a synthetic fatal Throwable. Absent a
-    //     prior stop(), that handler must back off (design D5, on the same injected sleeper)
-    //     before it respawns a fresh, distinct, live worker — proven here by driving the extra
-    //     backoff-sleep rendezvous round before the fresh worker's own first interval sleep; the
-    //     backoff progression itself is StandingReaperSupervisionSpec's job, not this one's.
-    def "a truly dead thread is respawned when stop() was not called"() {
+    // FR3 of fix-reaper-idle-liveness, FR6 (daemon-supervision "An Error in the work ends the
+    //     worker and the restart policy takes over"; M4): an Error from the duty ends the thread
+    //     — no tick-failed WARN — its death is logged at ERROR with component=reaper, and after one
+    //     backoff the respawned reaper waits its interval and reaps again.
+    def "an Error from the duty ends the thread, and the respawned reaper reaps again after one backoff"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-        def deadWorker = reaper.worker()
-        def handler = deadWorker.uncaughtExceptionHandler
+        rig.build(INTERVAL, { n ->
+            if (n == 1) throw new AssertionError('duty exploded on the first tick' as Object)
+            rig.stopHere()
+        })
 
-        when: 'the handler fires on its own thread, as if the worker escaped even the Throwable guard'
-        Thread.ofVirtual().start {
-            handler.uncaughtException(deadWorker, new OutOfMemoryError('simulated unrecoverable death'))
-        }
+        when:
+        rig.runToStop()
 
-        then: 'the handler parks in its backoff wait before respawning'
-        sleeper.awaitEntered() == INTERVAL
-
-        when: 'the backoff wait releases'
-        sleeper.releaseOne()
-
-        then: 'a fresh, distinct worker took over and reached its own first sleep'
-        sleeper.awaitEntered()
-        !reaper.worker().is(deadWorker)
-
-        cleanup:
-        reaper.stop()
+        then: 'wait, death, backoff of one interval, then the fresh thread waits and ticks'
+        rig.journal == [
+            WAIT,
+            'tick1',
+            WAIT,
+            WAIT,
+            'tick2'
+        ]
+        rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED).empty
+        def died = rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'reaper'
+        died[0].throwableProxy.className == AssertionError.name
     }
 
-    // FR15 of harden-logging-observability: the backoff sleep before a respawn is itself guarded
-    //     (design D5), and the guard's WARN is the only trace that a respawn skipped its backoff —
-    //     a reaper respawning in a tight loop with no delay looks identical without it.
-    def "a backoff sleep that throws before the respawn is logged at WARN and the respawn still happens"() {
-        given: 'a sleeper that throws on the backoff call only — the loop sleeps normally'
-        def base = new BlockingSleeper()
-        def calls = new AtomicInteger()
-        def flaky = { Duration d ->
-            if (calls.incrementAndGet() == 2) {
-                throw new IllegalStateException('backoff sleep blew up')
-            }
-            base.sleep(d)
-        } as Sleeper
-        def reaper = new StandingReaper(countingDuty(), flaky, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        base.awaitEntered()
-        def deadWorker = reaper.worker()
-
-        when: 'the worker dies and the handler backs off on the throwing sleeper'
-        Thread.ofVirtual().start {
-            deadWorker.uncaughtExceptionHandler.uncaughtException(deadWorker, new OutOfMemoryError('simulated death'))
-        }
-
-        then: 'a fresh worker still took over, reaching its own first interval sleep'
-        base.awaitEntered()
-        !reaper.worker().is(deadWorker)
-
-        and:
-        logs.list.any {
-            it.level == Level.WARN &&
-            it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_BACKOFF_SLEEP_FAILED.head())
-        }
-
-        cleanup:
-        reaper.stop()
-    }
-
-    // FR4, D4: if stopping was already set before the handler fires — the intentional-shutdown
-    //     race the design calls out — no respawn happens: the worker reference is unchanged.
-    def "a dead thread is not respawned once stop() was already called"() {
+    // FR3 of fix-reaper-idle-liveness, FR6: a throwing sleeper is the loop's failure too — logged
+    //     with component=reaper — and the loop still reaches its tick.
+    def "a throwing sleeper is logged with the loop's code and component, and the loop still ticks"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
-            []
-        }, new SystemClock())
-        reaper.start()
-        sleeper.awaitEntered()
-        def worker = reaper.worker()
-        def handler = worker.uncaughtExceptionHandler
+        rig.build(INTERVAL, { n -> rig.stopHere() }, { n, d ->
+            if (n == 1) throw new IllegalStateException('sleeper blew up')
+        })
 
-        when: 'stop() is called, then the handler fires as if death raced the shutdown'
-        reaper.stop()
-        handler.uncaughtException(worker, new OutOfMemoryError('simulated death racing stop()'))
+        when:
+        rig.runToStop()
 
-        then: 'no respawn happened: the worker reference is unchanged'
-        reaper.worker().is(worker)
+        then:
+        rig.journal == [WAIT, 'tick1']
+        def failed = rig.events(OperatorEvent.DAEMON_LOOP_TICK_FAILED)
+        failed.size() == 1
+        failed[0].level == Level.WARN
+        failed[0].MDCPropertyMap['component'] == 'reaper'
+    }
+
+    // FR4 of fix-reaper-idle-liveness, FR6: a dead thread is respawned after a backoff of the
+    //     reaper's interval, logging the loop's ERROR with component=reaper and restart #1.
+    def "a dead reaper thread is respawned after an interval's backoff"() {
+        given:
+        rig.build(INTERVAL, { n ->
+            if (n == 1) throw new Error('duty died')
+            rig.stopHere()
+        })
+
+        when:
+        rig.runToStop()
+
+        then: 'wait, death, backoff of one interval, then the fresh thread waits and ticks'
+        rig.journal == [
+            WAIT,
+            'tick1',
+            WAIT,
+            WAIT,
+            'tick2'
+        ]
+        def died = rig.events(OperatorEvent.DAEMON_LOOP_WORKER_DIED)
+        died.size() == 1
+        died[0].level == Level.ERROR
+        died[0].MDCPropertyMap['component'] == 'reaper'
+        died[0].argumentArray[0] == 'gnomish-reaper'
+        died[0].argumentArray[1] == INTERVAL
+        died[0].argumentArray[2] == 1
+        rig.reaper.restartCount() == 1
+    }
+
+    // FR6: the backoff wait before a respawn is guarded; its failure is the loop's
+    //     DAEMON_LOOP_BACKOFF_SLEEP_FAILED with component=reaper, and the respawn still happens.
+    def "a backoff sleep that throws is logged with the loop's code and component, and the respawn still happens"() {
+        given: 'the second sleep is the backoff after the first tick died'
+        rig.build(INTERVAL, { n ->
+            if (n == 1) throw new Error('duty died')
+            rig.stopHere()
+        }, { n, d ->
+            if (n == 2) throw new IllegalStateException('backoff sleep blew up')
+        })
+
+        when:
+        rig.runToStop()
+
+        then:
+        rig.ticks.get() == 2
+        def failed = rig.events(OperatorEvent.DAEMON_LOOP_BACKOFF_SLEEP_FAILED)
+        failed.size() == 1
+        failed[0].level == Level.WARN
+        failed[0].MDCPropertyMap['component'] == 'reaper'
     }
 }

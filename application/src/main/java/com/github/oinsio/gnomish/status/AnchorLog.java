@@ -2,9 +2,11 @@ package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.StringJoiner;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,12 +64,15 @@ public final class AnchorLog {
      */
     public static void serveStarted(ServeConfig config) {
         log.info(
-                "serve started: instance={}, slots={}, wipLimit={}, idlePoll={}, sigtermGrace={}",
+                "serve started: instance={}, slots={}, wipLimit={}, idlePoll={}, sigtermGrace={}, dashboard={},"
+                        + " dashboardOut={}",
                 config.instanceId(),
                 config.slots(),
                 config.wipLimit(),
                 config.idlePollInterval(),
-                config.sigtermGrace());
+                config.sigtermGrace(),
+                config.dashboard(),
+                config.dashboardOut() == null ? "none" : config.dashboardOut());
     }
 
     /**
@@ -131,7 +136,7 @@ public final class AnchorLog {
 
     /**
      * The effective serve configuration named by {@link #serveStarted}. A parameter object rather
-     * than five positional arguments: two {@code int}s and two {@code Duration}s side by side are
+     * than seven positional arguments: two {@code int}s and two {@code Duration}s side by side are
      * the transposition hazard {@code process-invariants.md} names, and a silently swapped grace
      * and poll interval would misreport the daemon's own settings.
      *
@@ -140,7 +145,17 @@ public final class AnchorLog {
      * @param wipLimit the configured open-front WIP limit; positive
      * @param idlePollInterval the feed's idle poll interval; never null
      * @param sigtermGrace how long a signal-initiated stop waits for in-flight slots; never null
+     * @param dashboard whether the embedded dashboard is on (NFR-O2 of
+     *     supervise-daemon-loops-and-embed-dashboard)
+     * @param dashboardOut the absolute path the embedded dashboard writes its page to, or {@code
+     *     null} when it is off — rendered as {@code none}, as an absent value is named here
      */
     public record ServeConfig(
-            String instanceId, int slots, int wipLimit, Duration idlePollInterval, Duration sigtermGrace) {}
+            String instanceId,
+            int slots,
+            int wipLimit,
+            Duration idlePollInterval,
+            Duration sigtermGrace,
+            boolean dashboard,
+            @Nullable Path dashboardOut) {}
 }

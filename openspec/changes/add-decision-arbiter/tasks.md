@@ -84,13 +84,11 @@ archives first, the other rebases its delta). TDD throughout
 
 ## 7. Usage accounting
 
-- [ ] 7.1 Extract the shared usage wire vocabulary consumed by state.json,
-      status.json, and usage.json (rule-of-three; removes the three
-      independent judge-usage DTO trees); round-trip spec per the wire
-      vocabulary rule (D10)
-- [ ] 7.2 `arbiterUsage` on the attempt record (map-only, additive);
-      totals stay executor-only with the asymmetry documented at the fold
-      site; usage/status render the new column (NFR-O1, D10)
+- [ ] 7.1 The consult reports its usage as a `decision` participant entry of
+      the round (role, executor name, provenance, per-model tokens and cost)
+      through the participant list `define-executor-contract` defines; no
+      new field, DTO or totals rule; usage and status render the role with
+      the label "arbiter" (NFR-O1, D10)
 
 ## 8. Observability and operator surfaces
 

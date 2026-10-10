@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.killpoint
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -56,7 +57,7 @@ class CreationWorld implements BareGitRepoFixture {
      * precisely what an unpushed branch looks like to everyone but its author.
      */
     String shape() {
-        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE).classifyShape(origin, taskId).label()
+        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(origin, taskId).label()
     }
 
     /** Whether {@code origin} carries the task branch at all. */

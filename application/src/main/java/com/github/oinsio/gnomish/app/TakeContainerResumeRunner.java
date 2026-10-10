@@ -32,7 +32,8 @@ import org.jspecify.annotations.Nullable;
  * {@link ContainerResumeMechanics} (design D6 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR12,
- * D13 of add-base-ref-resolution; FR18 of make-checkpoint-gate-durable.
+ * D13 of add-base-ref-resolution; FR18 of make-checkpoint-gate-durable; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 final class TakeContainerResumeRunner {
 
@@ -118,7 +119,8 @@ final class TakeContainerResumeRunner {
      */
     TaskContext appendDecision(
             ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
-        var decision = ResumeDecisionCommit.decisionFor(finalState, text);
+        var decision = ResumeDecisionCommit.decisionFor(
+                finalState, text, wiring.assembly().timeEquipment().clock().instant());
         bootstrap.support().disposeExistingEnvironment();
         bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
@@ -127,7 +129,7 @@ final class TakeContainerResumeRunner {
     private TakeContainerEngineExecution newExecution(LawBinding lawBinding) {
         return new TakeContainerEngineExecution(
                 wiring.assembly(),
-                wiring.abort(),
+                wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 lawBinding);

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import java.time.InstantSource;
 
 /**
  * The {@link ExternalCheckClient} adapter for GitHub Actions: reads the attempt commit of the
@@ -40,9 +41,11 @@ public record GithubCheckExternalClient(
      *     SecretsProvider} at wiring time ({@link GithubCheckClientFactory}, FR26)
      * @param owner the repository owner the checks run in, from factory config
      * @param repo the repository name the checks run in, from factory config
+     * @param clock the time source the cannot-verify suppressor measures on (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard)
      */
-    public GithubCheckExternalClient(GithubHttpClient httpClient, String owner, String repo) {
-        this(new GithubConditionalRequestCache(httpClient), owner, repo, RepeatSuppressor.system());
+    public GithubCheckExternalClient(GithubHttpClient httpClient, String owner, String repo, InstantSource clock) {
+        this(new GithubConditionalRequestCache(httpClient), owner, repo, RepeatSuppressor.withDefaultRollUp(clock));
     }
 
     /**

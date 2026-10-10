@@ -45,6 +45,14 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         ]
     }
 
+    // FR18, FR22 of supervise-daemon-loops-and-embed-dashboard (design D22): the run that owns
+    // the seam reads its time equipment from the box timing the factory was built with, so a
+    // run and its boxes measure on one time source
+    def "a factory-built seam carries the installation's box timing"() {
+        expect:
+        factoryBuilt(OwnershipMode.TRACKED, ChildEnvAllowlist.none()).timing().is(timing)
+    }
+
     // FR9 of add-sandbox-core, FR19 of make-checkpoint-gate-durable: the per-task allowlist
     // handed to forTask is the one the built seam scrubs with
     def "a factory-built seam scrubs exactly the credentials of the allowlist it was given"() {
@@ -68,7 +76,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
                         docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
                         timing, ChildEnvAllowlist.none(),
                         Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')),
-                { -> DenialRestoration.none() })
+                { -> DenialRestoration.none() }, timing)
                 .ownershipMode() == OwnershipMode.MANUAL
     }
 

@@ -6,13 +6,12 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
-import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
+import com.github.oinsio.gnomish.app.take.TerminalTransitions;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -61,8 +60,13 @@ import org.jspecify.annotations.Nullable;
  * the same {@code RunAssembly.assemble} contract, and in particular both hand it the task's
  * <em>law binding</em> — the repository and the commit its {@code .gnomish/} law and
  * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
- * argument taken from the claim, never derived per medium. A binding that changes on one side and not the other would make the
- * same task read different law in host and container mode.
+ * argument taken from the claim, never derived per medium. A binding that changes on one side and
+ * not the other would make the same task read different law in host and container mode. Both end
+ * on the same terminal path: the slot's {@link TakeOutcomeDispatch}, which carries the
+ * terminal-write retry derived from the slot's time equipment and the slot's abort fuse (design D22 of
+ * supervise-daemon-loops-and-embed-dashboard); each twin only builds its {@link
+ * TerminalTransitions} from its own park and finish closures, so neither can retry or abort a
+ * terminal write differently from the other.
  *
  * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.take.RevocationHandler}: both must end
  * a revoked claim with the same stop note and the same two tracker writes — the "Work stopped:"
@@ -75,11 +79,21 @@ import org.jspecify.annotations.Nullable;
  * modes report the same event differently.
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
- * add-tracker-port and add-sandbox-core.
+ * add-tracker-port and add-sandbox-core; FR18, FR22 of supervise-daemon-loops-and-embed-dashboard
+ * (the terminal path is the slot's outcome dispatch, design D22).
+ *
+ * @param assembly builds the {@code EnginePorts} bundle for the run; never null
+ * @param dispatch the slot's outcome dispatch ({@link SlotWiring#outcomeDispatch()}); never null
+ * @param credentialEnvVarsToScrub the declared credential variable names scrubbed from agent
+ *     environments; never null
+ * @param claimLossFlag the per-run heartbeat claim-loss flag consulted at each round boundary;
+ *     never null
+ * @param lawBinding which repository and tree this task's pipeline law and external-check pin are
+ *     read from (design D12 of add-base-ref-resolution); never null
  */
 record TakeContainerEngineExecution(
         RunAssembly assembly,
-        AbortFuse abortFuse,
+        TakeOutcomeDispatch dispatch,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
         LawBinding lawBinding) {
@@ -129,7 +143,6 @@ record TakeContainerEngineExecution(
 
         settleTerminalBoundary(support, outcome);
 
-        var retry = TerminalWriteRetry.system();
         String branchName = TaskIdSanitizer.branchName(order.taskId());
         // The park's intent is recorded here, not in settleTerminalBoundary: that method only settles
         // the box (kept stopped), and the outcome commit belongs to the protocol that follows it
@@ -145,7 +158,7 @@ record TakeContainerEngineExecution(
                 },
                 support::confirmTerminalWrite);
         var finish = new FinishTransition.Fresh(() -> {}, support::finishCleanup);
-        return new TakeOutcomeDispatch(retry, park, abortFuse, finish).dispatch(outcome, context, branchName, order);
+        return dispatch.dispatch(outcome, context, branchName, order, new TerminalTransitions(park, finish));
     }
 
     /**

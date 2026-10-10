@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -36,7 +35,8 @@ import org.jspecify.annotations.Nullable;
  * none, since its worktree is the branch. Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
- * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR4, FR7 of make-checkpoint-gate-durable.
+ * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR4, FR7 of make-checkpoint-gate-durable; FR18 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 final class GitResumeContinuation {
 
@@ -107,7 +107,7 @@ final class GitResumeContinuation {
         var escalated = new TaskOutcome.Escalated(finalState, report);
 
         DialogConsole console = assembly.dialogConsole();
-        var resumption = new EscalationResume(console, Clock.systemUTC(), returnPath())
+        var resumption = new EscalationResume(console, assembly.timeEquipment().clock(), returnPath())
                 .decide(bootstrap.context(), escalated, decision);
         EscalationResume.land(taskRepository, bootstrap.taskId(), resumption, decision);
         runToTerminalBoundary(order, resumption.context(), resumption.state());

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
+import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
 
@@ -40,17 +41,20 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
      * each time. Built here rather than injected — this decorator is constructed once per run
      * (one {@code apply} of the composition-root operator per {@code assemble}), so it is the
      * owner the round's {@link MidRoundPollContext} borrows it from, the same shape {@code
-     * SandboxRoundEnvironmentSource.harvestSuppressor} records.
+     * SandboxRoundEnvironmentSource.harvestSuppressor} records — on the composition root's time
+     * source (FR18 of supervise-daemon-loops-and-embed-dashboard).
      */
-    private final RepeatSuppressor pushSuppressor = RepeatSuppressor.system();
+    private final RepeatSuppressor pushSuppressor;
 
     /**
      * @param host the host round source being decorated; never null
      * @param runner the git subprocess runner the listeners poll and push through; never null
+     * @param clock the time source the task's push-failure suppressor measures on; never null
      */
-    public MidRoundPushRounds(RoundEnvironmentSource host, GitProcessRunner runner) {
+    public MidRoundPushRounds(RoundEnvironmentSource host, GitProcessRunner runner, InstantSource clock) {
         this.host = host;
         this.runner = runner;
+        this.pushSuppressor = RepeatSuppressor.withDefaultRollUp(clock);
     }
 
     @Override

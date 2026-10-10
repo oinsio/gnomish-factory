@@ -56,6 +56,12 @@ their gaps) in parallel with the two research agents. Then the shared phases.
   not by discovery order.
 
 **Decision discipline.**
+- The first alternative is always "no mechanism": delete the thing being
+  designed and name what is left per run, per test, per call; only that remainder
+  is designed, everything constant is prepared once (`design-decisions.md`,
+  "Alternative zero"; ADR 0015 is the case where this step was skipped and the
+  user had to ask "why generate at all?" twice). When the subject is a cost,
+  attribute it before designing: a per-item cost means ask why there is an item.
 - Any rejected major alternative gets a steelman first: argue FOR it honestly,
   then show exactly where it breaks on this project's constraints, then state
   what to borrow from it anyway. Expect and invite the user's challenges —

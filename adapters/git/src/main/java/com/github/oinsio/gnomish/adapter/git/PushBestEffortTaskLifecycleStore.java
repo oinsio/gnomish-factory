@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.nio.file.Path;
+import java.time.InstantSource;
 
 /**
  * The {@link TaskLifecycleStore} decorator: {@link PushBestEffortTaskRepository}'s behavior for the
@@ -65,10 +66,18 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
      * @param delegate the strict lifecycle store the commits are recorded through; never null
      * @param runner the git subprocess seam the push runs over; never null
      * @param cloneDir the factory clone the push runs from; never null
+     * @param retry the infrastructure budget the first push re-reads origin under; never null
+     * @param clock the time source the first push's failure suppressor measures on (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public PushBestEffortTaskLifecycleStore(TaskLifecycleStore delegate, GitProcessRunner runner, Path cloneDir) {
+    public PushBestEffortTaskLifecycleStore(
+            TaskLifecycleStore delegate,
+            GitProcessRunner runner,
+            Path cloneDir,
+            GitInfrastructureRetry retry,
+            InstantSource clock) {
         this.delegate = delegate;
-        this.base = new PushBestEffortTaskRepository(delegate, runner, cloneDir);
+        this.base = new PushBestEffortTaskRepository(delegate, runner, cloneDir, retry, clock);
         this.push = new LifecyclePush(runner);
         this.cloneDir = cloneDir;
     }

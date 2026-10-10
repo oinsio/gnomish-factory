@@ -16,9 +16,9 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleSweep;
 import com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleThresholds;
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import org.jspecify.annotations.NullMarked;
 
@@ -55,7 +55,7 @@ final class SandboxLifecyclePassFactory {
      * @return the real pass, or {@link SandboxLifecyclePass#NONE} on a host-only install
      */
     static SandboxLifecyclePass create(
-            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, Clock clock) {
+            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, InstantSource clock) {
         if (sandboxProperties.image() == null) {
             return SandboxLifecyclePass.NONE;
         }
@@ -80,7 +80,7 @@ final class SandboxLifecyclePassFactory {
             SandboxProperties sandboxProperties,
             SandboxLifecycleThresholds thresholds,
             Duration dockerCommandTimeout,
-            Clock clock)
+            InstantSource clock)
             implements SandboxLifecyclePass {
 
         @Override

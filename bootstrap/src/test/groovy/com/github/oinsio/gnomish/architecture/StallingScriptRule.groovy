@@ -20,8 +20,8 @@ final class StallingScriptRule {
     /** The shell {@code sleep} word with an operand; a qualified {@code x.sleep} is not a shell word. */
     static final Pattern SHELL_SLEEP = ~/(?<![\w.])sleep\s+["']?(?:\d|\$|infinity)/
 
-    /** The construction every consumer spells: building its stand-in through the owner. */
-    static final String OWNER_CONSTRUCTION = 'new StallingGit()'
+    /** The call every consumer spells: selecting its stalling preset through the owner. */
+    static final Pattern OWNER_SELECTION = ~/\bStallingGit\.(?:git|marked)\(/
 
     private StallingScriptRule() {
     }
@@ -36,9 +36,9 @@ final class StallingScriptRule {
         literals(source).any { SHELL_SLEEP.matcher(it).find() }
     }
 
-    /** Whether this file builds through the owner in code — a javadoc mention is never a hit. */
+    /** Whether this file selects through the owner in code — a javadoc mention is never a hit. */
     static boolean buildsThroughOwner(File file) {
-        RepoSourceTree.code(file).contains(OWNER_CONSTRUCTION)
+        OWNER_SELECTION.matcher(RepoSourceTree.code(file)).find()
     }
 
     /** The decoded contents of every string literal of a Groovy source, comments skipped. */

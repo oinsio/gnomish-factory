@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.*
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
@@ -73,7 +73,7 @@ tracker:
         def tracker = new OutageTracker()
         def factory = new OutageTrackerAdapterFactory(tracker)
         def runner = newRunner(
-                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
+                new TrackerWiring([github: factory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()))
         def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
         def originalErr = System.err
         def captured = new ByteArrayOutputStream()
@@ -204,7 +204,7 @@ class OutageTrackerAdapterFactory implements TrackerAdapterFactory {
     }
 
     @Override
-    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
+    Tracker create(TrackerAdapterContext context) {
         tracker
     }
 

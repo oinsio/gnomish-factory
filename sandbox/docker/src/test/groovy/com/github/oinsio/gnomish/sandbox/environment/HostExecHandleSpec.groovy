@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import spock.lang.Specification
 
 /**
@@ -16,7 +17,7 @@ import spock.lang.Specification
  */
 class HostExecHandleSpec extends Specification {
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = new VirtualClock()
 
     Process process
 
@@ -25,7 +26,7 @@ class HostExecHandleSpec extends Specification {
         process?.destroyForcibly()
     }
 
-    private HostExecHandle handle(List<String> command, Instant startedAt = Instant.now()) {
+    private HostExecHandle handle(List<String> command, Instant startedAt = clock.instant()) {
         process = new ProcessBuilder(command).start()
         new HostExecHandle(process, startedAt)
     }

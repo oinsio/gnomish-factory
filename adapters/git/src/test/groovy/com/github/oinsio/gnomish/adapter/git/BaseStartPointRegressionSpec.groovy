@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -68,7 +70,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
         // Virtual time: the retry's production bound is never elapsed here, only its policy used
         // (`.claude/rules/testing.md`, "Time is injected in tests").
         new BaseRefresh(runner, new GitInfrastructureRetry(
-                        { Duration ignored -> } as Sleeper, GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
+                        VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
     }
 
     private String createTaskFrom(String baseName, String taskId) {
@@ -77,7 +79,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
         "refresh of '${baseName}' did not succeed: ${refreshed}"
         String commit = (refreshed as BaseRefreshOutcome.Refreshed).commit()
         new GitTaskRepository(
-                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), clone), ClaimEpochSource.NONE).createTask(
+                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), clone), ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 ObjectId.of(commit),
                 new BasePin(baseName, (refreshed as BaseRefreshOutcome.Refreshed).kind(), BaseRule.CONFIGURED_DEFAULT),

@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.logtext.LogText;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -31,10 +31,10 @@ import org.slf4j.LoggerFactory;
  * escalating every occurrence to WARN would make normal rounds noisy.
  *
  * <p>Stream-json lines carry no timestamps, so each recognized event is stamped
- * with the injected {@link Clock}'s reading taken at the moment its line is
+ * with the injected {@link InstantSource}'s reading taken at the moment its line is
  * read off the process's stdout (design D3, FR6, NFR-O3) — {@link
  * ToolTraceBuilder} derives tool-call durations from these read-time instants.
- * The {@link Clock} is read live inside the loop, not reconstructed afterward:
+ * The {@link InstantSource} is read live inside the loop, not reconstructed afterward:
  * by the time a full event list is available, the real timing information is
  * already lost.
  *
@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  * fan-out implementation of this one-listener slot — rather than this class
  * accepting a list itself. The dispatch itself is delegated to {@link
  * AgentProgressEmitter} (design D3, fix-oversized-adapters): this class keeps
- * the tolerant read/parse loop and the read-time {@link Clock} stamping, and
+ * the tolerant read/parse loop and the read-time {@link InstantSource} stamping, and
  * calls the emitter inline before reading the next line to preserve this
  * live-before-next-line ordering.
  *
@@ -70,33 +70,33 @@ public final class StreamJsonParser {
     private static final ObjectMapper MAPPER =
             new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private final Clock clock;
+    private final InstantSource clock;
     private final AgentProgressEmitter progressEmitter;
 
     /**
-     * Equivalent to {@link #StreamJsonParser(Clock, AgentProgressListener)} with
+     * Equivalent to {@link #StreamJsonParser(InstantSource, AgentProgressListener)} with
      * a no-op listener, for callers that do not need live progress (existing
      * telemetry-only call sites, tests focused on the parsed event list).
      *
      * @param clock the read-time source stamped onto each recognized event; never
      *     null (production wiring uses {@link
-     *     com.github.oinsio.gnomish.domain.engine.time.SystemClock}, tests a
+     *     java.time.InstantSource}, tests a
      *     controllable fake)
      */
-    public StreamJsonParser(Clock clock) {
+    public StreamJsonParser(InstantSource clock) {
         this(clock, _ -> {});
     }
 
     /**
      * @param clock the read-time source stamped onto each recognized event; never
      *     null (production wiring uses {@link
-     *     com.github.oinsio.gnomish.domain.engine.time.SystemClock}, tests a
+     *     java.time.InstantSource}, tests a
      *     controllable fake)
      * @param progressListener the live-progress subscriber (design D10); never
      *     null — pass a fan-out implementation to reach several subscribers, or a
      *     no-op ({@code event -> {}}) to reach none
      */
-    public StreamJsonParser(Clock clock, AgentProgressListener progressListener) {
+    public StreamJsonParser(InstantSource clock, AgentProgressListener progressListener) {
         this.clock = clock;
         this.progressEmitter = new AgentProgressEmitter(progressListener, new TokenUsageMapper());
     }
@@ -107,7 +107,7 @@ public final class StreamJsonParser {
      * to exhaustion (end of stream) rather than stopping at a first bad line —
      * a single malformed or unrecognized line carries no information about the
      * lines that follow. Each recognized event is stamped with {@link
-     * Clock#now()} read at the moment its line is consumed (FR6, NFR-O3).
+     * InstantSource#instant()} read at the moment its line is consumed (FR6, NFR-O3).
      *
      * @param reader the round's stdout, line-buffered; never null; not closed
      *     by this method — the caller owns its lifecycle
@@ -143,7 +143,7 @@ public final class StreamJsonParser {
         String line;
         try {
             while ((line = reader.readLine()) != null) {
-                var readAt = clock.now();
+                var readAt = clock.instant();
                 parseLine(line).ifPresent(event -> {
                     // FR6: a recognized event still carries the agent's own words (assistant
                     // text, tool arguments, the result summary), so the rendered record is

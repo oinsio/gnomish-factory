@@ -19,7 +19,7 @@ class DashboardBoardCacheSpec extends Specification {
     private static final Instant T0 = Instant.parse('2026-08-06T00:00:00Z')
     private static final Duration CADENCE = Duration.ofSeconds(60)
 
-    def model = new BoardModel([], [], [], new ReadySummary(0, 0, 0, 0, 0), false, T0)
+    def model = new BoardModel([], [], [], new ReadySummary(0, 0, 0, 0, 0), 3, false, T0)
 
     def "is due before any fetch has ever been attempted"() {
         expect:

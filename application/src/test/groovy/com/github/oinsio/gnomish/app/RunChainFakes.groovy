@@ -5,27 +5,9 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
-import com.github.oinsio.gnomish.app.port.git.BasePin
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
-import com.github.oinsio.gnomish.app.port.git.BaseRefKind
-import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.OriginContact
-import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.Designator
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
@@ -33,34 +15,15 @@ import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.BranchShape
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Engine
-import com.github.oinsio.gnomish.domain.engine.EnginePorts
-import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.*
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+
 import java.nio.file.Path
 import java.util.function.UnaryOperator
-
 /**
  * The run chains' collaborators — take, git-mode and container-mode — built from PORT fakes only:
  * no git binary, no tracker HTTP, no Docker, no composition root (design D13(c) of
@@ -212,7 +175,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(),
             List hostGitPushAttached = []) {
-        def clock = new VirtualClock()
+        def time = VirtualTimeEquipment.create()
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
         [
@@ -220,13 +183,14 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, clock, new VirtualSleeper(clock))
+                persistence, time)
                 new Run(null, ports)
             },
             dialogConsole: {
                 ->
                 throw new UnsupportedOperationException('no console in this spec')
             },
+            timeEquipment: { -> time },
             withExtraListener: { listener ->
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
@@ -262,7 +226,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(),
             Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
-        def clock = new VirtualClock()
+        def time = VirtualTimeEquipment.create()
         def console = new DialogConsole(io)
         def self = null
         self = [
@@ -271,10 +235,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, clock, new VirtualSleeper(clock))
+                persistence, time)
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
             dialogConsole: { -> console },
+            timeEquipment: { -> time },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
             withHostGitPush: { decoration ->
@@ -380,7 +345,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             ClaimBeat beat = ClaimBeat.NONE, ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
             RegisteredClone clone = CLONE,
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        new TakeClaimAndWorkFactory(slotWiring(assembly, git, tracker, clone, ContainerTakeSupport.hostOnly(),
+        new TakeClaimAndWorkFactory(slotWiring(assembly, git, tracker, clone, ContainerTakeSupportFixture.hostOnly(),
                 new ClaimTenure(beat, claimLossFlag), trustedBase)).forSlot()
     }
 
@@ -390,10 +355,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * beat-less tenure over a fresh flag.
      */
     SlotWiring slotWiring(RunAssembly assembly, TaskGit git, Tracker tracker, RegisteredClone clone = CLONE,
-            ContainerTakeSupport containerTakeSupport = ContainerTakeSupport.hostOnly(),
+            ContainerTakeSupport containerTakeSupport = ContainerTakeSupportFixture.hostOnly(),
             ClaimTenure tenure = new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
             TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
-        new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [],
+        new SlotWiring(assembly, git, clone, 'taskId', new AbortFuse(new AbortHandler(tracker, assembly.timeEquipment().clock()), 3), [],
         containerTakeSupport, tenure, trustedBase)
     }
 

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -61,7 +62,7 @@ class GithubDecisionsSpec extends Specification {
 
     private GithubDecisions newDecisions(String instanceId = 'gnomish-factory-x7k2q1') {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubDecisions(httpClient, markerWriter(httpClient, instanceId))
+        new GithubDecisions(httpClient, markerWriter(httpClient, instanceId), new VirtualClock())
     }
 
     private TaskRef refFor(int issueNumber) {
@@ -215,6 +216,6 @@ class GithubDecisionsSpec extends Specification {
     }
 
     private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, new VirtualClock())
     }
 }

@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -13,15 +14,16 @@ import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
 
 /**
- * {@link SnapshotWriter#start}/{@link SnapshotWriter#loop}: the real writer
- * thread, proving the two-trigger/one-write-point contract of design D4 (FR1) —
- * a timer beat on its own keeps writing, an explicit {@link
+ * {@link SnapshotWriter#start}/{@link SnapshotWriter#stop}: the real writer
+ * thread (a supervised loop, design D1 of supervise-daemon-loops-and-embed-dashboard),
+ * proving the two-trigger/one-write-point contract of design D4 (FR1) — a timer beat on its own keeps writing, an explicit {@link
  * SnapshotWriter#markDirty} wakes it well before a long timer would ever fire,
  * and a burst of rapid triggers coalesces rather than producing one write per
  * trigger — plus that a dirty-triggered write, arriving off the timer boundary,
  * still carries a fresh, accurate {@code writtenAt} (FR2).
  *
- * <p>Implements FR1, FR2 of add-serve-observability.
+ * <p>Implements FR1, FR2 of add-serve-observability; FR6 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 @Timeout(10)
 class SnapshotWriterLifecycleSpec extends Specification {
@@ -44,7 +46,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
                 },
                 mapper,
                 Duration.ofSeconds(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.create(),
                 0)
 
         when:
@@ -69,7 +71,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
                 },
                 mapper,
                 Duration.ofMillis(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.create(),
                 0)
 
         when:
@@ -89,11 +91,10 @@ class SnapshotWriterLifecycleSpec extends Specification {
     def "markDirty triggers a prompt write without waiting for the timer"() {
         given:
         def calls = new AtomicInteger()
-        // Self-stop after a bound the real (sleeping) writer never reaches: an awaitNextWake mutant
-        // that busy-spins instead of waiting would otherwise write in a tight loop for the poll's
-        // whole timeout, and under full-suite PIT load that runaway I/O surfaces as a TIMED_OUT/
-        // MEMORY_ERROR rather than the fast red assertion below. The bound caps the spin at a few
-        // ticks so the mutant dies as a clean kill.
+        // Self-stop after a bound the real (waiting) writer never reaches: a mutant that ticks
+        // without waiting would otherwise write in a tight loop for the poll's whole timeout, and
+        // under full-suite PIT load that runaway I/O surfaces as a TIMED_OUT/MEMORY_ERROR rather
+        // than the fast red assertion below. The bound caps the spin at a few ticks.
         SnapshotWriter writer
         writer = new SnapshotWriter(
                 tempDir.resolve('snapshot.json'), {
@@ -103,7 +104,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
                 },
                 mapper,
                 Duration.ofSeconds(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.create(),
                 0)
         writer.start()
         conditions.eventually { assert calls.get() == 1 }
@@ -123,8 +124,8 @@ class SnapshotWriterLifecycleSpec extends Specification {
     def "a burst of rapid dirty triggers coalesces into a bounded number of writes"() {
         given:
         def calls = new AtomicInteger()
-        // Self-stop past the real coalesced count so a busy-spin awaitNextWake mutant caps its runaway
-        // writes at a few ticks (fast red kill) instead of looping for the settle window under load.
+        // Self-stop past the real coalesced count so a mutant that ticks without waiting caps its
+        // runaway writes at a few ticks (fast red kill) instead of looping for the settle window.
         SnapshotWriter writer
         writer = new SnapshotWriter(
                 tempDir.resolve('snapshot.json'), {
@@ -134,7 +135,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
                 },
                 mapper,
                 Duration.ofSeconds(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.create(),
                 0)
         writer.start()
         conditions.eventually { assert calls.get() == 1 }
@@ -162,19 +163,22 @@ class SnapshotWriterLifecycleSpec extends Specification {
     def "a dirty-triggered write off the timer boundary carries a fresh, accurate writtenAt"() {
         given:
         def target = tempDir.resolve('snapshot.json')
+        // FR21 of supervise-daemon-loops-and-embed-dashboard: virtual time, moved by the spec — the
+        //     startup write stamps the clock's start, the trigger lands after an explicit advance.
+        def clock = new VirtualClock()
         def writer = new SnapshotWriter(
                 target,
                 { -> SnapshotWriterSpec.fixtureSnapshot() },
                 mapper,
                 Duration.ofSeconds(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.on(clock),
                 0)
         writer.start()
         conditions.eventually { assert Files.exists(target) }
 
         when: 'the timer has not fired again; only an explicit dirty trigger causes the next write'
-        def beforeTrigger = Instant.now()
-        Thread.sleep(20)
+        def beforeTrigger = clock.instant()
+        clock.advance(Duration.ofSeconds(1))
         writer.markDirty()
 
         then: 'the resulting file content is fresh, timestamped after the trigger — not a stale reuse'
@@ -191,25 +195,28 @@ class SnapshotWriterLifecycleSpec extends Specification {
         return Instant.parse(matcher[0][1] as String)
     }
 
-    // FR1: stop() must not leave the thread running indefinitely — it wakes and
-    // exits promptly rather than waiting out the (possibly very long) interval.
-    def "stop() wakes and ends the thread promptly rather than waiting out the interval"() {
+    // FR1; FR4 of supervise-daemon-loops-and-embed-dashboard: stop() ends the loop during its
+    //     wait — a dirty trigger after it wakes nothing, where a running writer would write at once.
+    def "after stop() the writer writes no more, not even on a dirty trigger"() {
         given:
+        def calls = new AtomicInteger()
         def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> SnapshotWriterSpec.fixtureSnapshot() },
+                tempDir.resolve('snapshot.json'), {
+                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofSeconds(30),
-                Clock.systemUTC(),
+                VirtualTimeEquipment.create(),
                 0)
         writer.start()
-        conditions.eventually { assert writer.worker() != null }
+        conditions.eventually { assert calls.get() == 1 }
 
         when:
         writer.stop()
-        writer.worker().join(2000)
+        writer.markDirty()
+        Thread.sleep(300)
 
-        then:
-        !writer.worker().isAlive()
+        then: 'the trigger found no loop to wake'
+        calls.get() == 1
     }
 }

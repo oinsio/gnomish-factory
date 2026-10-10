@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import java.util.ArrayList;
@@ -28,10 +29,11 @@ import org.jspecify.annotations.Nullable;
  * can have a provider resolve a credential on first poll, but cannot obtain the seam or hand it on.
  * The {@link FactoryProperties} it holds are read for the check subsections and the connection
  * profiles only; the executor and judge settings the assembly reads from the same bean are no
- * concern of this class.
+ * concern of this class. The host's {@link TimeEquipment} is handed on to every check provider it
+ * builds, on the provider's context (design D21 of supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR16, FR26 of add-sandbox-core; FR5, FR6, FR16, FR17 of add-plugin-architecture;
- * FR1, FR4, NFR-S1 of collapse-composition-roots.
+ * FR1, FR4, NFR-S1 of collapse-composition-roots; FR23 of supervise-daemon-loops-and-embed-dashboard.
  */
 @NullMarked
 public final class CheckEquipment {
@@ -41,18 +43,21 @@ public final class CheckEquipment {
     private final Map<String, CheckClientFactory> checkClientRegistry;
     private final SecretsProvider secretsProvider;
     private final FactoryProperties factoryProperties;
+    private final TimeEquipment timeEquipment;
 
     CheckEquipment(
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
             SecretsProvider secretsProvider,
-            FactoryProperties factoryProperties) {
+            FactoryProperties factoryProperties,
+            TimeEquipment timeEquipment) {
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
         this.checkClientRegistry = checkClientRegistry;
         this.secretsProvider = secretsProvider;
         this.factoryProperties = factoryProperties;
+        this.timeEquipment = timeEquipment;
     }
 
     /**
@@ -130,8 +135,8 @@ public final class CheckEquipment {
      */
     ExternalCheckClient externalCheckClient(
             RunLaw runLaw, CheckRunContext runContext, Map<String, CheckClientFactory> registry) {
-        var dispatching =
-                new ProviderDispatchingExternalCheckClient(registry, checkSubsections(), secretsProvider, runContext);
+        var dispatching = new ProviderDispatchingExternalCheckClient(
+                registry, checkSubsections(), secretsProvider, runContext, timeEquipment);
         return runLaw.pinGuarded(dispatching, dispatching.pinContributor());
     }
 

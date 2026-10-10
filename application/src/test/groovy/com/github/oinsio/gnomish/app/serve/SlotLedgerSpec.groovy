@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.app.serve
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -27,7 +28,7 @@ class SlotLedgerSpec extends Specification {
 
     def "rejects a non-positive slot count"() {
         when:
-        new SlotLedger(slots)
+        new SlotLedger(slots, new VirtualClock())
 
         then:
         thrown(IllegalArgumentException)
@@ -38,13 +39,13 @@ class SlotLedgerSpec extends Specification {
 
     def "a fresh ledger has all N permits free"() {
         expect:
-        new SlotLedger(3).freeSlots() == 3
+        new SlotLedger(3, new VirtualClock()).freeSlots() == 3
     }
 
     // FR1, D1: acquire spends a permit up front; assign ties it to the claimed task.
     def "acquire then assign occupies one permit"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
 
         when:
         ledger.acquire()
@@ -57,7 +58,7 @@ class SlotLedgerSpec extends Specification {
     // FR1: the same-instance "never two slots for one task" guard.
     def "assigning an already-occupied task is rejected"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -72,7 +73,7 @@ class SlotLedgerSpec extends Specification {
     // D1: release frees the permit and clears occupancy so the same ref can be assigned again later.
     def "release frees the permit and clears occupancy"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -92,7 +93,7 @@ class SlotLedgerSpec extends Specification {
 
     def "releasing a task that does not occupy a slot is rejected"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
 
         when:
         ledger.release(A)
@@ -105,7 +106,7 @@ class SlotLedgerSpec extends Specification {
     //     touching occupancy.
     def "abandon returns an unassigned permit without requiring occupancy"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
 
         when:
@@ -119,7 +120,7 @@ class SlotLedgerSpec extends Specification {
     //     woken by a release() elsewhere, with no polling involved.
     def "release wakes a thread blocked in acquire"() {
         given: 'a fully occupied single-slot ledger'
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -149,7 +150,7 @@ class SlotLedgerSpec extends Specification {
     //     requiring any further acquire() calls to happen.
     def "awaitDrained blocks while a permit is outstanding and returns once it is released"() {
         given: 'a single-slot ledger with its one permit held by a running slot'
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -178,7 +179,7 @@ class SlotLedgerSpec extends Specification {
     //     is a wait, not a permanent acquisition.
     def "awaitDrained returns all permits to the pool once it unblocks"() {
         given:
-        def ledger = new SlotLedger(3)
+        def ledger = new SlotLedger(3, new VirtualClock())
 
         when:
         ledger.awaitDrained()
@@ -193,7 +194,7 @@ class SlotLedgerSpec extends Specification {
     def "awaitDrained never unblocks while any slot is still running under randomized interleaving"() {
         given:
         int slots = 4
-        def ledger = new SlotLedger(slots)
+        def ledger = new SlotLedger(slots, new VirtualClock())
         def refs = (0..<slots).collect {
             new TaskRef("github:o/r#${it}" as String)
         }
@@ -233,7 +234,7 @@ class SlotLedgerSpec extends Specification {
         int slots = 4
         int taskCount = 8
         int workersPerTask = 5
-        def ledger = new SlotLedger(slots)
+        def ledger = new SlotLedger(slots, new VirtualClock())
         def refs = (0..<taskCount).collect {
             new TaskRef("github:o/r#${it}" as String)
         }
@@ -305,14 +306,14 @@ class SlotLedgerSpec extends Specification {
     // FR11, D9: a fresh (nothing occupied) ledger's occupiedRefs() is empty.
     def "occupiedRefs is empty on a fresh ledger"() {
         expect:
-        new SlotLedger(2).occupiedRefs().isEmpty()
+        new SlotLedger(2, new VirtualClock()).occupiedRefs().isEmpty()
     }
 
     // FR11, D9: occupiedRefs reflects assign/release accurately, and is a snapshot (mutating the
     //     ledger afterwards does not change a set already returned).
     def "occupiedRefs reflects assign and release, and is an independent snapshot"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -342,7 +343,7 @@ class SlotLedgerSpec extends Specification {
     //     bounded timeout, exactly like the unbounded awaitDrained().
     def "awaitDrained(Duration) returns true once every slot frees within the timeout"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         def executor = Executors.newVirtualThreadPerTaskExecutor()
@@ -368,7 +369,7 @@ class SlotLedgerSpec extends Specification {
     //     method).
     def "awaitDrained(Duration) times out and returns false when a slot never releases in time"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -386,7 +387,7 @@ class SlotLedgerSpec extends Specification {
     // FR6, FR11: occupiedEntries is empty on a fresh ledger.
     def "occupiedEntries is empty on a fresh ledger"() {
         expect:
-        new SlotLedger(2).occupiedEntries().isEmpty()
+        new SlotLedger(2, new VirtualClock()).occupiedEntries().isEmpty()
     }
 
     // FR6, FR11: assign captures 'since' from the injected clock at assignment time, and
@@ -395,7 +396,7 @@ class SlotLedgerSpec extends Specification {
     def "assign captures since from the injected clock and occupiedEntries exposes it"() {
         given:
         def fixedInstant = Instant.parse('2026-08-03T10:15:30Z')
-        def clock = Stub(Clock) { now() >> fixedInstant }
+        def clock = Stub(InstantSource) { instant() >> fixedInstant }
         def ledger = new SlotLedger(2, clock)
 
         when:
@@ -414,8 +415,8 @@ class SlotLedgerSpec extends Specification {
         given:
         def first = Instant.parse('2026-08-03T10:00:00Z')
         def second = Instant.parse('2026-08-03T10:05:00Z')
-        def clock = Mock(Clock) {
-            now() >>> [first, second]
+        def clock = Mock(InstantSource) {
+            instant() >>> [first, second]
         }
         def ledger = new SlotLedger(2, clock)
 
@@ -440,7 +441,7 @@ class SlotLedgerSpec extends Specification {
     //     mirroring occupiedRefs' snapshot contract.
     def "occupiedEntries reflects release and is an independent snapshot"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
 
@@ -460,24 +461,5 @@ class SlotLedgerSpec extends Specification {
 
         cleanup:
         ledger.release(B)
-    }
-
-    // FR6, FR11: the single-arg constructor (used by every existing caller) still assigns a
-    //     real-time 'since' via a default system clock.
-    def "the single-arg constructor assigns since from the system clock"() {
-        given:
-        def before = Instant.now()
-        def ledger = new SlotLedger(1)
-
-        when:
-        ledger.acquire()
-        ledger.assign(A)
-        def after = Instant.now()
-
-        then:
-        def entry = ledger.occupiedEntries().find { it.taskId() == A }
-        entry != null
-        !entry.since().isBefore(before)
-        !entry.since().isAfter(after)
     }
 }

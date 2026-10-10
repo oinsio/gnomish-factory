@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.IsolationLevel
@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
+import java.time.InstantSource
 import spock.lang.TempDir
 
 /**
@@ -28,7 +28,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
     @TempDir
     Path workingCopy
 
-    private final Clock clock = { -> Instant.now() } as Clock
+    private final InstantSource clock = new VirtualClock()
 
     @Override
     protected Optional<TaskExecutionEnvironment> arrange() {

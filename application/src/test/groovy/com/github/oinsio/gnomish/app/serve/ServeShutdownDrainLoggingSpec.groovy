@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 
 /**
@@ -20,13 +21,13 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
     //     and kills both boolean-return mutants on the same line.
     def "logs allReleased=true when the occupied slot drains within the grace window"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def grace = Duration.ofMillis(500)
-        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, grace, killer, inertLoops())
 
         and: "a fake round that reacts to the flag almost immediately, well inside the grace window"
         Thread.ofVirtual().start({
@@ -52,12 +53,12 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
     //     released, so awaitDrainedQuietly must be observed returning false, not true.
     def "logs allReleased=false when the grace window expires with the slot still occupied"() {
         given:
-        def ledger = new SlotLedger(1)
+        def ledger = new SlotLedger(1, new VirtualClock())
         ledger.acquire()
         ledger.assign(A)
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }
@@ -79,10 +80,10 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
     //     would flip this and log the (vacuous) summary instead.
     def "logs no grace-window summary when nothing was occupied at shutdown"() {
         given:
-        def ledger = new SlotLedger(2)
+        def ledger = new SlotLedger(2, new VirtualClock())
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
-        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertReaper())
+        def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, inertLoops())
 
         when:
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }

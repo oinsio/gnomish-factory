@@ -8,12 +8,11 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 
 /**
  * Shared project/pipeline fixture and {@link TakeCommand} factory for {@link
@@ -96,12 +95,11 @@ tracker:
     /** Builds a fresh {@link TakeCommand}, positioned at {@code now} (design D10's backoff clock). */
     TakeCommand newCommand(Instant now) {
         TakeCommands.of(
-                newAssembly(factoryProperties()),
+                newAssembly(factoryProperties(), TakeCommands.slotTime(now)),
                 TaskGitFixture.real(),
                 registeredClone,
                 'taskId',
                 factoryProperties(),
-                Clock.fixed(now, ZoneOffset.UTC),
-                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 }

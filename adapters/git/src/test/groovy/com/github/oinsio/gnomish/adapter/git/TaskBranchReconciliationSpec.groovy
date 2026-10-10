@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -47,7 +48,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
 
     private TaskRepository undecoratedHostRepository() {
         new GitTaskRepository(
-                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE)
+                runner, RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve('home'), cloneDir), ClaimEpochSource.NONE, new VirtualClock())
     }
 
     private String localTip() {
@@ -80,7 +81,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         assert originTip() == Optional.empty()
 
         when: 'any instance later touches the task'
-        new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
+        new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
 
         then: 'origin now carries the park commit — healed without the crashed instance coming back'
         originTip() == Optional.of(localTip())
@@ -96,7 +97,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         assert originTip() == deliveredTip
 
         when:
-        new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'terminal-boundary')
+        new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).reconcileRemote(cloneDir, TASK_ID, 'terminal-boundary')
 
         then:
         originTip() == Optional.of(localTip())
@@ -109,7 +110,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
 
         when:
         def events = capture {
-            new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
+            new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
         }
 
         then:
@@ -120,7 +121,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def "a task with no local branch is nothing to reconcile"() {
         when:
         def events = capture {
-            new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, 'NO-SUCH', 'resume-start')
+            new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).reconcileRemote(cloneDir, 'NO-SUCH', 'resume-start')
         }
 
         then:

@@ -66,13 +66,16 @@ final class TakeEscalationExit {
      * @param escalated the fresh engine escalation to exit the run with; never null
      * @param order the take order whose task is parked: its tracker, the task's identity, and this
      *     instance's identity for the pre-write claim check; never null
+     * @param retry the bounded terminal-write retry the park runs under — the caller's, built on
+     *     the composition root's time source (FR18 of supervise-daemon-loops-and-embed-dashboard);
+     *     never null
      * @return the {@link TakeResult.AwaitingHuman} the park call was made with; never null
      */
-    static TakeResult exit(TaskOutcome.Escalated escalated, TakeOrder order) {
+    static TakeResult exit(TaskOutcome.Escalated escalated, TakeOrder order, TerminalWriteRetry retry) {
         return exit(
                 escalated,
                 order,
-                TerminalWriteRetry.system(),
+                retry,
                 // The caller of this convenience overload has already recorded the outcome commit, so
                 // the intent here is only the delivery verdict it fenced with — a fresh write either
                 // way, which is what keeps it from spending a probe read (FR10).

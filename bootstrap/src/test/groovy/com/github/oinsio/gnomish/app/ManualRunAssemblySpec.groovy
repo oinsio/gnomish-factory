@@ -5,8 +5,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -29,17 +29,12 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
     Path workspaceDir
 
     /**
-     * Points {@code FactoryProperties.agentCliBinary} at the fake agent script (task 2, D11 of
-     * add-agent-executor), mirroring {@code adapter.agent.FakeAgentSupport} — duplicated locally
-     * since that helper is a trait this spec's own hierarchy cannot take on.
+     * Points {@code FactoryProperties.agentCliBinary} at the fake agent's committed preset for
+     * {@code scenario} (task 2, D11 of add-agent-executor; ADR 0015), through the one owner,
+     * {@code FakeAgentSupport}.
      */
     private FactoryProperties fakeAgentProperties(String scenario) {
-        def scriptPath = FakeAgentBinary.commandPrefix()[1]
-        def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
-        wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${scriptPath}' \"\$@\"\n"
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath)
+        testProperties(agentCliBinary: FakeAgentSupport.wrapperFor(scenario))
     }
 
     /**

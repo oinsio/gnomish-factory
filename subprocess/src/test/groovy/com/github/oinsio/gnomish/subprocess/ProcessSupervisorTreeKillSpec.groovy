@@ -21,12 +21,7 @@ class ProcessSupervisorTreeKillSpec extends Specification implements FakeBinarie
     def "FR3, NFR-R2, G5, M2: neither the child nor its descendants survive a deadline kill"() {
         given: 'a binary that ignores the cooperative signal and forks a child that ignores it too'
         Path pidFile = dir.resolve('child.pid')
-        Path binary = fakeBinary(dir, 'tree', """
-trap '' TERM
-sh -c 'trap "" TERM; sleep 600' &
-echo \$! > "\$1"
-wait
-""")
+        Path binary = fakeBinary('tree')
         Process process = new ProcessBuilder(binary.toString(), pidFile.toString()).start()
 
         and: 'the tree is fully up: the forked child exists and has forked its own sleep'
@@ -68,11 +63,7 @@ wait
     def "design D3: a child forked while the tree is being killed is caught by the re-snapshot"() {
         given: 'a binary that answers the cooperative signal by forking a fresh child and carrying on'
         Path latePidFile = dir.resolve('late.pid')
-        Path binary = fakeBinary(dir, 'late', """
-trap 'sh -c "trap \\"\\" TERM; sleep 600" & echo \$! > "\$1"; wait' TERM
-sleep 600 &
-wait
-""")
+        Path binary = fakeBinary('late')
         Process process = new ProcessBuilder(binary.toString(), latePidFile.toString()).start()
         eventually('the fake binary is up') { process.isAlive() }
 

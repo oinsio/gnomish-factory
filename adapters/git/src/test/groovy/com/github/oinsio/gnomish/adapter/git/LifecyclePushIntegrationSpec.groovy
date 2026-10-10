@@ -9,10 +9,12 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -48,13 +50,13 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
      */
     private TaskLifecycleStore repositoryFor(String mode, Path clone) {
         if (mode == 'host') {
-            return new GitTaskStore(git, ClaimEpochSource.NONE).taskRepository(
+            return new GitTaskStore(git, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()).taskRepository(
                     RegisteredCloneFixture.resolvedOrRegistered(tempDir.resolve("home-${clone.fileName}"), clone))
         }
         Path indexDir = tempDir.resolve("index-${clone.fileName}")
         Files.createDirectories(indexDir)
-        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), ClaimEpochSource.NONE, DenialCursorSource.NONE)
-        new PushBestEffortTaskLifecycleStore(bare, git, clone)
+        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE)
+        new PushBestEffortTaskLifecycleStore(bare, git, clone, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
     def "M1: a task driven to Completed in #mode mode leaves origin at the local tip, with no manual push"() {

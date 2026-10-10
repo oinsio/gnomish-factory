@@ -4,8 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.Clock
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import java.nio.file.Path
 import java.time.Duration
 
@@ -25,24 +24,24 @@ class FeedAutomatonFixture {
 
     /** The feed automaton with no observability writer and a closed remote outage gate. */
     static FeedAutomaton feedAutomaton(
-            Tracker tracker, InstanceId instanceId, SlotLedger slotLedger, SlotRunner slotRunner, Sleeper sleeper,
-            Clock clock, Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
+            Tracker tracker, InstanceId instanceId, SlotLedger slotLedger, SlotRunner slotRunner, TimeEquipment time,
+            Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
             Random random) {
-        feedAutomaton(tracker, instanceId, slotLedger, slotRunner, sleeper, clock, backoffBase, backoffCap,
+        feedAutomaton(tracker, instanceId, slotLedger, slotRunner, time, backoffBase, backoffCap,
                 idlePollInterval, wipLimit, random, DirtyNotifier.NOOP)
     }
 
     /** As above plus a {@link DirtyNotifier} (FR1 of add-serve-observability, design D4). */
     static FeedAutomaton feedAutomaton(
-            Tracker tracker, InstanceId instanceId, SlotLedger slotLedger, SlotRunner slotRunner, Sleeper sleeper,
-            Clock clock, Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
+            Tracker tracker, InstanceId instanceId, SlotLedger slotLedger, SlotRunner slotRunner, TimeEquipment time,
+            Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
             Random random, DirtyNotifier dirtyNotifier) {
-        new FeedAssembly(sleeper, clock, new IdleTiming(idlePollInterval, backoffBase, backoffCap, random), wipLimit)
+        new FeedAssembly(time, new IdleTiming(idlePollInterval, backoffBase, backoffCap, random), wipLimit)
                 .feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, closedGate(idlePollInterval))
     }
 
     private static RemoteOutageGate closedGate(Duration idlePollInterval) {
         new RemoteOutageGate(BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), idlePollInterval,
-                RemoteOutageGates.DEFAULT_CAP)
+                Duration.ofMinutes(10))
     }
 }

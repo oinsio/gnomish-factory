@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -68,7 +69,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
             }
             base.sleep(d)
         } as Sleeper
-        def dying = new InstanceHeartbeat(tracker, progress, dyingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE, listener)
+        def dying = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, dyingSleeper), INTERVAL, ClaimLostSink.IGNORE, listener)
         started << dying
 
         when: 'the claim registers, the worker parks, then dies on its second sleep'
@@ -140,7 +141,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
             -> throw new RuntimeException('listener boom')
         }
         def sleeper = new BlockingSleeper()
-        def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, boom)
+        def hb = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, sleeper), INTERVAL, ClaimLostSink.IGNORE, boom)
         started << hb
         def logs = LogCaptureSupport.attach(InstanceHeartbeat)
 
@@ -172,7 +173,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     def "the six-arg constructor defaults to the no-op listener"() {
         given:
         def sleeper = new BlockingSleeper()
-        def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
+        def hb = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, sleeper), INTERVAL, ClaimLostSink.IGNORE)
         started << hb
 
         when:
@@ -187,7 +188,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     }
 
     private InstanceHeartbeat hbWith(Sleeper sleeper) {
-        def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, listener)
+        def hb = new InstanceHeartbeat(tracker, progress, VirtualTimeEquipment.on(clock, sleeper), INTERVAL, ClaimLostSink.IGNORE, listener)
         started << hb
         hb
     }

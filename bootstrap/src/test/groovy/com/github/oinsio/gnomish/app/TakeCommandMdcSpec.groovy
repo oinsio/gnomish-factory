@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -92,10 +91,9 @@ tracker:
         // to the real System.in (which a mutated confirm() would block on). Behaviour is identical: no
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
         newTakeCommand(
-                testProperties(instanceName: INSTANCE_NAME, agentCliBinary: FakeAgentSupport.wrapperFor('plain-round')), registeredClone, registry,
-                TakeCommandSeams.DEFAULTS
-                .withHeartbeatSleeper(new ThreadSleeper())
-                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
+                testProperties(instanceName: INSTANCE_NAME, agentCliBinary: FakeAgentSupport.wrapperFor('plain-round')), registeredClone, registry, { time ->
+                    TakeCommandSeams.defaults(time).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
+                })
     }
 
     // FR9, UX2, NFR-O1: every explicit-mode refusal disposition (Working/AwaitingHuman/Finished/

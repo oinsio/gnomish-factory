@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -32,7 +33,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
     Path tempDir
 
     GitProcessRunner runner = new GitProcessRunner()
-    def branches = new GitTaskBranches(runner, ClaimEpochSource.NONE)
+    def branches = new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure())
     Path cloneDir
     RegisteredClone registeredClone
 
@@ -108,7 +109,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
     def "FR2: a recorded park is named Parked, and a Completed tip still holding its envelope CompletedUncleaned"() {
         given:
         seedTask('PROJ-10')
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('PROJ-10', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
 
         expect:
@@ -144,7 +145,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         given: 'a delivered task branch, whose tip no longer carries the state files'
         seedTask('PROJ-6')
         def finalState = TaskState.atStageStart('implement')
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
                 .recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
 
         when:

@@ -10,9 +10,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
@@ -85,12 +84,10 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
                 RegisteredCloneFixture.unregistered(homeDir, projectDir),
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
-                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null),
-                Clock.systemUTC(),
-                new SystemClock(),
-                new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()), { FeedAutomaton automaton ->
+                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null, null),
+                new TrackerWiring([github: fakeFactory(tracker)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { FeedAutomaton automaton ->
                     automaton.run()
-                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly(),
                 LiveConsoleIO.onStderr())
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {

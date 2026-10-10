@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -210,7 +211,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     def "FR16: a delivered branch renders as delivered, not as a missing state file"() {
         given: 'a completed task whose cleanup commit stripped .gnomish-task/ from the tip'
         persistRound('DELIVERED-1', TaskState.atStageStart('implement'))
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'DELIVERED-1')
@@ -274,7 +275,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         given: 'one healthy task, one delivered task and one with a broken state file'
         persistRound('MIXED-OK', TaskState.atStageStart('implement'))
         persistRound('MIXED-DONE', TaskState.atStageStart('implement'))
-        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('MIXED-DONE')
         persistRound('MIXED-BAD', TaskState.atStageStart('implement'))

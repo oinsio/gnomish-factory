@@ -86,6 +86,8 @@ final class TakeReconcile {
      *     origin-behind line in the re-posted park report exactly as a fresh park does. A caller
      *     with no fence to run (container mode, whose pushes are best-effort throughout) passes
      *     {@link ParkDeliveryVerdict.Delivered}
+     * @param retry the bounded terminal-write retry the deferred park runs under, the slot
+     *     wiring's (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      * @return the {@link TakeResult.AwaitingHuman} the deferred park produced; never null
      */
     static TakeResult deliverPark(
@@ -93,8 +95,8 @@ final class TakeReconcile {
             TaskState finalState,
             Runnable clearMarker,
             TakeOrder order,
-            ParkDeliveryVerdict parkDelivery) {
-        var retry = TerminalWriteRetry.system();
+            ParkDeliveryVerdict parkDelivery,
+            TerminalWriteRetry retry) {
         // A recovered park: its intent is already on the branch, so the protocol probes the tracker
         // before re-driving the write and adds no duplicate artifact (FR10).
         var transition = new ParkTransition.Recovered(parkDelivery, clearMarker);

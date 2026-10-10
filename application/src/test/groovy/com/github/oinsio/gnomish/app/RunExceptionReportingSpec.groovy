@@ -122,7 +122,9 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
         failure << [
             new TaskNotFoundException('PROJ-1'),
             new TakeExitCodeException(0),
-            new ServeExitCodeException(1)
+            new ServeExitCodeException(1),
+            // FR9 of supervise-daemon-loops-and-embed-dashboard: the loop logged its give-up ERROR
+            new DashboardDisabledException()
         ]
     }
 

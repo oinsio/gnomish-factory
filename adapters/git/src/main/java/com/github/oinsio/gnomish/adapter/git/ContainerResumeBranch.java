@@ -34,16 +34,20 @@ public final class ContainerResumeBranch {
 
     private final GitProcessRunner runner;
     private final ClaimEpochSource epochs;
+    private final GitInfrastructureRetry retry;
 
     /**
      * @param runner the shared git subprocess runner; never null
      * @param epochs the tenure the reconciler's automatic discard is gated on (FR8 of
      *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} on the claimless {@code run
      *     --resume} path, where a diverged branch stops the run instead of discarding the local line
+     * @param retry the infrastructure budget the branch lookup is re-attempted under (FR18 of
+     *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public ContainerResumeBranch(GitProcessRunner runner, ClaimEpochSource epochs) {
+    public ContainerResumeBranch(GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.epochs = epochs;
+        this.retry = retry;
     }
 
     /**
@@ -55,7 +59,7 @@ public final class ContainerResumeBranch {
      */
     public boolean ensureLocalBranch(Path cloneDir, String taskId) {
         String branch = TaskIdSanitizer.branchName(taskId);
-        return switch (new TaskBranchLocator(runner).locate(cloneDir, taskId)) {
+        return switch (new TaskBranchLocator(runner, retry).locate(cloneDir, taskId)) {
             case BranchLocation.Local ignored -> {
                 ReplicaPairReconciler.forClone(runner, cloneDir, epochs).reconcile(taskId, branch);
                 yield true;

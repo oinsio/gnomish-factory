@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.TransferSource.SeedPath
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -21,21 +23,29 @@ trait TransferAdversaryFixture implements BareGitRepoFixture {
 
     /**
      * An {@code ext::} transport URL onto {@code box}, in the harvest's own shape ({@code <command>
-     * %S <path>}): the command is a script that appends each session's argv to {@code counter} and
-     * then serves the repository with {@code git upload-pack}, standing in for {@code docker exec}
-     * (FR12, NFR-P1 of own-git-transfer-argv) — so a spec can assert how many pack sessions a
-     * transfer spent, which the repository's end state cannot show.
+     * %S <path>}): the command is the committed preset {@code box-upload-pack}, through a per-run
+     * link in {@code parent}, which records each session's argv and then serves the repository with
+     * {@code git upload-pack}, standing in for {@code docker exec} (FR12, NFR-P1 of
+     * own-git-transfer-argv) — so a spec can assert how many pack sessions a transfer spent
+     * ({@link #boxUploadPackSessions}), which the repository's end state cannot show.
      *
-     * @param parent the directory the script is written under; never null
+     * @param parent the directory the per-run link is created in, one per directory; never null
      * @param box the repository the command serves; never null
-     * @param counter the file each session appends its argv to; absent until the first session
      * @return the URL to build a {@code Container} source from
      */
-    String boxUploadPackUrl(Path parent, Path box, Path counter) {
-        Path script = parent.resolve("box-upload-pack-${System.nanoTime()}.sh")
-        script.toFile().text = "#!/bin/sh\necho \"\$@\" >> \"${counter}\"\nexec git \"\${1#git-}\" \"\$2\"\n"
-        script.toFile().executable = true
-        "ext::${script} %S ${box}"
+    String boxUploadPackUrl(Path parent, Path box) {
+        Path link = parent.resolve('box-upload-pack')
+        if (!Files.isSymbolicLink(link)) {
+            StandIn.link(link, 'box-upload-pack')
+        }
+        "ext::${link} %S ${box}"
+    }
+
+    /** The argv of every pack session {@link #boxUploadPackUrl} served from {@code parent}, in order. */
+    List<String> boxUploadPackSessions(Path parent) {
+        StandInLog.blocks(parent.resolve('box-upload-pack')).findResults {
+            it.argv
+        }
     }
 
     /**

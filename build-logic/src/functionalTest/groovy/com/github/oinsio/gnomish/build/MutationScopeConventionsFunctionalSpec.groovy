@@ -64,6 +64,8 @@ pitest {
 """)
         // `adversarial-gitconfig-conventions` declares this file as a test input; nothing reads it here.
         repo.write('test-fixtures/src/main/resources/adversarial-gitconfig', '# inert\n')
+        // `stand-in-conventions` declares the stand-in library as a test input; nothing reads it here.
+        repo.write('test-fixtures/src/main/resources/stand-in/stand-in.sh', '# inert\n')
         repo.write(FOO, javaClass('Foo', 'public static int twice(int x) { return x * 2; }'))
         repo.write(BAR, javaClass('Bar', 'public static int one() { return 1; }'))
         repo.write(SPEC, spec(KILLING))

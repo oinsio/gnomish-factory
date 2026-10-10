@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -96,7 +96,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     def "judgeVoter binds the manifest-driven CLI judge in host mode"() {
         when:
         def voter = ExecutorAdapterSelector.judgeVoter(
-                testProperties(), new SystemClock(), childEnv, law, null)
+                testProperties(), new VirtualClock(), childEnv, law, null)
 
         then:
         voter != null

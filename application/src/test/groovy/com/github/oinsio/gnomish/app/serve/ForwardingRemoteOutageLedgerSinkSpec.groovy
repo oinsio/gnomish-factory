@@ -17,41 +17,41 @@ class ForwardingRemoteOutageLedgerSinkSpec extends Specification {
         new RemoteOutageClosedOutage('origin', Instant.EPOCH, Instant.EPOCH.plusSeconds(1), 1, 0, 'boom')
     }
 
-    def "accept() before bind() is a harmless no-op"() {
+    def "outageClosed() before bind() is a harmless no-op"() {
         given:
         def sink = new ForwardingRemoteOutageLedgerSink()
 
         when:
-        sink.accept(outage())
+        sink.outageClosed(outage())
 
         then:
         noExceptionThrown()
     }
 
-    def "accept() after bind() forwards the outage to the bound delegate"() {
+    def "outageClosed() after bind() forwards the outage to the bound delegate"() {
         given:
         def sink = new ForwardingRemoteOutageLedgerSink()
         def received = []
         sink.bind({ o -> received << o })
 
         when:
-        sink.accept(outage())
+        sink.outageClosed(outage())
 
         then:
         received == [outage()]
     }
 
-    def "a later bind() call rebinds subsequent accept() calls to the new delegate"() {
+    def "a later bind() call rebinds subsequent outageClosed() calls to the new delegate"() {
         given:
         def sink = new ForwardingRemoteOutageLedgerSink()
         def first = []
         def second = []
         sink.bind({ o -> first << o })
-        sink.accept(outage())
+        sink.outageClosed(outage())
 
         when:
         sink.bind({ o -> second << o })
-        sink.accept(outage())
+        sink.outageClosed(outage())
 
         then:
         first.size() == 1

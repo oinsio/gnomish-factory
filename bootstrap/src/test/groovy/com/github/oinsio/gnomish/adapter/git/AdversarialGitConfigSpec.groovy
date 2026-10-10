@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
@@ -76,11 +77,7 @@ class AdversarialGitConfigSpec extends Specification {
 
     def "FR12: a runner whose git points the variable elsewhere fails assertInEffect"() {
         given: 'a stand-in git that redirects the variable before delegating to the real one'
-        Path standIn = tempDir.resolve('redirecting-git')
-        standIn.toFile().text = """#!/bin/sh
-${AdversarialGitConfig.VARIABLE}=/dev/null exec git "\$@"
-"""
-        standIn.toFile().executable = true
+        Path standIn = StandIn.git('redirect-global-config')
 
         when:
         AdversarialGitConfig.assertInEffect(new GitProcessRunner(standIn.toString()))

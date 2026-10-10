@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -58,7 +59,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway factory home of its own. */
     private void buildTaskBranch(RegisteredClone seed, String taskId) {
         Path repo = seed.clonePath()
-        new GitTaskRepository(runner, seed, ClaimEpochSource.NONE).createTask(
+        new GitTaskRepository(runner, seed, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext(taskId, UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []), TaskStart.commit(repo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def worktree = TaskWorktreePath.resolve(seed, taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [

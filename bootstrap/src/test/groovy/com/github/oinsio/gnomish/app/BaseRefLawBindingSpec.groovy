@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -57,17 +57,8 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
-    private FactoryProperties fakeAgentProperties(String captureStdinPath) {
-        def scriptPath = FakeAgentBinary.commandPrefix()[1]
-        def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
-        wrapper.text = """#!/bin/sh
-export GNOMISH_FAKE_SCENARIO='plain-round'
-export GNOMISH_FAKE_CAPTURE_STDIN='${captureStdinPath}'
-exec sh '${scriptPath}' "\$@"
-"""
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath)
+    private FactoryProperties fakeAgentProperties(Path stdinCapture) {
+        testProperties(agentCliBinary: FakeAgentSupport.binaryCapturingStdin('plain-round', stdinCapture))
     }
 
     private static StageDefinition stage() {
@@ -85,9 +76,9 @@ exec sh '${scriptPath}' "\$@"
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
-    private GitModeRunner runner(String captureStdinPath) {
+    private GitModeRunner runner(Path stdinCapture) {
         new GitModeRunner(
-                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, fakeAgentProperties(captureStdinPath)),
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, fakeAgentProperties(stdinCapture)),
                 TaskGitFixture.real(),
                 registeredClone,
                 LiveConsoleIO.onStdout())
@@ -107,12 +98,11 @@ exec sh '${scriptPath}' "\$@"
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), DIRTY_LAW + '\n')
 
         and: 'a captured-stdin file the fake writes its one prompt to'
-        def captureFile = File.createTempFile('fake-agent-stdin', '.log')
-        captureFile.deleteOnExit()
+        def captureFile = tempDir.resolve('plain-round.log').toFile()
         def context = new TaskContext('BASE-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run based on release/1.18'
-        runner(captureFile.absolutePath).run(
+        runner(captureFile.toPath()).run(
                 new RunOrder(cloneDir, 'release/1.18', pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
@@ -140,12 +130,11 @@ exec sh '${scriptPath}' "\$@"
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), DIRTY_LAW + '\n')
 
         and: 'a captured-stdin file the fake writes its one prompt to'
-        def captureFile = File.createTempFile('fake-agent-stdin', '.log')
-        captureFile.deleteOnExit()
+        def captureFile = tempDir.resolve('plain-round.log').toFile()
         def context = new TaskContext('BASE-2', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
         when: 'a fresh git-mode run with no --base'
-        runner(captureFile.absolutePath).run(
+        runner(captureFile.toPath()).run(
                 new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 

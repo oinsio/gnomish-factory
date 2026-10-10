@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 
 /**
  * The git-adapter half of {@code VirtualTimeRetries}: the bounded infrastructure retry
@@ -20,8 +19,7 @@ final class VirtualTimeGitRetries {
 
     /** The production git infrastructure retry, on virtual time. */
     static GitInfrastructureRetry gitInfrastructure() {
-        def clock = new VirtualClock()
-        new GitInfrastructureRetry(new VirtualSleeper(clock), GitInfrastructureRetry.DEFAULT_ATTEMPTS,
+        new GitInfrastructureRetry(VirtualTimeEquipment.create(), GitInfrastructureRetry.DEFAULT_ATTEMPTS,
                 GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF)
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -16,12 +17,11 @@ class FetchRefusalSpec extends Specification {
 
     static final String OBJECT = '4fac338eb7ab83e161dedf7bd70faca576de5c41'
 
-    /** {@code git fetch} under {@code fetch.fsckObjects=true}, git 2.55.0. */
-    static final String FETCH_REFUSAL = """\
-error: object ${OBJECT}: missingEmail: invalid author/committer line - missing email
-fatal: fsck error in packed object
-fatal: index-pack failed
-"""
+    /**
+     * {@code git fetch} under {@code fetch.fsckObjects=true}, git 2.55.0 — read from the stand-in
+     * library, whose fetch-refusing presets print exactly this (ADR 0015: one spelling).
+     */
+    static final String FETCH_REFUSAL = StandIn.data('stderr#fetch-fsck-refusal')
 
     /** {@code git clone --no-local} under {@code transfer.fsckObjects=true}, git 2.55.0. */
     static final String CLONE_REFUSAL = """\

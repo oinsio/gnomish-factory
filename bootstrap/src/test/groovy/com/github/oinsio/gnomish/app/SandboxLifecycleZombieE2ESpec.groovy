@@ -23,8 +23,8 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
+import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
 import spock.lang.IgnoreIf
@@ -168,7 +168,9 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         Thread.sleep(1500)
 
         and: 'the sweep evaluates the host with a liveness verdict that omits this task — the oracle already judged it unowned'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), Clock.systemUTC())
+        // real-time-wiring: a real Docker daemon stamps the boxes' creation on the wall clock, and the
+        //     pass ages them against its clock; the end-to-end layer needs the same time.
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null), InstantSource.system())
         def summary = pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the zombie box was stopped — not disposed — volume and network retained'

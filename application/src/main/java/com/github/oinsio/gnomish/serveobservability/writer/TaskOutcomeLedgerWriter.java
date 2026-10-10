@@ -9,8 +9,8 @@ import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLineAssembler;
 import java.io.IOException;
-import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +39,7 @@ public final class TaskOutcomeLedgerWriter {
     private final SlotLedger slotLedger;
     private final RotatingLedgerAppender appender;
     private final InstanceInfo instance;
-    private final Clock clock;
+    private final InstantSource clock;
 
     /**
      * @param slotLedger the same slot registry the finishing slot's caller has not yet released
@@ -49,7 +49,7 @@ public final class TaskOutcomeLedgerWriter {
      * @param clock supplies {@code finishedAt} for every write; never null
      */
     public TaskOutcomeLedgerWriter(
-            SlotLedger slotLedger, RotatingLedgerAppender appender, InstanceInfo instance, Clock clock) {
+            SlotLedger slotLedger, RotatingLedgerAppender appender, InstanceInfo instance, InstantSource clock) {
         this.slotLedger = slotLedger;
         this.appender = appender;
         this.instance = instance;

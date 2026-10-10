@@ -2,12 +2,12 @@ package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import java.time.InstantSource;
 
 /**
  * The host-mode {@link CheckEnvironmentSource} (G4, D20: host isolation
@@ -20,7 +20,7 @@ import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironmen
  *
  * <p>Implements FR2, FR4 of add-sandbox-core.
  */
-record HostCheckEnvironmentSource(Clock clock, ChildEnvAllowlist childEnv) implements CheckEnvironmentSource {
+record HostCheckEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv) implements CheckEnvironmentSource {
 
     @Override
     public Acquired acquire(VerifyCheck.Command check, Workspace workspace) {

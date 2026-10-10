@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import java.time.Duration
 import spock.lang.Specification
 
@@ -47,13 +48,13 @@ class ReapingWhileSaturatedSpec extends Specification {
     // The real per-instance beat thread: every slot's held claim beats on this tick alone —
     // no reaper duty rides along, design D1 of fix-reaper-idle-liveness.
     private final InstanceHeartbeat heartbeat = new InstanceHeartbeat(
-    tracker, new HeartbeatProgress(), new BlockingSleeper(), clock, INTERVAL,
+    tracker, new HeartbeatProgress(), VirtualTimeEquipment.on(clock, new BlockingSleeper()), INTERVAL,
     ClaimLostSink.IGNORE)
     // The standing reaper, wired exactly like TakeHeartbeat#forRun: its live-claims supplier is
     // this SAME heartbeat, so OWN_A/OWN_B are excluded from staleness observation only while the
     // heartbeat is actively beating them.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
+    new StandingReaper(reaper, INTERVAL, heartbeat.&liveClaimsSnapshot, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> }))
 
     def cleanup() {
         heartbeat.unregister(OWN_A)

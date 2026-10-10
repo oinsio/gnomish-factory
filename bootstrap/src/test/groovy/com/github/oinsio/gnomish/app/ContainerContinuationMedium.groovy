@@ -30,6 +30,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.CommitMetadata
@@ -103,7 +104,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
     void park(String taskId, PipelineDefinition definition, String scenario) {
         def objects = objects()
         def first = TaskState.atStageStart(definition.stages().first().name())
-        new GitObjectsTaskRepository(objects, ClaimEpochSource.NONE, DenialCursorSource.NONE).createTask(context(taskId),
+        new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE).createTask(context(taskId),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), first)
         def rounds = new CurrentRound()
         def box = new LocalBoxEnvironment(cloneDir, Files.createTempDirectory(root, 'box'))
@@ -111,14 +112,14 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
             -> box
         }, TaskIdSanitizer.branchName(taskId), segments(definition))
         def source = new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, new VirtualClock())
-        // Ahead of the wall clock the local box stamps process starts with, so wall time is positive.
-        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario), new VirtualClock(Instant.now().plusSeconds(3600)),
+        // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
+        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
                 { e -> } as AgentProgressListener, LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, objects, taskId, rounds, ClaimEpochSource.NONE)
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
-                clock, new VirtualSleeper(clock))
+                VirtualTimeEquipment.on(clock))
         def outcome = new Engine().run(definition, context(taskId), first,
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
         assert outcome instanceof TaskOutcome.Paused || outcome instanceof TaskOutcome.Escalated: "the run of ${taskId} did not park: ${outcome}"
@@ -131,7 +132,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         def objects = objects()
         def tip = objects.resolveRef(ref).get()
         def identity = new CommitIdentity('gnome', 'gnome@sandbox.local')
-        def now = Instant.now()
+        def now = Instant.parse('2026-01-01T00:00:00Z')
         objects.commit(new CommitRequest(ref, Optional.of(tip), tip,
                 [
                     new TreeEdit.PutFile(BranchHistory.STALE_REQUEST, '{"question":"left over?","options":[]}'.getBytes('UTF-8'))

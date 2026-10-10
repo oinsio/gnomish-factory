@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -64,7 +65,7 @@ class GithubHeartbeatSpec extends Specification {
 
     private GithubHeartbeat newHeartbeat() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubHeartbeat(httpClient, INSTANCE_ID)
+        new GithubHeartbeat(httpClient, INSTANCE_ID, new VirtualClock())
     }
 
     private TaskRef refFor(int issueNumber) {

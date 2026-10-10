@@ -1,36 +1,40 @@
 package com.github.oinsio.gnomish.domain.engine.fake
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 
 /**
- * A controllable {@link Clock} for deterministic engine tests: holds a mutable
- * {@link Instant} (starting at {@link Instant#EPOCH}) that {@link #now} returns, and
+ * A controllable {@link InstantSource} for deterministic tests: holds a mutable
+ * {@link Instant} (starting at {@link Instant#EPOCH}) that {@link #instant} returns, and
  * that {@link #advance} moves forward. Paired with {@link VirtualSleeper}, it makes
  * the external poll loop's timing deterministic and instant.
  *
+ * <p>The current instant is a private field, not a Groovy property: a property named
+ * {@code instant} would shadow the {@link #instant()} method (design D18 of
+ * supervise-daemon-loops-and-embed-dashboard). Time moves only through {@link #advance}.
+ *
  * <p>Test fake for the add-stage-engine ports; not production code, never
- * PIT-mutated.
+ * PIT-mutated. Implements FR21 of supervise-daemon-loops-and-embed-dashboard.
  */
-class VirtualClock implements Clock {
+class VirtualClock implements InstantSource {
 
     /** The current virtual instant; starts at the epoch. */
-    Instant instant = Instant.EPOCH
+    private Instant current = Instant.EPOCH
 
     VirtualClock() {}
 
     VirtualClock(Instant start) {
-        this.instant = start
+        this.current = start
     }
 
     /** Moves virtual time forward by {@code duration}. */
     void advance(Duration duration) {
-        instant = instant.plus(duration)
+        current = current.plus(duration)
     }
 
     @Override
-    Instant now() {
-        instant
+    Instant instant() {
+        current
     }
 }

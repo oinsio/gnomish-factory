@@ -34,7 +34,7 @@ class BoardTextRendererSpec extends Specification {
             List<WorkingRow> workingRows = [],
             List<AwaitingHumanRow> awaitingHumanRows = [],
             boolean truncated = false) {
-        new BoardModel(readyRows, workingRows, awaitingHumanRows, ReadySummary.tally(readyRows), truncated, GENERATED_AT)
+        new BoardModel(readyRows, workingRows, awaitingHumanRows, ReadySummary.tally(readyRows), 3, truncated, GENERATED_AT)
     }
 
     // UX1: three columns, in Ready / Working / AwaitingHuman order

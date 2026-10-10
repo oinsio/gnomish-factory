@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * handed to every caller, so all three share the same counters.
  *
  * <p>Every delegated call is timed the same way: a normal return sets {@link #lastSuccessAt()} to
- * {@code clock.now()} and resets {@link #consecutiveFailures()} to zero; a thrown {@link
+ * {@code clock.instant()} and resets {@link #consecutiveFailures()} to zero; a thrown {@link
  * RuntimeException} increments {@link #consecutiveFailures()} and is rethrown completely
  * unchanged — this decorator is transparent, never altering a caller's error handling (FR8).
  *
@@ -29,7 +29,7 @@ import org.jspecify.annotations.Nullable;
 public final class TrackerHealthTracker implements Tracker {
 
     private final Tracker delegate;
-    private final Clock clock;
+    private final InstantSource clock;
     private volatile @Nullable Instant lastSuccessAt;
     private final AtomicInteger consecutiveFailures = new AtomicInteger();
 
@@ -38,7 +38,7 @@ public final class TrackerHealthTracker implements Tracker {
      * @param clock the time source read on each success to set {@link #lastSuccessAt()}; never
      *     null
      */
-    public TrackerHealthTracker(Tracker delegate, Clock clock) {
+    public TrackerHealthTracker(Tracker delegate, InstantSource clock) {
         this.delegate = delegate;
         this.clock = clock;
     }
@@ -167,7 +167,7 @@ public final class TrackerHealthTracker implements Tracker {
             }
             throw failure;
         }
-        lastSuccessAt = clock.now();
+        lastSuccessAt = clock.instant();
         consecutiveFailures.set(0);
         return result;
     }

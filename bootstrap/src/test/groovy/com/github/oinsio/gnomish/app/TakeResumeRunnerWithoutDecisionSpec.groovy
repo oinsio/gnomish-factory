@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -239,7 +240,8 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     private TakeLoadedBranchRoutes<ResumeBootstrap> loadedRoutes() {
         def runner = newTakeResumeRunner()
         def mechanics = new HostResumeMechanics(runner, taskGit, registeredClone, pipeline(AdvancementMode.MANUAL))
-        new TakeLoadedBranchRoutes<>(mechanics, new TakeDecisionResume<>(mechanics), taskGit)
+        new TakeLoadedBranchRoutes<>(mechanics, new TakeDecisionResume<>(mechanics), taskGit,
+                VirtualTimeRetries.terminalWrite())
     }
 
     private List<String> subjectsOldestFirst(String taskId) {

@@ -34,9 +34,12 @@ import org.jspecify.annotations.Nullable;
  * make-checkpoint-gate-durable.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
+ * @param retry the bounded terminal-write retry every reconciled tracker write runs under — the
+ *     slot wiring's, built on the composition root's time source (FR18 of
+ *     supervise-daemon-loops-and-embed-dashboard)
  */
 record TakeLoadedBranchRoutes<B extends ResumedBranch>(
-        ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git) {
+        ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git, TerminalWriteRetry retry) {
 
     /**
      * The loaded-branch routes: the shapes above all resume from what the branch itself records,
@@ -58,7 +61,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
             // rather than refusing or re-running paid work. The finish reuses TakeFinishReport + the
             // ClaimGuard pre-write check, so a reconcile that races a takeover cannot clobber a
             // successor. Needs no environment in either mode: it is a history read and a tracker write.
-            return TakeReconcileFinish.deliverCompleted(git, order);
+            return TakeReconcileFinish.deliverCompleted(git, order, retry);
         }
         TaskState finalState = mechanics.readFinalState(branch);
 
@@ -80,7 +83,8 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
                     finalState,
                     () -> mechanics.confirmTerminalWrite(cloneDir, branch),
                     order,
-                    git.branches().fenceParkDelivery(cloneDir, taskId));
+                    git.branches().fenceParkDelivery(cloneDir, taskId),
+                    retry);
         }
 
         // The CompletedUncleaned shape (FR9, FR10 of harden-task-branch-contract): the tip records
@@ -90,7 +94,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         // passed already, and re-running the last one would pay for delivered work (NFR-C1).
         if (branch.outcome() instanceof RecordedOutcome.Completed) {
             return TakeReconcileFinish.finishUncleaned(
-                    branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), order);
+                    branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), order, retry);
         }
 
         // The AwaitingApproval shape (FR4, FR11 of make-checkpoint-gate-durable): a manual stage
@@ -142,8 +146,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         var park = new ParkTransition.Fresh(
                 () -> mechanics.recordPark(order, branch, paused),
                 () -> mechanics.confirmTerminalWrite(order.run().cloneDir(), branch));
-        return TakePauseExit.finish(
-                paused, branch.context(), branch.branchName(), order, TerminalWriteRetry.system(), park);
+        return TakePauseExit.finish(paused, branch.context(), branch.branchName(), order, retry, park);
     }
 
     /**

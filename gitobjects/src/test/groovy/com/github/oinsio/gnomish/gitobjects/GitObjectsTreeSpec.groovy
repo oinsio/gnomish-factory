@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
@@ -62,9 +63,7 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
         def bare = seedBareRepo(tempDir, ['src/App.java': 'class App {}'])
         def hooks = bare.resolve('hooks')
         Files.createDirectories(hooks)
-        def hook = hooks.resolve('reference-transaction')
-        Files.writeString(hook, "#!/bin/sh\nexit 1\n")
-        hook.toFile().setExecutable(true)
+        StandIn.link(hooks.resolve('reference-transaction'), 'hook-refuse')
         def git = openGitObjects(bare, tempDir)
         def base = git.resolveRef('refs/heads/base').get()
 

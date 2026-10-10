@@ -1,9 +1,14 @@
 package com.github.oinsio.gnomish.adapter.sandbox;
 
 import com.github.oinsio.gnomish.adapter.plugin.ProviderDiscoveryReport;
+import com.github.oinsio.gnomish.app.SandboxModeSelector;
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe;
 import com.github.oinsio.gnomish.sandbox.AdapterBinding;
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
+import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
+import com.github.oinsio.gnomish.sandbox.SandboxProperties;
+import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
 
@@ -30,7 +35,13 @@ import org.springframework.context.annotation.Bean;
  * component scan — the composition root scans only {@code com.github.oinsio.gnomish.app} (design
  * D3 of add-tracker-port).
  *
- * <p>Implements FR1, NFR-O1 of open-adapter-binding-registry; UX3 of open-adapter-binding-registry.
+ * <p>Beside the registry it supplies the two other inputs of the execution-mode decision that are
+ * fixed for the process: the container-runtime probe — the one place the Docker adapter's probe is
+ * named — and the {@link SandboxModeSelector} built once over the registry, the bindings, the
+ * sandbox config and that probe (design D22 of supervise-daemon-loops-and-embed-dashboard).
+ *
+ * <p>Implements FR1, NFR-O1 of open-adapter-binding-registry; UX3 of open-adapter-binding-registry;
+ * FR18 of supervise-daemon-loops-and-embed-dashboard.
  */
 @AutoConfiguration
 public class SandboxBindingConfiguration {
@@ -49,6 +60,36 @@ public class SandboxBindingConfiguration {
         ProviderDiscoveryReport.reportOrigins(
                 PORT, registry.providerTypes(), name -> summarize(registry.require(name)));
         return registry;
+    }
+
+    /**
+     * The container-runtime prerequisite probe (D13 of add-sandbox-core): the Docker adapter's
+     * probe, named here and nowhere else in the application's wiring.
+     *
+     * @return the probe; never null
+     */
+    @Bean
+    public ContainerRuntimeProbe containerRuntimeProbe() {
+        return DockerRuntimeProbe::dockerAvailable;
+    }
+
+    /**
+     * The process's one execution-mode selector, asked by manual runs and by take and serve alike
+     * (design D22 of supervise-daemon-loops-and-embed-dashboard).
+     *
+     * @param bindings the operator's per-stage bindings; never null
+     * @param sandbox the operator sandbox config; never null
+     * @param registry the discovered bindings; never null
+     * @param runtimeProbe the container-runtime probe; never null
+     * @return the selector; never null
+     */
+    @Bean
+    public SandboxModeSelector sandboxModeSelector(
+            BindingProperties bindings,
+            SandboxProperties sandbox,
+            AdapterBindingRegistry registry,
+            ContainerRuntimeProbe runtimeProbe) {
+        return new SandboxModeSelector(bindings, sandbox, registry, runtimeProbe);
     }
 
     /**
