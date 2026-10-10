@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Pure orchestration run
-The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — the engine executes nothing itself; all effects happen behind the injected `EnginePorts` members: the seven behavioral ports (`StageExecutor`, `BuiltinCheckRunner`, `CommandCheckRunner`, `ExternalCheckClient`, `JudgeVoter`, `EngineEventListener`, `AttemptPersistence`) plus the two environment ports: the JDK instant source (`java.time.InstantSource`, the one type for the current instant across the codebase) and `Sleeper`.
+The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — the engine executes nothing itself; all effects happen behind the injected `EnginePorts` members: the seven behavioral ports (`StageExecutor`, `BuiltinCheckRunner`, `CommandCheckRunner`, `ExternalCheckClient`, `JudgeVoter`, `EngineEventListener`, `AttemptPersistence`) plus the one environment port: the time equipment (`TimeEquipment`), carrying the JDK instant source (`java.time.InstantSource`, the one type for the current instant across the codebase) and the `Sleeper` as one value.
 <!-- implements FR1, NFR-S1 of add-stage-engine -->
 <!-- implements FR15 of add-manual-run -->
 <!-- implements FR17 of supervise-daemon-loops-and-embed-dashboard -->

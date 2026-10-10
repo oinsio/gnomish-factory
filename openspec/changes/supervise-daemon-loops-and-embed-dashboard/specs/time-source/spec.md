@@ -55,9 +55,10 @@ its caller. A build gate SHALL fail on any new construction site.
 
 #### Scenario: A policy built on real time has one producer
 - **WHEN** the terminal-write retry is looked for across production code
-- **THEN** it is constructed in the composition root only, every run of a
-  slot dispatches its terminal outcome through that one instance, and a
-  second construction site fails the architecture gate naming the file
+- **THEN** it is constructed in one production file only, the slot wiring,
+  derived from the slot's time equipment; every run of a slot dispatches its
+  terminal outcome under a retry built there, and a second construction site
+  fails the architecture gate naming the file
 
 ### Requirement: The two halves of real time travel as one value
 A component that needs both the current instant and waiting SHALL take one

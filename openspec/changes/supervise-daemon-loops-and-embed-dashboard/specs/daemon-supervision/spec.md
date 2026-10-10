@@ -9,19 +9,25 @@ respawned or explicitly given up, and a stop ends it without racing a respawn.
 ## ADDED Requirements
 
 ### Requirement: A daemon loop survives failures of its work and its wait
-A supervised daemon loop SHALL repeat its work on a cadence, either work then
-wait or wait then work, where the wait is a fixed interval or an interval cut
-short by a wake signal. Any failure thrown by the work or by the wait SHALL be
-logged and SHALL NOT end the loop: the loop continues with its next wait.
+A supervised daemon loop SHALL repeat its work on a cadence (work then wait, or
+wait then work; a fixed interval or one cut short by a wake signal). An
+`Exception` from the work or the wait SHALL be logged and SHALL NOT end the
+loop. An `Error` SHALL end the worker thread; the restart policy then decides.
 <!-- implements FR1, FR2 of supervise-daemon-loops-and-embed-dashboard -->
 
-#### Scenario: An Error in the work does not end the loop
-- **WHEN** one run of a loop's work throws an `Error`
+#### Scenario: An Exception in the work does not end the loop
+- **WHEN** one run of a loop's work throws a `RuntimeException`
 - **THEN** a WARN line with the loop's component name and a stable operator
   event code is logged, and the work runs again after the next wait
 
+#### Scenario: An Error in the work ends the worker and the restart policy takes over
+- **WHEN** one run of a loop's work throws an `Error`
+- **THEN** no tick-failed WARN line is logged; the worker thread dies, its
+  death is logged at ERROR, and the loop's restart policy decides whether the
+  work runs again
+
 #### Scenario: A throwing wait does not end the loop
-- **WHEN** the loop's wait throws
+- **WHEN** the loop's wait throws an `Exception`
 - **THEN** the failure is logged and the loop runs its work again
 
 #### Scenario: Wake signals coalesce
@@ -59,8 +65,9 @@ SHALL be measured on the time source the loop stamps its own state with.
   passing, on the same source its `alive-at` stamps come from
 
 ### Requirement: The Unbounded restart policy respawns a dead loop thread
-If a loop's thread dies despite the failure guard and the loop's restart
-policy is Unbounded, the loop SHALL be respawned after an exponential backoff,
+If a loop's thread dies (an `Error` from the work or the wait, or a failure
+the guard's own reporting cannot survive) and the loop's restart policy is
+Unbounded, the loop SHALL be respawned after an exponential backoff,
 logging ERROR with a lifetime restart count, and SHALL never give up. The
 process SHALL keep running.
 <!-- implements FR3 of supervise-daemon-loops-and-embed-dashboard -->
@@ -141,9 +148,10 @@ the component name its log lines carry. The claim heartbeat SHALL remain
 unsupervised: its abnormal death keeps degrading to the lease path.
 <!-- implements FR6 of supervise-daemon-loops-and-embed-dashboard -->
 
-#### Scenario: The worktree cleaner survives an Error
+#### Scenario: The worktree cleaner is respawned after an Error
 - **WHEN** a worktree cleaner run throws an `Error`
-- **THEN** the cleaner runs again on its next cadence
+- **THEN** the death is logged at ERROR and the cleaner runs again after one
+  backoff
 
 #### Scenario: Reaper restarts stay visible in the snapshot
 - **WHEN** the standing reaper's thread dies and is respawned

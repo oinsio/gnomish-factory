@@ -26,7 +26,8 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
       (`Unbounded(base, cap)`, `Bounded(base, cap, maxRestarts, window, Clock)`), all over
       `RestartBackoff`. Provide `start()`, `stop()`, `stopAndJoin()` and `restartCount()`. The level-1
       guard is `catch (Throwable)` around the tick and the wait, reporting through `RepeatSuppressor`
-      keyed by the component (D2). The interrupt check follows D3. `stop()` interrupts the worker only
+      keyed by the component (D2; the catch type is narrowed to `Exception` by task 12.1, D2 as
+      amended). The interrupt check follows D3. `stop()` interrupts the worker only
       while the lock-guarded `waiting` flag is set, and releases `IntervalOrSignal` with `signal()`
       (D4). The death handler follows the
       three-phase shape of D4: nothing blocking under the lock, and `stopping` re-checked before
@@ -329,7 +330,8 @@ sub-agent to discover.
       time); assert the scan reached every allowlisted file. Two more literals with one-file
       allowlists, from D22 (revised): `new TerminalWriteRetry(` only in
       `TrackerCommandConfiguration.java` (a second producer of the time-built retry is the defect
-      3.6 removed) and `new TakeOutcomeDispatch(` only in `SlotWiring.java`; and a sibling scan over
+      3.6 removed; *moved by 3.9 to `SlotWiring.java`*, which derives the retry from the slot's
+      time equipment) and `new TakeOutcomeDispatch(` only in `SlotWiring.java`; and a sibling scan over
       `application/src/main` and `bootstrap/src/main` banning `BooleanSupplier` outright (the probe
       is `ContainerRuntimeProbe`), allowlist asserted reached. The ban's one pre-existing hit,
       `ConsoleTakeoverConfirmation(BooleanSupplier ttyPresent, …)`, is not exempted (user decision
@@ -533,7 +535,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`.
 - [x] 8.3 Extend `DaemonLoopOwnerBoundarySpec` (6.1) with the row-3 checks, one allowlist per
       marker, each file asserted reached: the `"dashboard.html"` literal only in `DashboardWatch.java`;
-      `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`. Verify: the spec is green, and a scratch violation is red (record the run).
+      `BoardComposition.compose(` only in `DashboardWatch.java` and `BoardCommand.java`. Verify: the spec is green, and a scratch violation is red (record the run). These row-3 dashboard checks and 9.4's now live in `DashboardOwnerBoundarySpec`, split out of the daemon-loop gate when its thread detectors grew (audit fix, 2026-10-10).
 
 ## 9. `serve --dashboard` (D9, D11, D12, single-owner row 4; FR8–FR11, FR15, NFR-R1, NFR-S1, NFR-P1, NFR-O2, UX1, UX2, UX5)
 
@@ -600,9 +602,106 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       supervise-daemon-loops-and-embed-dashboard` (`traceability.md`). Verify: each ID has at least
       one implementing spec or class, and the list is in the task report.
 
+      **Recorded (2026-10-10, audit fix):** ID → an implementing class · a spec (each found by
+      `grep "<ID>.*of supervise-daemon-loops-and-embed-dashboard"` or a `<ID>:` feature name).
+
+      | ID | Class or file | Spec |
+      |----|---------------|------|
+      | FR1, FR2, FR4, FR5 | `SupervisedLoop`, `LoopControl`, `LoopWait` | `SupervisedLoopSpec`, `SupervisedLoopWaitSpec`, `SupervisedLoopInterruptSpec`, `SupervisedLoopStopSpec` |
+      | FR3 | `RestartPolicy`, `LoopControl` | `SupervisedLoopRestartSpec`, `SupervisedLoopBoundedSpec` |
+      | FR6 | `StandingReaper`, `DaemonLoops` | `StandingReaperInterruptedStopSpec`, `ServeShutdownDaemonLoopsSpec` |
+      | FR7 | `SnapshotWriter` | `SnapshotWriterFinalWriteRaceSpec` |
+      | FR8 | `ServeArgumentsParser`, `SwitchFlag`, `ServeProperties` | `ServeArgumentsParserSpec`, `SwitchFlagSpec` |
+      | FR9, FR14 | `DashboardWatch`, `DashboardCommand` | `DashboardWatchSpec`, `DashboardCommandWatchSpec` |
+      | FR10, NFR-S1 | `ServeDashboard`, `BoardReaders` | `ServeDashboardSpec`, `TrackerWiringSpec` |
+      | FR11, UX2 | `DashboardWatch`, `ServeShutdownWiring` | `DashboardWatchFinalRenderSpec`, `ServeDashboardFinalRenderSpec` |
+      | FR12, FR13, UX3 | `BoardModel`, `DashboardStatusCardRenderer` | `BoardWipLimitIdentitySpec`, `DashboardStatusCardWipSpec` |
+      | FR15 | `.gnomish/factory/gnomish-up` | — (operator script) |
+      | FR16 | `.claude/rules/daemon-loops.md`, `docs/adr/0013-supervised-daemon-loop.md` | `DaemonLoopOwnerBoundarySpec` |
+      | FR17, FR18, NFR-R4 | `TimeEquipment`, `ManualRunConfiguration` | `TimeSourceOwnerBoundarySpec`, `FrozenTimeEquipmentRunSpec` |
+      | FR19 | `InstanceHeartbeat`, `HeartbeatBeater` | `HeartbeatOutageSuppressionSpec` |
+      | FR20, FR23 | `TrackerWiring`, `CheckEquipment` | `GithubTrackerAdapterFactorySpec`, `ProviderDispatchingExternalCheckClientSpec` |
+      | FR21 | `TestTimeInjectionCheck`, `TakeCommands` | `TimeSourceOwnerBoundarySpec` (FR21 identity feature) |
+      | FR22 | `ServeAssembly`, `RunAssembly`, `SlotWiring` | `SlotWiringFactorySpec`, `SlotPolicyProducerBoundarySpec` |
+      | NFR-R1, NFR-P1 | `ServeDashboard`, `DashboardWatch` | `ServeDashboardIsolationSpec`, `ServeDashboardReadBoundSpec` |
+      | NFR-R2, NFR-R3 | `SupervisedLoop`, `LoopControl` | `SupervisedLoopStopConcurrencySpec` |
+      | NFR-O1 | `LoopEvents` | `SupervisedLoopSpec` |
+      | NFR-O2, UX1 | `ServeCommand`, `ServeDashboard` | `ServeDashboardLaunchSpec` |
+      | UX4 | `DashboardDisabledException` | `ServeDashboardIsolationSpec` (`UX4:` feature) |
+      | UX5 | `docs/guides/operator-guide-dashboard.md`, `operator-guide-serve.md` | — (documentation) |
+
+      **Metrics measured (2026-10-10):** M3 — `gnomish-up` starts one factory process,
+      `gnomish serve --dashboard` (plus the log follower, not a renderer): daemon only. M4 — 4 of 4
+      loops tick again after an `Error` (`StandingReaperResilienceSpec`,
+      `WorktreeJanitorLifecycleSpec`, `SandboxLifecycleTickLifecycleSpec`,
+      `SnapshotWriterSupervisionSpec`). M6 — one type for "now" (`InstantSource`; no
+      `domain…Clock`, no `java.time.Clock` import in production), one bean
+      (`ManualRunConfiguration.instantSource`). M7 — 0 real-time sites outside the root
+      (`TimeSourceOwnerBoundarySpec`). M8 — one fake (`VirtualClock` in `:test-fixtures`) plus the
+      declared `:logtext` copy. M9 — 0 time-wiring `system()` factories (`HostResolver.system()` is
+      not time); 0 production signatures carrying the pair as two parameters (single-owner row 8).
+      M10 — one `create` per SPI factory (`TrackerAdapterFactory`, `CheckClientFactory`).
+
 ## 11. Final gate
 
 - [x] 11.1 Run the root `./gradlew check` once (no `--tests`, no `-PpitScope`) and fix what fails.
       Verify: green, with 100% mutation on the changed classes and the log-contract, log-expectation,
       time-source and test-time-injection gates green (retired codes named by no test, new codes
       asserted, no real clock outside the root).
+
+## 12. Narrow the guard: `Exception` continues, `Error` dies (D2 as amended, D5; FR2, FR3, FR6)
+
+Added 2026-10-10 after the audit: the restart path was reachable only through the guard's own
+reporting, and 15 spec files killed the worker with a message-throwing fixture (design D2,
+rationale). Each task runs under `verification-scope.md`: the specs named, then
+`pitestVerifyAllKilled -PpitScope=com.github.oinsio.gnomish.app.daemon.*`.
+
+- [ ] 12.1 In `app/daemon/SupervisedLoop.java` change both guards (`tickGuarded`, the wait in
+      `awaitFull`) from `catch (Throwable)` to `catch (Exception)`; an `Error` leaves the guard and
+      reaches `onWorkerDeath`. Update the class javadoc and `LoopEvents.failed`'s javadoc (the
+      reason is `FailureReason.of`; a failure whose reporting throws still ends the thread, now as
+      the rare case rather than the only one). In `SupervisedLoopSpec` turn the two
+      `throw new Error(...)` features (tick, sleeper) into `RuntimeException` ones (daemon-supervision
+      "An Exception in the work does not end the loop", "A throwing wait does not end the loop") and
+      add the feature for "An Error in the work ends the worker and the restart policy takes over":
+      no `DAEMON_LOOP_TICK_FAILED` line, one `DAEMON_LOOP_WORKER_DIED` line, the tick runs again
+      after the backoff. Verify: `SupervisedLoopSpec`, `SupervisedLoopRestartSpec`,
+      `SupervisedLoopBoundedSpec`, `SupervisedLoopDeathLineSpec` green; scoped PIT green.
+- [ ] 12.2 Replace every message-throwing kill with a plain `Error` (design D5, fixtures): delete
+      `Unrenderable` from `app/daemon/SupervisedLoopHarness.groovy`, `app/lease/ReaperLoopRig.groovy`,
+      `bootstrap/.../app/ServeDashboardIsolationSpec.groovy` and
+      `serveobservability/VitalsSnapshotAssemblerSpec.groovy`, and in the files that throw it —
+      `app/DashboardCommandFixture.groovy`, `app/DashboardCommandWatchSpec.groovy`,
+      `app/DashboardWatchSupervisionSpec.groovy`, `app/daemon/SupervisedLoopBoundedSpec.groovy`,
+      `app/daemon/SupervisedLoopRestartSpec.groovy`, `app/daemon/SupervisedLoopStopConcurrencySpec.groovy`,
+      `app/lease/StandingReaperInterruptedStopSpec.groovy`, `app/lease/StandingReaperResilienceSpec.groovy`,
+      `app/lease/StandingReaperSupervisionSpec.groovy`,
+      `serveobservability/writer/SnapshotWriterFinalWriteRaceSpec.groovy` — throw
+      `new Error('<what died>')` instead, keeping each feature's expectations. `Wordless` and
+      `UnrenderableTwice` stay in `SupervisedLoopHarness`, used by `SupervisedLoopDeathLineSpec`
+      only. Verify: the specs listed green; `ServeDashboardIsolationSpec` green;
+      `grep -rn "Unrenderable\b" application/src/test bootstrap/src/test` lists no file but
+      `SupervisedLoopHarness` and `SupervisedLoopDeathLineSpec` (the `UnrenderableTwice` fixture).
+- [ ] 12.3 Rewrite the four loop-level `Error` features to the respawn shape: an `Error` from the
+      tick logs `DAEMON_LOOP_WORKER_DIED` and the tick runs again after one backoff on virtual time
+      (daemon-supervision "The worktree cleaner is respawned after an Error"; M4) in
+      `StandingReaperResilienceSpec`, `WorktreeJanitorLifecycleSpec`,
+      `SandboxLifecycleTickLifecycleSpec` and `SnapshotWriterSupervisionSpec`. Where a feature
+      meant "the loop survives a recoverable fault", throw a `RuntimeException` and keep the
+      continue shape. Verify: the four specs green; the M4 line in task 10.1 updated to the respawn
+      wording.
+- [ ] 12.4 Durable guidance: amend `docs/adr/0013-supervised-daemon-loop.md` — status line
+      "amended 2026-10-10 (D2 of the same change, as amended)", D2 section ("The guard catches
+      `Exception`; an `Error` ends the worker and the policy decides"), the "catch
+      (RuntimeException)" alternative (rejected for the wait outside the guard, not for the catch
+      type), the Consequences line on `OutOfMemoryError` (a death with backoff, not a continue), and
+      a new rejected alternative "escalate `VirtualMachineError` to a process exit" (deferred).
+      Update `.claude/rules/daemon-loops.md` ("the guard (`catch (Exception)` around both; an
+      `Error` ends the worker and the restart policy decides)", and the specs paragraph: fixtures
+      kill a worker with a plain `Error`) and the glossary entry "Supervised daemon loop" ("guarded
+      so an `Exception` ... never ends the loop; an `Error` ends the worker and the restart policy
+      decides"). Verify: `grep -n "catch (Throwable)" docs/adr/0013-supervised-daemon-loop.md
+      .claude/rules/daemon-loops.md` is empty except the history paragraph; `DaemonLoopOwnerBoundarySpec`
+      green.
+- [ ] 12.5 Final gate again: the root `./gradlew check` once more (11.1 no longer stands as the last
+      run). Verify: green, 100% mutation on `app.daemon.*`.

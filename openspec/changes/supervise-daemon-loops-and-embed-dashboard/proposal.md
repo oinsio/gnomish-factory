@@ -162,10 +162,12 @@ written before anyone here knew it.
   tick first, then wait, or wait first, then tick. The wait SHALL be either a
   fixed interval or an interval cut short by a wake signal, with surplus
   signals coalesced.
-- **FR2** — A failure thrown by the tick or by the wait (any `Throwable`) SHALL
+- **FR2** — A failure thrown by the tick or by the wait (any `Exception`) SHALL
   be logged at WARN with a stable operator event, and the loop SHALL continue
-  with its next wait.
-- **FR3** — If the loop's thread dies anyway, the loop's restart policy
+  with its next wait. An `Error` thrown by the tick or by the wait SHALL leave
+  the guard and end the worker thread; FR3 then applies.
+- **FR3** — When the loop's thread dies (an `Error` from the tick or the wait,
+  or a failure of the loop's own reporting), the loop's restart policy
   SHALL decide what happens. *Unbounded*: respawn after an exponential backoff,
   logging ERROR with a rising restart count, never giving up. *Bounded*: the
   same, but after more than N restarts within window T, log one ERROR saying
