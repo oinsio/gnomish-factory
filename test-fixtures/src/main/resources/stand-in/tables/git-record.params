@@ -1,5 +1,5 @@
 # Git stand-ins that record what they were handed, most of them over the real git.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [box-upload-pack]
 # The command behind an ext:: URL onto a box: each pack session is recorded, then served by the

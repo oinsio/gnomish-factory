@@ -740,10 +740,12 @@ scripts varies per run except where argv recordings land.
   script's header) maps an argv prefix to steps (`record [VAR ...]`, `stdout`, `stderr`, `delay`,
   `run`, `write`, `export`, `close-stdout`) and one terminal action (`exit`, `answer`, `refuse`,
   `stall`, `delegate <binary>`, `exec-sh <file>`); no matching row is a broken preset (exit 97),
-  never a silent default. Beside it, `presets/<scenario>/` directories, each holding the symbolic
-  link (`git`, `docker`, `agent` or `hook`) to the interpreter and its table, and `data/` for
-  answers several presets share; a preset carries no absolute path and writes only beside a per-run
-  link, so the library is read-only, shareable across parallel JVMs and assessed by the OS once per
+  never a silent default. Beside it, as reworked after review, a preset is a link
+  `links/<preset>` to the interpreter and a section `[<preset>]` of a table under `tables/` (several
+  presets to a table, each table within the file-size budget); answers are sections of the files
+  under `data/` (`data/stderr#unable-to-access`), shell steps live under `steps/`, and a preset that
+  would differ from another in one word takes it from its link's name (`@name`, `export-name`). A
+  preset carries no absolute path and writes only beside a per-run link, so the library is read-only, shareable across parallel JVMs and assessed by the OS once per
   build (the resources are referenced from the source tree through the `standInDir` property that
   `stand-in-conventions` hands every test and PIT JVM, as `fakeAgentDir` already was, so even that
   once is per checkout). The supervisor's process-shaped fakes (a signal ignored, a child forked, a

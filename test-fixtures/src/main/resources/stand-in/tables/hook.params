@@ -1,5 +1,5 @@
 # Git hooks, linked into a repository under the name git runs them by.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [hook-record]
 # A hook that records that it ran and lets the operation through.

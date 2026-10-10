@@ -9,8 +9,8 @@ import spock.lang.TempDir
 
 /**
  * FR24, NFR-P2 of supervise-daemon-loops-and-embed-dashboard (design D23, ADR 0015): the committed
- * stand-in library is well formed scenario by scenario, and its one script does what its table says —
- * each action once, here, so no spec that selects a scenario re-tests the mechanics.
+ * stand-in library is well formed preset by preset, and its one script does what its table says —
+ * each action once, here, so no spec that selects a preset re-tests the mechanics.
  *
  * <p>Lives in {@code :bootstrap} because {@code :test-fixtures} has no test source set. Every run
  * passes the leading {@code -c} pairs a runner would, so the strip is exercised throughout.
@@ -40,16 +40,16 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: scenario #scenario is a link onto the one script and one section whose rows parse"() {
+    def "FR24: preset #preset is a link onto the one script and one section whose rows parse"() {
         given:
-        Path link = StandIn.preset(scenario)
+        Path link = StandIn.preset(preset)
 
         expect: 'a relative link onto the one script'
         Files.readSymbolicLink(link).toString() == '../stand-in.sh'
         Files.isSameFile(link, StandIn.library().resolve('stand-in.sh'))
 
         and: 'one section, every row a known action with its arguments, every file it names in the library'
-        def rows = StandIn.tables().rows(scenario)
+        def rows = StandIn.tables().rows(preset)
         !rows.isEmpty()
         rows.every { List<String> row ->
             ACTIONS.containsKey(row[1]) && row.size() - 2 >= ACTIONS[row[1]]
@@ -63,15 +63,15 @@ class StandInLibrarySpec extends Specification {
         }
 
         where:
-        scenario << scenarios()
+        preset << presets()
     }
 
-    def "FR24: every section has its link, and no scenario has two sections"() {
+    def "FR24: every section has its link, and no preset has two sections"() {
         given:
         List<String> sections = StandIn.tables().sections().values().flatten() as List<String>
 
         expect:
-        sections.toSorted() == scenarios()
+        sections.toSorted() == presets()
         sections.toSet().size() == sections.size()
     }
 
@@ -86,10 +86,10 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: every answer under data/ is one some scenario's row names"() {
+    def "FR24: every answer under data/ is one some preset's row names"() {
         given:
-        Set<String> named = StandInLibrarySpec.scenarios().collectMany { String scenario ->
-            StandIn.tables().rows(scenario).collectMany { List<String> row ->
+        Set<String> named = StandInLibrarySpec.presets().collectMany { String preset ->
+            StandIn.tables().rows(preset).collectMany { List<String> row ->
                 FILE_ARGUMENTS.getOrDefault(row[1], []).collect { row[2 + it] }
             }
         }.findAll { it.startsWith('data/') }.collect { it - 'data/' } as Set
@@ -150,7 +150,7 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: the library holds no log — nothing ran a recording scenario through its committed link"() {
+    def "FR24: the library holds no log — nothing ran a recording preset through its committed link"() {
         expect:
         Files.walk(StandIn.library()).withCloseable { walk ->
             walk.filter { it.fileName.toString().endsWith('.log') }.toList()
@@ -168,7 +168,7 @@ class StandInLibrarySpec extends Specification {
         answer(git, 'version') == [exit: 0, stdout: '']
     }
 
-    def "FR24: a refuse row exits with its code and its scenario's stderr; the rest reaches the real git"() {
+    def "FR24: a refuse row exits with its code and its preset's stderr; the rest reaches the real git"() {
         given:
         Path git = StandIn.git('refuse-fetch')
         Path repo = Files.createDirectories(tempDir.resolve('repo'))
@@ -307,7 +307,7 @@ class StandInLibrarySpec extends Specification {
         answer(StandIn.git('action-exec'), 'version') == [exit: 0, stdout: 'probe=probe-value argv=-c core.askPass= -c a.b=c version\n']
     }
 
-    def "FR24: export-name hands the script the name of the per-run link, so one scenario serves every value"() {
+    def "FR24: export-name hands the script the name of the per-run link, so one preset serves every value"() {
         given:
         Path link = StandIn.link(tempDir.resolve('probe-name'), 'action-export-name')
 
@@ -333,7 +333,7 @@ class StandInLibrarySpec extends Specification {
         process.alive
     }
 
-    def "FR24: an invocation no row matches is a broken scenario, exit 97 with the argv on stderr"() {
+    def "FR24: an invocation no row matches is a broken preset, exit 97 with the argv on stderr"() {
         when:
         def result = run(StandIn.git('action-broken'), 'status')
 
@@ -342,7 +342,7 @@ class StandInLibrarySpec extends Specification {
         result.stderr.contains('no row matches: -c core.askPass= -c a.b=c status')
     }
 
-    def "FR24: a recording scenario run through its committed link is refused and writes nothing into the library"() {
+    def "FR24: a recording preset run through its committed link is refused and writes nothing into the library"() {
         given: 'the committed path, which StandIn.git refuses to hand out'
         Path committed = StandIn.preset('action-record')
 
@@ -355,7 +355,7 @@ class StandInLibrarySpec extends Specification {
         !Files.exists(StandIn.log(committed))
     }
 
-    def "NFR-P2: after the script's first run, a scenario starts in milliseconds through a fresh link"() {
+    def "NFR-P2: after the script's first run, a preset starts in milliseconds through a fresh link"() {
         given: 'one untimed run: the script\'s own first-run assessment (macOS), paid once per checkout'
         run(StandIn.git('action-answer'), 'version')
 
@@ -371,8 +371,8 @@ class StandInLibrarySpec extends Specification {
         runs.every { it <Duration.ofMillis(500) }
     }
 
-    /** Every scenario of the library: the names of its committed links. */
-    static List<String> scenarios() {
+    /** Every preset of the library: the names of its committed links. */
+    static List<String> presets() {
         Files.list(StandIn.library().resolve('links')).withCloseable { stream ->
             stream.map { it.fileName.toString() }.sorted().toList()
         }

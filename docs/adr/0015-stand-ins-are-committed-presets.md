@@ -39,12 +39,14 @@ scripts varies per run except where a recording lands.
    link's name instead. The few stand-ins whose subject is the operating system's handling of a
    process — a signal ignored, a child forked, a pipe held open — are committed scripts of their
    own under `process/`, one reviewed script per behaviour, because no table states a fork.
-2. **Scenario parameters are committed presets.** `presets/<scenario>/` holds a link to the
-   interpreter, its table and the files the table names; answers several presets share live under
-   `data/`. A preset contains no absolute path and writes nothing into the library — only beside a
-   per-run link, its log or a file a `write` row names — so it is read-only, shared by parallel
-   JVMs, and assessed by the operating system at most once per checkout. A spec that asserts a
-   refusal text reads it from the preset, never from a second literal.
+2. **Scenario parameters are committed presets.** A preset is a link `links/<preset>` to the
+   interpreter and a section `[<preset>]` of a table under `tables/`; presets of one group share a
+   table, and a table stays within the project's file-size budget. The answers rows print are
+   sections of the files under `data/`, shell steps live under `steps/`. A preset contains no
+   absolute path and writes nothing into the library — only beside a per-run link, its log or a
+   file a `write` row names — so it is read-only, shared by parallel JVMs, and assessed by the
+   operating system at most once per checkout. A spec that asserts a refusal text reads it from the
+   library, never from a second literal.
 3. **A test never writes an executable file.** It selects a preset by name through the single
    owner fixture, `StandIn` in `:test-fixtures`. The one per-run artefact is a symbolic link to a
    preset, created by that owner for a scenario that records, reads a file the spec writes beside
@@ -66,7 +68,7 @@ ordinary `test` task and PIT's single-threaded coverage phase; scenarios become 
 shareable across modules.
 
 Negative: a scenario that genuinely needs new behaviour goes through the library and its spec
-rather than a ten-line inline script; presets are one more place a reviewer reads. Both are the
+rather than a ten-line inline script; the tables are one more place a reviewer reads. Both are the
 point.
 
 ## Alternatives Considered

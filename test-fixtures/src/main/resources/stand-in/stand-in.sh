@@ -1,8 +1,8 @@
 #!/bin/sh
-# The committed stand-in binary (ADR 0015). Every scenario is a symbolic link `links/<scenario>` to
-# this one script and a section `[<scenario>]` in one of the tables `tables/*.params`, several
-# scenarios to a file. A spec runs the link itself, or a per-run link to it that StandIn creates
-# where it needs a name, a log or files beside it; either way the scenario is the committed link's
+# The committed stand-in binary (ADR 0015). Every preset is a symbolic link `links/<preset>` to
+# this one script and a section `[<preset>]` in one of the tables `tables/*.params`, several
+# presets to a file. A spec runs the link itself, or a per-run link to it that StandIn creates
+# where it needs a name, a log or files beside it; either way the preset is the committed link's
 # name. Files the rows name are paths relative to this library: `data/` answers, `steps/` shell run
 # through sh. One row per line; `#` starts a comment line:
 #
@@ -11,7 +11,7 @@
 # <match> is `*` (every invocation) or a comma-separated argv prefix, each word a shell glob matched
 # against the argument at its position after the leading `-c <name>=<value>` pairs are dropped
 # (`rev-parse,--git-common-dir`, `ls-remote,origin,HEAD`). The word `@name` stands for the per-run
-# link's own name, literally: one scenario refuses or stalls whichever subcommand its link is named.
+# link's own name, literally: one preset refuses or stalls whichever subcommand its link is named.
 #
 # Rows are tried top to bottom. A step runs and the table goes on; a terminal action ends the run.
 #   steps:    record [VAR ...]   append a block to `$0.log`: argv=<all arguments>, arg.N=<the Nth>
@@ -24,7 +24,7 @@
 #             write <file> @name copy <file> over the per-run file `$0.name`, so what a later
 #                                invocation's `@name` row reads changes (a push that landed)
 #             export NAME <word> export NAME=<word> to what this run executes
-#             export-name NAME   export NAME=<the per-run link's own name>: one scenario serves
+#             export-name NAME   export NAME=<the per-run link's own name>: one preset serves
 #                                every value, the spec names the link after the one it means
 #                                (an agent link named after its scenario)
 #             close-stdout       close stdout and go on
@@ -43,46 +43,46 @@
 # per-run file `$0.name` beside a per-run link, which the spec writes. <code> is a number or
 # `@name`, read from that file. <word> is taken as written, or `@name` for that file's path.
 #
-# A scenario writes only beside a per-run link — its `$0.log`, or a `$0.name` a `write` row names:
+# A preset writes only beside a per-run link — its `$0.log`, or a `$0.name` a `write` row names:
 # a `record`, `write`, `export-name` or `@name` (in any column) reached through the committed link is
 # refused (exit 97), so the library stays read-only and a link's name is never mistaken for a value.
-# A scenario with no section, or in two, and an invocation no row matches are broken scenarios, not
+# A preset with no section, or in two, and an invocation no row matches are broken presets, not
 # defaults: exit 97 with the reason on stderr.
 
 invoked=$0
 target=$(readlink "$invoked")
 case "$target" in
     '')
-        echo "stand-in: $invoked is not a link to a scenario" >&2
+        echo "stand-in: $invoked is not a link to a preset" >&2
         exit 97
         ;;
     */stand-in.sh | stand-in.sh)
         direct=yes
         links=$(dirname "$invoked")
-        scenario=${invoked##*/}
+        preset=${invoked##*/}
         ;;
     *)
         direct=
         links=$(dirname "$target")
-        scenario=${target##*/}
+        preset=${target##*/}
         ;;
 esac
 library="$links/.."
-table="[$scenario]"
-found=$(grep -l -x -F "[$scenario]" "$library"/tables/*.params)
+table="[$preset]"
+found=$(grep -l -x -F "[$preset]" "$library"/tables/*.params)
 case "$found" in
     *"
 "*)
-        echo "stand-in: scenario $scenario has a section in more than one table" >&2
+        echo "stand-in: preset $preset has a section in more than one table" >&2
         exit 97
         ;;
     '')
-        echo "stand-in: scenario $scenario has no section under $library/tables" >&2
+        echo "stand-in: preset $preset has no section under $library/tables" >&2
         exit 97
         ;;
 esac
-table="$found [$scenario]"
-section=$(awk -v head="[$scenario]" '$0 == head { on = 1; next } /^\[/ { on = 0 } on' "$found")
+table="$found [$preset]"
+section=$(awk -v head="[$preset]" '$0 == head { on = 1; next } /^\[/ { on = 0 } on' "$found")
 
 broken() {
     echo "stand-in: $1 ($table)" >&2

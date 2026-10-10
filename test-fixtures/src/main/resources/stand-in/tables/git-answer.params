@@ -1,5 +1,5 @@
 # Git stand-ins that answer from a committed file: listings, versions, origin URLs.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [blank-url]
 # Every invocation succeeds and prints a blank line: a configured origin whose URL reads blank

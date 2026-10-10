@@ -1,5 +1,5 @@
 # Stand-ins for the docker CLI (DockerCliSpec, DockerCliBoundedSpec).
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [docker-daemon-down]
 # A docker client that cannot reach its daemon (DockerCliSpec).

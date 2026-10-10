@@ -1,5 +1,5 @@
 # Git stand-ins around a push that never returns or never lands (StallingGitFixture, FirstPushSpec).
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [first-push-absent]
 # Every push recorded and refused; the re-check answers that origin lacks the branch (FirstPushSpec).

@@ -1,5 +1,5 @@
 # The fake agent CLI and the paid-smoke recorder in front of the real one.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [agent]
 # The fake agent CLI playing the scenario its per-run link is named after (FakeAgentSupport): one

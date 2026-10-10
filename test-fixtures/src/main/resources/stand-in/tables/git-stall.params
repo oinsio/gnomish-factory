@@ -1,5 +1,5 @@
 # Git stand-ins that stall, so a deadline or an interrupt is the only way out (StallingGit).
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [bounded-network]
 # The four network commands stall; every local command takes a second, except the clone-key

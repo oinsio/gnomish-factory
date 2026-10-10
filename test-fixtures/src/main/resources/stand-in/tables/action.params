@@ -1,5 +1,5 @@
 # The library's own scenarios: one per table action, for StandInLibrarySpec.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [action-answer]
 # The library's own scenario for `answer` and argv-prefix matching, first match wins.

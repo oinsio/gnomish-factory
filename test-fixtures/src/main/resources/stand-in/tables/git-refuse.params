@@ -1,5 +1,5 @@
 # Git stand-ins that refuse one subcommand and pass the rest to the real git, or fail outright.
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [fail-subcommand]
 # A git probe that ran and failed: the subcommand the per-run link is named after exits 128 with an

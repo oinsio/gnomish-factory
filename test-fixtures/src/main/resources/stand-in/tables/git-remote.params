@@ -1,5 +1,5 @@
 # Git stand-ins playing a remote that lies, refuses or diverges (TaskBranchLocatorSpec, ReplicaPairReconcilerSpec).
-# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
 
 [locator-fetch-refused]
 # Every fetch recorded and refused, while ls-remote answers a real ref (TaskBranchLocatorSpec).

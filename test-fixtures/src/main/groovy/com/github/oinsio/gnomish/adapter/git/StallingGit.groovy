@@ -63,7 +63,7 @@ final class StallingGit {
             row.size() >= 2 && row[1] == 'stall'
         }
         if (!stalls) {
-            throw new IllegalArgumentException("stand-in scenario '${preset}' does not stall")
+            throw new IllegalArgumentException("stand-in preset '${preset}' does not stall")
         }
     }
 }

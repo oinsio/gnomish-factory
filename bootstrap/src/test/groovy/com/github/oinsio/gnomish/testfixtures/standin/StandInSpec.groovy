@@ -7,7 +7,7 @@ import spock.lang.TempDir
 
 /**
  * FR24 of supervise-daemon-loops-and-embed-dashboard (design D23, ADR 0015): {@link StandIn}, the
- * one owner of stand-in binaries in test sources, hands out committed scenarios and creates nothing
+ * one owner of stand-in binaries in test sources, hands out committed presets and creates nothing
  * but symbolic links to them — never an executable file.
  */
 class StandInSpec extends Specification {
@@ -15,14 +15,14 @@ class StandInSpec extends Specification {
     @TempDir
     Path tempDir
 
-    def "FR24: a scenario is handed out by its committed link, its data by path"() {
+    def "FR24: a preset is handed out by its committed link, its answers by reference"() {
         expect:
         StandIn.git('action-answer') == StandIn.library().resolve('links/action-answer')
         StandIn.data('common#url') == 'https://example.invalid/repo.git\n'
         StandIn.data('common#empty-line') == '\n'
     }
 
-    def "FR24: a scenario that records, reads per-run files or takes its link's name is not handed out by its committed link"() {
+    def "FR24: a preset that records, reads per-run files or takes its link's name is not handed out by its committed link"() {
         when:
         StandIn.git(preset)
 
@@ -38,16 +38,16 @@ class StandInSpec extends Specification {
         ]
     }
 
-    def "FR24: an unknown scenario is refused with its name"() {
+    def "FR24: an unknown preset is refused with its name"() {
         when:
-        StandIn.git('no-such-scenario')
+        StandIn.git('no-such-preset')
 
         then:
         def e = thrown(IllegalArgumentException)
-        e.message.contains("no stand-in scenario 'no-such-scenario'")
+        e.message.contains("no stand-in preset 'no-such-preset'")
     }
 
-    def "FR24: a scenario taken as the wrong kind of binary is refused with its kind"() {
+    def "FR24: a preset taken as the wrong kind of binary is refused with its kind"() {
         when:
         StandIn.docker('action-answer')
 
@@ -65,7 +65,7 @@ class StandInSpec extends Specification {
         e.message.contains("has no answer 'common#nope'")
     }
 
-    def "FR24: recording twice in one directory is two links to the scenario, so two logs"() {
+    def "FR24: recording twice in one directory is two links to the preset, so two logs"() {
         when:
         Path first = StandIn.recording(tempDir, 'action-record')
         Path second = StandIn.recording(tempDir, 'action-record')
