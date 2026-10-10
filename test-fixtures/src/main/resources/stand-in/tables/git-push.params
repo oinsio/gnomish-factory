@@ -1,0 +1,68 @@
+# Git stand-ins around a push that never returns or never lands (StallingGitFixture, FirstPushSpec).
+# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+
+[first-push-absent]
+# Every push recorded and refused; the re-check answers that origin lacks the branch (FirstPushSpec).
+push record
+push refuse 128 data/stderr#unable-to-access
+ls-remote answer data/common#empty-line 0
+merge-base exit 0
+rev-parse answer data/common#sha-1 0
+remote answer data/common#url 0
+* exit 1
+
+[first-push-landed]
+# Every push recorded and refused; the re-check answers gnomish/PROJ-7 at the pushed tip (FirstPushSpec).
+push record
+push refuse 128 data/stderr#unable-to-access
+ls-remote answer data/stdout-git#ls-remote-proj-7 0
+merge-base exit 0
+rev-parse answer data/common#sha-1 0
+remote answer data/common#url 0
+* exit 1
+
+[missing-branch]
+# A configured origin, a refused push, and no local branch to resolve (FirstPushSpec).
+push refuse 128 data/stderr#unable-to-access
+rev-parse exit 1
+remote answer data/common#url 0
+* exit 1
+
+[stall-push]
+# A push that never returns, around which every read the push points make is answered — the
+# remote's answer and HEAD's branch from what the spec wrote beside the link (StallingGitFixture).
+push record
+push stall 600
+rev-parse,--git-common-dir answer data/common#git-dir 0
+rev-parse answer data/common#sha-1 0
+remote answer data/common#url 0
+ls-remote answer @ls-remote-out @ls-remote-exit
+symbolic-ref answer @head-branch 0
+merge-base answer - 0
+* answer - 0
+
+[stall-push-lands]
+# stall-push, except that the push lands before it stalls: the re-check finds the tip on origin.
+push record
+push write data/stdout-git#ls-remote-landed-proj-1 @ls-remote-out
+push stall 600
+rev-parse,--git-common-dir answer data/common#git-dir 0
+rev-parse answer data/common#sha-1 0
+remote answer data/common#url 0
+ls-remote answer @ls-remote-out @ls-remote-exit
+symbolic-ref answer @head-branch 0
+merge-base answer - 0
+* answer - 0
+
+[stall-push-origin-gone]
+# stall-push, except that origin stops answering ls-remote once the push is in flight.
+push record
+push write data/common#exit-128 @ls-remote-exit
+push stall 600
+rev-parse,--git-common-dir answer data/common#git-dir 0
+rev-parse answer data/common#sha-1 0
+remote answer data/common#url 0
+ls-remote answer @ls-remote-out @ls-remote-exit
+symbolic-ref answer @head-branch 0
+merge-base answer - 0
+* answer - 0

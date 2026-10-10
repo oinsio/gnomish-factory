@@ -18,6 +18,8 @@ plugins {
     // No inherited GNOMISH_* variable reaches a Test or pitest JVM (make-checkpoint-gate-durable,
     // design D14).
     id 'test-environment-hygiene-conventions'
+    // The committed stand-in library's location for every Test and PIT JVM (ADR 0015).
+    id 'stand-in-conventions'
 }
 
 def libs = extensions.getByType(VersionCatalogsExtension).named('libs')

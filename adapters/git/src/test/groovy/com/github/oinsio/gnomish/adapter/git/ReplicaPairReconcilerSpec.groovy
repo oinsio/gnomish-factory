@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -298,6 +300,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
     def "FR8: a local tip that keeps moving loses the compare-and-swap and is never overwritten blindly"() {
         given: 'a git whose ref swap always loses, standing in for a second writer on the branch'
+        def losingSwapGit = StandIn.recording(tempDir, 'reconcile-swap-loses')
         def clone = initWorkingRepo(tempDir, 'clone-cas-loser')
         commit(clone, 'a.txt', 'first')
 
@@ -306,7 +309,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
         when:
         capture(events) {
-            ReplicaPairReconciler.forWorktree(new GitProcessRunner(alwaysLosingSwapGit().toString()), clone, underTenure)
+            ReplicaPairReconciler.forWorktree(new GitProcessRunner(losingSwapGit.toString()), clone, underTenure)
             .reconcile('PROJ-1', branchName)
         }
 
@@ -316,10 +319,10 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         ex.message.contains('second writer')
 
         and: "the diagnosis carries git's own account of the losing swap, not only the assertion"
-        ex.message.contains('cannot lock ref')
+        ex.message.contains(StandIn.data('stderr#cannot-lock-ref').trim())
 
         and: 'it spent exactly the bounded passes trying, not one more'
-        Files.readAllLines(tempDir.resolve('swap-attempts.txt')).size() == 3
+        StandInLog.blocks(losingSwapGit).size() == 3
 
         and: 'FR14, FR15: every lost pass leaves one coded WARN naming the task and the pass number'
         def lost = events.findAll {
@@ -345,31 +348,13 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
         when:
         ReplicaPairReconciler.forWorktree(
-                new GitProcessRunner(silentlyLosingSwapGit().toString()), clone, underTenure)
+                new GitProcessRunner(StandIn.git('reconcile-swap-loses-silently').toString()), clone, underTenure)
                 .reconcile('PROJ-1', branchName)
 
         then:
         def ex = thrown(IllegalStateException)
         ex.message.contains('second writer')
         ex.message.contains('(no stderr)')
-    }
-
-    /** {@link #alwaysLosingSwapGit} without the stderr line: a swap that loses without a word. */
-    private Path silentlyLosingSwapGit() {
-        def script = tempDir.resolve('silently-losing-swap-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    update-ref) exit 1;;
-    merge-base) exit 1;;
-    rev-parse) case "\$*" in *remotes*) echo ${'b' * 40};; *) echo ${'a' * 40};; esac; exit 0;;
-    fetch) exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
     }
 
     // FR8, NFR-R3: the ref swap and the working-tree resync are two durable steps of one repair. A
@@ -380,7 +365,7 @@ exit 1
         def clone = initWorkingRepo(tempDir, "clone-${failing}-fails")
 
         when:
-        ReplicaPairReconciler.forWorktree(new GitProcessRunner(divergedGitFailing(failing).toString()), clone, underTenure)
+        ReplicaPairReconciler.forWorktree(new GitProcessRunner(StandIn.link(tempDir.resolve(failing), 'reconcile-diverged-fails').toString()), clone, underTenure)
                 .reconcile('PROJ-1', branchName)
 
         then: 'the failure is named, with the branch, both tips and the remedy'
@@ -389,34 +374,13 @@ exit 1
         ex.message.contains('a' * 40)
         ex.message.contains('b' * 40)
         ex.message.contains("git ${command}")
-        ex.message.contains('could not lock')
+        ex.message.contains(StandIn.data('stderr#lock-index').trim())
         ex.message.contains('resume the task')
 
         where:
         failing | command
         'reset' | 'reset --hard'
         'clean' | 'clean -fd'
-    }
-
-    /**
-     * A git reporting two diverged tips whose ref swap wins but whose {@code failing} working-tree
-     * command fails: the shape of a resync that cannot complete behind a ref that already moved.
-     */
-    private Path divergedGitFailing(String failing) {
-        def script = tempDir.resolve("diverged-git-failing-${failing}.sh")
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    ${failing}) echo 'fatal: could not lock the index' 1>&2; exit 1;;
-    reset|clean|update-ref|fetch) exit 0;;
-    merge-base) exit 1;;
-    rev-parse) case "\$*" in *remotes*) echo ${'b' * 40};; *) echo ${'a' * 40};; esac; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
     }
 
     /** Runs {@code emit} with a {@link ch.qos.logback.core.read.ListAppender} attached to the reconciler's own logger. */
@@ -442,26 +406,5 @@ exit 1
             sink.addAll(logs.list)
             logs.detach()
         }
-    }
-
-    /**
-     * A git reporting two unrelated tips whose {@code update-ref} always fails: the shape of a
-     * losing compare-and-swap, which a real repository under a held lease will not produce.
-     */
-    private Path alwaysLosingSwapGit() {
-        def script = tempDir.resolve('losing-swap-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    update-ref) echo x >> '${tempDir.resolve('swap-attempts.txt')}'; echo 'error: cannot lock ref' 1>&2; exit 1;;
-    merge-base) exit 1;;
-    rev-parse) case "\$*" in *remotes*) echo bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;; *) echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;; esac; exit 0;;
-    fetch) exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
     }
 }

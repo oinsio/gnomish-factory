@@ -107,6 +107,24 @@ a flow"). A change with no single-owner mechanism states it: `Single-owner mecha
 `/review-artifacts` checks the table exists; `/audit-implementation` checks the code matches
 every row.
 
+## Alternative zero: remove the mechanism
+
+The first alternative every decision steelmans is **not having the mechanism at all**: what is
+left per run, per test, per call once the thing being designed is deleted? Only what survives that
+question is designed; everything else is prepared once and reused — a committed preset, a fixture
+in the repository, a value computed at build time.
+
+The failure this exists for (2026-10-10): the PIT measurement found that every spec wrote its own
+stand-in `git` script per test and macOS assessed each new file at 1–4 s. The first design kept
+the per-test generation and made the generated file cheap to run. Two rounds of "why generate at
+all?" from the user reduced it to committed scripts and committed presets with, at most, one
+symbolic link per test (ADR 0015). The mechanism that was being optimized should have been the
+first alternative rejected.
+
+So, before a `Dn` describes how a per-X artefact is produced, the decision lists what in that
+artefact actually varies per X; an alternative that removes the production step is written first,
+and rejected only with the varying part named.
+
 ## Rules
 
 - Always reference the FR/NFR/UX from proposal.md that drove the decision

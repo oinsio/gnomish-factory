@@ -23,6 +23,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,35 +69,15 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
     }
 
     /**
-     * The gnome: a stream-json-emitting agent stand-in that commits in its cwd (the task
-     * worktree) between two tool events, then polls the bare remote for the pushed tip and
-     * records the observation before closing the round with its result event.
+     * The gnome: the committed {@code agent-gnome-mid-round-commit} stand-in, a stream-json-emitting
+     * agent that commits in its cwd (the task worktree) between two tool events, then polls the bare
+     * remote — whose path the spec writes beside the per-run link — for the pushed tip and records
+     * the observation before closing the round with its result event.
      */
-    private Path gnomeScript(Path observedRemoteTip, Path committedTip) {
-        Path script = tempDir.resolve('gnome-agent.sh')
-        Files.writeString(script, """#!/bin/sh
-set -eu
-echo '{"type":"system","subtype":"init","session_id":"fake-session-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Bash"]}'
-echo '{"type":"assistant","session_id":"fake-session-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"git commit"}}]}}'
-echo 'gnome mid-round work' > gnome.txt
-git add gnome.txt >/dev/null 2>&1
-git -c user.email=g@b.c -c user.name=gnome commit -q -m 'gnome mid-round commit'
-git rev-parse HEAD > '${committedTip}'
-echo '{"type":"assistant","session_id":"fake-session-1","message":{"id":"msg_2","model":"claude-fake-main-1","content":[{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"true"}}]}}'
-local_tip=\$(cat '${committedTip}')
-i=0
-remote_tip=none
-while [ \$i -lt 150 ]; do
-    remote_tip=\$(git --git-dir='${bareRepo}' rev-parse refs/heads/gnomish/PROJ-1 2>/dev/null || echo none)
-    [ "\$remote_tip" = "\$local_tip" ] && break
-    i=\$((i+1))
-    sleep 0.1
-done
-printf '%s' "\$remote_tip" > '${observedRemoteTip}'
-echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result":"Stage complete.","usage":{"input_tokens":120,"output_tokens":45,"cache_creation_input_tokens":10,"cache_read_input_tokens":5},"modelUsage":{"claude-fake-main-1":{"inputTokens":120,"outputTokens":45,"cacheCreationInputTokens":10,"cacheReadInputTokens":5}}}'
-""")
-        script.toFile().setExecutable(true)
-        script
+    private Path gnome() {
+        Path gnome = StandIn.recording(tempDir, 'agent-gnome-mid-round-commit')
+        StandIn.beside(gnome, 'bare-repo').toFile().text = bareRepo.toString()
+        gnome
     }
 
     /** The production TaskGit shape: real git backend plus the real mid-round push decoration. */
@@ -115,10 +96,10 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
     // UX1 (5.2): the same healthy run produces zero WARN/ERROR after startup.
     def "a gnome commit mid-round reaches origin before the round closes, silently"() {
         given:
-        Path observedRemoteTip = tempDir.resolve('observed-remote-tip')
-        Path committedTip = tempDir.resolve('committed-tip')
-        def properties = testProperties(
-                agentCliBinary: gnomeScript(observedRemoteTip, committedTip).toString())
+        Path gnome = gnome()
+        Path observedRemoteTip = StandIn.beside(gnome, 'observed-tip')
+        Path committedTip = StandIn.beside(gnome, 'committed-tip')
+        def properties = testProperties(agentCliBinary: gnome.toString())
         def output = new ByteArrayOutputStream()
         def runner = new GitModeRunner(
                 newAssembly(null, new PrintStream(output, true, 'UTF-8'), properties), taskGit(), registeredClone,

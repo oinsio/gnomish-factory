@@ -46,10 +46,10 @@ plugins {
 
 description = 'Composition root: main(), the Spring configuration, and the assemblies that bind ports to adapters.'
 
-// How this module is checked — the `test` task's E2E wiring, its mutation scope, and the two
-// manual layers that run outside `check` — lives in its own script plugin, so this file states
-// what the module *is* and that one how it is verified (FR6, M2, task 9.2).
+// How this module is checked — its test wiring and manual layers, then what PIT runs — lives in
+// two script plugins, so this file states what the module *is* (FR6, M2, task 9.2).
 apply from: 'verification.gradle'
+apply from: 'mutation-scope.gradle'
 
 // Which versions this module forces away from what a BOM would resolve, and which advisory
 // forced each — its own script for the same file-size reason (FR6, M2, task 9.2).

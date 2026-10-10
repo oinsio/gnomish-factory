@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -151,9 +152,10 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
     // its result: whether or not the blank-line filter runs, a blank "commit hash" always fails
     // git show with a non-zero exit and contributes no row (this codebase has no Mockito and
     // GitProcessRunner is final, so GitProcessRunner's own gitBinary constructor seam — the same
-    // one GitProcessRunnerSpec's "nonexistent binary" scenario relies on — substitutes a script
-    // that injects a blank line ahead of the real commit hash for `log` only, delegating every
-    // other subcommand to the real git binary unchanged).
+    // one GitProcessRunnerSpec's "nonexistent binary" scenario relies on — substitutes the
+    // committed `log-answer-per-run` stand-in, which answers `log` with what the spec wrote beside
+    // it — a blank line ahead of the real commit hash — and delegates every other subcommand to the
+    // real git binary unchanged).
     def "FR14: a blank line in git log's output never crashes the walk nor produces a bogus row"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-8', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -161,15 +163,8 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
         def realCommit = runner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-8').stdout().forParsing().trim()
 
-        def fakeGit = tempDir.resolve('fake-git.sh')
-        fakeGit.toFile().text = """#!/bin/sh
-if [ "\$1" = "log" ]; then
-  printf '\\n${realCommit}\\n'
-  exit 0
-fi
-exec git "\$@"
-"""
-        fakeGit.toFile().setExecutable(true)
+        def fakeGit = StandIn.recording(tempDir, 'log-answer-per-run')
+        StandIn.beside(fakeGit, 'log.out').toFile().text = "\n${realCommit}\n"
         def fakeWalker = new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()), VirtualTimeGitRetries.gitInfrastructure())
 
         when:

@@ -717,6 +717,112 @@ answering it by hiding a dependency defeats the rule it satisfies, and answering
 hides the count. Both leaves fall under the limit by moving a decision to the object that owns its
 inputs. *Alternatives rejected* are recorded per leaf above and in the single-owner table.
 
+**D23 — Stand-in binaries are a committed library with committed presets; a test never writes an
+executable file** (added 2026-10-10 after the PIT time measurement; FR24, NFR-P2, M11, M12). The
+measurement: a full local `check` spent ≈ 90 min in PIT, `:bootstrap` 2934 s and `:adapters:git`
+1204 s of it. In `:adapters:git` the mutation phase cost 8800 minion-seconds while the mutants' test
+execution summed to 500–900 s, and every sampled minion main thread sat in
+`java.lang.ProcessImpl.waitFor` on a stand-in `git` script the spec had just written. Cause: macOS
+(`syspolicyd`, Gatekeeper exec evaluation plus the XProtect scan) assesses every *new* executable
+file on its first direct run, keyed per file, serialized through one daemon: a fresh one-line
+script costs 1–4 s under nine minions, its second run 10 ms, and `/bin/sh file` 9 ms because the
+file is read as data by an already-assessed interpreter. Sixty-one shebang scripts in about fifty
+test files were written per test, so every mutant paid the assessment again. Linux CI pays nothing;
+its slowness is the two-minion heavy-JVM budget of `ubuntu-latest`, out of scope (NG11).
+
+The decision is the one the user reached by asking twice "why generate at all?": nothing in those
+scripts varies per run except where argv recordings land.
+
+- *The library.* `test-fixtures/src/main/resources/stand-in/` holds the scripts, written once and
+  spec'd once. As built (task 13.2): one table interpreter, `stand-in.sh`, serves every stand-in a
+  table can state — `git`, `docker`, the agent CLI and hooks alike — rather than a `git.sh` and a
+  `docker.sh` that would be one rule in two copies. Its table (`<name>.params`, grammar in the
+  script's header) maps an argv prefix to steps (`record [VAR ...]`, `stdout`, `stderr`, `delay`,
+  `run`, `write`, `export`, `close-stdout`) and one terminal action (`exit`, `answer`, `refuse`,
+  `stall`, `delegate <binary>`, `exec-sh <file>`); no matching row is a broken preset (exit 97),
+  never a silent default. Beside it, `presets/<scenario>/` directories, each holding the symbolic
+  link (`git`, `docker`, `agent` or `hook`) to the interpreter and its table, and `data/` for
+  answers several presets share; a preset carries no absolute path and writes only beside a per-run
+  link, so the library is read-only, shareable across parallel JVMs and assessed by the OS once per
+  build (the resources are referenced from the source tree through the `standInDir` property that
+  `stand-in-conventions` hands every test and PIT JVM, as `fakeAgentDir` already was, so even that
+  once is per checkout). The supervisor's process-shaped fakes (a signal ignored, a child forked, a
+  pipe held open) are not table rows: they are twelve committed scripts under `process/`, one per
+  behaviour, since a table stating a fork would be shell under another name.
+- *The test.* A spec hands production the preset's path (`StandIn.git('refuse-fetch')`) as the git
+  binary. A scenario that reads back an argv recording asks the owner for a per-run link
+  (`StandIn.recording(tempDir, 'record-push')`): one symbolic link to the preset's script, which
+  writes `$0.log` beside the link. A link is not a new executable file (measured: 10 ms per test).
+  The spec reads the stderr text it asserts from the same preset file, never from a second literal.
+- *The owner.* `StandIn` in `:test-fixtures` is the only code in test sources that creates an
+  executable file or a link to one. `StallingGit`, `RecordingGit`, `FailingSubcommandGitFixture`,
+  `TransferAdversaryFixture`, `FakeAgentSupport`, `FakeBinaries`, `FakeDockerBinary` become thin
+  preset selectors or disappear; the inline scripts in the specs of `:adapters:git`, `:bootstrap`,
+  `:gitobjects`, `:sandbox:docker`, `:subprocess` and `:adapters:agent` become preset names. New
+  scenario = new preset directory with a row in the library's own spec, never shell in a spec.
+- *The gate.* `StandInOwnerSpec` in `:bootstrap` (shape of `ProcessEnvironmentOwnerSpec`) scans
+  every module's test tree and `test-fixtures/src/main`, comments stripped, for three shapes
+  (`StandInRule`): an executable bit set from code (`executable = true`, `setExecutable(`), shebang
+  text (`#!/` — a directly run script needs one), and a `chmod` granting execute spelled as command
+  text. Permission-mode calls are deliberately not a shape: specs lock directories with
+  `PosixFilePermissions.fromString`, and a file made executable that way still needs the shebang.
+  The files that match must be exactly the exemptions, each still matching, and the owner must be
+  reached and clean. Exemptions, each with its reason: scripts run inside a container
+  (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage` — Linux inside, and a host link would not
+  resolve there; the library directory is mounted whole instead), specs of shipped scripts
+  (`LauncherScriptSpec`, `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`), which run
+  once per build, and `StallingGitOwnerSpec`, whose detector is fed shebang text as data.
+
+*Alternatives, in the order the session went through them, each with where it broke:*
+1. **Generated shell per test** (the status quo): every test pays the assessment; 61 unreviewed
+   copies of the same four behaviours.
+2. **One committed launcher plus a generated behaviour file per test, run through `/bin/sh`** (the
+   first design): fast, but still generates shell per test, so the logic stays scattered and
+   unreviewed; rejected when the user asked why anything is generated.
+3. **Committed scripts plus generated parameter files per test**: parameters turned out constant
+   per scenario; only the recording location varies, and a link covers it. Folded into D23.
+4. **Hardlinks instead of symlinks**: also fast (one inode), but a hardlink is a second name for the
+   same file on one filesystem and `$0` cannot tell presets apart; a symbolic link does both.
+5. **Invoking stand-ins through `/bin/sh` from production**: production runs the operator's `git`
+   by path; its argv is not the test's to shape.
+6. **Developer Tools exemption / `spctl` / ad-hoc `codesign` / removing xattrs**: per-developer
+   machine state, not a build property (`spctl --master-disable` is no longer honoured on Sequoia);
+   signing and xattr removal do not stop the exec evaluation.
+
+Evidence: measurements in this session (eight fresh scripts 0.9–4.3 s each; eight links to one
+script 10 ms each after one 1.3 s assessment); Michael Tsai, "Why some apps sometimes launch
+extremely slowly" (2025-04-30, the `syspolicyd` YARA queue and per-vnode cache); Eclectic Light,
+"How does Ventura check the security of known apps and command tools" (2023-07-05); the
+`agent-control-plane` issue #817, which fixed the same symptom with a checked-in shim and per-test
+data; cargo-nextest's macOS notes. The principle outlives this change and is recorded as ADR 0015.
+
+**D24 — Nine `bootstrap` suites leave PIT's test scan** (FR25). As built (task 13.7), the module's `pitest` block moved from `bootstrap/verification.gradle` to its own `bootstrap/mutation-scope.gradle`, since the nine entries took the former past the file-size cap. `bootstrap/verification.gradle`
+already excludes the Docker-driven `ContainerMode*E2ESpec` family by the `testing.md` bar; nine
+later siblings were never added: `app.FrozenTimeEquipmentRunSpec`, `app.GiteaBestEffortPushE2ESpec`,
+`app.GiteaCrossInstanceResumeE2ESpec`, `app.RunParkKillPointContainerE2ESpec` (73 s in the
+coverage phase), `app.RunParkRecordingContainerE2ESpec`, `app.SandboxLifecycleCrossInstanceE2ESpec`,
+`app.SandboxLifecycleLegacyIdentityE2ESpec`, `app.SandboxLifecycleRemnantReapE2ESpec` and
+`domain.engine.GiteaActionsStageVerifyE2ESpec` (its own FQN entry: outside `app.*`). The audit read
+each one: every `bootstrap` production class they reach (`ManualRunRunner`, `ManualRunAssembly`,
+`ManualRunConfiguration`, `ContainerSupports`, `ContainerRunSupport`, `SandboxLifecyclePassFactory`,
+`CheckEquipment`, `ThreadSleeper`) has a fast in-process twin, and the Docker-only lines
+(`ContainerRunSupport.revocationSalvageAndPush`, `SandboxLifecyclePassFactory.sweepAndSummarize`)
+are already `@DoNotMutate`. Kept in scope deliberately: `app.ContainerResumeEscalationSpec`,
+`app.ContainerResumeRunnerSpec` and `app.killpoint.TransitionKillPointSpec` run on the fake
+`ScriptedSandboxDocker` over a real bare repository, in process.
+
+**D25 — The win is measured, not assumed** (M12; report-only, no new gate). Before 13.2 and after
+13.7, `:adapters:git` and `:bootstrap` are rerun with PIT's `--verbosity=VERBOSE` and the minion
+main threads sampled with `jcmd Thread.print`; the task report carries coverage-phase seconds,
+mutation-phase wall time, minion-seconds and the summed mutant test time, so a regression later
+has a baseline to be compared against. The count-based mutation cost report stays (it answers a
+different question); a time-weighted one is NG11.
+
+*Sync surfaces (D14, amended):* the stand-in behaviour owners of `kill-expensive-mutants`
+(`StallingGit`, `RecordingGit`) stay the owners of *what* a stand-in does; D23 adds one owner of
+*how it reaches the OS*. `StallingGitOwnerSpec` keeps its scan and gains the library path as the
+one allowed `sleep` site.
+
 ### Single-owner mechanisms
 
 | Owner                                                 | Value (type)                                                                                          | Consumers                                                                                                                                                                                  | Old way removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Enforced by                                                                                                                                                                                                                                                                                                           |
@@ -733,8 +839,19 @@ inputs. *Alternatives rejected* are recorded per leaf above and in the single-ow
 | `TrackerWiring.boardReader` over `BoundTracker` (D11) | the read-only board client built from the configuration and adapter factory bound from origin's default branch (`Tracker`, from a `BoundTracker` and a minted `InstanceId`) | the embedded `BoardSource`, built for the serve runtime assembly (`app/ServeRuntimeAssembly.java`) by `app/ServeDashboard.java`, which holds the `BoardReaders` role interface (task 9.3: the on/off decision is its own, so the runtime assembly stays straight-line)                                                | inside `serve`, `TrackerWiring.resolveReadOnly(dir, …)`; a `SecretsProvider` reaching the serve assembly. **Exemptions:** `app/DashboardCommand.java` and `app/BoardCommand.java` (standalone commands with no bound law)                                                                                                                                                                                                                                                                                                  | the type: `boardReader` takes a `BoundTracker`, and no `Path dir` reaches it. `TrackerWiringOwnerBoundarySpec` (unchanged): `SecretsProvider` stays declared only by `TrackerWiring`. Boundary spec: `resolveReadOnly(` declared only in `TrackerWiring.java` and called only from the two exempt files. Identity spec: `ServeDashboardBoundLimitSpec` — a `serve --dashboard --drain` run over a bare origin whose default branch sets `wip-limit: 10` (and a second row, 4, below the mapper's default) while the clone's checkout sets `wip-limit: 3` in a local commit renders origin's limit as the WIP denominator |
 | `BoardModel` (D13)                                    | the WIP limit eligibility was judged by and the open-front count (`int wipLimit`, `openFrontCount()`) | `board/json/BoardJsonMapper.java`, `dashboard/DashboardStatusCardRenderer.java`, `app/BoardCommand.java`                                                                                   | `BoardJsonMapper.serialize(model, wipLimit)` / `toDto(model, wipLimit)` and its inline `workingRows().size() + awaitingHumanRows().size()`; the four-argument `BoardModel.build` overload that defaults the limit to `Integer.MAX_VALUE` (deleted, test callers moved to the five-argument form)                                                                                                                                                                                                        | the signature: no `wipLimit` parameter remains on any renderer. Identity spec: one model built with a limit and a WIP-held row; the JSON `wipLimit`, the status card's WIP denominator and the limit eligibility used are the same value. Byte-stability spec: the existing board JSON reference fixture is unchanged |
 
+| `StandIn` in `:test-fixtures` over the committed library `test-fixtures/src/main/resources/stand-in/` (D23) | the path production receives as a stand-in binary (a committed preset's `git`/`docker`/agent link, or one per-run link to it), with the behaviour chosen by the preset's parameter table (`Path`; a primitive because `ProcessBuilder` consumes exactly that — the owner is enforced by the gate, not the type) | every spec that runs a stand-in: `test-fixtures` builders (`StallingGit`, `FailingSubcommandGitFixture`, `TransferAdversaryFixture`, `BareGitRepoFixture`, `FakeAgentSupport`), `adapters/git` (`RecordingGit` and the 25 specs with inline scripts, `BaseRefreshSpec` … `WorktreeSalvageSpec`), `bootstrap/app` (10 specs, `AgentDecisionRoundTripSpec` … `TakeCommandCredentialScrubSpec`), `gitobjects` (2), `sandbox/docker` (`FakeDockerBinary`, `HostExecHandleTreeKillSpec`), `subprocess` (`FakeBinaries`), `adapters/agent` (`CliStageExecutorCredentialScrubSpec`) — the task list of group 13 names each | inline `#!/bin/sh` text and `executable = true` / `setExecutable(` in specs and builders, deleted; survivors: container-run scripts (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage`), shipped-script specs (`LauncherScriptSpec`, `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`) and the stalling gate's seeded detector data (`StallingGitOwnerSpec`), each listed in the gate with its reason; `RecordingGit`, `FakeDockerBinary` and the per-spec wrapper builders deleted | `StandInOwnerSpec` (`:bootstrap`, D23), scan asserted to reach every allowlisted file |
+
 ## Risks / Trade-offs
 
+- [A committed stand-in script is rewritten in place (same inode, new content)] → the OS may
+  re-assess it on the next run, and worse, a preset shared by parallel JVMs would change under
+  them; the library is immutable in a build, and `StandIn` creates links only — the gate's scan
+  has no allowed writer of script text outside the library itself.
+- [A scenario needs behaviour no preset offers] → a new preset directory with a row in the
+  library's spec, never shell in the spec; the gate makes the shortcut fail to compile the
+  suite rather than pass quietly, which is the point.
+- [Linux never had the cost, so the migration shows nothing in CI] → M12 is measured on the
+  reference machine (D25); CI's own duration is NG11.
 - [An `Error` now ends the worker instead of being logged as a tick failure (D2 as amended)] → the
   respawn with backoff replaces the continue; a persistent `Error` produces one ERROR line per
   death, bounded by the policy's cap, instead of a suppressed WARN streak, and a `Bounded` loop may

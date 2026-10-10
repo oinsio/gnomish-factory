@@ -7,7 +7,8 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -20,8 +21,6 @@ import spock.lang.TempDir
  * and an abort on exhaustion so no round ever runs on a branch origin has never seen.
  */
 class FirstPushSpec extends Specification implements BareGitRepoFixture {
-
-    private static final String SHA = '1111111111111111111111111111111111111111'
 
     @TempDir
     Path tempDir
@@ -70,7 +69,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
 
     def "FR7: a push origin never received aborts after the budget, so no round starts on it"() {
         given: 'a git whose pushes fail and whose origin demonstrably lacks the branch'
-        def gitBinary = dispatchingGit('')
+        def gitBinary = StandIn.recording(tempDir, 'first-push-absent')
         def clone = initWorkingRepo(tempDir, 'clone-undelivered')
         commit(clone, 'a.txt', 'first')
 
@@ -84,12 +83,12 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         ex.message.contains('does not carry')
 
         and: 'every attempt of the budget was spent, and no more'
-        Files.readAllLines(tempDir.resolve('push-count.txt')).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        StandInLog.blocks(gitBinary).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
     }
 
     def "FR4, FR12: an origin that stays down never reaches the console — the abort is the report"() {
         given: 'a git whose pushes fail and whose origin demonstrably lacks the branch'
-        def gitBinary = dispatchingGit('')
+        def gitBinary = StandIn.recording(tempDir, 'first-push-absent')
         def clone = initWorkingRepo(tempDir, 'clone-flooding')
         commit(clone, 'a.txt', 'first')
         def logs = LogCaptureSupport.attach(FirstPush, Level.DEBUG)
@@ -119,7 +118,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
     // task's first failure reads as a continuation of a streak that is not its own.
     def "FR4: two branches failing against the same origin keep separate streaks"() {
         given: 'a git whose pushes fail, and two tasks delivered through one shared suppressor'
-        def gitBinary = dispatchingGit('')
+        def gitBinary = StandIn.recording(tempDir, 'first-push-absent')
         def clone = initWorkingRepo(tempDir, 'clone-two-branches')
         commit(clone, 'a.txt', 'first')
         def push = new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
@@ -150,7 +149,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
 
     def "FR4: a push that lands after a failed streak announces the recovery"() {
         given: 'an origin that refuses the first attempt and carries the tip on the re-check'
-        def gitBinary = dispatchingGit("${SHA}\trefs/heads/gnomish/PROJ-7")
+        def gitBinary = StandIn.recording(tempDir, 'first-push-landed')
         def clone = initWorkingRepo(tempDir, 'clone-recovering')
         commit(clone, 'a.txt', 'first')
         def logs = LogCaptureSupport.attach(FirstPush)
@@ -170,22 +169,22 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
 
     def "FR7: a push whose outcome was never established but which landed is success, not a re-push"() {
         given: 'a git whose push reports failure while origin already carries the local tip'
-        def gitBinary = dispatchingGit("${SHA}\trefs/heads/gnomish/PROJ-4")
+        def gitBinary = StandIn.recording(tempDir, 'first-push-landed')
         def clone = initWorkingRepo(tempDir, 'clone-landed')
         commit(clone, 'a.txt', 'first')
 
         when:
         new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
-                .deliver('PROJ-4', clone, 'gnomish/PROJ-4')
+                .deliver('PROJ-7', clone, 'gnomish/PROJ-7')
 
         then: 'the re-check settled it: no abort, and the budget stopped at the first attempt'
         noExceptionThrown()
-        Files.readAllLines(tempDir.resolve('push-count.txt')).size() == 1
+        StandInLog.blocks(gitBinary).size() == 1
     }
 
     def "FR7: a push of a branch the clone does not hold is a caller defect, named as one"() {
         given: 'a git whose push fails and whose clone cannot resolve the branch at all'
-        def gitBinary = missingBranchGit()
+        def gitBinary = StandIn.git('missing-branch')
         def clone = initWorkingRepo(tempDir, 'clone-missing-branch')
         commit(clone, 'a.txt', 'first')
 
@@ -196,48 +195,5 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         then: 'the abort says the branch is missing locally, not that origin refused it'
         def ex = thrown(FirstPushFailedException)
         ex.message.contains('holds no gnomish/PROJ-5 to deliver')
-    }
-
-    /** A git with a configured origin, a failing push, and no local branch to resolve. */
-    private Path missingBranchGit() {
-        def script = tempDir.resolve('missing-branch-git.sh')
-        script.toFile().text = '''#!/bin/sh
-for a in "$@"; do
-  case "$a" in
-    push) echo 'fatal: unable to access origin' 1>&2; exit 128;;
-    rev-parse) exit 1;;
-    remote) echo 'https://example.invalid/repo.git'; exit 0;;
-  esac
-done
-exit 1
-'''
-        script.toFile().setExecutable(true)
-        script
-    }
-
-    /**
-     * A git that fails every push while answering the re-check: the combination that separates
-     * "the push did not land" from "the push landed and said nothing", which a real remote cannot
-     * be talked into producing on demand.
-     *
-     * @param lsRemoteOutput what {@code ls-remote} reports — a ref line for the landed case, empty
-     *     for the demonstrably-absent one
-     */
-    private Path dispatchingGit(String lsRemoteOutput) {
-        def script = tempDir.resolve("dispatching-git-${lsRemoteOutput.isEmpty() ? 'absent' : 'landed'}.sh")
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    push) echo x >> '${tempDir.resolve('push-count.txt')}'; echo 'fatal: unable to access origin' 1>&2; exit 128;;
-    ls-remote) printf '%s' '${lsRemoteOutput}'; echo; exit 0;;
-    merge-base) exit 0;;
-    rev-parse) echo '${SHA}'; exit 0;;
-    remote) echo 'https://example.invalid/repo.git'; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
     }
 }

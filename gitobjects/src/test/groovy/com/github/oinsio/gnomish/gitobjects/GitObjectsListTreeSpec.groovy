@@ -106,11 +106,12 @@ class GitObjectsListTreeSpec extends Specification implements GitObjectsFixture 
         Files.createDirectories(work.resolve('.gnomish/stages'))
         Files.writeString(work.resolve('.gnomish/config.yaml'), 'stages: []')
         Files.writeString(work.resolve('.gnomish/stages/plan.md'), 'plan')
-        Path script = work.resolve('.gnomish/run.sh')
-        Files.writeString(script, '#!/bin/sh\n')
-        script.toFile().setExecutable(true)
+        Files.writeString(work.resolve('.gnomish/run.sh'), 'run\n')
         Files.createSymbolicLink(work.resolve('.gnomish/secrets.yaml'), Path.of('../../etc/passwd'))
         commitAll(work, 'law')
+        // The executable mode is git's, set in the index: no file on disk is made executable, and
+        // the next commit (the gitlink's) records it.
+        gitOutput(work, 'update-index', '--chmod=+x', '.gnomish/run.sh')
         // A gitlink cannot be produced by a checkout in a temp dir, so it is staged straight into
         // the index: any commit id will do as the submodule's recorded tip.
         gitOutput(work, 'update-index', '--add', '--cacheinfo',

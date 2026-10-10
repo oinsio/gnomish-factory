@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.gitobjects.GitObjectsInterruptedException
 import com.github.oinsio.gnomish.gitobjects.ObjectId
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -51,9 +52,6 @@ class TipStateCursorTerminationSpec extends Specification {
      * stays alive, leaving the supervised wait as the step the interrupt lands on.
      */
     private Path stalledAfterOutputGit() {
-        Path fakeGit = tempDir.resolve('stalled-git')
-        fakeGit.toFile().text = '#!/bin/sh\nexec 1>&-\nsleep 600\n'
-        fakeGit.toFile().executable = true
-        return fakeGit
+        StandIn.git('closed-stdout-stall')
     }
 }

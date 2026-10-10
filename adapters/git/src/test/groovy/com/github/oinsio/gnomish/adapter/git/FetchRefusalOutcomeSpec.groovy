@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.BranchShape
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -30,17 +30,21 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
     private Path work
     private Path origin
     private Path clone
+    private Path fetchStandIn
     private Path fetchLog
 
     def setup() {
         (work, origin, clone) = initBaseRefTopology(tempDir, ['v1.0']) { Path w ->
             gitOutput(w, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'tag', '-a', 'v1.0', '-m', 'release')
         }
-        fetchLog = tempDir.resolve('argv.log')
+        // A git that records every argv, fails every fetch with git 2.55.0's validation refusal,
+        // and passes everything else — refs reads included — to the real binary.
+        fetchStandIn = StandIn.link(tempDir.resolve('argv'), 'fetch-fsck-refused')
+        fetchLog = StandIn.log(fetchStandIn)
     }
 
     private GitProcessRunner refusingRunner() {
-        new GitProcessRunner(fetchRefusedGit().toString())
+        new GitProcessRunner(fetchStandIn.toString())
     }
 
     private BaseRefresh refresh() {
@@ -182,29 +186,8 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
 
     /** Whether the origin probe's own {@code ls-remote origin HEAD} ran through the stand-in. */
     private boolean probedHead() {
-        Files.exists(fetchLog) && Files.readAllLines(fetchLog).any {
+        recordedArgv(fetchLog).any {
             it.contains('ls-remote') && it.endsWith('HEAD')
         }
-    }
-
-    /**
-     * A git that logs every argv, fails every fetch with git 2.55.0's validation refusal, and
-     * passes everything else — refs reads included — to the real binary.
-     */
-    private Path fetchRefusedGit() {
-        Path stderr = tempDir.resolve('fsck-refusal.stderr')
-        stderr.toFile().text = FetchRefusalSpec.FETCH_REFUSAL
-        Path script = tempDir.resolve('fetch-refused-git.sh')
-        script.toFile().text = """#!/bin/sh
-echo "\$@" >> "${fetchLog}"
-for a in "\$@"; do
-  case "\$a" in
-    fetch) cat '${stderr}' 1>&2; exit 128;;
-  esac
-done
-exec git "\$@"
-"""
-        script.toFile().executable = true
-        script
     }
 }

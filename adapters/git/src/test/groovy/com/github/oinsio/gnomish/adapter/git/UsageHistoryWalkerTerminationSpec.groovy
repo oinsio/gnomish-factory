@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -50,7 +49,7 @@ class UsageHistoryWalkerTerminationSpec extends Specification {
             }
         })
         walker.start()
-        awaitStallStarted()
+        StallingGit.awaitStall(fakeGit)
         walker.interrupt()
         walker.join(Duration.ofSeconds(30).toMillis())
         return thrown
@@ -62,24 +61,6 @@ class UsageHistoryWalkerTerminationSpec extends Specification {
      * can be asked to produce on demand.
      */
     private Path stallingOn(String stalled) {
-        new StallingGit()
-                .stallOn(stalled)
-                .markOnStall(stallStarted())
-                .answer('log', 'a' * 40, 0)
-                .answer('rev-parse', 'a' * 40, 0)
-                .write(tempDir)
-    }
-
-    private Path stallStarted() {
-        tempDir.resolve('stall-started')
-    }
-
-    /** Blocks until the stalled command is in flight, so the interrupt lands on it and not before. */
-    private void awaitStallStarted() {
-        long deadline = System.nanoTime() + 20_000_000_000L
-        while (!Files.exists(stallStarted()) && System.nanoTime() <deadline) {
-            Thread.sleep(20)
-        }
-        assert Files.exists(stallStarted()): 'the stand-in git never reached the stalled command'
+        StallingGit.marked(tempDir.resolve(stalled), 'walker-stall')
     }
 }

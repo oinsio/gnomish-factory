@@ -1,0 +1,51 @@
+# Git stand-ins that answer from a committed file: listings, versions, origin URLs.
+# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+
+[blank-url]
+# Every invocation succeeds and prints a blank line: a configured origin whose URL reads blank
+# (OriginRemoteSpec).
+* answer data/common#empty-line 0
+
+[for-each-ref-noisy]
+# for-each-ref answers a blank line and an out-of-prefix ref ahead of the real task ref; the rest is
+# the real git (TaskBranchListerSpec).
+for-each-ref answer data/stdout-git#for-each-ref-noisy 0
+* delegate git
+
+[log-answer-per-run]
+# git log answers what the spec wrote beside the link (a blank line ahead of a real commit); the
+# rest is the real git (UsageHistoryWalkerEdgeCasesSpec).
+log answer @log.out 0
+* delegate git
+
+[ls-remote-hostile-symref]
+# ls-remote answers a default-branch name carrying an escape sequence; the rest is the real git
+# (RemoteDefaultBranchSpec).
+ls-remote answer data/stdout-git#ls-remote-hostile-symref 0
+* delegate git
+
+[version-2-44]
+# A git below the floor that records every invocation (GitVersionCheckSpec, GitVersionFloorSpec).
+* record
+* answer data/stdout-git#git-version-2-44 0
+
+[version-2-45-1]
+# A git exactly at the floor (GitVersionCheckSpec).
+* answer data/stdout-git#git-version-2-45-1 0
+
+[version-2-55-apple]
+# A git above the floor, as Apple ships it (GitVersionCheckSpec).
+* answer data/stdout-git#git-version-2-55-apple 0
+
+[version-broken]
+# A broken install: no version, an error, exit 1 (GitVersionCheckSpec).
+* refuse 1 data/stderr#git-broken-install
+
+[version-not-git]
+# Something on the git path that is not git (GitVersionCheckSpec).
+* answer data/stdout-git#not-a-git 0
+
+[version-record-2-55]
+# Records the argv, prints a supported version (GitVersionCheckSpec).
+* record
+* answer data/stdout-git#git-version-2-55 0

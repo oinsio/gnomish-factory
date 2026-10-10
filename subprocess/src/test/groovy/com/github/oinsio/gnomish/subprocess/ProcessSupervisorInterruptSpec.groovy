@@ -28,10 +28,7 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
         // It sleeps in a loop rather than waiting on one child, so that killing what it spawned is
         // not enough to end it: only the forcible phase reaching the process itself can, which is
         // the assertion below that a "the cooperative signal was enough" reading would fail.
-        Path binary = fakeBinary(dir, 'stubborn', """
-trap '' TERM
-while :; do sleep 1; done
-""")
+        Path binary = fakeBinary('stubborn')
         Process process = new ProcessBuilder(binary.toString()).start()
         eventually('the fake binary is up') { process.isAlive() }
 
@@ -59,11 +56,7 @@ while :; do sleep 1; done
     def "FR6: an interrupted capture returns the named outcome with what it had captured"() {
         given: 'a binary that speaks once, leaks a holder of its stdout, and stalls'
         Path pidFile = dir.resolve('holder.pid')
-        Path binary = fakeBinary(dir, 'leaky', """
-( sleep 30 & echo \$! > "\$1" )
-echo started
-sleep 600
-""")
+        Path binary = fakeBinary('leaky')
         ProcessBuilder builder = new ProcessBuilder(binary.toString(), pidFile.toString())
         CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(Duration.ofMillis(300)), Duration.ofMillis(300))
 
@@ -90,12 +83,7 @@ sleep 600
     def "FR6: an interrupt landing after a clean exit is still the named outcome, never a truncated EXITED"() {
         given: 'a binary that speaks, exits cleanly, and leaves a child holding its stdout open'
         Path pidFile = dir.resolve('holder.pid')
-        Path binary = fakeBinary(dir, 'exit-leaky', """
-echo spoken
-sleep 600 &
-echo \$! > "\$1"
-exit 0
-""")
+        Path binary = fakeBinary('exit-leaky')
         ProcessBuilder builder = new ProcessBuilder(binary.toString(), pidFile.toString())
         CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(Duration.ofMillis(300)), Duration.ofMillis(300))
 

@@ -704,5 +704,92 @@ rationale). Each task runs under `verification-scope.md`: the specs named, then
       decides"). Verify: `grep -n "catch (Throwable)" docs/adr/0013-supervised-daemon-loop.md
       .claude/rules/daemon-loops.md` is empty except the history paragraph; `DaemonLoopOwnerBoundarySpec`
       green.
-- [ ] 12.5 Final gate again: the root `./gradlew check` once more (11.1 no longer stands as the last
-      run). Verify: green, 100% mutation on `app.daemon.*`.
+- [x] 12.5 Final gate again: the root `./gradlew check` once more (11.1 no longer stands as the last
+      run). Verify: green, 100% mutation on `app.daemon.*`. Superseded as the last run by 13.9.
+
+## 13. Stand-in binaries are committed presets; PIT scan hygiene (D23–D25, single-owner row 12; FR24, FR25, NFR-P2, M11, M12)
+
+Added 2026-10-10 after measuring where PIT's time goes (design D23: macOS assesses every new
+executable file on its first run; every spec wrote a fresh stand-in per test). Each task runs under
+`verification-scope.md`: the specs it names by `--tests`, then `pitestVerifyAllKilled -PpitScope=`
+over the production classes it touched (most tasks touch none: they change test sources only, so
+the PIT step is skipped and the named specs are the check). The `implementation.md` sweep applies:
+13.6's report ends with the grep, its hits and what happened to each.
+
+- [x] 13.1 Baseline measurement (D25). Rerun PIT for `:adapters:git` and `:bootstrap` with
+      `--verbosity=VERBOSE` (the Gradle plugin has no switch: capture the `MutationCoverageReport`
+      command line from `./gradlew :<module>:pitest --rerun --info`, add `--verbosity=VERBOSE`, run
+      it under the build's `GIT_CONFIG_GLOBAL`); sample three minion main threads with `jcmd
+      <pid> Thread.print` during the mutation phase. Record in the task report: coverage-phase
+      seconds, mutation-phase wall, minion-seconds (wall × threads), the sum of per-mutant
+      durations ("Running mutation" → result lines), and where the sampled threads stood. The
+      2026-10-10 numbers for `:adapters:git` (214 s / 979 s / 8811 / 505–899 s / `ProcessImpl.waitFor`
+      on a stand-in script) are the reference; `:bootstrap` has no verbose baseline yet.
+- [x] 13.2 The library and its owner. `test-fixtures/src/main/resources/stand-in/`: `git.sh` reading
+      `$0.params` (rows `<subcommand> refuse <exit> <stderr-file>` | `answer <stdout-file> <exit>` |
+      `stall <seconds>` | `record` | `delegate`; unknown subcommand → `delegate` to the real git on
+      `PATH`; a recording appends argv to `$0.log`), `docker.sh` with the same table, and the
+      supervisor fakes (`sleeping`, `trapping`, `forking`) parameterised by `$0.params`. `presets/`
+      directories for the scenarios 13.3–13.6 need, each a `git` (or other) link to the script plus
+      its `.params` and any stdout/stderr files, no absolute path anywhere. `StandIn` in
+      `test-fixtures/src/main/groovy/.../stand-in/`: `git(preset)`, `docker(preset)`, `agent(...)`
+      return the committed path; `recording(tempDir, preset)` creates the one per-run link and
+      returns it; nothing else in the class touches the filesystem. Specs: `StandInLibrarySpec`
+      (data-driven over every preset directory: the link resolves, the params parse, refuse/answer/
+      stall/record/delegate each behave, exit code and stderr pass through, `$0.log` lands beside a
+      per-run link and nowhere else; no preset contains `/Users`, `/home` or `/var/folders`),
+      `StandInSpec` (the owner creates links only; `recording` twice in one directory is two links,
+      two logs). Verify: the two specs green.
+- [x] 13.3 Migrate the `test-fixtures` builders onto the library: `StallingGit` (keeps its API,
+      becomes a preset selector over `stall` rows; `StallingGitOwnerSpec`'s `sleep` scan gains the
+      library as the one allowed site), `FailingSubcommandGitFixture` (`refuse` rows, the health
+      marker becomes a preset variant), `TransferAdversaryFixture`, `BareGitRepoFixture`'s script,
+      `FakeAgentSupport` (per-run link to `fake-agent.sh` for recordings). Delete the shebang
+      strings. Verify: `StallingGitOwnerSpec`, `StallingGitSpec`, and the specs of each builder
+      green; `grep -rn '#!/bin/' test-fixtures/src/main` hits only the library.
+- [x] 13.4 Migrate `:adapters:git`: `RecordingGit` becomes `StandIn.recording` over the `record`
+      preset; the 25 specs with inline scripts (`BaseRefreshSpec`, `CloneMutationConcurrencySpec`,
+      `ContainerHarvestFetchSpec`, `EnvironmentSalvageSpec`, `FactoryCloneHardeningSpec`,
+      `FetchRefusalOutcomeSpec`, `FirstPushSpec`, `GitNetworkCommandsSpec`,
+      `GitObjectsTaskRepositorySpec`, `GitProcessRunnerBoundedNetworkSpec`, `GitProcessRunnerSpec`,
+      `GitVersionCheckSpec`, `OriginRemoteSpec`, `ParkDeliveryFenceSpec`, `RefspecPushSpec`,
+      `RemoteAttemptDeliverySpec`, `RemoteDefaultBranchSpec`, `ReplicaPairReconcilerSpec`,
+      `TaskBranchListerSpec`, `TaskBranchLocatorSpec`, `TipStateCursorTerminationSpec`,
+      `UsageHistoryWalkerEdgeCasesSpec`, `WorktreeSalvageSpec`, `ContainerGitMechanicsSpec` —
+      exempt, container-mounted) select presets; a refusal text a spec asserts is read from the
+      preset file. Verify: every named spec green; `grep -rn '#!/bin/' adapters/git/src/test` hits
+      only the exempt file.
+- [x] 13.5 Migrate `:bootstrap` (`AdversarialGitConfigSpec`, `AgentDecisionRoundTripSpec`,
+      `BaseRefLawBindingSpec`, `ContainerRunSupportSpec`, `GitModeLawBindingSpec`,
+      `GitModeMidRoundPushSpec`, `GitResumeBootstrapRefusalSpec`, `GitVersionFloorSpec`,
+      `ManualRunAssemblySpec`, `TakeCommandCredentialScrubSpec`, `e2e/paidsmoke/ArgvRecorder`),
+      `:gitobjects` (`GitObjectsTreeSpec`, `GitObjectsListTreeSpec`), `:sandbox:docker`
+      (`FakeDockerBinary`, `HostExecHandleTreeKillSpec`), `:subprocess` (`FakeBinaries`),
+      `:adapters:agent` (`CliStageExecutorCredentialScrubSpec`). Verify: every named spec green;
+      the shebang grep over each module's test tree hits only the exemptions of D23.
+- [x] 13.6 The gate and the durable record. `StandInOwnerSpec` in `:bootstrap` (shape of
+      `ProcessEnvironmentOwnerSpec`): scans every module's `src/test` and `test-fixtures/src/main`
+      for `executable = true`, `setExecutable(`, `PosixFilePermissions.fromString(` followed by an
+      exec of that file, and `#!/bin/`; allowed only in `StandIn`, the library resources and the
+      exemptions (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage`, `LauncherScriptSpec`,
+      `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`), each with its reason;
+      asserts the scan reached every listed file. Durable record, already written on 2026-10-10 and
+      to be checked against the final code: ADR 0015 (`docs/adr/0015-stand-ins-are-committed-presets.md`),
+      `testing.md` sections "Stand-ins are prepared, not generated" and "Diagnosing a slow gate",
+      `design-decisions.md` "Alternative zero", glossary entries **Stand-in** and **Preset**, the
+      architect skill's and `/audit-codebase`'s new items. Report: the sweep grep
+      (`executable = true|setExecutable\(|PosixFilePermissions\.fromString|#!/bin/` over test
+      sources), every hit, and its disposition. Verify: `StandInOwnerSpec` green and red when one
+      exemption line is removed.
+- [x] 13.7 `bootstrap/verification.gradle`: add the nine suites of D24 to `excludedTestClasses` with
+      a rationale comment in the file's existing style, naming for each the in-process twin; add a
+      comment naming the three `ScriptedSandboxDocker` suites as deliberately kept. Verify:
+      `./gradlew :bootstrap:pitest --rerun --info` shows none of the nine among the tests sent to
+      the coverage minion; `pitestVerifyAllKilled` for `:bootstrap` green.
+- [x] 13.8 After-measurement (D25, M12): repeat 13.1 for both modules; record the same five numbers
+      beside the baseline and the mutant counts (unchanged: 933 and 444 on the 2026-10-10 tree, or
+      the new tree's own before/after pair). Targets: `:adapters:git:pitest` under 480 s,
+      `:bootstrap:pitest` under 1200 s. A miss is reported with the sampled thread states, not
+      hidden.
+- [x] 13.9 Final gate: the root `./gradlew check` once (no `--tests`, no `-PpitScope`); fix what
+      fails. Verify: green; whole-`check` wall time recorded in the report against M12's 45 min.

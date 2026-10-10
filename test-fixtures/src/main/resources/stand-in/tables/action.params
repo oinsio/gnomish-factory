@@ -1,0 +1,45 @@
+# The library's own scenarios: one per table action, for StandInLibrarySpec.
+# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+
+[action-answer]
+# The library's own scenario for `answer` and argv-prefix matching, first match wins.
+rev-parse,--git-common-dir answer data/common#git-dir 0
+rev-parse answer - 1
+remote,get-url,* answer data/common#url 0
+* answer - 0
+
+[action-broken]
+# The library's own scenario for a table with no row for an invocation.
+fetch answer - 0
+
+[action-exec]
+# The library's own scenario for `export` and `exec-sh`: the variable reaches the script.
+* export STAND_IN_PROBE probe-value
+* exec-sh steps/show-probe.sh
+
+[action-export-name]
+# The library's own scenario for `export-name`: the link's name reaches the script.
+* export-name STAND_IN_PROBE
+* exec-sh steps/show-probe.sh
+
+[action-per-run]
+# The library's own scenario for `@name`: the answer and its exit code are what the spec wrote.
+ls-remote answer @ls-remote.out @ls-remote.exit
+* answer - 0
+
+[action-record]
+# The library's own scenario for `record`: the clone-key answer is not recorded, the rest is.
+rev-parse answer data/common#git-dir 0
+* record GIT_SSH_COMMAND STAND_IN_UNSET
+* answer - 0
+
+[action-steps]
+# The library's own scenario for the steps: stderr, a delay, a spec-written hook and a per-run
+# write, then an exit; status reads what the push wrote.
+push stderr data/stderr#password-prompt-leak
+push delay 0.3
+push run @hook.sh
+push write data/stdout-git#landed @remote-answer
+push exit 3
+status answer @remote-answer 0
+* answer - 0

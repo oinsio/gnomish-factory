@@ -191,6 +191,79 @@ Gates, both in `:bootstrap`:
 A new spawner that needs a variable the kept set lacks adds it to `TestChildEnvironment`, not
 at the call site.
 
+## Stand-ins are prepared, not generated
+
+A stand-in binary a spec runs in place of `git`, `docker`, the agent CLI, a hook or a supervised
+process is **committed** under `test-fixtures/src/main/resources/stand-in/` (ADR 0015): a
+**preset** — a directory under `presets/` holding one link to the table interpreter `stand-in.sh`,
+its table (`<name>.params`, grammar in the script's header) and the files the table names — or,
+for the supervisor specs whose subject is a signal or a fork, one of the scripts under `process/`.
+Answers several presets share live under `data/`. A spec selects one by name through `StandIn` in
+`:test-fixtures` (`StandIn.git('refuse-fetch')`, `StandIn.process('polite')`); it never writes an
+executable file and never carries shell text. The one per-run artefact is a symbolic link to a
+preset (`StandIn.recording`, `StandIn.link` for a name git chooses, such as a hook), for a scenario
+that records or reads a file the spec writes beside the link; the stand-in writes only there —
+its `<link>.log`, or a `<link>.<name>` a `write` row names. A stand-in that must change behaviour
+mid-spec is re-pointed at another preset (`StandIn.repoint`), not given a marker file to test.
+
+The failure this exists for: 61 inline shell scripts in about fifty specs, each written into the
+spec's temporary directory per test. macOS assesses every new executable file on its first direct
+run (1–4 s, queued across PIT's minions; the second run 10 ms), so every mutant paid it again and
+PIT spent 90 % of its minion time waiting on scripts, invisible on Linux CI and to the count-based
+cost report. The same mechanism slowed the ordinary `test` task and PIT's coverage phase.
+
+- **New behaviour is a new preset directory**, covered by the library's data-driven spec
+  (`StandInLibrarySpec`), never shell in a spec; a new table action is a new feature there. A
+  preset holds no absolute path and writes nothing into the library — a `record`, `write` or
+  `@name` row reached through the preset's own name is refused — so parallel JVMs share it and the
+  OS assesses the script once per checkout.
+- **A text a spec asserts is read from the preset**, never retyped: `StandIn.file(preset, name)`,
+  or the shared file under `data/`.
+- **The library is immutable in a build.** Rewriting a committed script in place would change it
+  under parallel JVMs and may trigger a fresh assessment.
+- **Exemptions are named in the gate**, each with its reason: scripts run inside a container
+  (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage` — Linux inside, a host link would not
+  resolve; mount the library directory instead), specs of shipped scripts (`LauncherScriptSpec`,
+  `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`), which run once per build, and
+  `StallingGitOwnerSpec`, whose detector is fed shebang text as data.
+- **The gate**: `StandInOwnerSpec` in `:bootstrap` scans every module's test tree and
+  `test-fixtures/src/main` (comments stripped) for three shapes — an executable bit set from code
+  (`executable = true`, `setExecutable(`), shebang text (`#!/`, which a directly run script needs),
+  and a `chmod` granting execute spelled as command text; the files that match must be exactly the
+  exemptions, each still matching, and the owner must be reached and clean. Permission-mode calls
+  are not a shape: specs lock directories with them, and a file made executable that way still
+  needs the shebang the gate catches.
+
+Before designing anything "per test" — a script, a configuration file, a repository — list what
+truly varies per run. Everything constant becomes a committed preset; only the remainder is
+created, by one owner. The project record of that question is `design-decisions.md`,
+"Alternative zero".
+
+## Diagnosing a slow gate
+
+A slow `test` or `pitest` is attributed before it is changed. The count-based mutation cost report
+(`expensive-mutants.txt`) answers "which mutant needed many tests", not "where the seconds went":
+on 2026-10-10 every module reported zero above threshold while PIT ran for 90 minutes.
+
+1. **Split the phases.** PIT's log gives `Calculated coverage in N seconds` (one minion, the whole
+   covering suite, single-threaded) and `Completed in N seconds`; the difference is the mutation
+   phase. Multiply its wall time by `threads` for minion-seconds.
+2. **Attribute the mutation phase.** Rerun with `--verbosity=VERBOSE` (the Gradle plugin has no
+   switch: take the `MutationCoverageReport` command line from `./gradlew :<module>:pitest --rerun
+   --info`, add the flag, run it under the build's `GIT_CONFIG_GLOBAL`). Each mutant's `Running
+   mutation …` and result line give its duration; sum them. On 2026-10-10 the sum was 500–900 s
+   of 8800 minion-seconds — the time was not in the tests.
+3. **Look at the threads.** `jcmd <minion pid> Thread.print` during the mutation phase, three
+   minions, two or three samples. A main thread in `ProcessImpl.waitFor` names the child it waits
+   on; `ps -o ppid` lists the children. That one look found the stand-in scripts.
+4. **Group by PIT's units, not by source class.** PIT runs all mutants of one *runtime* class
+   (`Outer$Inner` is its own unit) serially in one fresh minion JVM; a gap between two result
+   lines of what looks like one class may be two units. The parser mistake that produced the
+   refuted "deadline-waiting mutants" reading was exactly this.
+5. **Only then change something**, and re-measure the same five numbers (coverage seconds,
+   mutation wall, minion-seconds, summed mutant time, sampled thread state) so the task report
+   carries a before/after pair.
+
 ## Rules
 
 - Maximize automated verification in task plans — avoid manual testing steps

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -123,27 +125,24 @@ class GitNetworkCommandsSpec extends Specification {
     }
 
     def "FR4: the settings reach the child process itself, and only the network ones"() {
-        given: 'a git stand-in that reports both the argv and the ssh command it was handed'
-        def fakeGit = tempDir.resolve('argv-reporting-git')
-        fakeGit.toFile().text = '''#!/bin/sh
-echo "argv=[$*] ssh=[${GIT_SSH_COMMAND}]"
-'''
-        fakeGit.toFile().executable = true
+        given: 'a git stand-in that records both the argv and the ssh command it was handed'
+        def fakeGit = StandIn.recording(tempDir, 'record-ssh')
         def runner = new GitProcessRunner(fakeGit.toString())
 
         when:
-        def local = runner.run(tempDir, 'status').stdout().forParsing().trim()
-        def network = runner.run(tempDir, 'ls-remote', 'origin').stdout().forParsing().trim()
+        runner.run(tempDir, 'status')
+        runner.run(tempDir, 'ls-remote', 'origin')
+        def (local, network) = StandInLog.blocks(fakeGit)
 
         then: 'a local command is handed nothing it did not ask for — no options, no ssh wrapper'
-        local.startsWith('argv=[status]')
-        !local.contains('BatchMode')
+        local.argv == 'status'
+        !local.GIT_SSH_COMMAND.contains('BatchMode')
 
         and: 'a network command carries the HTTP no-progress abort ahead of its own arguments'
-        network.startsWith('argv=[-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ls-remote origin]')
+        network.argv == '-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ls-remote origin'
 
         and: 'and the SSH connect/keepalive limits, in the child environment only'
-        network.contains('ssh=[ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15' +
-                ' -o ServerAliveCountMax=4]')
+        network.GIT_SSH_COMMAND == '[ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15' +
+                ' -o ServerAliveCountMax=4]'
     }
 }

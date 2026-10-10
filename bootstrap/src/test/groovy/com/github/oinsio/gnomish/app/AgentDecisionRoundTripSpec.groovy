@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -47,20 +47,15 @@ class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFix
     @TempDir
     Path workspaceDir
 
+    /** Where the agent stand-in's per-run link and its capture live — apart from the workspace. */
+    @TempDir
+    Path standInDir
+
     private static final String QUESTION = 'Refactor or patch?'
     private static final String ANSWER = 'Re: "Refactor or patch?" — refactor everything, do not patch'
 
-    private FactoryProperties fakeAgentProperties(String scenario, String captureStdinPath) {
-        def scriptPath = FakeAgentBinary.commandPrefix()[1]
-        def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
-        wrapper.text = """#!/bin/sh
-export GNOMISH_FAKE_SCENARIO='${scenario}'
-export GNOMISH_FAKE_CAPTURE_STDIN='${captureStdinPath}'
-exec sh '${scriptPath}' "\$@"
-"""
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath)
+    private FactoryProperties fakeAgentProperties(String scenario, Path stdinCapture) {
+        testProperties(agentCliBinary: FakeAgentSupport.binaryCapturingStdin(scenario, stdinCapture))
     }
 
     private static StageDefinition stage() {
@@ -83,13 +78,12 @@ exec sh '${scriptPath}' "\$@"
         given: 'instructions.md the stage control file reads, and a captured-stdin file the fake will append to'
         Files.createDirectories(workspaceDir.resolve('.gnomish'))
         Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
-        def captureFile = File.createTempFile('fake-agent-stdin', '.log')
-        captureFile.deleteOnExit()
+        def captureFile = standInDir.resolve('decision-then-plain.log').toFile()
 
         and: 'no operator input at all: stdin is empty'
         def capturedOut = new ByteArrayOutputStream()
         def assembly = newAssembly(new ByteArrayInputStream(new byte[0]), new PrintStream(capturedOut, true, 'UTF-8'),
-                fakeAgentProperties('decision-then-plain', captureFile.absolutePath))
+                fakeAgentProperties('decision-then-plain', captureFile.toPath()))
 
         def context = new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         def initialState = TaskState.atStageStart('build')

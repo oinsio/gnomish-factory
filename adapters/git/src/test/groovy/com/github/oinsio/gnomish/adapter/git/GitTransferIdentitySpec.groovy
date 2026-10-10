@@ -130,8 +130,7 @@ class GitTransferIdentitySpec extends Specification implements TransferAdversary
         String boxTip = currentHead(box)
 
         and: 'the harvest transport onto the box, counting its sessions'
-        Path sessions = tempDir.resolve('upload-pack-sessions.log')
-        Container source = new Container(boxUploadPackUrl(tempDir, box, sessions))
+        Container source = new Container(boxUploadPackUrl(tempDir, box))
         Map<String, String> refsBefore = refs(clone)
         assert !Files.exists(clone.resolve('.git/FETCH_HEAD'))
 
@@ -158,8 +157,8 @@ class GitTransferIdentitySpec extends Specification implements TransferAdversary
         !Files.exists(clone.resolve(AdversarialGitConfig.CREDENTIAL_GET_MARKER))
 
         and: 'exactly one upload-pack session served the transfer'
-        Files.readAllLines(sessions).size() == 1
-        Files.readAllLines(sessions)[0].startsWith('git-upload-pack ')
+        boxUploadPackSessions(tempDir).size() == 1
+        boxUploadPackSessions(tempDir)[0].startsWith('git-upload-pack ')
 
         when: 'the box plants a .gitmodules that is a symbolic link on the task branch, and the harvest runs again'
         plantGitmodulesSymlink(box)

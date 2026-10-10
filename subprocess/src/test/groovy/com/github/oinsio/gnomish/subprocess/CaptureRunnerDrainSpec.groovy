@@ -24,17 +24,10 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
 
     def "FR2, design D2: more than a pipe buffer on both streams completes with both captured in full"() {
         given: 'a binary writing ~150 KiB to each stream — well past any OS pipe buffer'
-        Path binary = fakeBinary(dir, 'noisy', """
-i=0
-while [ \$i -lt ${LINES} ]; do
-  printf '%s\\n' "\$1"
-  printf '%s\\n' "\$1" >&2
-  i=\$((i+1))
-done
-""")
+        Path binary = fakeBinary('noisy')
 
         when:
-        Captured captured = new CaptureRunner().run(new ProcessBuilder(binary.toString(), LINE), Duration.ofSeconds(60))
+        Captured captured = new CaptureRunner().run(new ProcessBuilder(binary.toString(), LINE, String.valueOf(LINES)), Duration.ofSeconds(60))
 
         then: 'the command completed normally rather than deadlocking on a full pipe'
         captured.termination() == Termination.EXITED
@@ -48,11 +41,7 @@ done
     def "design D2: on the kill path a straggler holding the pipe does not block the return"() {
         given: 'a binary that leaks a holder of its stdout out of its own process tree before stalling'
         Path pidFile = dir.resolve('holder.pid')
-        Path binary = fakeBinary(dir, 'leaky', """
-( sleep 30 & echo \$! > "\$1" )
-echo started
-sleep 600
-""")
+        Path binary = fakeBinary('leaky')
 
         and: 'a runner whose kill-path drain join is a fraction of what the holder will live'
         CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(Duration.ofMillis(300)), Duration.ofMillis(300))
@@ -88,11 +77,7 @@ sleep 600
         // reaper until the holder is done, which is what makes post-exit output observable at all.
         // Without the linger the drain's virtual thread races the exit for that first read, and a
         // loaded runner loses it: observed as a CI-only failure of this feature on 2026-09-13.
-        Path binary = fakeBinary(dir, 'trailing', """
-( sleep 2; echo from-the-holder ) &
-echo from-the-parent
-sleep 0.5
-""")
+        Path binary = fakeBinary('trailing')
 
         and: 'a runner whose kill-path drain bound is far too short to have produced that output'
         CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(), Duration.ofMillis(1))

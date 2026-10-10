@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -16,16 +18,16 @@ import spock.lang.TempDir
  * FR1, NFR-R1, NFR-R2 of kill-expensive-mutants (design D1): the runner's network branch observed
  * by what it hands the child — argv, environment, deadline — rather than by re-running a real
  * stall. A local command ({@code version}) and a non-mutating network one ({@code ls-remote},
- * which takes no clone lock and resolves no clone key) go through a {@link RecordingGit} that
- * prints its argv and {@code GIT_SSH_COMMAND} into a record file; the only waits are a 50 ms
+ * which takes no clone lock and resolves no clone key) go through a recording stand-in (the
+ * {@code record-ssh} presets) that records its argv and {@code GIT_SSH_COMMAND}; the only waits are a 50 ms
  * and a zero deadline, and the only timing assertion has a margin of three orders of magnitude.
  *
  * <p>The behaviour itself is that of FR1, FR4, NFR-O1, NFR-S1 of bound-subprocess-commands; this
  * spec exists so that each mutant of the branch has a sub-second first killer.
  *
- * <p>The stand-ins are written and run once per spec, not per feature: macOS checks an executable
- * on its first launch, which costs some 300 ms per fresh file — more than the 50 ms deadline, and a
- * large share of the per-feature budget (FR1).
+ * <p>The stand-ins are linked and run once per spec, not per feature: the first launch of the
+ * library's script may pay macOS's first-run check, some 300 ms — more than the 50 ms deadline,
+ * and a large share of the per-feature budget (FR1).
  *
  * <p>The {@code GIT_SSH_COMMAND} assertions are written against the parent environment, so they
  * hold whether or not the operator set one: unset, a network command gets the default limits; set,
@@ -42,8 +44,6 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
 
     static final Duration NETWORK_TIMEOUT = Duration.ofMillis(50)
 
-    static final Duration SLOW_CHILD = Duration.ofMillis(150)
-
     /**
      * The deadline of the WARN feature, which is the first killer of the deadline and elapsed
      * mutants (FR1, M2). PIT tries the covering tests fastest first, by whole milliseconds of their
@@ -51,7 +51,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
      * deadline the feature ran after 136 faster covering tests, under 1 ms after 24 (measured, scoped
      * runs of 2026-10-09). A zero deadline cuts the child off as soon as it is launched — some 2 ms,
      * where a stand-in that runs to its exit takes some 4 — so the feature costs one launch and one
-     * kill. The outcome cannot race: the child sleeps 150 ms, so it is still running when the zero
+     * kill. The outcome cannot race: the child ({@code record-ssh-slow}) sleeps 150 ms, so it is still running when the zero
      * deadline is checked.
      */
     static final Duration CUT_OFF_TIMEOUT = Duration.ZERO
@@ -67,19 +67,15 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
     Path tempDir
 
     @Shared
-    Path record
-
-    @Shared
     Path instantGit
 
     @Shared
     Path slowGit
 
     def setupSpec() {
-        record = tempDir.resolve('record.txt')
-        instantGit = recordingGit(Duration.ZERO)
-        slowGit = recordingGit(SLOW_CHILD)
-        // The first launch of each fresh executable, paid here rather than inside a feature.
+        instantGit = StandIn.recording(tempDir, 'record-ssh')
+        slowGit = StandIn.recording(tempDir, 'record-ssh-slow')
+        // The first launch of each stand-in, paid here rather than inside a feature.
         new GitProcessRunner(instantGit.toString(), UNREACHED_TIMEOUT).run(tempDir, 'version')
         new GitProcessRunner(slowGit.toString(), UNREACHED_TIMEOUT).run(tempDir, 'version')
         // The first cut-off in the JVM, paid here too: the kill path, the log capture and the
@@ -90,7 +86,8 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
     }
 
     def setup() {
-        Files.deleteIfExists(record)
+        Files.deleteIfExists(StandIn.log(instantGit))
+        Files.deleteIfExists(StandIn.log(slowGit))
     }
 
     def "FR1: a local command carries no stall-detection options and no ssh limits of the runner's"() {
@@ -102,7 +99,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         recorded().argv == 'version'
 
         and: 'the child sees exactly the parent\'s GIT_SSH_COMMAND — none, unless the operator set one'
-        recorded().ssh == "[${parentSshCommand() ?: 'unset'}]"
+        recorded().GIT_SSH_COMMAND == (parentSshCommand() == null ? 'unset' : "[${parentSshCommand()}]")
     }
 
     def "FR1, FR4: a network command carries the stall-detection options and the ssh limits"() {
@@ -112,7 +109,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         then:
         result.exitCode() == 0
         recorded().argv == "${STALL_DETECTION} ls-remote origin"
-        recorded().ssh == "[${parentSshCommand() ?: DEFAULT_SSH_COMMAND}]"
+        recorded().GIT_SSH_COMMAND == "[${parentSshCommand() ?: DEFAULT_SSH_COMMAND}]"
     }
 
     // Declared right after a feature that launches a process, not after the 50 ms one: a launch that
@@ -165,7 +162,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         recordingRunner().run(tempDir, 'ls-remote', 'origin')
 
         then:
-        recorded().ssh == "[${parentSshCommand()}]"
+        recorded().GIT_SSH_COMMAND == "[${parentSshCommand()}]"
     }
 
     /** The stand-in that exits at once, under a deadline it never reaches. */
@@ -191,17 +188,9 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
         Duration.parse((warnings[0] =~ /elapsed=(PT[^,]+)/)[0][1] as String)
     }
 
-    private Path recordingGit(Duration delay) {
-        new RecordingGit(record)
-                .record('argv', '$*')
-                .record('ssh', '[${GIT_SSH_COMMAND-unset}]')
-                .delay(delay)
-                .write(tempDir)
-    }
-
-    /** The one block the stand-in recorded. */
+    /** The one block the stand-ins recorded between them. */
     private Map<String, String> recorded() {
-        def blocks = RecordingGit.blocks(record)
+        def blocks = StandInLog.blocks(instantGit) + StandInLog.blocks(slowGit)
         assert blocks.size() == 1: "expected one recorded invocation, got ${blocks.size()}"
         blocks[0]
     }

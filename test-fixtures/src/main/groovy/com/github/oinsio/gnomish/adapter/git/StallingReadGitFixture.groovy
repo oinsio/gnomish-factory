@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -12,31 +13,28 @@ import java.nio.file.Path
  * {@code push}, this fixture is for specs exercising a read-side seam (tip lookups, ref
  * enumeration) where every invocation the seam makes must stall.
  *
- * <p>The stall mechanics — stripping the leading {@code -c} pairs, the stall set and its length —
- * are owned by {@link StallingGit}; this trait states only its started marker.
- * Implements FR2 of kill-expensive-mutants (design D4).
+ * <p>The stand-in is the committed preset {@code stall-everything}, reached through one
+ * per-run link in the spec's directory: each invocation records that it began, then stalls (ADR
+ * 0015). Implements FR2 of kill-expensive-mutants (design D4); FR24 of
+ * supervise-daemon-loops-and-embed-dashboard.
  */
 trait StallingReadGitFixture {
 
-    /** Appears once a read is in flight. */
-    Path readStarted(Path dir) {
-        dir.resolve('read-started')
-    }
-
     /**
-     * Writes the stand-in binary into {@code dir}, stalling on every subcommand it is asked for
-     * {@link StallingGit#DEFAULT_STALL}, so a read only ends on an interrupt.
+     * The stand-in binary for {@code dir}: one per directory, stalling on every subcommand it is
+     * asked for, so a read only ends on an interrupt.
      */
     Path stallingGit(Path dir) {
-        new StallingGit().stallOnEverything().markOnStall(readStarted(dir)).write(dir)
+        Path link = readLink(dir)
+        Files.isSymbolicLink(link) ? link : StallingGit.marked(link, 'stall-everything')
     }
 
     /** Blocks until a read is in flight, so an interrupt lands on the read and not before it. */
     void awaitReadStarted(Path dir) {
-        long deadline = System.nanoTime() + 20_000_000_000L
-        while (!Files.exists(readStarted(dir)) && System.nanoTime() <deadline) {
-            Thread.sleep(20)
-        }
-        assert Files.exists(readStarted(dir)): 'the stand-in git never reached its read'
+        StallingGit.awaitStall(readLink(dir))
+    }
+
+    private static Path readLink(Path dir) {
+        dir.resolve('stalling-read-git')
     }
 }

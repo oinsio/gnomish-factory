@@ -1,0 +1,21 @@
+# Git hooks, linked into a repository under the name git runs them by.
+# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+
+[hook-record]
+# A hook that records that it ran and lets the operation through.
+* record
+* exit 0
+
+[hook-refuse]
+# A hook that refuses whatever it guards (a pre-commit that fails any hook-running commit).
+* exit 1
+
+[hook-refuse-push]
+# A pre-receive hook that refuses every push (ParkDeliveryFenceSpec).
+* refuse 1 data/stderr#no-further-push
+
+[hook-reject-once]
+# A pre-receive hook that refuses the first push as a transient and accepts every later one; it
+# keeps its one bit in the receiving repository, as a real hook would (RemoteAttemptDeliverySpec,
+# ParkDeliveryFenceSpec).
+* exec-sh steps/reject-once.sh

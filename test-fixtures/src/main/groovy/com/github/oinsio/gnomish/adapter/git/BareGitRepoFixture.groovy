@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 
 /**
@@ -279,17 +281,23 @@ trait BareGitRepoFixture implements SeedTransferFixture {
     }
 
     /**
-     * Writes an executable {@code git} stand-in that appends every invocation's argv to {@code log}
-     * and then runs the real {@code git}, and returns its path — hand it to a
-     * {@code GitProcessRunner} to observe what a code path SPENDS rather than only what it leaves
-     * behind. How many remote round-trips a check costs is invisible in the repository's end state,
-     * so a cost claim ("one refs read", "one push") can only be asserted over the argv log.
+     * A {@code git} stand-in that records every invocation's argv in {@code log} and then runs the
+     * real {@code git}; hand its path to a {@code GitProcessRunner} to observe what a code path
+     * SPENDS rather than only what it leaves behind. How many remote round-trips a check costs is
+     * invisible in the repository's end state, so a cost claim ("one refs read", "one push") can
+     * only be asserted over the record. The stand-in is the committed preset {@code record-delegate}
+     * through a per-run link named {@code log} without its {@code .log} suffix, so the record lands
+     * at {@code log} itself (ADR 0015).
+     *
+     * @param log where the record lands; its name ends in {@code .log}
      */
     Path recordingGit(Path log) {
-        Path script = log.resolveSibling("recording-git-${log.fileName}.sh")
-        script.toFile().text = "#!/bin/sh\necho \"\$@\" >> \"${log}\"\nexec git \"\$@\"\n"
-        script.toFile().executable = true
-        script
+        StandIn.link(recordingLink(log), 'record-delegate')
+    }
+
+    /** Every invocation {@link #recordingGit} recorded in {@code log}, argv as one line each, in call order. */
+    List<String> recordedArgv(Path log) {
+        StandInLog.blocks(recordingLink(log)).findResults { it.argv }
     }
 
     /**
@@ -300,9 +308,17 @@ trait BareGitRepoFixture implements SeedTransferFixture {
      * command (FR4 of bound-subprocess-commands) are not what a call-count assertion is about.
      */
     List<String> recordedSubcommands(Path log) {
-        log.toFile().exists() ? log.toFile().readLines().collect {
+        recordedArgv(log).collect {
             subcommandOf(it)
-        } : []
+        }
+    }
+
+    private Path recordingLink(Path log) {
+        String name = log.fileName.toString()
+        if (!name.endsWith('.log')) {
+            throw new IllegalArgumentException("a recording git's log is named <name>.log, not ${name}")
+        }
+        log.resolveSibling(name.substring(0, name.length() - '.log'.length()))
     }
 
     private String subcommandOf(String argvLine) {

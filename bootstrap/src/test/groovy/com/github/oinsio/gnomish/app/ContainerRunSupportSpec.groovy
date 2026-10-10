@@ -47,6 +47,7 @@ import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -133,14 +134,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
      * touchpoint reconciliation behind it can deliver the tip.
      */
     private void rejectFirstPush() {
-        def hook = origin.resolve('hooks').resolve('pre-receive').toFile()
-        hook.parentFile.mkdirs()
-        hook.text = '''#!/bin/sh
-marker="$(git rev-parse --git-dir)/first-push-seen"
-if [ ! -f "$marker" ]; then touch "$marker"; echo "transient" >&2; exit 1; fi
-exit 0
-'''
-        hook.setExecutable(true)
+        StandIn.link(Files.createDirectories(origin.resolve('hooks')).resolve('pre-receive'), 'hook-reject-once')
     }
 
     // FR3 of fix-lifecycle-push: the terminal boundary closes with the touchpoint reconciliation,

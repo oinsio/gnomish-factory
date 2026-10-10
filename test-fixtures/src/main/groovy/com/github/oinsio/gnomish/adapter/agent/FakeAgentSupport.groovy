@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -9,19 +8,26 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Shared seam for CLI-adapter specs that point {@link FactoryProperties} at
  * the fake agent binary (task 2, design D11 of add-agent-executor): {@code
  * FactoryProperties.agentCliBinary()} is a single token, but the fake's
- * script must be invoked as {@code sh <path>} (its executable bit is not
- * reliably preserved by Gradle's resource copy / a fresh checkout — see
- * {@code fake-agent/README.md}) and needs {@code GNOMISH_FAKE_SCENARIO} set
- * before it runs. This wraps both into one tiny generated shell script so a
- * real {@code CliStageExecutor} (running the round through the task environment
- * port) can invoke it as a plain binary path.
+ * script must be invoked as {@code sh <path>} (see {@code fake-agent/README.md})
+ * and needs {@code GNOMISH_FAKE_SCENARIO} set before it runs. One committed
+ * stand-in preset does both for every scenario — {@code agent}, or
+ * {@code agent-judged-by-<judgeModel>} for the two-role binary — reached through a
+ * symbolic link named after the scenario, which the preset reads as
+ * {@code GNOMISH_FAKE_SCENARIO}; so a real {@code CliStageExecutor} (running the
+ * round through the task environment port) can invoke it as a plain binary path
+ * (ADR 0015: a test never writes an executable file; the operating system assesses
+ * the preset's script once per checkout, not once per spawned round). The links of
+ * the plain and judged binaries live in one directory per JVM, one per scenario.
  *
  * <p>Also the single owner of the {@code StageExecutor.Request}/{@code TaskContext}
  * fixture shape every fake-agent-driven spec in {@code :adapters:agent} built by
@@ -33,23 +39,16 @@ import java.nio.file.Path
  */
 final class FakeAgentSupport {
 
-    /**
-     * One wrapper file per distinct environment per JVM, not per call: macOS assesses a
-     * freshly written executable on its FIRST direct exec (syspolicyd /
-     * Gatekeeper), which can cost seconds — a per-call temp file made every
-     * spawned round pay that scan cold, blowing tightly budgeted
-     * PollingConditions windows in real-thread specs. The wrapper's content is
-     * a pure function of the variables it exports, so reuse is safe.
-     */
-    private static final Map<Map<String, String>, String> WRAPPERS_BY_ENVIRONMENT = [:].asSynchronized()
+    /** One link per (preset, scenario) per JVM, named after the scenario; removed at exit. */
+    private static final Map<String, String> LINKS = new ConcurrentHashMap<>()
+
+    private static final Path LINK_ROOT = linkRoot()
 
     private FakeAgentSupport() {}
 
     /**
-     * @param scenario the {@code GNOMISH_FAKE_SCENARIO} name to hardcode into
-     *     the generated wrapper script
-     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the
-     *     generated wrapper script's path
+     * @param scenario the {@code GNOMISH_FAKE_SCENARIO} the agent plays
+     * @return {@link FactoryProperties} whose {@code agentCliBinary} plays {@code scenario}
      */
     static FactoryProperties propertiesFor(String scenario) {
         propertiesOver(wrapperFor(scenario))
@@ -63,75 +62,103 @@ final class FakeAgentSupport {
      * @param scenario the scenario an executor round plays
      * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
      * @param judgeScenario the scenario a judge vote plays
-     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the generated wrapper
+     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the two-role binary
      */
     static FactoryProperties propertiesFor(String scenario, String judgeModel, String judgeScenario) {
         propertiesOver(wrapperFor(scenario, judgeModel, judgeScenario))
     }
 
     /**
-     * The wrapper path itself, for a caller that hands the binary to a process rather than
+     * The agent binary's path itself, for a caller that hands the binary to a process rather than
      * building {@link FactoryProperties} in-JVM — the packaged-jar harness passes it as
-     * {@code --factory.agent-cli-binary=<path>}. Same cache as {@link #propertiesFor}.
+     * {@code --factory.agent-cli-binary=<path>}.
      *
      * @param scenario the scenario an executor round plays
-     * @param judgeModel the judge check's model id, or {@code null} for an executor-only wrapper
+     * @param judgeModel the judge check's model id, or {@code null} for an executor-only binary
      * @param judgeScenario the scenario a judge vote plays, or {@code null} with {@code judgeModel}
-     * @return the absolute path of the generated wrapper script
+     * @return the absolute path of the scenario's link to the preset
      */
     static String wrapperFor(String scenario, String judgeModel = null, String judgeScenario = null) {
-        if ((judgeModel == null) != (judgeScenario == null)) {
-            throw new IllegalArgumentException('judgeModel and judgeScenario are set together or not at all')
-        }
-        Map<String, String> environment = [GNOMISH_FAKE_SCENARIO: scenario]
-        if (judgeModel != null) {
-            environment.GNOMISH_FAKE_JUDGE_MODEL = judgeModel
-            environment.GNOMISH_FAKE_JUDGE_SCENARIO = judgeScenario
-        }
-        WRAPPERS_BY_ENVIRONMENT.computeIfAbsent(environment.asImmutable()) { Map<String, String> exports ->
-            writeWrapper('fake-agent-wrapper', exports)
+        String preset = presetFor(judgeModel, judgeScenario)
+        LINKS.computeIfAbsent("${preset}/${scenario}".toString()) {
+            Path dir = Files.createDirectories(LINK_ROOT.resolve(preset))
+            dir.toFile().deleteOnExit()
+            Path link = StandIn.link(dir.resolve(scenarioName(scenario)), preset)
+            link.toFile().deleteOnExit()
+            link.toString()
         }
     }
 
     /**
-     * A wrapper that plays {@code judgeScenario} when the invocation's {@code --model} is
-     * {@code judgeModel} and {@code executorScenario} otherwise, and appends every invocation's
-     * argv to {@code argvCapture} through the fake's {@code GNOMISH_FAKE_CAPTURE_ARGV} hook — the
-     * shape an E2E spec needs to drive an executor round and a judge vote through one binary and
-     * then read back what each actually launched with (M1 of fix-operator-blockers). The wrapper
-     * sets every variable itself, so none depends on the child-environment allowlist.
+     * A binary that plays {@code judgeScenario} when the invocation's {@code --model} is
+     * {@code judgeModel} and {@code executorScenario} otherwise, and records every invocation's
+     * argv through the fake's {@code GNOMISH_FAKE_CAPTURE_ARGV} hook — the shape an E2E spec needs
+     * to drive an executor round and a judge vote through one binary and then read back what each
+     * actually launched with (M1 of fix-operator-blockers). The preset sets every variable itself,
+     * so none depends on the child-environment allowlist. The binary is a per-run link named after
+     * the executor scenario, beside {@code argvCapture}, whose log the capture is.
      *
      * @param executorScenario the scenario an executor round plays
      * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
      * @param judgeScenario the scenario a judge vote plays
-     * @param argvCapture the host file every invocation's argv is appended to
-     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the generated wrapper
+     * @param argvCapture the host file every invocation's argv lands in: {@code <executorScenario>.log}
+     * @return {@link FactoryProperties} whose {@code agentCliBinary} is the per-run link
      */
     static FactoryProperties propertiesCapturingArgv(
             String executorScenario, String judgeModel, String judgeScenario, Path argvCapture) {
-        propertiesOver(writeWrapper('fake-agent-routing-wrapper', [
-            GNOMISH_FAKE_SCENARIO : executorScenario,
-            GNOMISH_FAKE_JUDGE_MODEL : judgeModel,
-            GNOMISH_FAKE_JUDGE_SCENARIO: judgeScenario,
-            GNOMISH_FAKE_CAPTURE_ARGV : argvCapture.toAbsolutePath().toString(),
-        ]))
+        propertiesOver(StandIn.link(linkBeside(argvCapture, executorScenario),
+                "${presetFor(judgeModel, judgeScenario)}-capturing").toString())
     }
 
-    private static FactoryProperties propertiesOver(String wrapperPath) {
-        new FactoryProperties('factory-01', wrapperPath, null, null)
+    /**
+     * An agent binary playing {@code scenario} that appends every round's prompt — its stdin — to
+     * {@code stdinCapture} through the fake's {@code GNOMISH_FAKE_CAPTURE_STDIN} hook, one block
+     * per invocation closed by a {@code ---} line. The binary is a per-run link named after the
+     * scenario, beside {@code stdinCapture}, whose log the capture is.
+     *
+     * @param scenario the scenario every round plays
+     * @param stdinCapture the file the prompts land in: {@code <scenario>.log}
+     * @return the per-run link's path, for {@code agentCliBinary}
+     */
+    static String binaryCapturingStdin(String scenario, Path stdinCapture) {
+        StandIn.link(linkBeside(stdinCapture, scenario), 'agent-capturing-stdin').toString()
     }
 
-    private static String writeWrapper(String prefix, Map<String, String> exports) {
-        def wrapper = File.createTempFile(prefix, '.sh')
-        def lines = ['#!/bin/sh']
-        exports.each { String name, String value ->
-            lines << "export ${name}='${value}'".toString()
+    /** The per-run link named {@code scenario} whose log is {@code capture}, which must say so. */
+    private static Path linkBeside(Path capture, String scenario) {
+        String expected = "${scenarioName(scenario)}.log"
+        if (capture.fileName.toString() != expected) {
+            throw new IllegalArgumentException("an agent capture is named after its scenario: ${expected}, not ${capture.fileName}")
         }
-        lines << "exec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"".toString()
-        wrapper.text = lines.join('\n') + '\n'
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        wrapper.absolutePath
+        capture.resolveSibling(scenario)
+    }
+
+    /** {@code scenario} as a link name: the preset plays the name it is invoked under. */
+    private static String scenarioName(String scenario) {
+        if (scenario.isBlank() || scenario.contains('/')) {
+            throw new IllegalArgumentException("a fake-agent scenario is a plain name, not '${scenario}'")
+        }
+        scenario
+    }
+
+    private static String presetFor(String judgeModel, String judgeScenario) {
+        if ((judgeModel == null) != (judgeScenario == null)) {
+            throw new IllegalArgumentException('judgeModel and judgeScenario are set together or not at all')
+        }
+        if (judgeModel != null && judgeScenario != 'judge-verdict-pass') {
+            throw new IllegalArgumentException("no agent preset judges with ${judgeScenario}; add one to the stand-in library")
+        }
+        judgeModel == null ? 'agent' : "agent-judged-by-${judgeModel}"
+    }
+
+    private static Path linkRoot() {
+        Path root = Files.createTempDirectory('fake-agent-links')
+        root.toFile().deleteOnExit()
+        root
+    }
+
+    private static FactoryProperties propertiesOver(String binaryPath) {
+        new FactoryProperties('factory-01', binaryPath, null, null)
     }
 
     /**

@@ -29,7 +29,7 @@ class GitProcessRunnerShutdownReportSpec extends Specification {
     }
 
     private GitProcessRunner stallingRunner() {
-        new GitProcessRunner(new StallingGit().stallOnEverything().write(tempDir).toString())
+        new GitProcessRunner(StallingGit.marked(tempDir.resolve('stalling'), 'stall-everything').toString())
     }
 
     def "FR9: outside the shutdown phase the interrupt is reported as an unexplained one"() {

@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -227,7 +229,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     def "FR6: a branch origin confirms it carries but the fetch could not deliver is unavailable"() {
         given: 'a git that answers the branch probe but fails every fetch'
-        def gitBinary = dispatchingGit()
+        def gitBinary = StandIn.recording(tempDir, 'locator-fetch-refused')
         def clone = initWorkingRepo(tempDir, 'clone-fetch-broken')
         commit(clone, 'a.txt', 'first')
 
@@ -254,7 +256,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         commit(clone, 'a.txt', 'first')
 
         when:
-        def location = instantRetryLocator(new GitProcessRunner(lyingFetchGit().toString())).locate(clone, 'PROJ-13')
+        def location = instantRetryLocator(new GitProcessRunner(StandIn.git('locator-lying-fetch').toString())).locate(clone, 'PROJ-13')
 
         then: 'the absent ref decides, not the zero exit'
         location instanceof BranchLocation.Unavailable
@@ -263,7 +265,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     def "FR6: the unsettled lookup is re-attempted under the infrastructure budget before giving up"() {
         given:
-        def gitBinary = dispatchingGit()
+        def gitBinary = StandIn.recording(tempDir, 'locator-fetch-refused')
         def clone = initWorkingRepo(tempDir, 'clone-retry-count')
         commit(clone, 'a.txt', 'first')
 
@@ -271,7 +273,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         instantRetryLocator(new GitProcessRunner(gitBinary.toString())).locate(clone, 'PROJ-10')
 
         then: 'the fetch ran once per attempt of the budget, and no more'
-        Files.readAllLines(tempDir.resolve('fetch-count.txt')).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        StandInLog.blocks(gitBinary).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
     }
 
     // FR6 of harden-task-branch-contract: "this clone has no origin" is itself the answer of a git
@@ -281,7 +283,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given: 'a git that stalls on every network command and denies having an origin at all'
         def clone = initWorkingRepo(tempDir, 'clone-stalled-fetch')
         commit(clone, 'a.txt', 'first')
-        def stalling = new GitProcessRunner(stallingNetworkGit().toString(), Duration.ofMillis(500))
+        def stalling = new GitProcessRunner(StallingGit.git('locator-stall-network').toString(), Duration.ofMillis(500))
         def oneAttempt = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), 1, Duration.ofMillis(1))
 
         when:
@@ -290,68 +292,5 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         then: 'the unestablished lookup says so, instead of the absence that forks a duplicate branch'
         location instanceof BranchLocation.Unavailable
         (location as BranchLocation.Unavailable).reason().contains('origin did not answer whether gnomish/PROJ-12')
-    }
-
-    /**
-     * A git whose network commands never return — so the runner ends them on its own deadline —
-     * and whose {@code remote get-url} fails: the combination in which a silenced origin read
-     * would otherwise pass for "this clone is purely local". Every subcommand the locator drives
-     * is answered explicitly: the clone-key resolution, the ref probes (absent) and the origin read
-     * (failed); the spec reads none of their output text.
-     */
-    private Path stallingNetworkGit() {
-        new StallingGit()
-                .stallOn('fetch', 'ls-remote')
-                .answer([
-                    'rev-parse',
-                    '--git-common-dir'
-                ], '.git', 0)
-                .answer('rev-parse', '', 1)
-                .answer('remote', '', 128)
-                .write(tempDir)
-    }
-
-    /**
-     * A git that reports a <em>successful</em> fetch while creating no ref at all, and answers
-     * {@code ls-remote} with the branch: the combination that tells apart "the fetch's exit code"
-     * from "the tracking ref" as the authority on what actually arrived.
-     */
-    private Path lyingFetchGit() {
-        def script = tempDir.resolve('lying-fetch-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    fetch) exit 0;;
-    ls-remote) echo '1111111111111111111111111111111111111111\trefs/heads/gnomish/PROJ'; exit 0;;
-    rev-parse) exit 1;;
-    remote) echo 'https://example.invalid/repo.git'; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
-    }
-
-    /**
-     * A git that fails every fetch while answering {@code ls-remote} with a real ref: the one
-     * combination that separates "origin has no such branch" from "this clone could not get it",
-     * and one a real remote cannot be talked into producing on demand.
-     */
-    private Path dispatchingGit() {
-        def script = tempDir.resolve('dispatching-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    fetch) echo x >> '${tempDir.resolve('fetch-count.txt')}'; echo 'fatal: unable to access origin' 1>&2; exit 128;;
-    ls-remote) echo '1111111111111111111111111111111111111111\trefs/heads/gnomish/PROJ'; exit 0;;
-    rev-parse) exit 1;;
-    remote) echo 'https://example.invalid/repo.git'; exit 0;;
-  esac
-done
-exit 1
-"""
-        script.toFile().setExecutable(true)
-        script
     }
 }

@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.Refspec
 import com.github.oinsio.gnomish.gittransfer.TransferSource
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Shared
@@ -16,12 +18,12 @@ import spock.lang.TempDir
  * before a process is launched — so a transfer enters the runner only as the owner's value.
  *
  * <p>Driven through the runner's git-binary seam: a stand-in that answers the clone-key
- * {@code rev-parse} and records the argv and the environment it was handed to a file the spec
- * reads back. The environment half is only observable from inside the child, which is why the
+ * {@code rev-parse} and records the argv and the environment it was handed (the committed
+ * {@code record-transfer-environment} preset, through a per-run link whose log the spec reads back). The environment half is only observable from inside the child, which is why the
  * stand-in reports it rather than the spec inspecting a builder.
  *
- * <p>The stand-in is written and launched once per spec, not per feature: macOS checks an
- * executable on its first launch, which costs some 300-500 ms per fresh file. Paid inside a feature,
+ * <p>The stand-in is linked and launched once per spec, not per feature: the first launch of the
+ * library's script may pay macOS's first-run check, some 300-500 ms. Paid inside a feature,
  * that cost made every process-launching feature here slower than hundreds of other covering tests,
  * so the "FR6, NFR-S2" feature — the intended first killer of the transfer-environment mutant — ran
  * after 669 of them (FR1, M2 of kill-expensive-mutants, task 2.3; measured, scoped run of
@@ -36,27 +38,16 @@ class GitProcessRunnerTransferSpec extends Specification {
     Path tempDir
 
     @Shared
-    Path record
-
-    @Shared
     Path recordingGit
 
     def setupSpec() {
-        record = tempDir.resolve('record.txt')
-        recordingGit = new RecordingGit(record)
-                .answer('rev-parse', '.git')
-                .record('argv', '$*')
-                .record('allow', '[${GIT_ALLOW_PROTOCOL-unset}]')
-                .record('count', '[${GIT_CONFIG_COUNT-unset}] key0=[${GIT_CONFIG_KEY_0-unset}]')
-                .record('askpass', '[${GIT_ASKPASS-unset}] ssh=[${SSH_ASKPASS-unset}]')
-                .record('global', '[${GIT_CONFIG_GLOBAL-unset}]')
-                .write(tempDir)
-        // The first launch of the fresh executable, paid here rather than inside a feature.
+        recordingGit = StandIn.recording(tempDir, 'record-transfer-environment')
+        // The first launch of the stand-in, paid here rather than inside a feature.
         new GitProcessRunner(recordingGit.toString()).run(tempDir, 'version')
     }
 
     def setup() {
-        Files.deleteIfExists(record)
+        Files.deleteIfExists(StandIn.log(recordingGit))
     }
 
     def "FR8: the typed entry runs the owner's fetch through the bounded, stall-detected path"() {
@@ -79,17 +70,19 @@ class GitProcessRunnerTransferSpec extends Specification {
         recordingRunner().run(tempDir, 'ls-remote', 'origin')
 
         then: 'the child inherits it, as every git command did before'
-        recorded('count') == '[1] key0=[' + System.getenv('GIT_CONFIG_KEY_0') + ']'
+        recorded('GIT_CONFIG_COUNT') == '[1]'
+        recorded('GIT_CONFIG_KEY_0') == '[' + System.getenv('GIT_CONFIG_KEY_0') + ']'
 
         when: 'the typed entry runs a transfer'
-        Files.deleteIfExists(record)
+        Files.deleteIfExists(StandIn.log(recordingGit))
         recordingRunner().run(tempDir, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(REFSPEC)))
 
         then: 'the allowlist is set and the inherited configuration is gone'
-        recorded('allow') == '[https:http:ssh:file]'
+        recorded('GIT_ALLOW_PROTOCOL') == '[https:http:ssh:file]'
         // The owner strips the count, which is what git reads the keyed entries under; a key
         // left behind without its count is inert (git-config(1), GIT_CONFIG_COUNT).
-        recorded('count') == '[unset] key0=[' + System.getenv('GIT_CONFIG_KEY_0') + ']'
+        recorded('GIT_CONFIG_COUNT') == 'unset'
+        recorded('GIT_CONFIG_KEY_0') == '[' + System.getenv('GIT_CONFIG_KEY_0') + ']'
     }
 
     def "FR6: #kind carries its own configuration isolation into the child"() {
@@ -97,8 +90,8 @@ class GitProcessRunnerTransferSpec extends Specification {
         recordingRunner().run(tempDir, transfer)
 
         then:
-        recorded('allow') == "[${allow}]"
-        recorded('global') == "[${global}]"
+        recorded('GIT_ALLOW_PROTOCOL') == "[${allow}]"
+        recorded('GIT_CONFIG_GLOBAL') == "[${global}]"
 
         where:
         kind | transfer | allow | global
@@ -119,7 +112,8 @@ class GitProcessRunnerTransferSpec extends Specification {
         }
 
         then:
-        recorded('askpass') == '[] ssh=[]'
+        recorded('GIT_ASKPASS') == '[]'
+        recorded('SSH_ASKPASS') == '[]'
 
         where:
         entry | typed
@@ -149,7 +143,7 @@ class GitProcessRunnerTransferSpec extends Specification {
         then: 'the refusal names the owner, and the stand-in never ran'
         def e = thrown(UnownedTransferException)
         e.message.contains('GitTransfer')
-        !Files.exists(record)
+        !Files.exists(StandIn.log(recordingGit))
 
         where:
         args << [
@@ -234,9 +228,11 @@ class GitProcessRunnerTransferSpec extends Specification {
         new GitProcessRunner(recordingGit.toString())
     }
 
+    /** {@code key} as the one invocation the stand-in recorded saw it. */
     private String recorded(String key) {
-        def line = record.toFile().readLines().find { it.startsWith(key + '=') }
-        assert line != null: "the stand-in recorded no '${key}' line"
-        line.substring(key.length() + 1)
+        def blocks = StandInLog.blocks(recordingGit)
+        assert blocks.size() == 1: "expected one recorded invocation, got ${blocks.size()}"
+        assert blocks[0].containsKey(key): "the stand-in recorded no '${key}' line"
+        blocks[0][key]
     }
 }

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -168,15 +169,7 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         Files.writeString(repo.resolve('a.txt'), 'modified content')
 
         and: 'a stand-in git that refuses reset and clean, delegating status unchanged'
-        def fakeGit = tempDir.resolve('refuse-discard-git.sh')
-        fakeGit.toFile().text = """#!/bin/sh
-if [ "\$1" = "reset" ] || [ "\$1" = "clean" ]; then
-  echo 'fatal: stand-in git refuses' >&2
-  exit 128
-fi
-exec git "\$@"
-"""
-        fakeGit.toFile().setExecutable(true)
+        def fakeGit = StandIn.git('refuse-discard')
         def salvage = new WorktreeSalvage(new GitProcessRunner(fakeGit.toString()), repo, ClaimEpochSource.NONE)
         def logs = LogCaptureSupport.attach(WorktreeSalvage)
 

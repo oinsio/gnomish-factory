@@ -33,6 +33,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -471,9 +472,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: createTask never fires a factory-clone hook (bare-object commits bypass hooks)"() {
         given: 'a pre-commit hook that would fail any hook-running commit'
-        Path hook = bareDir.resolve('hooks').resolve('pre-commit')
-        Files.writeString(hook, '#!/bin/sh\nexit 1\n')
-        hook.toFile().setExecutable(true)
+        StandIn.link(Files.createDirectories(bareDir.resolve('hooks')).resolve('pre-commit'), 'hook-refuse')
 
         when:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))

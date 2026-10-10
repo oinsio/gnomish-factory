@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -48,12 +49,10 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         new RemoteBranchTip(runner).read(clone, BRANCH)
     }
 
-    /** Installs a pre-receive hook on the bare origin; hooks run with cwd = the bare repo. */
-    private void installPreReceiveHook(String script) {
-        def hook = origin.resolve('hooks').resolve('pre-receive').toFile()
-        hook.parentFile.mkdirs()
-        hook.text = "#!/bin/sh\n" + script + "\n"
-        hook.setExecutable(true)
+    /** Installs a committed pre-receive hook preset on the bare origin (ADR 0015). */
+    private void installPreReceiveHook(String preset) {
+        Path hooks = Files.createDirectories(origin.resolve('hooks'))
+        StandIn.link(hooks.resolve('pre-receive'), preset)
     }
 
     def "an undelivered park commit is pushed and reported delivered"() {
@@ -73,7 +72,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         given:
         def parked = commitPark()
         assert new RefspecPush(runner).push(clone, BRANCH).exitCode() == 0
-        installPreReceiveHook('echo "no further push may happen" >&2; exit 1')
+        installPreReceiveHook('hook-refuse-push')
 
         when:
         def verdict = new ParkDeliveryFence(runner).ensureDelivered(clone, TASK_ID)
@@ -87,11 +86,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         given: 'a hook that rejects only the first push it sees'
         ParkDeliveryVerdict verdict = null
         commitPark()
-        installPreReceiveHook('''
-            marker="$(git rev-parse --git-dir)/first-push-seen"
-            if [ ! -f "$marker" ]; then touch "$marker"; echo "transient" >&2; exit 1; fi
-            exit 0
-        '''.stripIndent())
+        installPreReceiveHook('hook-reject-once')
 
         when:
         def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {

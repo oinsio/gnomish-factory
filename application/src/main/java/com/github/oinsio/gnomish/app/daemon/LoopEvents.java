@@ -119,17 +119,17 @@ final class LoopEvents {
         try {
             line.accept(cause);
         } catch (Throwable unrenderable) {
-            line.accept(new UnrenderableCause(cause));
+            line.accept(new UnrenderableCauseException(cause));
         }
     }
 
     /** Stands in for a cause the logger could not render; its message names only the type. */
-    static final class UnrenderableCause extends RuntimeException {
+    static final class UnrenderableCauseException extends RuntimeException {
 
         @Serial
         private static final long serialVersionUID = 1L;
 
-        UnrenderableCause(Throwable cause) {
+        UnrenderableCauseException(Throwable cause) {
             super("a " + cause.getClass().getName() + " that could not be rendered");
         }
     }

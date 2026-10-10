@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -261,22 +263,14 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
 
     def "FR9: only the unanswered arm is re-asked, and the budget is bounded"() {
         given: 'a git whose refs read always fails, counting the invocations'
-        Path log = tempDir.resolve('ls-remote.log')
-        Path gitBinary = tempDir.resolve('failing-git.sh')
-        gitBinary.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  if [ "\$a" = "ls-remote" ]; then echo "\$@" >> "${log}"; echo "fatal: unable to access origin" >&2; exit 128; fi
-done
-exec git "\$@"
-"""
-        gitBinary.toFile().executable = true
+        Path gitBinary = StandIn.recording(tempDir, 'refuse-ls-remote-recorded')
 
         when:
         def outcome = refresh(new GitProcessRunner(gitBinary.toString())).refresh(clone, 'develop')
 
         then:
         outcome instanceof BaseRefreshOutcome.Unavailable
-        Files.readAllLines(log).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        StandInLog.blocks(gitBinary).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
 
         and: 'the waits between them are the production backoff, doubling and bounded'
         sleeper.slept == [
@@ -349,7 +343,7 @@ exec git "\$@"
         advance('develop', 'stale.txt')
 
         when:
-        def outcome = refresh(new GitProcessRunner(fetchAlwaysFails().toString())).refresh(clone, base)
+        def outcome = refresh(new GitProcessRunner(StandIn.git('refuse-fetch').toString())).refresh(clone, base)
 
         then: 'origin still answers the probe, so the non-delivering fetch is a refusal, not an outage'
         outcome instanceof BaseRefreshOutcome.Refused
@@ -371,7 +365,7 @@ exec git "\$@"
         advance('develop', 'stale2.txt')
 
         when:
-        def outcome = refresh(new GitProcessRunner(fetchFailsAndOriginUnreachable().toString())).refresh(clone, base)
+        def outcome = refresh(new GitProcessRunner(StandIn.git('refuse-fetch-and-origin-probe').toString())).refresh(clone, base)
 
         then: 'the same non-delivering fetch, the opposite class — because the probe got no answer either'
         outcome instanceof BaseRefreshOutcome.Unavailable
@@ -388,7 +382,7 @@ exec git "\$@"
         assert gitExitCode(clone, 'cat-file', '-e', advanced + '^{commit}') != 0
 
         when:
-        def outcome = refresh(new GitProcessRunner(fetchAlwaysFails().toString())).refresh(clone, advanced)
+        def outcome = refresh(new GitProcessRunner(StandIn.git('refuse-fetch').toString())).refresh(clone, advanced)
 
         then: 'the probe separates "declined" from "unreachable" without reading git\'s wording'
         outcome instanceof BaseRefreshOutcome.Refused
@@ -416,68 +410,12 @@ exec git "\$@"
         assert gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/feature/late') != 0
 
         when:
-        def outcome = refresh(new GitProcessRunner(fetchSilentlyDoesNothing().toString()))
+        def outcome = refresh(new GitProcessRunner(StandIn.git('fetch-noop').toString()))
                 .refresh(clone, 'feature/late')
 
         then: 'the exit code alone is never enough — the destination has to exist'
         outcome instanceof BaseRefreshOutcome.Unavailable
         (outcome as BaseRefreshOutcome.Unavailable).reason().contains('left no refs/remotes/origin/feature/late')
-    }
-
-    /** A git whose fetch reports success and does nothing: the "delivered nothing" arm's only cause. */
-    private Path fetchSilentlyDoesNothing() {
-        Path script = tempDir.resolve('fetch-noop-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    fetch) exit 0;;
-  esac
-done
-exec git "\$@"
-"""
-        script.toFile().executable = true
-        script
-    }
-
-    /**
-     * A git that fails every fetch while passing everything else — refs reads included — to the real
-     * binary: the one combination that separates "origin does not carry it" from "this clone could
-     * not get it", and one a local bare remote cannot be talked into producing on demand.
-     */
-    private Path fetchAlwaysFails() {
-        Path script = tempDir.resolve('fetch-fails-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    fetch) echo 'fatal: unable to access origin' 1>&2; exit 128;;
-  esac
-done
-exec git "\$@"
-"""
-        script.toFile().executable = true
-        script
-    }
-
-    /**
-     * A git that fails every fetch and, separately, fails the probe's own {@code ls-remote origin
-     * HEAD} — while still answering a base refs read (the {@code refs/heads}/{@code refs/tags}
-     * pattern {@link RemoteBaseRef} sends) for real. The two {@code ls-remote} questions are told
-     * apart by their argument, exactly as {@link OriginProbe} and {@link RemoteBaseRef} differ in
-     * production, so this simulates origin going unreachable in the gap between the two calls.
-     */
-    private Path fetchFailsAndOriginUnreachable() {
-        Path script = tempDir.resolve('fetch-fails-origin-gone-git.sh')
-        script.toFile().text = """#!/bin/sh
-for a in "\$@"; do
-  case "\$a" in
-    fetch) echo 'fatal: unable to access origin' 1>&2; exit 128;;
-    HEAD) echo 'fatal: unable to access origin' 1>&2; exit 128;;
-  esac
-done
-exec git "\$@"
-"""
-        script.toFile().executable = true
-        script
     }
 
     def "FR6: every refresh fetch carries the flags that keep it narrow"() {
@@ -489,7 +427,7 @@ exec git "\$@"
         refresh(new GitProcessRunner(recordingGit(log).toString())).refresh(clone, base)
 
         then: 'one refspec, no auto-followed tags, no configured refmap, no FETCH_HEAD, full depth'
-        def fetchArgv = Files.readAllLines(log).find { it.contains('fetch') }
+        def fetchArgv = recordedArgv(log).find { it.contains('fetch') }
         fetchArgv.contains('--no-tags')
         fetchArgv.contains('--no-write-fetch-head')
         fetchArgv.contains('--refmap=')

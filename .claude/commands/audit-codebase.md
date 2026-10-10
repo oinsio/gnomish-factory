@@ -107,7 +107,13 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
 - **test-quality** — every `@DoNotMutate`, `excludedClasses`, `excludedTestClasses` entry
   still meets its written bar in `testing.md` (the named covering suite exists and covers
   the claimed scenarios); exemption count trend; per `traceability.md`, every FR/NFR of
-  *active* changes has an implementing entity (grep).
+  *active* changes has an implementing entity (grep). Stand-ins (`testing.md`, "Stand-ins are
+  prepared, not generated"; ADR 0015): any test-source site outside the `StandIn` owner and the
+  gate's exemptions that writes an executable file or carries shebang (`#!/`) text is a finding; any
+  Docker-, Gitea- or jar-driven suite missing from its module's `excludedTestClasses` while
+  meeting the bar is a finding; a suite listed there whose module classes have no in-process
+  twin is the opposite finding. A `pitest` or `test` task that got slower is attributed per
+  "Diagnosing a slow gate" before any recommendation is written.
 - **docs-drift** — `docs/glossary.md` vs code naming (banned synonyms absent, domain terms
   match), ADRs vs implementation, `README.md`/operator guides vs actual CLI commands and
   flags, Mermaid diagrams vs current architecture.

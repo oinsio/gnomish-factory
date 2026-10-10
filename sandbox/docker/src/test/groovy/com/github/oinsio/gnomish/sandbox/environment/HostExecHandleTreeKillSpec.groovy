@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -40,13 +41,7 @@ class HostExecHandleTreeKillSpec extends Specification {
     def "FR11, G5: a timed-out round leaves no orphaned agent children"() {
         given: 'a fake agent CLI that forks a child of its own and then outlives any round budget'
         def pidFile = tempDir.resolve('child.pid')
-        def cli = tempDir.resolve('fake-agent-cli')
-        Files.writeString(cli, """#!/bin/sh
-sleep 600 &
-echo \$! > "\$1"
-wait
-""")
-        cli.toFile().setExecutable(true)
+        def cli = StandIn.process('agent-forking')
         process = new ProcessBuilder(cli.toString(), pidFile.toString()).start()
         def handle = new HostExecHandle(process, clock.instant())
 

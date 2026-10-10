@@ -27,12 +27,7 @@ class ProcessSupervisorDescendantKillSpec extends Specification implements FakeB
         // still reports alive through ProcessHandle — in production the parent is the JVM, whose
         // process reaper does this for every child it spawned. After `wait` returns, `read` keeps
         // the parent itself alive for the FR14 assertion.
-        Path binary = fakeBinary(dir, 'parent', """
-sh -c 'trap "" TERM; sleep 600' &
-echo \$! > "\$1"
-wait
-read line
-""")
+        Path binary = fakeBinary('parent')
         Process process = new ProcessBuilder(binary.toString(), pidFile.toString()).start()
 
         and: 'the tree is fully up: the forked child exists and has forked its own sleep'

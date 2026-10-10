@@ -22,12 +22,7 @@ class ProcessSupervisorGraceSpec extends Specification implements FakeBinaries {
         // The parent lingers half a second before exiting so the assertions below read a settled
         // tree rather than a race between the child's own signal handler and the forcible phase.
         Path pidFile = dir.resolve('child.pid')
-        Path binary = fakeBinary(dir, 'polite', """
-trap 'sleep 0.5; exit 143' TERM
-sh -c 'trap "printf term > term.marker; sleep 600" TERM; sleep 600 & wait' &
-echo \$! > "\$1"
-wait
-""")
+        Path binary = fakeBinary('polite')
         Process process = new ProcessBuilder(binary.toString(), pidFile.toString())
                 .directory(dir.toFile())
                 .start()

@@ -55,7 +55,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         !undeliverable.details().contains('failed twice')
 
         and: 'one push: a second full deadline on a proven-unresponsive remote establishes nothing'
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
     }
 
     def "FR7: an interrupted push is reported as unknown and is not re-attempted"() {
@@ -88,7 +88,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         undeliverable.details().contains('was interrupted before it finished')
 
         and:
-        pushAttempts(tempDir).toFile().readLines().size() == 1
+        pushAttempts(tempDir) == 1
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */

@@ -32,3 +32,9 @@ description = 'Subprocess supervision: concurrent drains, bounded waits, two-pha
 layering {
     allowedProjects = []
 }
+
+dependencies {
+    // The committed stand-in library's owner (`StandIn`, ADR 0015): the supervisor specs run its
+    // process-shaped fakes. Test scope only — the layering gate governs production classpaths.
+    testImplementation project(':test-fixtures')
+}

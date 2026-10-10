@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -57,18 +57,9 @@ class GitModeLawBindingSpec extends Specification implements BareGitRepoFixture,
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
-    /** A fake-agent wrapper pinned to a scenario, with per-invocation stdin (the round prompt) captured. */
-    private FactoryProperties fakeAgentProperties(String scenario, String captureStdinPath) {
-        def scriptPath = FakeAgentBinary.commandPrefix()[1]
-        def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
-        wrapper.text = """#!/bin/sh
-export GNOMISH_FAKE_SCENARIO='${scenario}'
-export GNOMISH_FAKE_CAPTURE_STDIN='${captureStdinPath}'
-exec sh '${scriptPath}' "\$@"
-"""
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        testProperties(agentCliBinary: wrapper.absolutePath)
+    /** A fake-agent binary pinned to a scenario, with per-invocation stdin (the round prompt) captured. */
+    private FactoryProperties fakeAgentProperties(String scenario, Path stdinCapture) {
+        testProperties(agentCliBinary: FakeAgentSupport.binaryCapturingStdin(scenario, stdinCapture))
     }
 
     private static StageDefinition stage() {
@@ -91,11 +82,10 @@ exec sh '${scriptPath}' "\$@"
     // gnome branch, yet every attempt's prompt still carries the clone's ORIGINAL law.
     def "a mid-run gnome edit to the worktree's control file never re-enters the frozen law"() {
         given: 'a captured-stdin file the fake appends each attempt\'s prompt to'
-        def captureFile = File.createTempFile('fake-agent-stdin', '.log')
-        captureFile.deleteOnExit()
+        def captureFile = tempDir.resolve('law-tamper-then-plain.log').toFile()
         def runner = new GitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out,
-                fakeAgentProperties('law-tamper-then-plain', captureFile.absolutePath)),
+                fakeAgentProperties('law-tamper-then-plain', captureFile.toPath())),
                 TaskGitFixture.real(),
                 registeredClone,
                 LiveConsoleIO.onStdout())

@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -36,22 +37,27 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
     }
 
-    private Path reportPath
+    /** Where the agent stand-in's per-run link and its record live — apart from the workspace. */
+    @TempDir
+    Path standInDir
+
+    private Path agentStandIn
+
+    /**
+     * The committed {@code agent-reporting-home} stand-in, through a per-run link: it
+     * records whether {@code CREDENTIAL_VAR} reached it, then plays plain-round (ADR 0015).
+     */
     private FactoryProperties wrapperReporting() {
-        reportPath = workspaceDir.resolve('credential-report.txt')
-        def wrapper = File.createTempFile('cli-stage-executor-cred-scrub', '.sh')
-        wrapper.text = """#!/bin/sh
-export GNOMISH_FAKE_SCENARIO='plain-round'
-if [ -n "\${${CREDENTIAL_VAR}:-}" ]; then
-    echo 'present' >> '${reportPath}'
-else
-    echo 'absent' >> '${reportPath}'
-fi
-exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
-"""
-        wrapper.setExecutable(true)
-        wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, null, null)
+        assert CREDENTIAL_VAR == 'HOME': 'the reporting preset records HOME'
+        agentStandIn = StandIn.link(standInDir.resolve('plain-round'), 'agent-reporting-home')
+        new FactoryProperties('factory-01', agentStandIn.toString(), null, null)
+    }
+
+    /** What the agent saw of {@code CREDENTIAL_VAR}, one entry per spawned round: present or absent. */
+    private List<String> credentialReports() {
+        StandInLog.blocks(agentStandIn).collect {
+            it[CREDENTIAL_VAR] == 'unset' ? 'absent' : 'present'
+        }
     }
 
     // Delegates to FakeAgentSupport#requestFor, the single owner of this fixture shape.
@@ -72,7 +78,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         executor.execute(requestFor(workspaceDir))
 
         then:
-        reportPath.toFile().text.trim() == 'absent'
+        credentialReports() == ['absent']
     }
 
     def "with nothing declared, the same base variable reaches the spawned process"() {
@@ -84,6 +90,6 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         executor.execute(requestFor(workspaceDir))
 
         then:
-        reportPath.toFile().text.trim() == 'present'
+        credentialReports() == ['present']
     }
 }

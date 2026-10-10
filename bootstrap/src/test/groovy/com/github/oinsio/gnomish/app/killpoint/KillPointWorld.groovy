@@ -18,6 +18,8 @@ import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 /**
@@ -56,11 +58,11 @@ class KillPointWorld implements BareGitRepoFixture {
     Path worktree
 
     /**
-     * The argv log of this medium's own git stand-in, or {@code null} for a medium whose runner is
-     * not recorded. Only a row making a cost claim reads it (NFR-P1 of fix-envelope-medium); the
-     * rest ignore it.
+     * This medium's own recording git stand-in, or {@code null} for a medium whose runner is not
+     * recorded. Only a row making a cost claim reads its record (NFR-P1 of fix-envelope-medium);
+     * the rest ignore it.
      */
-    Path gitLog
+    Path gitStandIn
 
     /**
      * The runner {@link #store} writes through — shared so a row's own git calls land in the same
@@ -142,9 +144,11 @@ class KillPointWorld implements BareGitRepoFixture {
         tipTask()?.egressCursor()
     }
 
-    /** Every invocation {@link #gitLog} recorded, argv per line, in call order. */
+    /** Every invocation {@link #gitStandIn} recorded, argv per line, in call order. */
     List<String> gitArgv() {
-        gitLog?.toFile()?.exists() ? gitLog.toFile().readLines() : []
+        gitStandIn == null ? [] : StandInLog.blocks(gitStandIn).findResults {
+            it.argv
+        }
     }
 
     /**

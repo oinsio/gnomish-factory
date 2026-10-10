@@ -90,6 +90,14 @@ written before anyone here knew it.
 - **MODIFIED** the test-time gate (`checkTestTimeInjection`) to flag every way of
   building a real clock or a real sleeper in a test source, and the three time
   fakes merge into one virtual instant source.
+- **ADDED** (2026-10-10, folded in by the user's decision after the PIT time
+  measurement) a committed library of stand-in binaries and their parameter
+  presets under `test-fixtures`, with one owner fixture and a build gate, so no
+  test writes an executable file; nine Docker/Gitea-driven `bootstrap` specs
+  leave PIT's test scan by the existing bar. Measured cause: macOS assesses
+  every new executable file on its first run (1–4 s, queued across PIT's
+  minions), and every spec wrote a fresh stand-in `git` per test — 8800
+  minion-seconds for 500–900 s of actual test execution in `:adapters:git`.
 
 ## Goals
 
@@ -134,6 +142,12 @@ written before anyone here knew it.
 - **NG10** — Backward compatibility of the plugin SPI `create` methods. No
   third-party plugin exists; the in-repo implementors (GitHub, in-memory, the
   sample plugin) move in the same change.
+- **NG11** — Other PIT levers the 2026-10-10 measurement examined and set
+  aside: the minion count on the Linux CI runner (its own change), a
+  time-weighted mutation cost report, PIT's `mutationUnitSize` (no gain on
+  `:subprocess`), reducing class complexity (mutant density is 6–20 per 100
+  lines everywhere; the cost is per process start, not per mutant), and the
+  refuted "deadline-waiting mutants" reading.
 
 ## Users & Scenarios
 
@@ -256,6 +270,19 @@ written before anyone here knew it.
   implementors and the sample plugin SHALL move to the new shape in this
   change, and the plugin API version and compatibility baseline SHALL record
   the break.
+- **FR24** — Every stand-in binary a test runs (a `git`, `docker`, agent or
+  process-shaped fake) SHALL be a committed script in `test-fixtures` whose
+  per-scenario parameters are committed presets beside it. A spec SHALL select
+  a preset by path and SHALL NOT write an executable file or shell text; the
+  one per-run artefact allowed is a symbolic link to a preset, created by the
+  single owner fixture, where a scenario needs a per-run output location
+  (argv recording). A build gate SHALL fail on any other writer of executable
+  files or shebang text in test sources, with named exemptions for scripts
+  that run inside a container and for specs of shipped scripts.
+- **FR25** — The nine `bootstrap` specs that drive a real Docker daemon or a
+  Gitea container and whose production classes are all covered by in-process
+  specs SHALL leave PIT's test scan by the `testing.md` exclusion bar; the
+  three specs that run on the fake `ScriptedSandboxDocker` SHALL stay in it.
 
 ### Non-Functional: Reliability
 
@@ -283,6 +310,10 @@ written before anyone here knew it.
 - **NFR-P1** — The embedded dashboard SHALL add no tracker reads beyond the
   standalone `--watch` cadence (one `listReady` + `listOpen` pair per board
   interval).
+- **NFR-P2** — Starting a stand-in binary from a test SHALL cost no more than
+  one operating-system assessment per committed script per build; a second
+  test using the same preset SHALL start it in milliseconds, on macOS as on
+  Linux.
 
 ### Non-Functional: Security
 
@@ -335,6 +366,11 @@ written before anyone here knew it.
 - **M8** — Test fakes for the current instant: 3 (`VirtualClock`,
   `MovableClock`, `StepClock`) → 1, plus the declared layering copy in
   `:logtext`. Specs building two clocks for one flow: 11 → 0.
+- **M11** — Test-source sites that write an executable file or shebang text:
+  61 scripts in ~50 files → 1 owner fixture plus the named exemptions.
+- **M12** — On the 14-core reference machine, with the mutant count unchanged:
+  `:adapters:git:pitest` 1204 s → under 480 s; `:bootstrap:pitest` 2934 s →
+  under 1200 s; the whole local `check` under 45 min (was ≈ 90 min of PIT).
 
 ## Open Questions
 
@@ -343,6 +379,10 @@ written before anyone here knew it.
 - **Q2** — Backoff cap for the snapshot writer. It is the operator's only window
   into the daemon, so it may need a shorter cap than the reaper's 10 minutes.
   Settle in design.
+- **Q3** — How many stand-in presets the 61 inline scripts collapse into. The
+  keyword survey says 15–20 scenarios; where two specs differ only in a
+  refusal text written for one test, one canonical text is preferred. Settle
+  during tasks 13.4–13.5 and record the count in the task report.
 
 ## Capabilities
 
@@ -369,9 +409,19 @@ written before anyone here knew it.
   one context object per `create`, not as a growing argument list.
 - `plugin/plugin-api-contract`: a breaking version bump with a regenerated
   compatibility baseline for the `create` reshape.
+- `quality-gates`: stand-in binaries and their presets are committed under
+  `test-fixtures` with one owner and a gate; nine out-of-process `bootstrap`
+  suites leave the mutation scan (FR24, FR25).
 
 ## Impact
 
+- Stand-ins (FR24, FR25) — `:test-fixtures` gains `stand-in/` resources
+  (scripts and presets) and the `StandIn` owner; test sources of
+  `adapters/git`, `:bootstrap`, `:gitobjects`, `sandbox/docker`, `:subprocess`
+  and `adapters/agent` lose their inline scripts; `:bootstrap` gains
+  `StandInOwnerSpec` and nine `excludedTestClasses` entries in
+  `verification.gradle`; no production code changes; `docs/adr/0015`, the
+  testing and design-decisions rules, and the glossary are updated.
 - `:application` — `app/lease/StandingReaper`, `RestartBackoff`;
   `app/serve/WorktreeJanitor`, `SandboxLifecycleTick`, `ServeShutdown`;
   `app/ServeCommand`, `ServeArguments(Parser)`, `ServeAssembly`,

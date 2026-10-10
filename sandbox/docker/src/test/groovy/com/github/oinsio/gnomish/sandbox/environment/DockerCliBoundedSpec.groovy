@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -16,23 +17,18 @@ import spock.lang.TempDir
  * would read as "docker ran and failed". Both streams are drained concurrently with the running
  * process, so output past the OS pipe buffer cannot deadlock the command it belongs to.
  *
- * <p>Driven by a fake {@code docker} binary, so no daemon is required. The stall stands in for the
+ * <p>Driven by a fake {@code docker} binary — a committed stand-in preset (ADR 0015) — so no daemon
+ * is required. The stall stands in for the
  * defect this bounds: {@code docker run} on an absent image reaching a registry that accepts the
  * connection and then never answers.
- *
- * <p>Kept in sync with {@link FakeDockerBinary}: the fake binary is the one place that writes the
- * shell shebang and executable bit, and this spec's expectations rest on that being unchanged.
  */
 class DockerCliBoundedSpec extends Specification {
-
-    /** Long enough that a wall-clock assertion can only pass because the deadline fired. */
-    static final String STALL_SECONDS = '600'
 
     @TempDir
     Path tempDir
 
-    private DockerCli cliBackedBy(String script, Duration timeout) {
-        new DockerCli(FakeDockerBinary.write(tempDir, script), timeout)
+    private DockerCli cliBackedBy(String preset, Duration timeout) {
+        new DockerCli(StandIn.docker(preset).toString(), timeout)
     }
 
     def cleanup() {
@@ -56,7 +52,7 @@ class DockerCliBoundedSpec extends Specification {
     // FR10, NFR-R1, M4: the wedged registry case — the command ends on its deadline, not on docker
     def "FR10, M4: a management command that never answers ends on its deadline with a named timeout"() {
         given: 'a docker that accepts the command and then stalls far past any deadline'
-        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(2))
+        def cli = cliBackedBy('docker-stall', Duration.ofSeconds(2))
 
         when:
         def result = null
@@ -89,7 +85,7 @@ class DockerCliBoundedSpec extends Specification {
     // NFR-O1: a command that answers is silent — an operator's WARN log means a bound actually fired
     def "NFR-O1: a command that runs to completion writes no WARN at all"() {
         given:
-        def cli = cliBackedBy('exit 0', Duration.ofSeconds(30))
+        def cli = cliBackedBy('docker-silent', Duration.ofSeconds(30))
 
         expect:
         warnings { cli.run(['inspect', 'box']) }.isEmpty()
@@ -98,7 +94,7 @@ class DockerCliBoundedSpec extends Specification {
     // NFR-O1: a bare `docker` invocation has no subcommand to name, and still reports usefully
     def "NFR-O1: a bound command with no subcommand is reported as docker itself"() {
         given:
-        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(1))
+        def cli = cliBackedBy('docker-stall', Duration.ofSeconds(1))
 
         when:
         def warns = warnings { cli.run([]) }
@@ -111,7 +107,7 @@ class DockerCliBoundedSpec extends Specification {
     // FR10: a command that answers within its deadline is unchanged — EXITED, with its own code
     def "FR10, NFR-R3: a command that answers inside its deadline keeps its exit code and streams"() {
         given:
-        def cli = cliBackedBy('echo "out:$1"; echo warn 1>&2; exit 3', Duration.ofSeconds(30))
+        def cli = cliBackedBy('docker-inspect-exit-3', Duration.ofSeconds(30))
 
         when:
         def result = cli.run(['inspect', 'box'])
@@ -126,16 +122,7 @@ class DockerCliBoundedSpec extends Specification {
     // design D11, M4: concurrent drains — a stream past the OS pipe buffer neither blocks nor truncates
     def "design D11, M4: output larger than the pipe buffer is captured in full on both streams"() {
         given: 'a docker printing well past 64 KiB to stdout and to stderr'
-        def line = 'x' * 100
-        def cli = cliBackedBy("""
-i=0
-while [ \$i -lt 2000 ]; do
-  echo "${line}"
-  echo "${line}" 1>&2
-  i=\$((i + 1))
-done
-exit 0
-""", Duration.ofSeconds(60))
+        def cli = cliBackedBy('docker-noisy', Duration.ofSeconds(60))
 
         when:
         def result = cli.run(['logs', 'box'])
@@ -150,7 +137,7 @@ exit 0
     // FR6: an interrupted wait is a named outcome, not the -1 sentinel the old catch returned
     def "FR6: an interrupted management command is a named outcome and preserves the interrupt flag"() {
         given:
-        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(60))
+        def cli = cliBackedBy('docker-stall', Duration.ofSeconds(60))
 
         when: 'the wait is interrupted before it begins, which drives the path deterministically'
         def result = null
@@ -176,7 +163,7 @@ exit 0
     // warnings during one. It names the stop instead.
     def "FR9: an interrupt during the shutdown phase is attributed to the stop"() {
         given:
-        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(60))
+        def cli = cliBackedBy('docker-stall', Duration.ofSeconds(60))
         ShutdownPhase.begin()
 
         when:

@@ -49,7 +49,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
         died[0].level == Level.ERROR
         died[0].MDCPropertyMap['component'] == 'janitor'
         died[0].formattedMessage.contains('restart #1')
-        died[0].throwableProxy.className == LoopEvents.UnrenderableCause.name
+        died[0].throwableProxy.className == LoopEvents.UnrenderableCauseException.name
         died[0].throwableProxy.message.contains(SupervisedLoopHarness.UnrenderableTwice.name)
     }
 
@@ -70,7 +70,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
         def gaveUp = rig.events(OperatorEvent.DAEMON_LOOP_GAVE_UP)
         gaveUp.size() == 1
         gaveUp[0].level == Level.ERROR
-        gaveUp[0].throwableProxy.className == LoopEvents.UnrenderableCause.name
+        gaveUp[0].throwableProxy.className == LoopEvents.UnrenderableCauseException.name
         gaveUp[0].throwableProxy.message.contains(SupervisedLoopHarness.UnrenderableTwice.name)
     }
 
@@ -93,7 +93,7 @@ class SupervisedLoopDeathLineSpec extends Specification {
         def failed = rig.events(OperatorEvent.DAEMON_LOOP_BACKOFF_SLEEP_FAILED)
         failed.size() == 1
         failed[0].level == Level.WARN
-        failed[0].throwableProxy.className == LoopEvents.UnrenderableCause.name
+        failed[0].throwableProxy.className == LoopEvents.UnrenderableCauseException.name
         failed[0].throwableProxy.message.contains(SupervisedLoopHarness.Wordless.name)
     }
 }

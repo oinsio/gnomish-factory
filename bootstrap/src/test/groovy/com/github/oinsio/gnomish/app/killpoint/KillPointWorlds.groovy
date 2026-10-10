@@ -59,11 +59,11 @@ trait KillPointWorlds implements BareGitRepoFixture {
         Path clone = initGnomishClone(root, 'my-project')
         def registered = RegisteredCloneFixture.registered(root.resolve('home'), clone)
         def epochs = new ClaimEpochBook()
-        Path gitLog = root.resolve('git-invocations.log')
-        def runner = new GitProcessRunner(recordingGit(gitLog).toString())
+        Path gitStandIn = recordingGit(root.resolve('git-invocations.log'))
+        def runner = new GitProcessRunner(gitStandIn.toString())
         def store = new GitTaskRepository(runner, registered, epochs, new VirtualClock())
         def world = seed(clone, store, epochs, 'HEAD', registered.worktrees().resolve(TASK_ID))
-        world.gitLog = gitLog
+        world.gitStandIn = gitStandIn
         world.runner = runner
         world
     }

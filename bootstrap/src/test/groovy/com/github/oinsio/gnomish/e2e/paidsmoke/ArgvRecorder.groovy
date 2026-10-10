@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import groovy.transform.CompileStatic
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * A recording stand-in for the agent CLI binary, handed to a real {@code gnomish run} as
@@ -14,8 +14,9 @@ import java.nio.file.attribute.PosixFilePermissions
  * factory builds, it does not repair it, so it is not the agent-CLI wrapper the operator guides
  * no longer recommend.
  *
- * <p>The capture directory is written into the script itself: a host-mode round's environment
- * is the child allowlist, so a variable naming it would never reach the script.
+ * <p>The recorder is the committed {@code argv-recorder} stand-in (ADR 0015), reached through a
+ * per-run link whose neighbours name the real binary and the capture directory: a host-mode
+ * round's environment is the child allowlist, so a variable naming them would never reach it.
  *
  * <p>Implements task 6.2 of fix-operator-blockers (FR1, FR2, FR3, M1 on the real CLI).
  *
@@ -38,19 +39,12 @@ final class ArgvRecorder {
     /**
      * @param realBinary absolute path of the real CLI the recorder hands off to
      * @param root a scratch directory for the script and its captures
-     * @return the recorder, its script executable
+     * @return the recorder, its script a link to the committed preset
      */
     static ArgvRecorder create(Path realBinary, Path root) {
-        Path captures = Files.createDirectories(root.resolve('captures'))
-        Path script = root.resolve('claude-recorder')
-        Files.writeString(script, """#!/bin/bash
-round=\$(mktemp '${captures}/round.XXXXXX')
-printf '%s\\0' "\$@" > "\$round.argv"
-'${realBinary}' "\$@" | tee "\$round.jsonl"
-exit \${PIPESTATUS[0]}
-""")
-
-        Files.setPosixFilePermissions(script, PosixFilePermissions.fromString('rwxr-xr-x'))
+        Path script = StandIn.link(root.resolve('claude-recorder'), 'argv-recorder')
+        StandIn.beside(script, 'real-binary').toFile().text = realBinary.toString()
+        Path captures = Files.createDirectories(StandIn.beside(script, 'captures'))
         new ArgvRecorder(script, captures)
     }
 

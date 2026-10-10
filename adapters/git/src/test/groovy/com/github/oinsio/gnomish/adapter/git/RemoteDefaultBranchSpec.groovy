@@ -5,7 +5,8 @@ import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -141,15 +142,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
 
     def "FR9: the unsettled read is re-asked under the infrastructure budget before giving up"() {
         given: 'a git whose ls-remote always fails, counting the invocations'
-        Path log = tempDir.resolve('ls-remote-calls.log')
-        Path gitBinary = tempDir.resolve('failing-git.sh')
-        gitBinary.toFile().text = '''#!/bin/sh
-for a in "$@"; do
-  if [ "$a" = "ls-remote" ]; then echo "$@" >> "''' + log + '''"; echo "fatal: unable to access origin" >&2; exit 128; fi
-done
-exec git "$@"
-'''
-        gitBinary.toFile().executable = true
+        Path gitBinary = StandIn.recording(tempDir, 'refuse-ls-remote-recorded')
         def clone = initWorkingRepo(tempDir, 'retried')
         commit(clone, 'a.txt', 'seed')
         addRemote(clone, 'origin', tempDir.resolve('anywhere.git').toString())
@@ -159,7 +152,7 @@ exec git "$@"
 
         then:
         discovered instanceof DefaultBranchDiscovery.Unavailable
-        Files.readAllLines(log).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        StandInLog.blocks(gitBinary).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
 
         and: 'the waits between them are the production backoff, doubling and bounded'
         sleeper.slept == [
@@ -197,14 +190,7 @@ exec git "$@"
 
     def "NFR-S3: a default-branch name origin reports with a control character is undetermined, never discovered"() {
         given: 'a git whose ls-remote answers with a symref line carrying an escape sequence'
-        Path gitBinary = tempDir.resolve('hostile-git.sh')
-        gitBinary.toFile().text = '''#!/bin/sh
-for a in "$@"; do
-  if [ "$a" = "ls-remote" ]; then printf 'ref: refs/heads/main\\033[31m\\tHEAD\\nabc123\\tHEAD\\n'; exit 0; fi
-done
-exec git "$@"
-'''
-        gitBinary.toFile().executable = true
+        Path gitBinary = StandIn.git('ls-remote-hostile-symref')
         def clone = initWorkingRepo(tempDir, 'hostile-origin')
         commit(clone, 'a.txt', 'seed')
         addRemote(clone, 'origin', tempDir.resolve('anywhere.git').toString())

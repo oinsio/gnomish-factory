@@ -109,7 +109,7 @@ pitest {
     // the right fix here rather than excluding the specs: the fixtures are a
     // deterministic on-disk directory, and those specs are the only coverage
     // several `adapter.agent` classes have.
-    jvmArgs = ["-DfakeAgentDir=${rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath}".toString()]
+    jvmArgs.addAll(["-DfakeAgentDir=${rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath}".toString()])
     // M5 documented exception (harden-reference-dump-scrubber): ReferenceDumpHygieneSpec
     // resolves the committed fixtures through the `referenceDumpDir` system property that
     // only the `test` task wires (see above) — PIT's child JVMs are a separate process

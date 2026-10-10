@@ -678,6 +678,27 @@ trusted/task tier split, and the law-root rule.
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
   returns early.
 
+## Test stand-ins
+
+- **Stand-in** — a committed binary under `test-fixtures/src/main/resources/stand-in/`
+  that a spec hands production in place of a real one (`git`, `docker`, the
+  agent CLI, a hook, a supervised process): either a preset's link to the one
+  table interpreter `stand-in.sh`, which reads its behaviour from the table
+  beside the name it was invoked under, or one of the process-shaped scripts
+  under `process/` whose signal and fork behaviour is the subject itself.
+  Written once, spec'd once; a spec never writes one, and `StandIn` in
+  `:test-fixtures` is the one owner that hands them out (ADR 0015). *Never:*
+  "fake git" written inline in a spec, "stub script" — both name the
+  generated-per-test shape the term replaces.
+- **Preset** — one committed scenario for a stand-in: a directory under
+  `presets/` holding one link to `stand-in.sh`, its table (`<name>.params`)
+  and the stdout/stderr files the table names, with no absolute path. It
+  writes only beside a per-run link — its `$0.log`, or a `$0.<name>` a
+  `write` row names — and never into the library. A spec selects a preset by
+  path; a scenario that records, or reads a file the spec writes per run,
+  gets one symbolic link to the preset from the owner. *Not:* a template a
+  test fills in — a preset is complete as committed.
+
 ## Daemon loops
 
 Introduced by `supervise-daemon-loops-and-embed-dashboard`; the reasoning is

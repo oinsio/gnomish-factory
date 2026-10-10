@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -109,13 +111,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
     // does have a controlling terminal, would block on the prompt instead of failing.
     def "NFR-S2: git stderr carrying a remote URL's userinfo is scrubbed before any caller sees it"() {
         given: 'a git stand-in whose stderr echoes a PAT-in-URL exactly as git 2.55 does'
-        def fakeGit = tempDir.resolve('fake-git')
-        fakeGit.toFile().text = '''#!/bin/sh
-echo "https://ghp_FAKETOKEN1234567890@github.com/acme/widgets.git"
-echo "fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com': Device not configured" >&2
-exit 128
-'''
-        fakeGit.toFile().executable = true
+        def fakeGit = StandIn.git('leak-credentials')
 
         when:
         def result = new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
@@ -279,17 +275,20 @@ exit 128
     // password. Driven through the runner's own git-binary seam because the property under test is
     // what the child process's environment holds, which only the child can report.
     def "NFR-R2: git runs with interactive credential prompting switched off"() {
-        given: 'a git stand-in that reports the prompting-related variables it was handed'
-        def fakeGit = tempDir.resolve('env-reporting-git')
-        fakeGit.toFile().text = '''#!/bin/sh
-echo "prompt=[${GIT_TERMINAL_PROMPT-unset}] askpass=[${GIT_ASKPASS-unset}] ssh=[${SSH_ASKPASS-unset}]"
-'''
-        fakeGit.toFile().executable = true
+        given: 'a git stand-in that records the prompting-related variables it was handed'
+        def fakeGit = StandIn.recording(tempDir, 'record-prompting')
 
         when:
-        def result = new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
+        new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
 
         then:
-        result.stdout().forParsing().trim() == 'prompt=[0] askpass=[] ssh=[]'
+        StandInLog.blocks(fakeGit)*.subMap([
+            'GIT_TERMINAL_PROMPT',
+            'GIT_ASKPASS',
+            'SSH_ASKPASS'
+        ]) ==
+        [
+            [GIT_TERMINAL_PROMPT: '[0]', GIT_ASKPASS: '[]', SSH_ASKPASS: '[]']
+        ]
     }
 }

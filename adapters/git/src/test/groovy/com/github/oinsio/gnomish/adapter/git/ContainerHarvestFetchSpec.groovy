@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -28,15 +29,14 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     // follows them.
     def "FR5, FR4, FR6: fetch runs the owner's container argv — common set, ext transport, unforced refspec"() {
         given: 'a fake git binary that records its argv'
-        def record = tempDir.resolve('args.txt')
-        def git = fakeGit(0, '', record)
+        def git = StandIn.recording(tempDir, 'record-argv')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir)
                 .fetch('gnomish-box-k7', 'gnomish/task-1')
 
         then: 'the owner\'s exact list: no protocol.ext.allow — the allowlist alone enables ext'
-        Files.readAllLines(record) == stallDetectionArgv() + [
+        StandInLog.argv(StandInLog.blocks(git).last()) == stallDetectionArgv() + [
             '-c',
             'fetch.recurseSubmodules=no',
             '-c',
@@ -72,7 +72,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     //     report naming the message id and the object.
     def "FR5: an object refused by validation is a boundary violation naming the object, never a plain failure"() {
         given:
-        def git = fakeGit(128, FetchRefusalSpec.FETCH_REFUSAL)
+        def git = StandIn.git('harvest-fsck-refused')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
@@ -88,7 +88,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: a non-fast-forward refusal surfaces as the history-rewrite violation"() {
         given:
-        def git = fakeGit(1, '! [rejected] gnomish/task-1 -> gnomish/task-1 (non-fast-forward)')
+        def git = StandIn.git('harvest-rejected')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
@@ -101,7 +101,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "NFR-R1: a daemon outage during harvest classifies as infrastructure, never a harvest failure"() {
         given:
-        def git = fakeGit(128, 'docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock')
+        def git = StandIn.git('harvest-daemon-down')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
@@ -112,7 +112,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: any other fetch failure is a plain harvest failure carrying git's stderr"() {
         given:
-        def git = fakeGit(128, "fatal: '/gnomish/work' does not appear to be a git repository")
+        def git = StandIn.git('harvest-not-a-repository')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
@@ -124,7 +124,7 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: a clean fetch throws nothing"() {
         given:
-        def git = fakeGit(0, '')
+        def git = StandIn.recording(tempDir, 'record-argv')
 
         when:
         new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
@@ -154,23 +154,6 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     // that a mutant which drops the bound fails on the stand-in's own exit instead of hanging. Only
     // the fetch stalls: the runner's clone-key resolution in front of it answers at once.
     private Path stallingGit() {
-        new StallingGit().stallOn('fetch').stall(Duration.ofSeconds(60)).write(tempDir)
-    }
-
-    private int scriptCounter = 0
-
-    private Path fakeGit(int exitCode, String stderr, Path record = null) {
-        def script = tempDir.resolve("fake-git-${scriptCounter++}.sh")
-        def lines = ['#!/bin/sh']
-        if (record != null) {
-            lines.add("printf '%s\\n' \"\$@\" > '${record}'".toString())
-        }
-        if (stderr) {
-            lines.add("echo '${stderr.replace("'", '')}' 1>&2".toString())
-        }
-        lines.add("exit ${exitCode}".toString())
-        script.toFile().text = lines.join('\n') + '\n'
-        script.toFile().setExecutable(true)
-        script
+        StallingGit.git('stall-fetch')
     }
 }

@@ -1,0 +1,74 @@
+# Git stand-ins that record what they were handed, most of them over the real git.
+# Grammar: the header of ../stand-in.sh. One section per scenario; its link is ../links/<section>.
+
+[box-upload-pack]
+# The command behind an ext:: URL onto a box: each pack session is recorded, then served by the
+# real upload-pack (TransferAdversaryFixture).
+* record
+* exec-sh steps/box-upload-pack.sh
+
+[delegate-git]
+# The real git behind a stand-in name: what a healed failing stand-in becomes.
+* delegate git
+
+[record-argv]
+# Records the argv it was handed and exits 0 (RefspecPushSpec, ContainerHarvestFetchSpec).
+* record
+* answer - 0
+
+[record-delegate]
+# The real git, every invocation recorded first: what a code path spends, not only what it leaves
+# (BareGitRepoFixture.recordingGit).
+* record
+* delegate git
+
+[record-prompting]
+# Records the prompting-related variables the runner handed the child (GitProcessRunnerSpec).
+* record GIT_TERMINAL_PROMPT GIT_ASKPASS SSH_ASKPASS
+* answer - 0
+
+[record-ssh]
+# Records the argv and the ssh command the runner handed the child, answers nothing
+# (GitProcessRunnerNetworkBranchSpec, GitNetworkCommandsSpec).
+* record GIT_SSH_COMMAND
+* answer - 0
+
+[record-ssh-slow]
+# record-ssh, every invocation taking 150 ms first: a child that outlives a quick deadline check
+# (GitProcessRunnerNetworkBranchSpec).
+* delay 0.15
+* record GIT_SSH_COMMAND
+* answer - 0
+
+[record-transfer-environment]
+# Answers the runner's clone-key rev-parse, records everything else with the environment a transfer
+# owns (GitProcessRunnerTransferSpec).
+rev-parse answer data/common#git-dir 0
+* record GIT_ALLOW_PROTOCOL GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_ASKPASS SSH_ASKPASS GIT_CONFIG_GLOBAL
+* answer - 0
+
+[redirect-global-config]
+# The real git, but with GIT_CONFIG_GLOBAL pointed away from the build's file (AdversarialGitConfigSpec).
+* export GIT_CONFIG_GLOBAL /dev/null
+* delegate git
+
+[trace-clone-mutations]
+# The real git, each clone-mutating command (fetch, push, worktree add|remove|prune) recorded before
+# a short delay and again with its exit after, so the record's order shows whether two overlapped
+# (CloneMutationConcurrencySpec).
+fetch record
+fetch delay 0.15
+fetch delegate git
+push record
+push delay 0.15
+push delegate git
+worktree,add record
+worktree,add delay 0.15
+worktree,add delegate git
+worktree,remove record
+worktree,remove delay 0.15
+worktree,remove delegate git
+worktree,prune record
+worktree,prune delay 0.15
+worktree,prune delegate git
+* delegate git

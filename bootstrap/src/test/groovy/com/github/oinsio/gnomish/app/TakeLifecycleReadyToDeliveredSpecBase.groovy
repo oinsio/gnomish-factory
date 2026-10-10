@@ -115,7 +115,7 @@ tracker:
         // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
         addOrigin(projectDir, tempDir)
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), projectDir)
-        argvCapture = tempDir.resolve('fake-agent-argv.txt')
+        argvCapture = tempDir.resolve('plain-round.log')
     }
 
     private FactoryProperties fakeAgent() {
