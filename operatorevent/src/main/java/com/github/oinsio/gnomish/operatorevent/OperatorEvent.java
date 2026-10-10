@@ -244,7 +244,11 @@ public enum OperatorEvent {
     // A bounded policy exceeded its restarts within its window: the loop is disabled, no respawn.
     DAEMON_LOOP_GAVE_UP("GF155"),
     // The backoff sleep before a respawn failed: the respawn proceeds without further delay.
-    DAEMON_LOOP_BACKOFF_SLEEP_FAILED("GF156");
+    DAEMON_LOOP_BACKOFF_SLEEP_FAILED("GF156"),
+    // dashboard final render (supervise-daemon-loops-and-embed-dashboard, design D9, NFR-R1): the
+    // render on serve's stop path failed; swallowed so the teardown after it still runs, and the
+    // page keeps its last render.
+    DASHBOARD_FINAL_RENDER_FAILED("GF157");
 
     private final String code;
     private final String head;

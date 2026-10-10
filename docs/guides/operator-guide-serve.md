@@ -65,10 +65,10 @@ apply per ref — plus:
 `serve`'s own exit code (not the per-task outcome, which is the tracker's
 story) is:
 
-| Code | Meaning                                                                                                                                      |
-|------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                             |
-| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                           |
+| Code | Meaning                                                                                                                                                                                           |
+|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                                                                                  |
+| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                                                                                |
 | 2    | usage error — malformed flags (including `--dashboard-out` with the dashboard off), an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
 
 Batch `take` reuses the single-`take` exit-code table (see "`take` CLI
@@ -512,7 +512,11 @@ page stops updating, and the open browser tab shows that through its own
 writes its final `stopped` snapshot and then renders the page one last time
 from it, so the open tab reads `Daemon stopped (<reason>)` — for example
 `Daemon stopped (drainComplete)` — instead of a live-looking "running". A
-stopped snapshot reads as stopped however old it is.
+stopped snapshot reads as stopped however old it is. The last render makes no
+tracker call: its board blocks show the board as of the last fetch, so a
+tracker that is down cannot hold up the stop. If that render fails, `serve`
+logs one WARN line coded `GF157` (`DASHBOARD_FINAL_RENDER_FAILED`) and stops
+normally; the page keeps its previous render.
 
 **One file, one writer.** `serve --dashboard` and a standalone
 `gnomish dashboard --watch` pointed at the same file both write it and

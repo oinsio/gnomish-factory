@@ -144,19 +144,40 @@ public final class DashboardWatch {
      * both reach this, and a later pass must not re-stamp the final page (FR11, UX2 of
      * supervise-daemon-loops-and-embed-dashboard). The claim is an atomic flag, no lock, so a
      * second caller never waits behind the first one's render (lock-scope.md).
+     *
+     * <p>The render runs on the caller's thread — the drain body or the JVM shutdown hook — outside
+     * the loop's guard, so it guards itself (NFR-R1): it renders the cached board with no tracker
+     * call, so no network deadline sits inside the teardown, and any failure, an {@link Error}
+     * included, is one coded WARN rather than an exception that would skip the logging stop after it
+     * or fail a completed drain.
      */
     public void stopAndRenderFinal() {
         loop.stopAndJoin();
         if (finalRendered.compareAndSet(false, true)) {
-            tick();
+            renderFinal();
+        }
+    }
+
+    private void renderFinal() {
+        try {
+            write(boardCache.cached(), clock.instant());
+        } catch (Throwable failure) {
+            log.warn(
+                    OperatorEvent.DASHBOARD_FINAL_RENDER_FAILED.head()
+                            + "final dashboard render failed; the page keeps its last render",
+                    failure);
         }
     }
 
     // Package-private: specs drive the watch cycle one tick at a time, on virtual time.
     void tick() {
         Instant now = clock.instant();
-        BoardSectionView boardView =
-                boardCache.dueFor(now, BOARD_CADENCE) ? boardCache.refresh(this::fetchBoard, now) : boardCache.cached();
+        write(
+                boardCache.dueFor(now, BOARD_CADENCE) ? boardCache.refresh(this::fetchBoard, now) : boardCache.cached(),
+                now);
+    }
+
+    private void write(BoardSectionView boardView, Instant now) {
         String html = renderCycle.render(boardView, now, RENDER_CADENCE);
         try {
             AtomicFileWriter.write(outputFile, html);
