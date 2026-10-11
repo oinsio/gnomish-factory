@@ -6,6 +6,11 @@ in groups 3–4 may start before 1 is green (design D1). Groups 7–10 (secrets
 at source, bounded waits, judge WARN, spawn gate) are independent of the
 emitter and may run in parallel with groups 1–5.
 
+Runs after group 14 of `supervise-daemon-loops-and-embed-dashboard`: every holder of the git runner
+is typed as the package-private `GitRunner` role (`adapters/git`), and `GitProcessRunner` is its
+one production implementation. Task 3.1 wires the emitter inside `GitProcessRunner.execute` only;
+no holder is retyped to `GitProcessRunner`, or `GitRunnerBoundarySpec` in `:bootstrap` fails.
+
 ## 1. Emitter and redactor in `:logtext`
 
 - [ ] 1.1 TDD (red first): `AccessRecordSpec` pinning the line schema (FR1, FR5, design

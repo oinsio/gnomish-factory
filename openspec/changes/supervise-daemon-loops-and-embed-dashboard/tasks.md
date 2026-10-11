@@ -23,7 +23,8 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 - [x] 1.3 Implement `app.daemon.SupervisedLoop` with `LoopShape(DaemonComponent, LoopOrder, LoopWait,
       RestartPolicy)`, the sealed `LoopWait` (`FixedInterval(Sleeper, Duration)`,
       `IntervalOrSignal(Duration)` with `signal()` and permit coalescing) and the sealed `RestartPolicy`
-      (`Unbounded(base, cap)`, `Bounded(base, cap, maxRestarts, window, Clock)`), all over
+      (`Unbounded(base)`, `Bounded(base, maxRestarts, window, InstantSource)`; the cap is the shared
+      `RestartBackoff.MAX_BACKOFF`, as built), all over
       `RestartBackoff`. Provide `start()`, `stop()`, `stopAndJoin()` and `restartCount()`. The level-1
       guard is `catch (Throwable)` around the tick and the wait, reporting through `RepeatSuppressor`
       keyed by the component (D2; the catch type is narrowed to `Exception` by task 12.1, D2 as
@@ -58,7 +59,7 @@ sweep its task names: the grep, the hits, and what happened to each (`implementa
 ## 2. Standing reaper on the supervised loop (D2, D5, D6, D7; FR2, FR6)
 
 - [x] 2.1 Rewrite `app/lease/StandingReaper.java` to hold a `SupervisedLoop` (wait → tick,
-      `FixedInterval(interval)`, `Unbounded(interval, 10 min)`, component `REAPER`). Delete
+      `FixedInterval(interval)`, `Unbounded(interval)`, component `REAPER`). Delete
       `loop()`, `onWorkerDeath`, `spawnWorker`, its `RestartBackoff` field and its own
       lock/stopping/worker. `restartCount()` delegates to the loop. Retire GF067, GF068 and GF069 from
       the catalog. Verify: the reaper's lifecycle and resilience specs are rewritten to assert the
@@ -413,7 +414,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 ## 4. Worktree janitor and sandbox sweep tick on the supervised loop (D7, D9, D14; FR6)
 
 - [x] 4.1 Rewrite `app/serve/WorktreeJanitor.java` to hold a `SupervisedLoop` (tick → wait,
-      `FixedInterval(1 h)`, `Unbounded(1 h, 10 min)`, component `JANITOR`, the janitor's own
+      `FixedInterval(1 h)`, `Unbounded(1 h)`, component `JANITOR`, the janitor's own
       `InstantSource` per D16) and add `stop()`. Keep
       `tick()` and `lastRunAt`. Retire GF077. The tick's own codes (GF078, GF079) stay. Remove the
       `Kept in sync with SandboxLifecycleTick` paragraph. Verify: the janitor policy spec is unchanged
@@ -437,7 +438,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
 ## 5. Snapshot writer on the supervised loop (D3, D7, D8; FR6, FR7)
 
 - [x] 5.1 Rewrite `serveobservability/writer/SnapshotWriter.java` to hold a `SupervisedLoop` (tick
-      → wait, `IntervalOrSignal(interval)`, `Unbounded(interval, 10 min)`, component `SNAPSHOT`, the
+      → wait, `IntervalOrSignal(interval)`, `Unbounded(interval)`, component `SNAPSHOT`, the
       writer's own `InstantSource` per D16).
       `markDirty()` becomes `wait.signal()`. `stopAfterFinalWrite()` becomes `loop.stopAndJoin()` then
       `writeCycle.writeOnce()`. Delete `awaitNextWake`, its own semaphore and the `log-contract-exempt`
@@ -522,7 +523,7 @@ receive dependencies as method arguments" of `plugin/plugin-discovery`. Its delt
       Path outOverride, BoardSource)`, with `BoardSource(Tracker, TrackerConfig,
       FactoryProperties.Tracker)` as a record. It owns `DEFAULT_FILE_NAME`, `BOARD_READY_LIMIT`, the
       `BoardComposition.compose` call, the render cycle, the board cache and a `SupervisedLoop`
-      (`FixedInterval(10 s)`, `Bounded(10 s, 10 min, 5, 10 min)`, component `DASHBOARD`). Methods:
+      (`FixedInterval(10 s)`, `Bounded(10 s, 5, 10 min, clock)`, component `DASHBOARD`). Methods:
       `outputFile()`, `renderOnce()`, `start()`, `awaitEnd()` (true if given up), and
       `stopAndRenderFinal()`. Move `DashboardWatchLoop.renderOnce` into the tick and delete
       `DashboardWatchLoop.run`. Verify: the existing watch-loop specs, retargeted to the tick, are green,
@@ -855,6 +856,13 @@ ends with the old-way sweep.
       parameter type outside `GitProcessRunner.java` and `bootstrap/src/main` — expected empty, each
       survivor named with its disposition. Verify: `./gradlew :adapters:git:compileJava
       :application:compileJava :bootstrap:compileJava`; the specs of the retyped classes green.
+      *As built — sweep result:* holders retyped in `adapters/git`: 62 files (37 fields, 25
+      parameter-only). `:application`: no holder — its one hit is a comment
+      (`FactoryPropertyDefaults`), kept. `:bootstrap`: four holders cannot take the package-private
+      role and keep the class as the composition side — `ManualRunConfiguration` (`@Bean` and its
+      two injection sites), `ContainerRunSupport`, `ContainerTipReader`,
+      `SandboxLifecyclePassFactory` — listed as the allowlist of `GitRunnerBoundarySpec` (14.2) and
+      as the exemption of single-owner row 13; `ContainerRunSupportFactory` only constructs one.
 - [x] 14.2 The gate. `GitRunnerBoundarySpec` (`:bootstrap`, shape of `ClaimlessGitBoundarySpec`):
       scans `adapters/git/src/main`, `application/src/main` and `bootstrap/src/main`, comments
       stripped, for `GitProcessRunner` as a field or parameter type; allowed only in

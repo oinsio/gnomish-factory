@@ -107,7 +107,9 @@ roll-up. The first clean tick after a failure logs one INFO recovery line. A cle
 not caught: it leaves the guard, the worker thread dies, and the uncaught-exception handler asks the
 restart policy (D5) — the respawn with backoff replaces "log and continue" for that class. The
 wait stays inside the loop's control (D3) either way, so a throwing sleeper is an `Exception` edge,
-and a stop never races the death.
+and a stop never races the death. The respawn backoff (D5) is outside this guard and catches
+`Throwable`: it runs in the uncaught-exception handler, where the JVM drops whatever escapes and
+nothing restarts the loop, so an `Error` let out there would be a silent permanent death.
 
 *Rationale.* The original D2 caught `Throwable` and kept a second mechanism, the restart policy,
 for "whatever still escapes" — and the only thing that could escape was the guard's own reporting
@@ -196,14 +198,15 @@ tick, and pays for it with WARN lines and half-done disposals on every `Ctrl-C` 
 mid-tick. The cost of the chosen shape is that `stopAndJoin` waits out the current tick: one file
 write for the writer and the dashboard, the only two callers of the join (D8, D9).
 
-**D5 — Restart policies: `Unbounded` and `Bounded`.** `RestartPolicy` is a sealed interface over
+**D5 — Restart policies: `Unbounded` and `Bounded`.** `RestartPolicy` is a sealed class over
 the existing `RestartBackoff`, which moves from `app.lease` to `app.daemon`. `RemoteOutageProbeSchedule`
-keeps calling `nextJitteredBackoff` unchanged.
-- `Unbounded(base, cap)`: respawn after the doubling backoff, logging ERROR with a lifetime restart
-  count. It never gives up. The reaper keeps base = its interval, cap = 10 min, so its behavior
-  and its `restartCount` vital are unchanged. The janitor and the sweep tick use the same policy:
+keeps calling `nextJitteredBackoff` unchanged. Neither policy takes a cap: every loop shares the one
+ceiling `RestartBackoff.MAX_BACKOFF` (10 min), and a base above it is clamped from the first respawn.
+- `Unbounded(base)`: respawn after the doubling backoff, logging ERROR with a lifetime restart
+  count. It never gives up. The reaper keeps base = its interval under the shared 10 min ceiling,
+  so its behavior and its `restartCount` vital are unchanged. The janitor and the sweep tick use the same policy:
   their ticks fail mostly on transient external causes (file system, Docker).
-- `Bounded(base, cap, maxRestarts, window, Clock)`: the same, but more than `maxRestarts` restarts
+- `Bounded(base, maxRestarts, window, InstantSource)`: the same, but more than `maxRestarts` restarts
   within `window` logs one ERROR that the loop is disabled, and the loop does not respawn. The
   dashboard uses N = 5 within 10 minutes and base = its 10 s render cadence (resolves Q1).
 The death handler writes its lines through one `withRenderableCause` guard: it runs in the
@@ -213,7 +216,7 @@ written again — the respawn never depends on the death line rendering. Specs k
 plain `Error` from the tick (as the sources test a supervisor); the message-throwing fixtures
 (`Wordless`, `UnrenderableTwice`) stay only in `SupervisedLoopDeathLineSpec`, where the handler's
 own rendering is the subject.
-The snapshot writer is `Unbounded` with base = the snapshot interval and the default 10 min cap
+The snapshot writer is `Unbounded` with base = the snapshot interval under the shared 10 min ceiling
 (resolves Q2). A single death is then followed by a write within two intervals, inside the dashboard's
 `3 × interval` staleness window, so it never shows as a dead daemon. A writer that keeps dying does
 go stale, and its ERROR lines name it. Implements FR3, FR6. *Rationale:* restart intensity follows the
@@ -244,18 +247,20 @@ callbacks: four near-identical log methods per loop, the very copy this change r
 **D7 — Migration of the four loops.** Each class keeps its public surface for its callers, except
 that the janitor and the sweep tick gain `stop()`.
 
-| Loop                   | Order       | Wait                                  | Policy (base / cap / bound)          |
-|------------------------|-------------|---------------------------------------|--------------------------------------|
-| `StandingReaper`       | wait → tick | `FixedInterval(interval)`             | Unbounded, interval / 10 min         |
-| `WorktreeJanitor`      | tick → wait | `FixedInterval(1 h)`                  | Unbounded, 1 h / 10 min              |
-| `SandboxLifecycleTick` | tick → wait | `FixedInterval(sweep interval)`       | Unbounded, interval / 10 min         |
-| `SnapshotWriter`       | tick → wait | `IntervalOrSignal(snapshot interval)` | Unbounded, interval / 10 min         |
-| `DashboardWatch` (D10) | tick → wait | `FixedInterval(10 s)`                 | Bounded, 10 s / 10 min / 5 in 10 min |
+| Loop                   | Order       | Wait                                  | Policy, as built                       |
+|------------------------|-------------|---------------------------------------|----------------------------------------|
+| `StandingReaper`       | wait → tick | `FixedInterval(interval)`             | `Unbounded(interval)`                  |
+| `WorktreeJanitor`      | tick → wait | `FixedInterval(1 h)`                  | `Unbounded(1 h)`                       |
+| `SandboxLifecycleTick` | tick → wait | `FixedInterval(sweep interval)`       | `Unbounded(interval)`                  |
+| `SnapshotWriter`       | tick → wait | `IntervalOrSignal(snapshot interval)` | `Unbounded(interval)`                  |
+| `DashboardWatch` (D10) | tick → wait | `FixedInterval(10 s)`                 | `Bounded(10 s, 5, 10 min, clock)`      |
+
+Every backoff is capped by the shared `RestartBackoff.MAX_BACKOFF` (10 min).
 
 `StandingReaper.restartCount()` reads the policy's count, so the `vitals.reaper.restartCount` field
 and alarm rule 5 are unchanged. `SnapshotWriter` loses its `log-contract-exempt` outer guard and its
-own semaphore loop. Whenever a backoff is capped at 10 min below a 1 h interval, the cap wins: the
-first respawn waits `min(base, cap)`.
+own semaphore loop. Whenever the 10 min ceiling is below a 1 h interval, the ceiling wins: the
+first respawn waits `min(base, MAX_BACKOFF)`.
 
 **D8 — The snapshot writer's final write stays single-writer across respawns.**
 `stopAfterFinalWrite()` becomes `loop.stopAndJoin()` followed by `writeCycle.writeOnce()` on the
@@ -882,7 +887,7 @@ real binary — their whole table is scripted answers — and about 20 of those 
 `OriginRemote`, `ParkDeliveryFence`, `RefspecPush`, `RemoteAttemptDelivery`). Those specs are
 in-process fakes written as shell and paid for as a process per git call per mutant. Freeman and
 Pryce (GOOS ch. 8): fake the types you own; test the adapter with the real thing. The project
-already does this for every other port; the runner is the one `final` class with 60 direct
+already does this for every other port; the runner is the one `final` class with 60-odd direct
 holders and no role in front of it.
 
 - *The port.* `GitRunner`, a package-private interface in `adapters/git` with the runner's two
@@ -890,6 +895,12 @@ holders and no role in front of it.
   GitRunner` and keeps everything else — argv, environment, deadlines, the mutation lock, the
   `rev-parse --git-common-dir` parse. Every holder's field and constructor parameter becomes
   `GitRunner`; the composition root and the adapter's own specs still construct the class.
+  *As built (task 14.1):* the holders are the 62 files of `adapters/git` that declare the role as
+  a field or parameter type (37 fields, 25 parameter-only). The composition side cannot take the
+  role — it is package-private and `:bootstrap` lives in another package — so the four
+  `:bootstrap` files that hold the class (`ManualRunConfiguration`, `ContainerRunSupport`,
+  `ContainerTipReader`, `SandboxLifecyclePassFactory`) keep `GitProcessRunner` and are the
+  allowlist of `GitRunnerBoundarySpec`; `:application` never held a runner.
 - *The fake.* `ScriptedGit` in `adapters/git/src/test` (same package: `GitCommandResult` is
   package-private, and that is right — the result stays the adapter's type): rows of argv prefix
   → result, first match wins, an unmatched call throws (the exit-97 contract of the stand-in,
@@ -949,7 +960,7 @@ holders and no role in front of it.
 | `BoardModel` (D13)                                    | the WIP limit eligibility was judged by and the open-front count (`int wipLimit`, `openFrontCount()`) | `board/json/BoardJsonMapper.java`, `dashboard/DashboardStatusCardRenderer.java`, `app/BoardCommand.java`                                                                                   | `BoardJsonMapper.serialize(model, wipLimit)` / `toDto(model, wipLimit)` and its inline `workingRows().size() + awaitingHumanRows().size()`; the four-argument `BoardModel.build` overload that defaults the limit to `Integer.MAX_VALUE` (deleted, test callers moved to the five-argument form)                                                                                                                                                                                                        | the signature: no `wipLimit` parameter remains on any renderer. Identity spec: one model built with a limit and a WIP-held row; the JSON `wipLimit`, the status card's WIP denominator and the limit eligibility used are the same value. Byte-stability spec: the existing board JSON reference fixture is unchanged |
 
 | `StandIn` in `:test-fixtures` over the committed library `test-fixtures/src/main/resources/stand-in/` (D23, D26) | the path production receives as a stand-in binary (a link the owner creates once per JVM for a plain selection, or one per-run link to it), with the behaviour chosen by the preset's table section (`Path`; a primitive because `ProcessBuilder` consumes exactly that — the owner is enforced by the gate, not the type). Old way removed by D26: the committed `links/` directory and `StandIn.preset(id)` resolving through it, deleted; `StandInLibrarySpec` enumerates sections | every spec that runs a stand-in: `test-fixtures` builders (`StallingGit`, `FailingSubcommandGitFixture`, `TransferAdversaryFixture`, `BareGitRepoFixture`, `FakeAgentSupport`), `adapters/git` (`RecordingGit` and the 25 specs with inline scripts, `BaseRefreshSpec` … `WorktreeSalvageSpec`), `bootstrap/app` (10 specs, `AgentDecisionRoundTripSpec` … `TakeCommandCredentialScrubSpec`), `gitobjects` (2), `sandbox/docker` (`FakeDockerBinary`, `HostExecHandleTreeKillSpec`), `subprocess` (`FakeBinaries`), `adapters/agent` (`CliStageExecutorCredentialScrubSpec`) — the task list of group 13 names each | inline `#!/bin/sh` text and `executable = true` / `setExecutable(` in specs and builders, deleted; survivors: container-run scripts (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage`), shipped-script specs (`LauncherScriptSpec`, `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`) and the stalling gate's seeded detector data (`StallingGitOwnerSpec`), each listed in the gate with its reason; `RecordingGit`, `FakeDockerBinary` and the per-spec wrapper builders deleted | `StandInOwnerSpec` (`:bootstrap`, D23), scan asserted to reach every allowlisted file |
-| `GitProcessRunner` behind the `GitRunner` role interface (D27) | one `GitCommandResult` per git invocation (`GitCommandResult`, package-private; the fake and the class produce the same type) | every production holder of the runner: the 60 classes of `adapters/git` with a `private final GitProcessRunner` field (`BaseRefresh` … `WorktreeSalvage`, listed by `grep -rl 'private final GitProcessRunner' adapters/git/src/main`), the one site in `:application` and the five in `:bootstrap`; the composition root constructs the class | fields, constructor parameters and factory signatures typed `GitProcessRunner` outside the class and the composition root, retyped to `GitRunner`; old-way grep: `GitProcessRunner` as a field or parameter type outside `GitProcessRunner.java` and `bootstrap/src/main` — expected empty | `GitRunnerBoundarySpec` (`:bootstrap`, shape of `ClaimlessGitBoundarySpec`): the old-way grep as a gate over `adapters/git/src/main` and `application/src/main`, plus the compiler once the fields are retyped |
+| `GitProcessRunner` behind the `GitRunner` role interface (D27) | one `GitCommandResult` per git invocation (`GitCommandResult`, package-private; the fake and the class produce the same type) | every holder of the runner, all in `adapters/git` (the only package that can name the package-private role): 62 files that declare `GitRunner` as a field or parameter type — 37 with a `private final GitRunner` field (`BaseRefresh` … `WorktreeSalvage`) and 25 that take it as a method or constructor parameter only (`FirstPush`, `LsRemote`, `WorktreeSalvage`, …); listed by the gate's own pattern over `adapters/git/src/main`. `:application` holds no runner (its one hit is a comment in `FactoryPropertyDefaults`). **Exemption, composition side:** the four `:bootstrap` files that hold the class — `ManualRunConfiguration` (the `@Bean` and its two injection sites), `ContainerRunSupport`, `ContainerTipReader`, `SandboxLifecyclePassFactory` — keep `GitProcessRunner`, because `:bootstrap` builds the runner and cannot name the package-private role; `ContainerRunSupportFactory` only constructs one | fields, constructor parameters and factory signatures typed `GitProcessRunner` inside `adapters/git`, retyped to `GitRunner`; old-way grep: `GitProcessRunner` as a field, parameter or local type in `adapters/git/src/main`, `application/src/main` and `bootstrap/src/main` — expected exactly the four exempt files | `GitRunnerBoundarySpec` (`:bootstrap`, shape of `ClaimlessGitBoundarySpec`): the old-way grep as a gate over all three trees, the four composition files as its allowlist, each asserted reached; plus the compiler, since the retyped holders no longer accept anything the role does not declare |
 
 ## Risks / Trade-offs
 

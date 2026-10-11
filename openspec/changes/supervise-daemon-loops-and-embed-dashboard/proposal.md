@@ -474,8 +474,9 @@ written before anyone here knew it.
   rules, and the glossary are updated. The second review (FR26, FR27) deletes
   the library's `links/` directory and three `process/` scripts, and makes one
   production change, in `adapters/git` only: a role interface in front of
-  `GitProcessRunner` that its 60 holders in the package, the one in
-  `:application` and the five in `:bootstrap` take instead of the class; the
+  `GitProcessRunner` that its holders in the package take instead of the
+  class (the composition side in `:bootstrap` keeps the class: the role is
+  package-private); the
   class itself, its argv, environment and deadlines are untouched. The two
   active changes that rewrite the runner's `execute` (`own-git-invocation-policy`,
   `add-subprocess-access-log`) see one more interface to implement and no

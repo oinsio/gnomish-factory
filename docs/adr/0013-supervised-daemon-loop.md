@@ -68,6 +68,12 @@ reasonable application should not try to catch" (its javadoc; *Effective Java* i
 S1181; CERT ERR08-J). A death is no longer silent — it is an ERROR line, a backoff and a respawn —
 so the total guard only duplicated D5 and hid it from every test.
 
+The respawn backoff is the one place that still catches `Throwable`. It runs in the dead worker's
+uncaught-exception handler, where the JVM drops whatever escapes and nothing stands above to
+restart the loop, so an `Error` let out there would end the loop for good with no line: the
+silent death the restart policy exists to prevent. A failed backoff logs one WARN and respawns
+without further delay.
+
 The suppressor is the loop's own. `SupervisedLoop` builds it from its equipment's clock, with a
 roll-up period from `RollUpPeriod.forInterval`: six of the loop's intervals, never less than the
 catalog default. A period equal to the tick would be no suppression at all — every repeat would

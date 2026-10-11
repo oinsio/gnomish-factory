@@ -35,7 +35,10 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
  * case, when the guard's own reporting throws — the worker's uncaught-exception handler asks the
  * {@link RestartPolicy} in three phases: decide under the lock, wait the backoff with nothing held (a stop cuts it
  * short like any wait), then re-check {@code stopping} under the lock and spawn only if it is
- * still clear — so no respawn ever follows a stop.
+ * still clear — so no respawn ever follows a stop. The backoff wait alone catches {@code
+ * Throwable}, an {@code Error} included: it runs in that handler, where the JVM drops whatever
+ * escapes and no supervisor stands above, so letting an {@code Error} out would end the loop for
+ * good with no line — the silent death D2's amendment relies on level 2 to prevent.
  *
  * <p><b>The lock is a state-guarding lock</b> ({@code .claude/rules/lock-scope.md}), held by
  * {@link LoopControl}: it guards {@code stopping}'s companions — the worker and the active wait —
@@ -202,6 +205,8 @@ public final class SupervisedLoop {
 
     // Phase 2 of the restart: the backoff is this thread's wait, so a stop cuts it short. A stray
     // interrupt flag is cleared by entering the wait; the dying thread has no cycle to protect.
+    // Throwable, not Exception: nothing supervises this handler, so an escaping Error would skip
+    // the respawn silently (class javadoc, level 2; SupervisedLoopRestartSpec pins it).
     private void respawnAfter(LoopWait backoff) {
         if (control.enterWait(backoff) == LoopControl.WaitEntry.STOPPED) {
             return;

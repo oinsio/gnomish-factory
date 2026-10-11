@@ -51,10 +51,10 @@ that none of its features reaches.
 <!-- implements FR26, M11 of supervise-daemon-loops-and-embed-dashboard; design D26 -->
 
 #### Scenario: A refusal that differs only in its text is one preset
-- **WHEN** a spec needs a harvest fetch refused with one of the four
-  documented refusals
-- **THEN** it links the one `harvest-refuse` preset under the refusal's name
-  and the script prints that refusal
+- **WHEN** a spec needs a fetch refused with one of the refusals in
+  `data/stderr-fetch`
+- **THEN** it links the one `action-answer-by-name` preset under the
+  refusal's name, and the script prints that refusal and exits 1
 
 #### Scenario: A dead row fails the library spec
 - **WHEN** a table row is added that no feature of the library's spec reaches
@@ -94,9 +94,15 @@ gate SHALL fail on a holder typed as the class.
 ### Requirement: One owner of executable files in test sources
 A build gate SHALL fail on any test-source site, outside the owner fixture and
 the stand-in library, that creates an executable file or carries shebang text,
-with named exemptions for scripts mounted into a container and for specs of
-shipped scripts, and SHALL assert that its scan reached every exempted file.
+except in named exemptions each listed with its reason, and SHALL assert that
+its scan reached every exempted file.
 <!-- implements FR24, M11 of supervise-daemon-loops-and-embed-dashboard; design D23 -->
+
+#### Scenario: Only three kinds of file are exempt
+- **WHEN** the gate lists its exemptions
+- **THEN** each is a script run inside a container, a spec of a shipped
+  script, or a gate's own seeded sources that hold shebang text as data for its
+  detector and never write it to disk
 
 #### Scenario: A spec that writes its own script fails the gate
 - **WHEN** a test source outside the owner fixture and the named exemptions
