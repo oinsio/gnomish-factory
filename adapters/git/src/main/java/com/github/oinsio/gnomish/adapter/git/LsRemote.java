@@ -37,7 +37,7 @@ final class LsRemote {
      * @param refPatterns the ref patterns to ask about; at least one
      * @return the invocation's outcome — {@code <sha>\t<ref>} lines on a zero exit
      */
-    static GitCommandResult refs(GitProcessRunner runner, Path repo, String... refPatterns) {
+    static GitCommandResult refs(GitRunner runner, Path repo, String... refPatterns) {
         String[] argv = new String[refPatterns.length + 3];
         argv[0] = "ls-remote";
         argv[1] = "--end-of-options";
@@ -55,7 +55,7 @@ final class LsRemote {
      * @return the invocation's outcome, whose first line is {@code "ref: <ref>\tHEAD"} when origin
      *     names one
      */
-    static GitCommandResult symrefHead(GitProcessRunner runner, Path repo) {
+    static GitCommandResult symrefHead(GitRunner runner, Path repo) {
         return runner.run(repo, "ls-remote", "--symref", "--end-of-options", OriginRemote.NAME, "HEAD");
     }
 }

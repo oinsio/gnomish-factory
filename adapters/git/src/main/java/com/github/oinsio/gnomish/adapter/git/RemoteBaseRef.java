@@ -31,10 +31,10 @@ final class RemoteBaseRef {
     /** {@code <sha>\t<ref>} — {@code ls-remote}'s only output shape. */
     private static final Pattern REF_LINE = Pattern.compile("^(\\S+)\\s+(\\S+)$");
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final OriginRemote origin;
 
-    RemoteBaseRef(GitProcessRunner runner) {
+    RemoteBaseRef(GitRunner runner) {
         this.runner = runner;
         this.origin = new OriginRemote(runner);
     }

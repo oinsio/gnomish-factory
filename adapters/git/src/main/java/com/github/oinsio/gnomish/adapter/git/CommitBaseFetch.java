@@ -44,10 +44,10 @@ final class CommitBaseFetch {
 
     private static final int SHA256_LENGTH = 64;
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final OriginProbe probe;
 
-    CommitBaseFetch(GitProcessRunner runner) {
+    CommitBaseFetch(GitRunner runner) {
         this.runner = runner;
         this.probe = new OriginProbe(runner);
     }

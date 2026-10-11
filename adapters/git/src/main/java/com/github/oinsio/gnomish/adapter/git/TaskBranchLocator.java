@@ -59,7 +59,7 @@ public final class TaskBranchLocator {
 
     private static final Logger log = LoggerFactory.getLogger(TaskBranchLocator.class);
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final OriginRemote origin;
     private final RemoteBranchTip remoteTip;
     private final GitInfrastructureRetry retry;
@@ -68,7 +68,7 @@ public final class TaskBranchLocator {
      * @param runner the git subprocess seam; never null
      * @param retry the infrastructure budget the unsettled lookup is re-attempted under; never null
      */
-    public TaskBranchLocator(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public TaskBranchLocator(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);

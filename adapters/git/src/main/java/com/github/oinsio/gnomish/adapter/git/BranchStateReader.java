@@ -48,7 +48,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BranchStateReader {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final TaskBranchLocator locator;
     private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
 
@@ -57,7 +57,7 @@ public final class BranchStateReader {
      * @param retry the infrastructure budget the branch lookup is re-attempted under, the
      *     composition root's own (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public BranchStateReader(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public BranchStateReader(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.locator = new TaskBranchLocator(runner, retry);
     }

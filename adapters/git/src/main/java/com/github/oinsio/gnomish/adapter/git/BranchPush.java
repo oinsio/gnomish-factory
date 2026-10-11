@@ -38,7 +38,7 @@ public final class BranchPush {
     private final OriginRemote origin;
     private final RefspecPush push;
 
-    public BranchPush(GitProcessRunner runner) {
+    public BranchPush(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.push = new RefspecPush(runner);
     }

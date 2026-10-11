@@ -35,7 +35,7 @@ final class LifecyclePush {
     private final OriginRemote origin;
     private final RefspecPush push;
 
-    LifecyclePush(GitProcessRunner runner) {
+    LifecyclePush(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.push = new RefspecPush(runner);
     }

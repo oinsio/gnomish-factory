@@ -1,8 +1,10 @@
 # ADR 0015: Stand-ins Are Committed Presets
 
 Status: accepted (2026-10-10, introduced by `supervise-daemon-loops-and-embed-dashboard`, design
-D23–D25 — recorded here because a change's `design.md` archives with the change and governs
-nothing afterwards)
+D23–D25; amended the same day by its design D26 after a second review — links are derived, each
+behaviour is one preset, no row is dead — and D27 — specs above the git adapter fake its port.
+Recorded here because a change's `design.md` archives with the change and governs nothing
+afterwards)
 
 ## Context
 
@@ -29,19 +31,30 @@ scripts varies per run except where a recording lands.
 
 1. **Stand-in scripts are committed, written once, spec'd once.** They live under
    `test-fixtures/src/main/resources/stand-in/`. One table interpreter, `stand-in.sh`, serves
-   every stand-in whose behaviour a table can state — `git`, `docker`, the agent CLI, a hook — and
-   reads it from the table beside the name it was invoked under (`$0.params`): per argv prefix,
+   every stand-in whose behaviour a table can state — `git`, `docker`, the agent CLI, a hook, a
+   supervised process that exits, waits or stalls — and reads it from the section named after the
+   link it was invoked through: per argv prefix,
    refuse with an exit code and a stderr file, answer with a stdout file, stall, record argv and
    named variables, delay, write a per-run file, export a variable — or the per-run link's own name,
    so one preset serves every value of a parameter (the fake agent's scenario; the subcommand a
    probe refuses or stalls on, named in the match column) — or hand over to the real binary or a
    committed script. A preset that would differ from another in one word takes that word from the
-   link's name instead. The few stand-ins whose subject is the operating system's handling of a
+   link's name instead — as a value, as the subcommand matched, or as the answer it prints
+   (`data/stderr-fetch#@name`). The few stand-ins whose subject is the operating system's handling of a
    process — a signal ignored, a child forked, a pipe held open — are committed scripts of their
    own under `process/`, one reviewed script per behaviour, because no table states a fork.
-2. **Scenario parameters are committed presets.** A preset is a link `links/<preset>` to the
-   interpreter and a section `[<preset>]` of a table under `tables/`; presets of one group share a
-   table, and a table stays within the project's file-size budget. The answers rows print are
+2. **Scenario parameters are committed presets; a preset is a section.** A preset is a section
+   `[<preset>]` of a table under `tables/`, and nothing else: presets of one group share a table,
+   and a table stays within the project's file-size budget. The link that carries the preset's name
+   to the interpreter (`$0` is the one channel production leaves: it execs the configured path and
+   clears the environment) is made by the owner, `<jvm-dir>/<preset> -> stand-in.sh`, once per JVM
+   on first use; the interpreter walks the chain of links to itself, takes the last name before it
+   as the preset and its own directory as the library. A link costs what a committed one costs —
+   the assessment is keyed by the script's inode — so a committed directory of links was a
+   registry with one hand-kept invariant, and is gone; the preset list is
+   `grep '^\[' tables/*.params`. Every row of every section is reached by some invocation: the
+   library's own spec runs each row by an argv built from its match and fails on a row an earlier
+   terminal row shadows. The answers rows print are
    sections of the files under `data/`, shell steps live under `steps/`. A preset contains no
    absolute path and writes nothing into the library — only beside a per-run link, its log or a
    file a `write` row names — so it is read-only, shared by parallel JVMs, and assessed by the
@@ -52,6 +65,13 @@ scripts varies per run except where a recording lands.
    preset, created by that owner for a scenario that records, reads a file the spec writes beside
    the link, or needs a name git chooses (a hook); a stand-in that changes behaviour mid-spec is
    re-pointed at another preset in one rename. A link is not a new executable file.
+
+   A hook preset is linked into a repository under the name git runs it by. Whether git runs it
+   depends on the caller's configuration, not the preset's: `GitExec` passes
+   `-c core.hooksPath=/dev/null`, and git hands `-c` pairs to the git processes it starts through
+   `GIT_CONFIG_PARAMETERS`, so a local push made through it would not run the receiving
+   repository's `pre-receive`; the transfer owner (`GitTransfer`) strips that variable, which is
+   why a push through the runner reaches a `pre-receive` preset in a bare fixture remote.
 4. **A gate keeps it so.** An architecture spec in `:bootstrap` scans every test tree and
    `test-fixtures/src/main` for an executable bit set from code, shebang text and a `chmod`
    granting execute; only named exemptions may match (scripts run inside a container, where Linux
@@ -59,6 +79,16 @@ scripts varies per run except where a recording lands.
    gate's own seeded data), each must still match, and the owner must be reached and clean.
 5. **A new scenario is a new preset**, with a row in the library's data-driven spec — never shell
    in a spec.
+6. **Stand-ins serve the process boundary, not the layer above it.** A class above one of the four
+   `ProcessBuilder` owners (`GitProcessRunner`, `GitExec`, `DockerCli`,
+   `HostTaskExecutionEnvironment`) is specified against a fake of the port it holds, in process
+   (`ScriptedGit` for `GitRunner`); a preset that only scripts the answers such a class receives is
+   an in-process fake written as shell and paid for as a process per call per mutant. What keeps a
+   stand-in: the specs of those four owners, where the process is the subject; a preset that hands
+   part of the argv to the real binary over a real repository; a hook preset, which real git runs
+   over a real bare remote; `GitVersionCheck`, which spawns `git --version` itself; and the
+   end-to-end layer. `ScriptedGit` matches an argv prefix exactly as the interpreter does, a pair
+   declared in `.claude/rules/manual-sync-pairs.md`.
 
 ## Consequences
 
@@ -82,6 +112,12 @@ In the order the design session went through them:
 - **Committed scripts, generated parameter files**: the parameters turned out constant per
   scenario; only the recording location varies, and a link covers it.
 - **Hardlinks**: as fast, but one filesystem, one inode, and `$0` cannot tell presets apart.
+- **Committed links as the preset registry** (the first form of decision 2): a visible list, but
+  one file per preset carrying nothing the table headers do not, kept in step by hand.
+- **A sidecar plan file beside the per-run link** (the `bats-mock` shape): carries parameters too,
+  but a second artefact kind per test for a need the link's name already covers.
+- **An off-the-shelf stand-in library**: every one found selects the binary by `PATH` or the
+  environment, which production does not consult, and all but one write an executable per test.
 - **Running stand-ins through `/bin/sh` from production**: production executes the operator's
   `git` by path; its argv is not the test's to shape.
 - **Machine-level exemptions** (Developer Tools, `spctl`, ad-hoc `codesign`, xattr removal):

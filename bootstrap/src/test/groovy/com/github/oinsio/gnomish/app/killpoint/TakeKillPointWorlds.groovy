@@ -67,7 +67,7 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         def registered = RegisteredCloneFixture.registered(root.resolve('home'), clone)
         def git = TaskGitFixture.real()
         Path argv = root.resolve('plain-round.log')
-        def agent = FakeAgentSupport.propertiesCapturingArgv('plain-round', 'judge-model', 'judge-verdict-pass', argv)
+        def agent = FakeAgentSupport.propertiesCapturingArgv('plain-round', argv)
         def world = new TakeKillPointWorld(definition: definition, repoDir: clone, epochs: git.epochs(),
         worktree: registered.worktrees().resolve(TAKE_TASK_ID),
         agentRounds: {

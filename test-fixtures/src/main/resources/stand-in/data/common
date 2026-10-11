@@ -1,4 +1,4 @@
-# Answers many scenarios share: the clone key, the origin URL, commit names, an empty line, an exit code.
+# Answers many scenarios share: the clone key and the origin URL.
 # One section per answer: its lines up to the blank line that separates it from the next one.
 
 [git-dir]
@@ -6,18 +6,3 @@
 
 [url]
 https://example.invalid/repo.git
-
-[sha-1]
-1111111111111111111111111111111111111111
-
-[sha-a]
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-[sha-b]
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-[empty-line]
-
-
-[exit-128]
-128

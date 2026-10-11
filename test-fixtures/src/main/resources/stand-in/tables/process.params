@@ -1,0 +1,22 @@
+# Process-shaped fakes the supervisor specs run as they are (FakeBinaries), whose behaviour a table
+# states; a trap or a fork is the subject of a script under ../process/ instead, and
+# StandIn.process resolves a section here before a script there.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[quick]
+# Exits at once with its own code, 3 (ProcessSupervisorStallSpec).
+* exit 3
+
+[local]
+# Exits after a beat with its own code, 7: the local-command shape (ProcessSupervisorStallSpec).
+* delay 0.2
+* exit 7
+
+[stall]
+# Never exits on its own: only a deadline or a kill ends it (ProcessSupervisorStallSpec).
+* stall 600
+
+[noisy]
+# Writes NOISY_LINE as a line NOISY_LINES times to each stream, the amount the spec sets in the
+# child's environment (CaptureRunnerDrainSpec).
+* exec-sh steps/noisy.sh

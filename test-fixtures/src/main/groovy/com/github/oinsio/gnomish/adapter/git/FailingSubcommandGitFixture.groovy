@@ -16,9 +16,8 @@ import java.nio.file.Path
  *
  * <p>The stand-in is the committed preset {@code fail-subcommand}, reached through a per-run link
  * named after the subcommand it fails; healing re-points that link at {@code delegate-git} (ADR
- * 0015). Sibling of
- * {@link StallingReadGitFixture}, which drives the other half of the same rule: a probe that
- * never ran to its own exit at all.
+ * 0015). The other half of the same rule — a probe that never ran to its own exit at all — is
+ * driven over the runner's port ({@code StalledReadGit} in {@code adapters/git}'s specs).
  */
 trait FailingSubcommandGitFixture {
 

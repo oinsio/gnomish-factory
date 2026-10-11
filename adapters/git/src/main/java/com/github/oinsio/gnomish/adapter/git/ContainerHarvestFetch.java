@@ -51,7 +51,7 @@ import java.util.Optional;
  *     as {@code cwd}
  */
 @UntrustedParser
-public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) implements ContainerHarvest {
+public record ContainerHarvestFetch(GitRunner runner, Path cloneDir) implements ContainerHarvest {
 
     @Override
     public void fetch(String containerName, String branch) {

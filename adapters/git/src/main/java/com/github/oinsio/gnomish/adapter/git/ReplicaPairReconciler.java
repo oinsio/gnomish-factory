@@ -70,13 +70,12 @@ final class ReplicaPairReconciler {
      */
     private static final int MAX_PASSES = 3;
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path repo;
     private final boolean syncWorkingTree;
     private final ClaimEpochSource epochs;
 
-    private ReplicaPairReconciler(
-            GitProcessRunner runner, Path repo, boolean syncWorkingTree, ClaimEpochSource epochs) {
+    private ReplicaPairReconciler(GitRunner runner, Path repo, boolean syncWorkingTree, ClaimEpochSource epochs) {
         this.runner = runner;
         this.repo = repo;
         this.syncWorkingTree = syncWorkingTree;
@@ -91,12 +90,12 @@ final class ReplicaPairReconciler {
      * @param epochs the tenure this instance holds on the task, which gates the discard; {@link
      *     ClaimEpochSource#NONE} on the claimless manual-resume path
      */
-    static ReplicaPairReconciler forWorktree(GitProcessRunner runner, Path worktreeRoot, ClaimEpochSource epochs) {
+    static ReplicaPairReconciler forWorktree(GitRunner runner, Path worktreeRoot, ClaimEpochSource epochs) {
         return new ReplicaPairReconciler(runner, worktreeRoot, true, epochs);
     }
 
     /** Container mode: refs only, in the factory clone — the boxed task has no host working tree. */
-    static ReplicaPairReconciler forClone(GitProcessRunner runner, Path cloneDir, ClaimEpochSource epochs) {
+    static ReplicaPairReconciler forClone(GitRunner runner, Path cloneDir, ClaimEpochSource epochs) {
         return new ReplicaPairReconciler(runner, cloneDir, false, epochs);
     }
 

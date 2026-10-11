@@ -72,8 +72,7 @@ final class StateFileWrite {
      * @param state the state to record
      * @param event the lifecycle event this write belongs to; for error reporting
      */
-    static void write(
-            GitProcessRunner runner, Path worktree, String taskId, TaskState state, TaskLifecycleEvent event) {
+    static void write(GitRunner runner, Path worktree, String taskId, TaskState state, TaskLifecycleEvent event) {
         Path target = worktree.resolve(EnvelopePaths.STATE_JSON_PATH);
         try {
             AtomicFileWriter.write(
@@ -117,7 +116,7 @@ final class StateFileWrite {
      * subprocess, that one a blob through the bare-object reader), so no shared implementation is
      * available to enforce it.
      */
-    private static @Nullable EgressCursorDto currentCursor(GitProcessRunner runner, Path worktree) {
+    private static @Nullable EgressCursorDto currentCursor(GitRunner runner, Path worktree) {
         try {
             return new GitShowTip(runner, worktree, GitObjects.HEAD)
                     .readAtTip(EnvelopePaths.STATE_JSON_PATH)

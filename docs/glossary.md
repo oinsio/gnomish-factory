@@ -682,21 +682,22 @@ trusted/task tier split, and the law-root rule.
 
 - **Stand-in** — a committed binary under `test-fixtures/src/main/resources/stand-in/`
   that a spec hands production in place of a real one (`git`, `docker`, the
-  agent CLI, a hook, a supervised process): either a preset — a link to the one
+  agent CLI, a hook, a supervised process): either a preset run by the one
   table interpreter `stand-in.sh` — or one of the process-shaped scripts under
   `process/` whose signal and fork behaviour is the subject itself. Written
   once, spec'd once; a spec never writes one, and `StandIn` in `:test-fixtures`
   is the one owner that hands them out (ADR 0015). *Never:* "fake git" written
   inline in a spec, "stub script" — both name the generated-per-test shape the
   term replaces.
-- **Preset** — one committed stand-in behaviour: the symbolic link
-  `links/<preset>` to `stand-in.sh` and the section `[<preset>]` of a table under
-  `tables/`, several presets to a table; the answers its rows print are sections
-  of the files under `data/` (`data/stderr#unable-to-access`). It holds no
+- **Preset** — one committed stand-in behaviour: the section `[<preset>]` of a
+  table under `tables/`, several presets to a table, and nothing else — the link
+  named after it that carries the name to `stand-in.sh` is made by `StandIn` once
+  per JVM, never committed. The answers its rows print are sections of the files
+  under `data/` (`data/stderr#unable-to-access`). It holds no
   absolute path and writes only beside a per-run link — its `$0.log`, or a
   `$0.<name>` a `write` row names — never into the library. A preset that would
   differ from another in one word takes that word from its per-run link's name
-  instead (`@name`, `export-name`). *Not:* a template a test fills in — a preset
+  instead (`@name`, `export-name`, `data/stderr-fetch#@name`). *Not:* a template a test fills in — a preset
   is complete as committed; not the fake agent's *scenario*, which a preset may
   play.
 

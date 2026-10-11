@@ -56,7 +56,7 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
      */
     public PushBestEffortTaskRepository(
             TaskRepository delegate,
-            GitProcessRunner runner,
+            GitRunner runner,
             Path cloneDir,
             GitInfrastructureRetry retry,
             InstantSource clock) {

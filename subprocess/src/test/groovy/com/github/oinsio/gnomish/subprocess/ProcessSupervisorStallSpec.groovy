@@ -17,7 +17,7 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
     Path dir
 
     def "FR3, NFR-R1, M1: a child that stalls holding its output open cannot outlive its deadline"() {
-        given: 'a binary that produces no exit and holds stdout open through a child of its own'
+        given: 'a binary that produces no exit and holds stdout open'
         Path binary = fakeBinary('stall')
         Process process = new ProcessBuilder(binary.toString()).start()
 

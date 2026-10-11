@@ -4,9 +4,8 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.standin.StandIn
-import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -207,8 +206,25 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         (location as BranchLocation.Local).ref() == 'refs/heads/gnomish/PROJ-7-fix-it'
     }
 
+    /**
+     * A git over a clone without the tracking ref, whose origin confirms it carries the branch
+     * (an {@code ls-remote} listing) and whose every fetch exits with {@code fetch}.
+     */
+    private static ScriptedGit originCarries(GitCommandResult fetch) {
+        new ScriptedGit()
+                .answer(['fetch'], fetch)
+                .answer(['ls-remote'], 0, "${'1' * 40}\trefs/heads/gnomish/PROJ\n")
+                .answer(['rev-parse'], 1)
+                .answer(['remote'], 0, 'https://example.invalid/repo.git\n')
+    }
+
+    /** Every fetch refused as an unreachable origin. */
+    private static ScriptedGit fetchRefused() {
+        originCarries(GitCommandResult.of(128, '', 'fatal: unable to access origin\n'))
+    }
+
     /** No-wait budget: the same three attempts and doubling backoff, with the sleeps virtualized. */
-    private TaskBranchLocator instantRetryLocator(GitProcessRunner boundRunner = runner) {
+    private TaskBranchLocator instantRetryLocator(GitRunner boundRunner = runner) {
         new TaskBranchLocator(boundRunner, new GitInfrastructureRetry(
                         VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
     }
@@ -229,12 +245,10 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     def "FR6: a branch origin confirms it carries but the fetch could not deliver is unavailable"() {
         given: 'a git that answers the branch probe but fails every fetch'
-        def gitBinary = StandIn.recording(tempDir, 'locator-fetch-refused')
-        def clone = initWorkingRepo(tempDir, 'clone-fetch-broken')
-        commit(clone, 'a.txt', 'first')
+        def git = fetchRefused()
 
         when:
-        def location = instantRetryLocator(new GitProcessRunner(gitBinary.toString())).locate(clone, 'PROJ-9')
+        def location = instantRetryLocator(git).locate(tempDir, 'PROJ-9')
 
         then:
         location instanceof BranchLocation.Unavailable
@@ -252,11 +266,10 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     //     there, which every reader then resolves against.
     def "FR6: a fetch that exits zero without creating the ref is unavailable, never remote-tracking"() {
         given: 'a git whose fetch succeeds silently while origin confirms it carries the branch'
-        def clone = initWorkingRepo(tempDir, 'clone-lying-fetch')
-        commit(clone, 'a.txt', 'first')
+        def git = originCarries(GitCommandResult.of(0, '', ''))
 
         when:
-        def location = instantRetryLocator(new GitProcessRunner(StandIn.git('locator-lying-fetch').toString())).locate(clone, 'PROJ-13')
+        def location = instantRetryLocator(git).locate(tempDir, 'PROJ-13')
 
         then: 'the absent ref decides, not the zero exit'
         location instanceof BranchLocation.Unavailable
@@ -265,15 +278,13 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     def "FR6: the unsettled lookup is re-attempted under the infrastructure budget before giving up"() {
         given:
-        def gitBinary = StandIn.recording(tempDir, 'locator-fetch-refused')
-        def clone = initWorkingRepo(tempDir, 'clone-retry-count')
-        commit(clone, 'a.txt', 'first')
+        def git = fetchRefused()
 
         when:
-        instantRetryLocator(new GitProcessRunner(gitBinary.toString())).locate(clone, 'PROJ-10')
+        instantRetryLocator(git).locate(tempDir, 'PROJ-10')
 
         then: 'the fetch ran once per attempt of the budget, and no more'
-        StandInLog.blocks(gitBinary).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        git.calls(['fetch']).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
     }
 
     // FR6 of harden-task-branch-contract: "this clone has no origin" is itself the answer of a git
@@ -281,13 +292,20 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     //     read whose own silence is then spent as a second vote for absence.
     def "FR6: a fetch cut off on its deadline is unavailable even when the origin read fails too"() {
         given: 'a git that stalls on every network command and denies having an origin at all'
-        def clone = initWorkingRepo(tempDir, 'clone-stalled-fetch')
-        commit(clone, 'a.txt', 'first')
-        def stalling = new GitProcessRunner(StallingGit.git('locator-stall-network').toString(), Duration.ofMillis(500))
+        def cutOff = GitCommandResult.of(143, '', '', Termination.TIMED_OUT)
+        def stalling = new ScriptedGit()
+                .answer(['fetch'], cutOff)
+                .answer(['ls-remote'], cutOff)
+                .answer([
+                    'rev-parse',
+                    '--git-common-dir'
+                ], 0, '.git\n')
+                .answer(['rev-parse'], 1)
+                .answer(['remote'], 128)
         def oneAttempt = new GitInfrastructureRetry(VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), 1, Duration.ofMillis(1))
 
         when:
-        def location = new TaskBranchLocator(stalling, oneAttempt).locate(clone, 'PROJ-12')
+        def location = new TaskBranchLocator(stalling, oneAttempt).locate(tempDir, 'PROJ-12')
 
         then: 'the unestablished lookup says so, instead of the absence that forks a duplicate branch'
         location instanceof BranchLocation.Unavailable

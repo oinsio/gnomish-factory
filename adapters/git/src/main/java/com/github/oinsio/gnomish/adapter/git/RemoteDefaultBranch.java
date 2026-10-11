@@ -36,7 +36,7 @@ public final class RemoteDefaultBranch {
      */
     private static final String SYMREF_HEAD = "ref: refs/heads/";
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final OriginRemote origin;
     private final GitInfrastructureRetry retry;
 
@@ -44,7 +44,7 @@ public final class RemoteDefaultBranch {
      * @param runner the git subprocess seam; never null
      * @param retry the infrastructure budget an unanswered origin is re-asked under; never null
      */
-    public RemoteDefaultBranch(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public RemoteDefaultBranch(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.origin = new OriginRemote(runner);
         this.retry = retry;

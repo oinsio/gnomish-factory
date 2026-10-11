@@ -903,6 +903,19 @@ holders and no role in front of it.
   mixed preset that delegates part of the argv to the real git over a real repository
   (`refuse-fetch`, `fetch-fsck-refused`, `trace-clone-mutations`, …); the end-to-end layer in
   `:bootstrap`; `GitVersionCheck`, which spawns `git --version` itself.
+  *As built (task 14.5):* the runner's own specs keep `bounded-network`, `stall-everything`,
+  `leak-credentials*` and the `StallingGit` owner (now two consumers); the mixed presets keep
+  their users — `record-delegate` (`BaseRefreshSpec`, `BaseRefreshCloneSafetySpec`,
+  `ResumeBaseResolutionSpec`, `RemoteAuthRefusalSpec`), `refuse-fetch*`, `fetch-noop`,
+  `fail-subcommand`/`delegate-git` (`FailingSubcommandGitFixture`), `for-each-ref-noisy`,
+  `log-answer-per-run`, `fetch-fsck-refused`, `trace-clone-mutations`; the hook presets stay
+  because real git runs a `pre-receive` over a real bare remote (`RemoteAttemptDeliverySpec`,
+  `ParkDeliveryFenceSpec`); `closed-stdout-stall` stays because `TipStateCursorTerminationSpec`
+  reads through `GitObjects`/`GitExec`, a `ProcessBuilder` owner, and the capped read of a real
+  pipe is its subject. Every preset that only scripted a `GitCommandResult` for a class above the
+  runner is gone, together with `StallingGitFixture` and `StallingReadGitFixture`; their specs run
+  on `ScriptedGit`, `StalledPush` and `StalledReadGit`. `ScriptedGit` and `stand-in.sh` are a
+  declared pair for the prefix-match rule (`manual-sync-pairs.md`, no shared classpath).
 - *Sequencing against the two active runner changes.* `own-git-invocation-policy` and
   `add-subprocess-access-log` both rewrite `GitProcessRunner.execute` (0 of 22 and 0 of 32 tasks
   done). D27 touches the class's signature line and its holders' types, not `execute`; whichever

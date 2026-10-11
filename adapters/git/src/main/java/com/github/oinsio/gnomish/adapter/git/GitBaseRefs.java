@@ -32,7 +32,7 @@ public final class GitBaseRefs implements BaseRefGit {
      * @param retry the bounded retry both reads share — the production one from the composition
      *     root, a virtual-time one in specs; never null
      */
-    public GitBaseRefs(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public GitBaseRefs(GitRunner runner, GitInfrastructureRetry retry) {
         this.defaultBranch = new RemoteDefaultBranch(runner, retry);
         this.refresh = new BaseRefresh(runner, retry);
         this.resumeResolution = new ResumeBaseResolution(runner, retry);

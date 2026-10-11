@@ -51,11 +51,12 @@ dependencies {
 
     // The git-transfer owner leaf (FR1, FR8, design D1/D5 of own-git-transfer-argv):
     // `GitProcessRunner`'s typed entry takes the owner's value and refuses every
-    // transfer that did not come from it. `implementation`, not `api`: the entry is
-    // package-private, so the value type sits on no signature this module exports (the
-    // Groovy compiler of a consuming test tree still resolves the whole class, which is why
-    // `:test-fixtures` carries the leaf as `api` for every test classpath).
-    implementation project(':gittransfer')
+    // transfer that did not come from it. `api`: the entry implements the package-private
+    // `GitRunner` role (design D27 of supervise-daemon-loops-and-embed-dashboard), and an
+    // interface method is public, so the value type sits on the public class's signature —
+    // even though its result type, `GitCommandResult`, keeps the entry unusable outside the
+    // package.
+    api project(':gittransfer')
 
     implementation libs.slf4j.api
     // The shared subprocess wait/kill/drain discipline (FR9, design D9/D10 of

@@ -20,7 +20,7 @@ public final class RefTipSource implements BranchTipSource {
      * @param cloneDir the clone to read in
      * @param ref the ref to read at, e.g. {@code gnomish/PROJ-1} or {@code origin/gnomish/PROJ-1}
      */
-    public RefTipSource(GitProcessRunner runner, Path cloneDir, String ref) {
+    public RefTipSource(GitRunner runner, Path cloneDir, String ref) {
         this.tip = new GitShowTip(runner, cloneDir, ref);
     }
 

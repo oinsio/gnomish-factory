@@ -28,15 +28,6 @@ local done
 ref: refs/heads/main[31m	HEAD
 abc123	HEAD
 
-[ls-remote-landed-proj-1]
-1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ-1
-
-[ls-remote-proj-7]
-1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ-7
-
-[ls-remote-proj]
-1111111111111111111111111111111111111111	refs/heads/gnomish/PROJ
-
 [not-a-git]
 not a git at all
 

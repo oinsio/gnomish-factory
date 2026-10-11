@@ -82,7 +82,7 @@ final class TerminalWriteMarker {
      *     envelope is still present (only a completion's cleanup removes one), so a missing file
      *     is a fault and is reported rather than skipped
      */
-    static void clearPending(GitProcessRunner runner, Path worktree, String taskId) {
+    static void clearPending(GitRunner runner, Path worktree, String taskId) {
         Path taskJson = worktree.resolve(EnvelopePaths.TASK_JSON_PATH);
         TaskJsonDto cleared = RequiredTaskJson.atTipOf(runner, worktree, taskId, TaskLifecycleEvent.RESUMED)
                 .dto()

@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR10 of add-git-workflow; FR5 of harden-task-branch-contract.
  */
-public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimEpochSource epochs)
+public record WorktreeSalvage(GitRunner runner, Path worktreeRoot, ClaimEpochSource epochs)
         implements WorktreeSalvager {
 
     private static final Logger log = LoggerFactory.getLogger(WorktreeSalvage.class);

@@ -24,7 +24,7 @@ import java.nio.file.Path;
  * @param registeredClone the registered clone that owns the worktree registration — {@code git worktree
  *     remove} runs in its path — and whose worktree folder holds the worktree
  */
-public record WorktreeEnvironmentDisposal(GitProcessRunner runner, RegisteredClone registeredClone)
+public record WorktreeEnvironmentDisposal(GitRunner runner, RegisteredClone registeredClone)
         implements TaskEnvironmentDisposal {
 
     /**

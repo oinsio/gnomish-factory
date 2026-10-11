@@ -13,10 +13,11 @@ import spock.lang.TempDir
  * branch for a task that already has one. The tip-reader seam is where the invocation outcome is
  * classified (design D3, D14), so the unavailability leaves the source before any fact is assembled.
  *
- * <p>Driven through the runner's git-binary seam: a stand-in {@code git} that stalls on every read
- * the seam makes, interrupted mid-wait — the outcome no real repository can be asked to produce.
+ * <p>Driven through the runner's port ({@link StalledReadGit}, design D27 of
+ * supervise-daemon-loops-and-embed-dashboard): a scripted git that blocks on every read the seam
+ * makes until interrupted — the outcome no real repository can be asked to produce.
  */
-class GitShowTipTerminationSpec extends Specification implements StallingReadGitFixture {
+class GitShowTipTerminationSpec extends Specification implements StalledReadGit {
 
     @TempDir
     Path tempDir
@@ -31,19 +32,19 @@ class GitShowTipTerminationSpec extends Specification implements StallingReadGit
             }
         })
         reader.start()
-        awaitReadStarted(tempDir)
+        awaitReadStarted(tempDir, reader)
         reader.interrupt()
         reader.join(Duration.ofSeconds(30).toMillis())
         return thrown
     }
 
     private RefTipSource source() {
-        new RefTipSource(new GitProcessRunner(stallingGit(tempDir).toString()), tempDir, 'gnomish/PROJ-1')
+        new RefTipSource(stallingGit(tempDir), tempDir, 'gnomish/PROJ-1')
     }
 
     /** The seam itself, for the two answers {@link RefTipSource} does not expose. */
     private GitShowTip tip() {
-        new GitShowTip(new GitProcessRunner(stallingGit(tempDir).toString()), tempDir, 'gnomish/PROJ-1')
+        new GitShowTip(stallingGit(tempDir), tempDir, 'gnomish/PROJ-1')
     }
 
     def "FR6: an interrupted file read is unavailability, never an absent file"() {

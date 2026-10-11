@@ -44,14 +44,14 @@ import java.util.List;
 @UntrustedParser
 public final class HarvestedBoundaryCheck {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
 
     /**
      * @param runner the git subprocess runner
      * @param cloneDir the factory clone holding the harvested refs; bare reads run here
      */
-    public HarvestedBoundaryCheck(GitProcessRunner runner, Path cloneDir) {
+    public HarvestedBoundaryCheck(GitRunner runner, Path cloneDir) {
         this.runner = runner;
         this.cloneDir = cloneDir;
     }

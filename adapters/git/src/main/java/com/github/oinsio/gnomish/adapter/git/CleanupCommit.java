@@ -79,7 +79,7 @@ final class CleanupCommit {
      * @param epoch the tenure this cleanup belongs to, stamped as a trailer (FR13 of
      *     harden-task-branch-contract); {@code null} where no claim is held
      */
-    static void commit(GitProcessRunner runner, Path worktree, String taskId, @Nullable ClaimEpoch epoch) {
+    static void commit(GitRunner runner, Path worktree, String taskId, @Nullable ClaimEpoch epoch) {
         if (!new GitShowTip(runner, worktree, GitObjects.HEAD).carries(EnvelopePaths.DIR_NAME)) {
             // Already cleaned: running the destructive step twice equals running it once, which is
             // what lets the completion recovery re-run safely (FR10 of harden-task-branch-contract).

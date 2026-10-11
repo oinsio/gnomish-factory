@@ -32,7 +32,7 @@ public final class ContainerResumeBranch {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerResumeBranch.class);
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final ClaimEpochSource epochs;
     private final GitInfrastructureRetry retry;
 
@@ -44,7 +44,7 @@ public final class ContainerResumeBranch {
      * @param retry the infrastructure budget the branch lookup is re-attempted under (FR18 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public ContainerResumeBranch(GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
+    public ContainerResumeBranch(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.epochs = epochs;
         this.retry = retry;

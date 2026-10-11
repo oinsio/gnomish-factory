@@ -30,7 +30,7 @@ import java.util.List;
  */
 public final class GitTaskBranches implements TaskBranchGit {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final FactoryCloneHardening hardening;
     private final ContainerResumeBranch resumeBranch;
     private final TaskBranchLocator locator;
@@ -52,7 +52,7 @@ public final class GitTaskBranches implements TaskBranchGit {
      *     composition root's, so no collaborator builds its own (FR18 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskBranches(GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
+    public GitTaskBranches(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.hardening = new FactoryCloneHardening(runner);
         this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
         this.locator = new TaskBranchLocator(runner, retry);

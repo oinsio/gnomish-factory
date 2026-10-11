@@ -83,7 +83,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
     private static final Logger log = LoggerFactory.getLogger(GitTaskRepository.class);
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
     private final TaskBranchCreator branchCreator;
     private final TaskWorktreeManager worktreeManager;
@@ -99,8 +99,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * @param clock the source of the task file's {@code createdAt} (FR20 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskRepository(
-            GitProcessRunner runner, RegisteredClone clone, ClaimEpochSource epochs, InstantSource clock) {
+    public GitTaskRepository(GitRunner runner, RegisteredClone clone, ClaimEpochSource epochs, InstantSource clock) {
         this.runner = runner;
         this.cloneDir = clone.clonePath();
         this.branchCreator = new TaskBranchCreator(runner);

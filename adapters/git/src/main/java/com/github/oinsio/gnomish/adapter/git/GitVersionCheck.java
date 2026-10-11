@@ -43,7 +43,7 @@ public final class GitVersionCheck {
     /** {@code git --version} needs no repository; the runner only asks that the directory exist. */
     private static final Path ANY_DIRECTORY = Path.of(".");
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
     /** The version the first call accepted; a later call answers from it without a subprocess. */
     private volatile @Nullable GitVersion accepted;
@@ -51,7 +51,7 @@ public final class GitVersionCheck {
     /**
      * @param runner the one git subprocess runner every git-backed port shares
      */
-    public GitVersionCheck(GitProcessRunner runner) {
+    public GitVersionCheck(GitRunner runner) {
         this.runner = runner;
     }
 

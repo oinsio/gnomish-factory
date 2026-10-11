@@ -23,21 +23,19 @@ import spock.lang.Specification
 class StallingGitOwnerSpec extends Specification {
 
     private static final String GIT_TESTS = 'adapters/git/src/test/groovy/com/github/oinsio/gnomish/adapter/git/'
-    private static final String FIXTURES = 'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/'
 
     /** The owner: the stand-in library's one script, where the one shell {@code sleep} lives. */
     private static final String OWNER = 'test-fixtures/src/main/resources/stand-in/stand-in.sh'
 
-    /** The eight consumers of design D4's single-owner table: each selects its stand-in through the owner. */
+    /**
+     * The consumers of design D4's single-owner table that still run a stalling process: the
+     * runner's own specs, where the process is the subject. The six above the runner left with
+     * design D27 of supervise-daemon-loops-and-embed-dashboard — they block a scripted port
+     * ({@code ScriptedGit}) instead, and two fixtures went with them.
+     */
     private static final List<String> CONSUMERS = [
-        GIT_TESTS + 'ContainerHarvestFetchSpec.groovy',
         GIT_TESTS + 'GitProcessRunnerBoundedNetworkSpec.groovy',
         GIT_TESTS + 'GitProcessRunnerShutdownReportSpec.groovy',
-        GIT_TESTS + 'ReplicaPairReconcilerTerminationSpec.groovy',
-        GIT_TESTS + 'TaskBranchLocatorSpec.groovy',
-        GIT_TESTS + 'UsageHistoryWalkerTerminationSpec.groovy',
-        FIXTURES + 'StallingGitFixture.groovy',
-        FIXTURES + 'StallingReadGitFixture.groovy',
     ]
 
     // FR2, UX2: a stalling script outside the owner is the tenth copy — the shape that sat out a
@@ -61,7 +59,7 @@ class StallingGitOwnerSpec extends Specification {
     }
 
     // FR2, M5: a consumer renamed or moved away must fail here, not drop out of the scan silently.
-    def "FR2, M5: the scan reached all eight consumers, and each selects through the owner"() {
+    def "FR2, M5: the scan reached every consumer, and each selects through the owner"() {
         given: 'the consumers the scan reached that select through the owner'
         def reached = governedSources().findAll {
             CONSUMERS.contains(RepoSourceTree.relative(it)) && StallingScriptRule.buildsThroughOwner(it)

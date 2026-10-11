@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -18,8 +19,10 @@ import spock.lang.TempDir
  * interrupted {@code update-ref} left the swap's outcome unknown — neither "won" nor "the tip
  * moved" — and counting it as a losing pass turns a shutdown into a second-writer diagnosis.
  *
- * <p>Driven through the runner's git-binary seam: a stand-in {@code git} that answers every command
- * before the one under test and stalls on that one, interrupted mid-wait.
+ * <p>Driven through the runner's port: a scripted git ({@link ScriptedGit}) that answers every
+ * command before the one under test and blocks on that one until its thread is interrupted, which
+ * answers {@code INTERRUPTED} exactly as the real runner does (design D27 of
+ * supervise-daemon-loops-and-embed-dashboard).
  */
 class ReplicaPairReconcilerTerminationSpec extends Specification {
 
@@ -56,19 +59,20 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
         !thrown.message.contains('second writer')
     }
 
-    /** Runs a tenured reconcile over {@code fakeGit} in its own thread and interrupts it mid-stall. */
-    private Throwable interruptDuring(Path fakeGit) {
+    /** Runs a tenured reconcile over {@code git} in its own thread and interrupts it mid-stall. */
+    private Throwable interruptDuring(Map stalling) {
+        ScriptedGit git = stalling.git
         Throwable thrown = null
         def reconciler = new Thread({
             try {
-                ReplicaPairReconciler.forClone(new GitProcessRunner(fakeGit.toString()), tempDir, underTenure)
+                ReplicaPairReconciler.forClone(git, tempDir, underTenure)
                         .reconcile('PROJ-1', 'gnomish/PROJ-1')
             } catch (Throwable t) {
                 thrown = t
             }
         })
         reconciler.start()
-        StallingGit.awaitStall(fakeGit)
+        git.awaitCall([stalling.command], reconciler)
         reconciler.interrupt()
         reconciler.join(Duration.ofSeconds(30).toMillis())
         return thrown
@@ -79,7 +83,20 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
      * it answers — and then stalls until interrupted, the outcome no real repository can be asked
      * to produce on demand.
      */
-    private Path stallingOn(String stalled) {
-        StallingGit.marked(tempDir.resolve(stalled), 'reconcile-stall')
+    private static Map stallingOn(String stalled) {
+        def git = new ScriptedGit()
+                .stalls([stalled], new CountDownLatch(1))
+                .answer(['fetch'], 0)
+                .answer(['update-ref'], 0)
+                .answer(['merge-base'], 1)
+                .answer([
+                    'rev-parse',
+                    '--verify',
+                    '--quiet',
+                    'refs/remotes/origin/gnomish/PROJ-1'
+                ], 0, 'b' * 40 + '\n')
+                .answer(['rev-parse'], 0, 'a' * 40 + '\n')
+                .answer([], 0)
+        [git: git, command: stalled]
     }
 }

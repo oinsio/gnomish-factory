@@ -19,14 +19,14 @@ import java.nio.file.Path;
 @SuppressWarnings("ClassCanBeRecord")
 final class WorktreeResync {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path worktreeRoot;
 
     /**
      * @param runner the shared git subprocess runner; never null
      * @param worktreeRoot the working tree to bring behind the moved ref; never null
      */
-    WorktreeResync(GitProcessRunner runner, Path worktreeRoot) {
+    WorktreeResync(GitRunner runner, Path worktreeRoot) {
         this.runner = runner;
         this.worktreeRoot = worktreeRoot;
     }

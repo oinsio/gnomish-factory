@@ -34,7 +34,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BaseRefresh {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final RemoteBaseRef remoteRef;
     private final TagBaseFetch tags;
     private final CommitBaseFetch commits;
@@ -44,7 +44,7 @@ public final class BaseRefresh {
      * @param runner the git subprocess seam; never null
      * @param retry the infrastructure budget an unanswered origin is re-asked under; never null
      */
-    public BaseRefresh(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public BaseRefresh(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.remoteRef = new RemoteBaseRef(runner);
         this.tags = new TagBaseFetch(runner);

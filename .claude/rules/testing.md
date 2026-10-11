@@ -195,10 +195,11 @@ at the call site.
 
 A stand-in binary a spec runs in place of `git`, `docker`, the agent CLI, a hook or a supervised
 process is **committed** under `test-fixtures/src/main/resources/stand-in/` (ADR 0015): a
-**preset** — the link `links/<preset>` to the table interpreter `stand-in.sh` and the section
-`[<preset>]` of a table under `tables/` (grammar in the script's header; several presets to a table,
-each table at most 120 lines) — or, for the supervisor specs whose subject is a signal or a fork,
-one of the scripts under `process/`. The answers rows print are sections of the files under `data/`
+**preset** — the section `[<preset>]` of a table under `tables/`, run by the table interpreter
+`stand-in.sh` (grammar in the script's header; several presets to a table, each table at most 120
+lines; the link that carries the preset's name to the script is made by `StandIn` once per JVM,
+never committed) — or, for the supervisor specs whose subject is a signal or a fork, one of the
+scripts under `process/`. The answers rows print are sections of the files under `data/`
 (`data/stderr#unable-to-access`), shell steps live under `steps/`. A spec selects a preset by name
 through `StandIn` in `:test-fixtures` (`StandIn.git('refuse-fetch')`, `StandIn.process('polite')`);
 it never writes an executable file and never carries shell text. The one per-run artefact is a
@@ -214,12 +215,17 @@ run (1–4 s, queued across PIT's minions; the second run 10 ms), so every mutan
 PIT spent 90 % of its minion time waiting on scripts, invisible on Linux CI and to the count-based
 cost report. The same mechanism slowed the ordinary `test` task and PIT's coverage phase.
 
-- **New behaviour is a new preset** — a link and a section in the table of its group — covered by
-  the library's data-driven spec (`StandInLibrarySpec`), never shell in a spec; a new table action is
-  a new feature there. Two presets that would differ in one word are one preset taking that word
+- **New behaviour is a new preset** — a section in the table of its group — covered by the
+  library's data-driven spec (`StandInLibrarySpec`), never shell in a spec; a new table action is
+  a new feature there, and every row must be reached (`StandInRowReachSpec` fails on a row an
+  earlier one shadows). Two presets that would differ in one word are one preset taking that word
   from its link's name. A preset holds no absolute path and writes nothing into the library — a
-  `record`, `write`, `export-name` or `@name` row reached through the committed link is refused —
-  so parallel JVMs share it and the OS assesses the script once per checkout.
+  `record`, `write`, `export-name` or `@name` row reached through the preset's own link is
+  refused — so parallel JVMs share it and the OS assesses the script once per checkout.
+- **Above the process boundary, fake the port, not the binary.** A class that holds the git
+  runner is specified against `ScriptedGit`, the in-process fake of `GitRunner`; a stand-in serves
+  the specs of the `ProcessBuilder` owners themselves, presets that delegate to the real binary,
+  and the end-to-end layer (ADR 0015, decision 6).
 - **A text a spec asserts is read from the library**, never retyped: `StandIn.data('stderr#name')`.
 - **The library is immutable in a build.** Rewriting a committed script in place would change it
   under parallel JVMs and may trigger a fresh assessment.

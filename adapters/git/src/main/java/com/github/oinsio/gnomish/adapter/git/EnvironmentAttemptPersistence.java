@@ -92,7 +92,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private static final String COMMIT_SCRIPT = "git add -- \"$1\" \"$2\" && git -c core.hooksPath= commit -m \"$3\"";
 
     private final TaskExecutionEnvironment environment;
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
     private final String branch;
     private final CurrentRound rounds;
@@ -115,7 +115,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
      */
     public EnvironmentAttemptPersistence(
             TaskExecutionEnvironment environment,
-            GitProcessRunner runner,
+            GitRunner runner,
             Path cloneDir,
             GitObjects gitObjects,
             String taskId,

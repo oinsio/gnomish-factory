@@ -13,14 +13,14 @@ import spock.lang.TempDir
  * signal landed mid-read. The same non-exit-is-not-a-fact rule the tip reads enforce
  * ({@link GitShowTipTerminationSpec}), applied to the enumeration that feeds them.
  */
-class TaskBranchListerTerminationSpec extends Specification implements StallingReadGitFixture {
+class TaskBranchListerTerminationSpec extends Specification implements StalledReadGit {
 
     @TempDir
     Path tempDir
 
     def "FR16: an interrupted ref enumeration is unavailability, never an empty listing"() {
         given:
-        def lister = new TaskBranchLister(new GitProcessRunner(stallingGit(tempDir).toString()))
+        def lister = new TaskBranchLister(stallingGit(tempDir))
         def outcome = null
         Throwable thrown = null
 
@@ -33,7 +33,7 @@ class TaskBranchListerTerminationSpec extends Specification implements StallingR
             }
         })
         reader.start()
-        awaitReadStarted(tempDir)
+        awaitReadStarted(tempDir, reader)
         reader.interrupt()
         reader.join(Duration.ofSeconds(30).toMillis())
 

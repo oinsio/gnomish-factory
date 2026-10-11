@@ -72,7 +72,7 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
      */
     public PushBestEffortTaskLifecycleStore(
             TaskLifecycleStore delegate,
-            GitProcessRunner runner,
+            GitRunner runner,
             Path cloneDir,
             GitInfrastructureRetry retry,
             InstantSource clock) {

@@ -71,11 +71,11 @@ final class StandInTables {
         rows
     }
 
-    /** Whether {@code preset} records, writes, reads a per-run file or takes the link's name. */
+    /** Whether {@code preset} records, writes, reads a per-run file or takes the link's name (as a value or an answer). */
     boolean perRun(String preset) {
         rows(preset).any { List<String> row ->
             row.size() >= 2 && (row[1] in PER_RUN_ACTIONS || '@name' in row[0].split(',')
-            || row.drop(2).any { it.startsWith('@') })
+            || row.drop(2).any { it.startsWith('@') || it.endsWith('#@name') })
         }
     }
 

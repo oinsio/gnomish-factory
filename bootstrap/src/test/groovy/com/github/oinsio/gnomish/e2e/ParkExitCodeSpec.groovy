@@ -46,7 +46,7 @@ class ParkExitCodeSpec extends AbstractE2eProcessSpec {
         Files.writeString(E2eFixture.projectRoot().resolve(MARKER_FILE), '')
 
         and: 'the fake agent plays a clean round and a passing judge vote'
-        def agent = FakeAgentSupport.wrapperFor('plain-round', 'judge-model', 'judge-verdict-pass')
+        def agent = FakeAgentSupport.wrapperFor('plain-round', true)
 
         when:
         def result = harness.run(E2eFixture.projectRoot(), agent, [

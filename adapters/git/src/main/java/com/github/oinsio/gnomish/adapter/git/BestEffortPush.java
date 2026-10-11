@@ -50,7 +50,7 @@ final class BestEffortPush {
     private final OriginRemote origin;
     private final RefspecPush push;
 
-    BestEffortPush(GitProcessRunner runner) {
+    BestEffortPush(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.push = new RefspecPush(runner);
     }

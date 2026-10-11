@@ -1,5 +1,5 @@
 # Git stand-ins that record what they were handed, most of them over the real git.
-# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
 
 [box-upload-pack]
 # The command behind an ext:: URL onto a box: each pack session is recorded, then served by the
@@ -10,11 +10,6 @@
 [delegate-git]
 # The real git behind a stand-in name: what a healed failing stand-in becomes.
 * delegate git
-
-[record-argv]
-# Records the argv it was handed and exits 0 (RefspecPushSpec, ContainerHarvestFetchSpec).
-* record
-* answer - 0
 
 [record-delegate]
 # The real git, every invocation recorded first: what a code path spends, not only what it leaves

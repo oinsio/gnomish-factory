@@ -1,5 +1,5 @@
 # Stand-ins for the docker CLI (DockerCliSpec, DockerCliBoundedSpec).
-# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
 
 [docker-daemon-down]
 # A docker client that cannot reach its daemon (DockerCliSpec).
@@ -21,7 +21,10 @@
 * answer data/stdout-docker#out-inspect 3
 
 [docker-noisy]
-# A docker command printing well past the OS pipe buffer on both streams (DockerCliBoundedSpec).
+# A docker command printing well past the OS pipe buffer on both streams, 2000 lines of 100
+# characters each (DockerCliBoundedSpec).
+* export NOISY_LINES 2000
+* export NOISY_LINE xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 * exec-sh steps/noisy.sh
 
 [docker-silent]

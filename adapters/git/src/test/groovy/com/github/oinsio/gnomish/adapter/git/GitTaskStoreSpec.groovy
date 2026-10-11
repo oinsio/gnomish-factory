@@ -35,7 +35,7 @@ import spock.lang.TempDir
  * <p>Added by task 8.1 of split-into-modules for the same reason as {@link GitTaskBranchesSpec}:
  * per-module mutation scoping needs a module's classes covered by that module's own specs.
  */
-class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, TaskSeedFixture, StallingReadGitFixture {
+class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, TaskSeedFixture, StalledReadGit {
 
     @TempDir
     Path tempDir
@@ -146,9 +146,9 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
     }
 
     def "NFR-R2 of fix-envelope-medium: a read cut off before git exits is unavailability, never absence"() {
-        given: 'a stand-in git that stalls on every read, so the read can only end on an interrupt'
+        given: 'a git that blocks on every read, so the read can only end on an interrupt'
         Path stallDir = Files.createDirectories(tempDir.resolve('stall'))
-        def stalled = new GitTaskStore(new GitProcessRunner(stallingGit(stallDir).toString()), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
+        def stalled = new GitTaskStore(stallingGit(stallDir), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
 
         when:
         Throwable thrown = null
@@ -160,7 +160,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
             }
         })
         reader.start()
-        awaitReadStarted(stallDir)
+        awaitReadStarted(stallDir, reader)
         reader.interrupt()
         reader.join(Duration.ofSeconds(30).toMillis())
 

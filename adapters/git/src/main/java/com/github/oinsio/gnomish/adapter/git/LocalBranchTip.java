@@ -20,9 +20,9 @@ import java.util.Optional;
 @UntrustedParser
 final class LocalBranchTip {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
-    LocalBranchTip(GitProcessRunner runner) {
+    LocalBranchTip(GitRunner runner) {
         this.runner = runner;
     }
 

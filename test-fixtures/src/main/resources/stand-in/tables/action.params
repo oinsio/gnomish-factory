@@ -1,5 +1,5 @@
 # The library's own scenarios: one per table action, for StandInLibrarySpec.
-# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
 
 [action-answer]
 # The library's own scenario for `answer` and argv-prefix matching, first match wins.
@@ -43,3 +43,8 @@ push write data/stdout-git#landed @remote-answer
 push exit 3
 status answer @remote-answer 0
 * answer - 0
+
+[action-answer-by-name]
+# The library's own scenario for an answer the per-run link is named after, `<file>#@name`: one
+# preset serves every answer of a file.
+* refuse 1 data/stderr-fetch#@name

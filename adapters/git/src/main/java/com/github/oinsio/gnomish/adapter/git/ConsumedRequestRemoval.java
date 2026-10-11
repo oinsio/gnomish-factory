@@ -55,7 +55,7 @@ final class ConsumedRequestRemoval {
      * @param taskId the task being written; for error reporting
      * @param event the consuming write's lifecycle event; for error reporting
      */
-    static void stage(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+    static void stage(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
         GitCommandResult rm = runner.run(
                 worktree, "rm", "-r", "-f", "-q", "--ignore-unmatch", "--", FactoryOwnedPaths.GNOME_WRITABLE);
         if (rm.exitCode() != 0) {

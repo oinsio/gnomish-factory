@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.subprocess
 
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -25,9 +26,11 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
     def "FR2, design D2: more than a pipe buffer on both streams completes with both captured in full"() {
         given: 'a binary writing ~150 KiB to each stream — well past any OS pipe buffer'
         Path binary = fakeBinary('noisy')
+        ProcessBuilder builder = new ProcessBuilder(binary.toString())
+        TestChildEnvironment.cleared(builder).putAll([NOISY_LINE: LINE, NOISY_LINES: String.valueOf(LINES)])
 
         when:
-        Captured captured = new CaptureRunner().run(new ProcessBuilder(binary.toString(), LINE, String.valueOf(LINES)), Duration.ofSeconds(60))
+        Captured captured = new CaptureRunner().run(builder, Duration.ofSeconds(60))
 
         then: 'the command completed normally rather than deadlocking on a full pipe'
         captured.termination() == Termination.EXITED

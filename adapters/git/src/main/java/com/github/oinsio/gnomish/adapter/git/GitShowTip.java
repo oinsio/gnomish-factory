@@ -37,11 +37,11 @@ final class GitShowTip {
 
     private static final Logger log = LoggerFactory.getLogger(GitShowTip.class);
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path repo;
     private final String revision;
 
-    GitShowTip(GitProcessRunner runner, Path repo, String revision) {
+    GitShowTip(GitRunner runner, Path repo, String revision) {
         this.runner = runner;
         this.repo = repo;
         this.revision = revision;

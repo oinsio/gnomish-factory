@@ -47,7 +47,7 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
      * @param cloneRoot the factory clone the branch and its objects live in; never null
      * @param branch the task branch name whose tip carries the attempt commit; never null
      */
-    public RemoteAttemptDelivery(GitProcessRunner runner, Path cloneRoot, String branch) {
+    public RemoteAttemptDelivery(GitRunner runner, Path cloneRoot, String branch) {
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);
         this.refspecPush = new RefspecPush(runner);

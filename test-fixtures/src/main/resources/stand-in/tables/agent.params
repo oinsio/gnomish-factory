@@ -1,5 +1,5 @@
 # The fake agent CLI and the paid-smoke recorder in front of the real one.
-# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
 
 [agent]
 # The fake agent CLI playing the scenario its per-run link is named after (FakeAgentSupport): one
@@ -22,34 +22,10 @@
 * export GNOME_OBSERVED_TIP @observed-tip
 * exec-sh steps/gnome-mid-round-commit.sh
 
-[agent-judged-by-claude-fake-judge-1]
-# The fake agent CLI: an invocation whose --model is claude-fake-judge-1 plays judge-verdict-pass, every other one
-# the scenario its link is named after (FakeAgentSupport).
-* export-name GNOMISH_FAKE_SCENARIO
-* export GNOMISH_FAKE_JUDGE_MODEL claude-fake-judge-1
-* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
-* exec-sh ../fake-agent/fake-agent.sh
-
-[agent-judged-by-claude-fake-judge-1-capturing]
-# The fake agent CLI: an invocation whose --model is claude-fake-judge-1 plays judge-verdict-pass, every other one
-# the scenario its link is named after; every argv is captured in the per-run log (FakeAgentSupport).
-* export-name GNOMISH_FAKE_SCENARIO
-* export GNOMISH_FAKE_JUDGE_MODEL claude-fake-judge-1
-* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
-* export GNOMISH_FAKE_CAPTURE_ARGV @log
-* exec-sh ../fake-agent/fake-agent.sh
-
-[agent-judged-by-judge-model]
-# The fake agent CLI: an invocation whose --model is judge-model plays judge-verdict-pass, every other one
-# the scenario its link is named after (FakeAgentSupport).
-* export-name GNOMISH_FAKE_SCENARIO
-* export GNOMISH_FAKE_JUDGE_MODEL judge-model
-* export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass
-* exec-sh ../fake-agent/fake-agent.sh
-
-[agent-judged-by-judge-model-capturing]
-# The fake agent CLI: an invocation whose --model is judge-model plays judge-verdict-pass, every other one
-# the scenario its link is named after; every argv is captured in the per-run log (FakeAgentSupport).
+[agent-judged]
+# The fake agent CLI: an invocation whose --model is judge-model (FakeAgentSupport.JUDGE_MODEL) plays
+# judge-verdict-pass, every other one the scenario its link is named after; every argv is captured in
+# the per-run log (FakeAgentSupport).
 * export-name GNOMISH_FAKE_SCENARIO
 * export GNOMISH_FAKE_JUDGE_MODEL judge-model
 * export GNOMISH_FAKE_JUDGE_SCENARIO judge-verdict-pass

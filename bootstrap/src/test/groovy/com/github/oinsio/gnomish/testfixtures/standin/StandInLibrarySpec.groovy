@@ -40,13 +40,15 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: preset #preset is a link onto the one script and one section whose rows parse"() {
+    def "FR24: preset #preset reaches the one script through the link its owner makes, and its rows parse"() {
         given:
         Path link = StandIn.preset(preset)
 
-        expect: 'a relative link onto the one script'
-        Files.readSymbolicLink(link).toString() == '../stand-in.sh'
+        expect: 'a link outside the library onto the one script, named after the preset'
+        Files.isSymbolicLink(link)
+        link.fileName.toString() == preset
         Files.isSameFile(link, StandIn.library().resolve('stand-in.sh'))
+        !link.toAbsolutePath().startsWith(StandIn.library().toAbsolutePath())
 
         and: 'one section, every row a known action with its arguments, every file it names in the library'
         def rows = StandIn.tables().rows(preset)
@@ -59,6 +61,9 @@ class StandInLibrarySpec extends Specification {
         }.findAll {
             it != '-' && !it.startsWith('@')
         }.every {
+            if (it.endsWith('#@name')) {
+                return Files.isRegularFile(StandIn.library().resolve(it - '#@name'))
+            }
             it.contains('#') ? StandIn.data(it - 'data/') != null : Files.isRegularFile(StandIn.library().resolve(it))
         }
 
@@ -66,12 +71,14 @@ class StandInLibrarySpec extends Specification {
         preset << presets()
     }
 
-    def "FR24: every section has its link, and no preset has two sections"() {
+    def "FR26: the library holds no link — a preset is a section, and no preset has two"() {
         given:
         List<String> sections = StandIn.tables().sections().values().flatten() as List<String>
 
         expect:
-        sections.toSorted() == presets()
+        Files.walk(StandIn.library()).withCloseable { walk ->
+            walk.filter { Files.isSymbolicLink(it) }.toList()
+        } == []
         sections.toSet().size() == sections.size()
     }
 
@@ -86,13 +93,19 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: every answer under data/ is one some preset's row names"() {
+    def "FR24: every answer under data/ is one some preset's row names — a #@name row names its whole file"() {
         given:
-        Set<String> named = StandInLibrarySpec.presets().collectMany { String preset ->
+        List<String> refs = StandInLibrarySpec.presets().collectMany { String preset ->
             StandIn.tables().rows(preset).collectMany { List<String> row ->
                 FILE_ARGUMENTS.getOrDefault(row[1], []).collect { row[2 + it] }
             }
-        }.findAll { it.startsWith('data/') }.collect { it - 'data/' } as Set
+        }.findAll { it.startsWith('data/') }.collect { it - 'data/' }
+        Set<String> byName = refs.findAll {
+            it.endsWith('#@name')
+        }.collect {
+            it - '#@name'
+        } as Set
+        Set<String> named = refs as Set
 
         expect:
         Files.list(StandIn.library().resolve('data')).withCloseable {
@@ -103,7 +116,9 @@ class StandInLibrarySpec extends Specification {
             }.collect {
                 "${file.fileName}#${it[1..-2]}".toString()
             }
-        }.findAll { !(it in named) } == []
+        }.findAll {
+            !(it in named) && !(it.substring(0, it.indexOf('#')) in byName)
+        } == []
     }
 
     def "FR24: no file of #dir holds a machine path"() {
@@ -150,7 +165,31 @@ class StandInLibrarySpec extends Specification {
         }
     }
 
-    def "FR24: the library holds no log — nothing ran a recording preset through its committed link"() {
+    def "FR26: a process name resolves to its process-table section first and to a committed script second"() {
+        given:
+        List<String> rows = StandIn.tables().sections().find { table, names ->
+            table.fileName.toString() == 'process.params'
+        }.value
+        List<String> scripts = Files.list(StandIn.library().resolve('process')).withCloseable { stream ->
+            stream.map { it.fileName.toString() - '.sh' }.toList()
+        }
+
+        expect: 'a section is handed out by its link, a script by its own path'
+        Files.isSameFile(StandIn.process('quick'), StandIn.library().resolve('stand-in.sh'))
+        StandIn.process('polite') == StandIn.library().resolve('process/polite.sh')
+
+        and: 'no name is both, so the order never hides a script'
+        rows.intersect(scripts) == []
+    }
+
+    def "FR26: the process table's rows behave as the scripts they replaced — an exit code, a beat, a stall"() {
+        expect:
+        answer(StandIn.process('quick')) == [exit: 3, stdout: '']
+        answer(StandIn.process('local')) == [exit: 7, stdout: '']
+        !start(StandIn.process('stall'), tempDir).waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    def "FR24: the library holds no log — nothing ran a recording preset through its own link"() {
         expect:
         Files.walk(StandIn.library()).withCloseable { walk ->
             walk.filter { it.fileName.toString().endsWith('.log') }.toList()
@@ -281,6 +320,20 @@ class StandInLibrarySpec extends Specification {
         answer(git, 'ls-remote', 'origin') == [exit: 2, stdout: 'abc\trefs/heads/main\n']
     }
 
+    def "FR26: a #@name answer is the one the per-run link is named after, refused through the preset's own link"() {
+        given:
+        Path git = StandIn.link(tempDir.resolve('fetch-fsck-refusal'), 'action-answer-by-name')
+
+        when:
+        def named = run(git, 'fetch', 'origin')
+        def own = run(StandIn.preset('action-answer-by-name'), 'fetch', 'origin')
+
+        then:
+        named == [exit: 1, stdout: '', stderr: StandIn.data('stderr-fetch#fetch-fsck-refusal')]
+        own.exit == 97
+        own.stderr.contains('#@name needs a per-run link')
+    }
+
     def "FR24: steps run in order before the terminal row — stderr, a delay, the spec's hook, a write"() {
         given:
         Path git = StandIn.recording(tempDir, 'action-steps')
@@ -315,7 +368,7 @@ class StandInLibrarySpec extends Specification {
         answer(link, 'version') == [exit: 0, stdout: 'probe=probe-name argv=-c core.askPass= -c a.b=c version\n']
     }
 
-    def "FR24: export-name through the committed link is refused — its name is not a value"() {
+    def "FR24: export-name through the preset's own link is refused — its name is not a value"() {
         when:
         def result = run(StandIn.preset('action-export-name'), 'version')
 
@@ -342,17 +395,17 @@ class StandInLibrarySpec extends Specification {
         result.stderr.contains('no row matches: -c core.askPass= -c a.b=c status')
     }
 
-    def "FR24: a recording preset run through its committed link is refused and writes nothing into the library"() {
-        given: 'the committed path, which StandIn.git refuses to hand out'
-        Path committed = StandIn.preset('action-record')
+    def "FR24: a recording preset run through its own link is refused and writes nothing beside it"() {
+        given: 'the preset\'s own link, which StandIn.git refuses to hand out'
+        Path own = StandIn.preset('action-record')
 
         when:
-        def result = run(committed, 'status')
+        def result = run(own, 'status')
 
         then:
         result.exit == 97
         result.stderr.contains('@log needs a per-run link')
-        !Files.exists(StandIn.log(committed))
+        !Files.exists(StandIn.log(own))
     }
 
     def "NFR-P2: after the script's first run, a preset starts in milliseconds through a fresh link"() {
@@ -371,11 +424,9 @@ class StandInLibrarySpec extends Specification {
         runs.every { it <Duration.ofMillis(500) }
     }
 
-    /** Every preset of the library: the names of its committed links. */
+    /** Every preset of the library: the sections of its tables. */
     static List<String> presets() {
-        Files.list(StandIn.library().resolve('links')).withCloseable { stream ->
-            stream.map { it.fileName.toString() }.sorted().toList()
-        }
+        (StandIn.tables().sections().values().flatten() as List<String>).toSorted()
     }
 
 

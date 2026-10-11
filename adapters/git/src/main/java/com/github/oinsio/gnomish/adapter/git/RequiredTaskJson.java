@@ -37,7 +37,7 @@ final class RequiredTaskJson {
      * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's own
      *     diagnosis of why
      */
-    static CommittedTaskJson atTipOf(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+    static CommittedTaskJson atTipOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
         return CommittedTaskJson.parse(documentAtTip(runner, worktree, taskId, event, EnvelopePaths.TASK_JSON_PATH));
     }
 
@@ -50,7 +50,7 @@ final class RequiredTaskJson {
      * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
      */
     static UntrustedText documentAtTip(
-            GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event, String path) {
+            GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event, String path) {
         GitCommandResult result = new GitShowTip(runner, worktree, GitObjects.HEAD).showAtTip(path);
         if (result.exitCode() != 0) {
             throw new GitTaskRepositoryException(

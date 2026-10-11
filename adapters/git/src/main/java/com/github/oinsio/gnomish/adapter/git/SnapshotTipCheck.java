@@ -61,10 +61,10 @@ public final class SnapshotTipCheck {
      */
     private static final Pattern STAGE_ROUND_TOKEN = Pattern.compile("(.+)#([0-9]+) ([0-9a-f]+)");
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
 
-    public SnapshotTipCheck(GitProcessRunner runner, Path cloneDir) {
+    public SnapshotTipCheck(GitRunner runner, Path cloneDir) {
         this.runner = runner;
         this.cloneDir = cloneDir;
     }

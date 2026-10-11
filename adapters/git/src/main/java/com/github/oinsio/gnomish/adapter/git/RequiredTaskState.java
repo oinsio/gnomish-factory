@@ -29,7 +29,7 @@ final class RequiredTaskState {
      * @return the state the branch tip records
      * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
      */
-    static TaskState atTipOf(GitProcessRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+    static TaskState atTipOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
         return StateJsonMapper.fromDto(StateJsonMapper.readDto(
                 RequiredTaskJson.documentAtTip(runner, worktree, taskId, event, EnvelopePaths.STATE_JSON_PATH)));
     }

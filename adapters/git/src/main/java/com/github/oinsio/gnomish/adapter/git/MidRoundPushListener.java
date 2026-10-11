@@ -84,7 +84,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
      *     TaskIdSanitizer#branchName}) and the suppressor its failure streaks live in
      */
     public MidRoundPushListener(
-            GitProcessRunner runner, Path worktreeRoot, String stage, int round, MidRoundPollContext context) {
+            GitRunner runner, Path worktreeRoot, String stage, int round, MidRoundPollContext context) {
         this.push = new BestEffortPush(runner);
         this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, context.branch());
         this.worktreeRoot = worktreeRoot;

@@ -38,7 +38,7 @@ public final class OriginReconciliation {
     /**
      * @param runner the git subprocess seam; never null
      */
-    public OriginReconciliation(GitProcessRunner runner) {
+    public OriginReconciliation(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);
         this.push = new RefspecPush(runner);

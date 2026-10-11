@@ -248,6 +248,22 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
     // Following that established precedent, this spec invokes the private static canonicalize
     // directly via reflection with a path that does not exist, forcing the IOException branch, and
     // asserts the fallback value it returns — not null — killing the NullReturnValsMutator mutant.
+    // D8: a mutating command whose cwd is no repository cannot resolve a clone; the lock is keyed
+    //     by the directory itself, and git's own refusal comes back as a result. Pinned here since
+    //     design D27 of supervise-daemon-loops-and-embed-dashboard moved the specs above the runner
+    //     — which used to reach this path through stand-ins — onto the runner's port.
+    def "D8: a mutating command outside any repository runs under the directory's own key and returns git's refusal"() {
+        given: 'a directory that is no git repository'
+        def notARepo = java.nio.file.Files.createDirectories(tempDir.resolve('not-a-repo'))
+
+        when:
+        def result = runner.run(notARepo, 'push', 'origin', 'main')
+
+        then:
+        result.exitCode() != 0
+        result.stderr().contains('not a git repository')
+    }
+
     def "D8: canonicalize falls back to the normalized absolute path (never null) when the real path cannot be resolved"() {
         given:
         def method = GitProcessRunner.getDeclaredMethod('canonicalize', Path)

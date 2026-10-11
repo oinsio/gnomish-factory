@@ -74,12 +74,15 @@ import org.slf4j.LoggerFactory;
  * the elapsed time and the configured deadline belongs to it (NFR-O1). Callers add their own line
  * about what the command was for.
  *
+ * <p>The one production {@link GitRunner}: every holder in this package takes the role, and only
+ * the composition root names this class (design D27 of supervise-daemon-loops-and-embed-dashboard).
+ *
  * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
  * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text; FR6, FR8 of
  * own-git-transfer-argv.
  */
 @UntrustedParser
-public final class GitProcessRunner {
+public final class GitProcessRunner implements GitRunner {
 
     private static final Logger log = LoggerFactory.getLogger(GitProcessRunner.class);
 
@@ -150,7 +153,8 @@ public final class GitProcessRunner {
      * @throws UnownedTransferException if {@code args} names a transfer subcommand, which only the
      *     owner's value may carry (see {@link #run(Path, GitTransfer)})
      */
-    GitCommandResult run(Path cwd, String... args) {
+    @Override
+    public GitCommandResult run(Path cwd, String... args) {
         if (GitNetworkCommands.isTransfer(args)) {
             throw new UnownedTransferException(GitNetworkCommands.subcommand(args));
         }
@@ -170,7 +174,8 @@ public final class GitProcessRunner {
      * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
      */
-    GitCommandResult run(Path cwd, GitTransfer transfer) {
+    @Override
+    public GitCommandResult run(Path cwd, GitTransfer transfer) {
         return runClassified(cwd, transfer.argv().toArray(String[]::new), transfer.environment());
     }
 

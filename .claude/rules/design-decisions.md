@@ -119,7 +119,9 @@ stand-in `git` script per test and macOS assessed each new file at 1–4 s. The 
 the per-test generation and made the generated file cheap to run. Two rounds of "why generate at
 all?" from the user reduced it to committed scripts and committed presets with, at most, one
 symbolic link per test (ADR 0015). The mechanism that was being optimized should have been the
-first alternative rejected.
+first alternative rejected. The second pass asked the same question of what was left: the
+committed links were a registry that alternative zero removes too, since the owner can make one
+on first use for what a committed one cost (ADR 0015, as amended).
 
 So, before a `Dn` describes how a per-X artefact is produced, the decision lists what in that
 artefact actually varies per X; an alternative that removes the production step is written first,

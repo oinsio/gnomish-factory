@@ -29,9 +29,9 @@ import java.nio.file.Path;
  */
 public final class TaskBranchCreator {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
-    public TaskBranchCreator(GitProcessRunner runner) {
+    public TaskBranchCreator(GitRunner runner) {
         this.runner = runner;
     }
 

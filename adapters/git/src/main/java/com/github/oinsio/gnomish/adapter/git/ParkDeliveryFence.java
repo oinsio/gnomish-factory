@@ -48,7 +48,7 @@ public final class ParkDeliveryFence {
     /**
      * @param runner the git subprocess seam; never null
      */
-    public ParkDeliveryFence(GitProcessRunner runner) {
+    public ParkDeliveryFence(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.localTip = new LocalBranchTip(runner);
         this.remoteTip = new RemoteBranchTip(runner);

@@ -58,7 +58,7 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
     def "M3: escalate, decide and resume, retry, pause, resume, complete — three processes with empty stdin exit 10, 11, 0"() {
         given: 'a published clone bound to the host, and the fake agent as gnome and judge'
         Path clone = E2eGitTree.publishedCopyOf('e2e')
-        def agent = FakeAgentSupport.wrapperFor('decision-then-plain', 'judge-model', 'judge-verdict-pass')
+        def agent = FakeAgentSupport.wrapperFor('decision-then-plain', true)
         def returnPath = new TerminalOutcomeRender.ReturnPath(clone, TASK)
 
         when: 'process 1 runs the task with stdin closed'

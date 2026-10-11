@@ -62,7 +62,7 @@ public final class UsageHistoryWalker {
 
     private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final TaskBranchLocator locator;
 
     /**
@@ -70,7 +70,7 @@ public final class UsageHistoryWalker {
      * @param retry the infrastructure budget the branch lookup is re-attempted under, the
      *     composition root's own (FR18 of supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public UsageHistoryWalker(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    public UsageHistoryWalker(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.locator = new TaskBranchLocator(runner, retry);
     }

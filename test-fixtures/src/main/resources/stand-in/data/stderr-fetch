@@ -1,0 +1,9 @@
+# What a refused fetch prints on stderr, each exactly as git prints it. A `data/stderr-fetch#@name`
+# row (`action-answer-by-name`) takes one by its per-run link's name, so every answer here is one some
+# link may be named after.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[fetch-fsck-refusal]
+error: object 4fac338eb7ab83e161dedf7bd70faca576de5c41: missingEmail: invalid author/committer line - missing email
+fatal: fsck error in packed object
+fatal: index-pack failed

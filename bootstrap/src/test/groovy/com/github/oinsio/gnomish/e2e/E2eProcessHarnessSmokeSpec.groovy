@@ -26,7 +26,7 @@ class E2eProcessHarnessSmokeSpec extends AbstractE2eProcessSpec {
 
     def "M1: a real gnomish run process launches, is driven by the fake agent, and returns an exit code"() {
         given: 'the fake agent as gnome and judge, and no stdin at all'
-        def agent = FakeAgentSupport.wrapperFor('plain-round', 'judge-model', 'judge-verdict-pass')
+        def agent = FakeAgentSupport.wrapperFor('plain-round', true)
         List<String> script = []
 
         when:

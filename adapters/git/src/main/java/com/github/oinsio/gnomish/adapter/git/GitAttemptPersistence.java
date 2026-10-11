@@ -66,7 +66,7 @@ import java.nio.file.Path;
  */
 public final class GitAttemptPersistence implements AttemptPersistence {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path worktreeRoot;
     private final String branch;
     private final RoundBoundaryCheck roundBoundaryCheck;
@@ -83,7 +83,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
      * @param epochs the tenure the round commits are stamped with (FR13); {@link
      *     ClaimEpochSource#NONE} where no claim is held
      */
-    public GitAttemptPersistence(GitProcessRunner runner, Path worktreeRoot, String taskId, ClaimEpochSource epochs) {
+    public GitAttemptPersistence(GitRunner runner, Path worktreeRoot, String taskId, ClaimEpochSource epochs) {
         this.runner = runner;
         this.epochs = epochs;
         this.worktreeRoot = worktreeRoot;

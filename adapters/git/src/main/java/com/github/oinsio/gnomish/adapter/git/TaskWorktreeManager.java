@@ -30,7 +30,7 @@ import java.nio.file.Path;
 @UntrustedParser
 public final class TaskWorktreeManager {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final RegisteredClone clone;
 
     /**
@@ -38,7 +38,7 @@ public final class TaskWorktreeManager {
      * @param clone the registered clone that owns the repository — {@code git worktree add} runs in
      *     its path — and whose worktree folder the task worktrees are created in
      */
-    public TaskWorktreeManager(GitProcessRunner runner, RegisteredClone clone) {
+    public TaskWorktreeManager(GitRunner runner, RegisteredClone clone) {
         this.runner = runner;
         this.clone = clone;
     }

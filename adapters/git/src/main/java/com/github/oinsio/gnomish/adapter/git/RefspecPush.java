@@ -20,9 +20,9 @@ import java.nio.file.Path;
 @SuppressWarnings("ClassCanBeRecord")
 final class RefspecPush {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
-    RefspecPush(GitProcessRunner runner) {
+    RefspecPush(GitRunner runner) {
         this.runner = runner;
     }
 

@@ -17,10 +17,11 @@ import spock.lang.TempDir
  * rather than negative. Both outcomes are Undeliverable, which the engine resolves as CannotVerify
  * — an infrastructure failure that burns no stage attempt — never a quality failure.
  *
- * <p>Driven through the runner's git-binary seam ({@link StallingGitFixture}); the real-remote
+ * <p>Driven through the runner's port ({@link StalledPush}, design D27 of
+ * supervise-daemon-loops-and-embed-dashboard); the real-remote
  * behaviour of the same class lives in {@link RemoteAttemptDeliverySpec}.
  */
-class RemoteAttemptDeliveryTerminationSpec extends Specification implements StallingGitFixture {
+class RemoteAttemptDeliveryTerminationSpec extends Specification {
 
     private static final String BRANCH = 'gnomish/task-1'
 
@@ -30,10 +31,11 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
     def "FR7: a timed-out push is reported as unknown, not as a delivery failure, and is not re-attempted"() {
         given:
         AttemptDelivery.Outcome outcome = null
+        def push = StalledPush.timingOut()
 
         when:
         def events = capture {
-            outcome = delivery(Duration.ofSeconds(2)).ensureDelivered(workspace())
+            outcome = delivery(push).ensureDelivered(workspace())
         }
 
         // FR12 of harden-logging-observability: the Undeliverable outcome below carries this same
@@ -55,13 +57,14 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         !undeliverable.details().contains('failed twice')
 
         and: 'one push: a second full deadline on a proven-unresponsive remote establishes nothing'
-        pushAttempts(tempDir) == 1
+        push.pushAttempts() == 1
     }
 
     def "FR7: an interrupted push is reported as unknown and is not re-attempted"() {
         given:
         AttemptDelivery.Outcome outcome = null
-        def delivery = delivery(Duration.ofSeconds(30))
+        def push = StalledPush.blocking()
+        def delivery = delivery(push)
 
         when:
         def events = capture {
@@ -69,7 +72,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
                 outcome = delivery.ensureDelivered(workspace())
             })
             runner.start()
-            awaitPushStarted(tempDir)
+            push.awaitPushStarted(runner)
             runner.interrupt()
             runner.join(Duration.ofSeconds(30).toMillis())
         }
@@ -88,7 +91,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         undeliverable.details().contains('was interrupted before it finished')
 
         and:
-        pushAttempts(tempDir) == 1
+        push.pushAttempts() == 1
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
@@ -102,11 +105,11 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         }
     }
 
-    private RemoteAttemptDelivery delivery(Duration deadline) {
-        new RemoteAttemptDelivery(new GitProcessRunner(stallingGit(tempDir).toString(), deadline), tempDir, BRANCH)
+    private RemoteAttemptDelivery delivery(StalledPush push) {
+        new RemoteAttemptDelivery(push.git, tempDir, BRANCH)
     }
 
-    /** A workspace carrying a commit the stand-in's empty ls-remote answer never confirms. */
+    /** A workspace carrying a commit origin's empty ls-remote answer never confirms. */
     private static RecordedAttemptCommitWorkspace workspace() {
         def ref = ClosedRounds.at('2222222222222222222222222222222222222222')
         new RecordedAttemptCommitWorkspace(ref)

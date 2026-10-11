@@ -47,9 +47,9 @@ final class RemoteBranchTip {
         UNKNOWN
     }
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
-    RemoteBranchTip(GitProcessRunner runner) {
+    RemoteBranchTip(GitRunner runner) {
         this.runner = runner;
     }
 

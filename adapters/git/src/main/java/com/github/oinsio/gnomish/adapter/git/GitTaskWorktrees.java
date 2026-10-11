@@ -25,7 +25,7 @@ import java.nio.file.Path;
  */
 public final class GitTaskWorktrees implements TaskWorktreeGit {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final TaskWorktreeCleanup cleanup;
     private final ClaimEpochSource epochs;
 
@@ -35,7 +35,7 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
      *     harden-task-branch-contract), and the one the reconciler's automatic discard is gated on
      *     (FR8); {@link ClaimEpochSource#NONE} where no claim is held
      */
-    public GitTaskWorktrees(GitProcessRunner runner, ClaimEpochSource epochs) {
+    public GitTaskWorktrees(GitRunner runner, ClaimEpochSource epochs) {
         this.runner = runner;
         this.cleanup = new TaskWorktreeCleanup(runner);
         this.epochs = epochs;

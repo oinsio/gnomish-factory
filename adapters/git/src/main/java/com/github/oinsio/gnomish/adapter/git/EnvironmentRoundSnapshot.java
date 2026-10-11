@@ -39,7 +39,7 @@ public final class EnvironmentRoundSnapshot {
     private static final String SNAPSHOT_SCRIPT = "git add -A && git -c core.hooksPath= commit --allow-empty -m \"$1\"";
 
     private final TaskExecutionEnvironment environment;
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
     private final String branch;
     private final CurrentRound rounds;
@@ -53,11 +53,7 @@ public final class EnvironmentRoundSnapshot {
      *     the harvested snapshot closes that round in it
      */
     public EnvironmentRoundSnapshot(
-            TaskExecutionEnvironment environment,
-            GitProcessRunner runner,
-            Path cloneDir,
-            String taskId,
-            CurrentRound rounds) {
+            TaskExecutionEnvironment environment, GitRunner runner, Path cloneDir, String taskId, CurrentRound rounds) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;

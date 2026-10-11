@@ -26,12 +26,12 @@ public final class OriginRemote {
     /** The remote name the factory pushes to and reads from; the factory never uses another. */
     static final String NAME = "origin";
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
     /**
      * @param runner the git subprocess seam; never null
      */
-    public OriginRemote(GitProcessRunner runner) {
+    public OriginRemote(GitRunner runner) {
         this.runner = runner;
     }
 

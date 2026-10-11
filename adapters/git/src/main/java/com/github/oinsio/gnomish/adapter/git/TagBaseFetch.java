@@ -26,7 +26,7 @@ import java.util.Optional;
  *
  * <p>Implements FR6, FR9 of add-base-ref-resolution.
  */
-record TagBaseFetch(GitProcessRunner runner) {
+record TagBaseFetch(GitRunner runner) {
 
     /**
      * Brings tag {@code name} into {@code refs/tags/} and reads back the commit it points at.

@@ -1,10 +1,5 @@
 # Git stand-ins that answer from a committed file: listings, versions, origin URLs.
-# Grammar: the header of ../stand-in.sh. One section per preset; its link is ../links/<section>.
-
-[blank-url]
-# Every invocation succeeds and prints a blank line: a configured origin whose URL reads blank
-# (OriginRemoteSpec).
-* answer data/common#empty-line 0
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
 
 [for-each-ref-noisy]
 # for-each-ref answers a blank line and an out-of-prefix ref ahead of the real task ref; the rest is

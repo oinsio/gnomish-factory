@@ -3,22 +3,25 @@ package com.github.oinsio.gnomish.testfixtures.standin
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The one owner of stand-in binaries in test sources (ADR 0015, design D23 of
  * supervise-daemon-loops-and-embed-dashboard): a spec names a committed preset and receives the
  * path production runs in place of {@code git}, {@code docker}, the agent CLI or a hook. A preset
- * of the library {@code test-fixtures/src/main/resources/stand-in/} is a symbolic link
- * {@code links/<preset>} to {@code stand-in.sh} and a section of one of the tables under
- * {@code tables/} (several presets to a table, {@link StandInTables}); the script's header is the
- * grammar of the rows.
+ * of the library {@code test-fixtures/src/main/resources/stand-in/} is a section of one of the
+ * tables under {@code tables/} (several presets to a table, {@link StandInTables}); the script's
+ * header is the grammar of the rows.
  *
- * <p>Nothing here writes an executable file. A preset is handed out by its committed link. The one
- * per-run artefact is a symbolic link to that link ({@link #recording}, {@link #link}): what the
- * stand-in records lands beside it as {@code <link>.log}, and what a spec writes beside it as
- * {@code <link>.<name>} is what the table's {@code @name} rows read. A link is not a new executable
- * file, so the operating system's first-run assessment of the script is paid once per checkout,
- * not once per test.
+ * <p>Nothing here writes an executable file. A preset reaches the script by a symbolic link named
+ * after it, {@code <jvm-dir>/<preset> -> stand-in.sh}, which this owner creates on first use in a
+ * directory it makes once per JVM and removes at exit (design D26: the link carries nothing the
+ * table does not, so it is derived, never committed; one directory per JVM, so PIT's minions and
+ * parallel test JVMs never share one). The one per-run artefact is a symbolic link to that link
+ * ({@link #recording}, {@link #link}): what the stand-in records lands beside it as
+ * {@code <link>.log}, and what a spec writes beside it as {@code <link>.<name>} is what the table's
+ * {@code @name} rows read. A link is not a new executable file — the operating system's first-run
+ * assessment is keyed by the script's inode — so it is paid once per checkout, not once per test.
  *
  * <p>The library is found through the {@code standInDir} system property, which
  * {@code stand-in-conventions} hands every test JVM and every PIT minion: the scripts run from the
@@ -31,10 +34,13 @@ final class StandIn {
     /** The system property naming the library directory. */
     static final String DIR_PROPERTY = 'standInDir'
 
+    /** The link of each preset handed out in this JVM, by preset. */
+    private static final Map<String, Path> LINKS = new ConcurrentHashMap<>()
+
     private StandIn() {
     }
 
-    /** The library: {@code stand-in.sh}, {@code links/}, {@code tables/}, {@code data/}, {@code steps/}, {@code process/}. */
+    /** The library: {@code stand-in.sh}, {@code tables/}, {@code data/}, {@code steps/}, {@code process/}. */
     static Path library() {
         String dir = System.getProperty(DIR_PROPERTY)
         if (dir == null || dir.isBlank()) {
@@ -49,39 +55,52 @@ final class StandIn {
         new StandInTables(library())
     }
 
-    /** The committed link of preset {@code id}, the path every run of it goes through. */
+    /**
+     * The link of preset {@code id} in this JVM's directory, {@code <jvm-dir>/<id> -> stand-in.sh},
+     * created on first use: the path every run of the preset goes through. The preset must have a
+     * section in exactly one table.
+     */
     static Path preset(String id) {
-        Path link = library().resolve('links').resolve(id)
-        if (!Files.isSymbolicLink(link)) {
-            throw new IllegalArgumentException("no stand-in preset '${id}' under ${library()}")
+        LINKS.computeIfAbsent(id) {
+            if (!(id in tables().sections().values().flatten())) {
+                throw new IllegalArgumentException("no stand-in preset '${id}' under ${library()}")
+            }
+            tables().tableOf(id)
+            Path link = Files.createSymbolicLink(Holder.DIR.resolve(id), library().resolve('stand-in.sh').toAbsolutePath())
+            link.toFile().deleteOnExit()
+            link
         }
-        link
     }
 
-    /** A git preset, run through its committed link: it neither records nor reads per-run files. */
+    /** A git preset, run through its JVM link: it neither records nor reads per-run files. */
     static Path git(String id) {
-        committed(id, 'git', 'action')
+        selected(id, 'git', 'action')
     }
 
-    /** A docker preset, run through its committed link. */
+    /** A docker preset, run through its JVM link. */
     static Path docker(String id) {
-        committed(id, 'docker')
+        selected(id, 'docker')
     }
 
-    /** An agent preset, run through its committed link. */
+    /** An agent preset, run through its JVM link. */
     static Path agent(String id) {
-        committed(id, 'agent')
+        selected(id, 'agent')
     }
 
     /**
-     * A committed process-shaped fake under the library's {@code process/} directory: a child that
-     * stalls, ignores a signal, forks or keeps a pipe open — behaviour that is the subject of the
-     * supervisor specs and that no table expresses, so each is one reviewed script, run as it is.
+     * A process-shaped fake the supervisor specs run as it is: a section of the {@code process}
+     * table when a row states its behaviour (an exit code, a delay, a stall), and otherwise a
+     * committed script under the library's {@code process/} directory — a child that ignores a
+     * signal, forks or keeps a pipe open, behaviour that is the subject of those specs and that no
+     * table expresses, so each is one reviewed script. The table is asked first.
      */
     static Path process(String name) {
+        if (name in tables().sections().values().flatten()) {
+            return selected(name, 'process')
+        }
         Path script = library().resolve('process').resolve("${name}.sh")
         if (!Files.isExecutable(script)) {
-            throw new IllegalArgumentException("no committed process fake '${name}' under ${library()}")
+            throw new IllegalArgumentException("no process fake '${name}' in the process table or under ${library()}/process")
         }
         script
     }
@@ -153,7 +172,7 @@ final class StandIn {
         beside(link, 'log')
     }
 
-    private static Path committed(String id, String... kinds) {
+    private static Path selected(String id, String... kinds) {
         Path link = preset(id)
         StandInTables tables = tables()
         if (!(tables.kindOf(id) in kinds)) {
@@ -164,5 +183,17 @@ final class StandIn {
             + 'take it through StandIn.recording or StandIn.link')
         }
         link
+    }
+
+    /** This JVM's directory of preset links, made on first use; removed at exit after its links. */
+    private static final class Holder {
+
+        static final Path DIR = directory()
+
+        private static Path directory() {
+            Path dir = Files.createTempDirectory('stand-in-')
+            dir.toFile().deleteOnExit()
+            dir
+        }
     }
 }

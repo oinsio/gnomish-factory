@@ -45,7 +45,7 @@ import java.nio.file.Path;
 @UntrustedParser
 final class RoundBoundaryCheck {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path worktreeRoot;
     private final String expectedBranch;
 
@@ -55,7 +55,7 @@ final class RoundBoundaryCheck {
      * @param expectedBranch the task branch name gnome commits must still be on, e.g. {@link
      *     TaskIdSanitizer#branchName}
      */
-    RoundBoundaryCheck(GitProcessRunner runner, Path worktreeRoot, String expectedBranch) {
+    RoundBoundaryCheck(GitRunner runner, Path worktreeRoot, String expectedBranch) {
         this.runner = runner;
         this.worktreeRoot = worktreeRoot;
         this.expectedBranch = expectedBranch;

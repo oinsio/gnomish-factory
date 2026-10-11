@@ -57,7 +57,7 @@ final class RefreshedTip {
      *     fetch did
      */
     static BaseRefreshOutcome of(
-            GitProcessRunner runner, Path cloneDir, GitCommandResult fetch, String ref, String name, BaseRefKind kind) {
+            GitRunner runner, Path cloneDir, GitCommandResult fetch, String ref, String name, BaseRefKind kind) {
         if (fetch.termination() != Termination.EXITED || fetch.exitCode() != 0) {
             return undelivered(runner, cloneDir, fetch, name, kind);
         }
@@ -77,7 +77,7 @@ final class RefreshedTip {
      * detail, is the evidence.
      */
     private static BaseRefreshOutcome undelivered(
-            GitProcessRunner runner, Path cloneDir, GitCommandResult fetch, String name, BaseRefKind kind) {
+            GitRunner runner, Path cloneDir, GitCommandResult fetch, String name, BaseRefKind kind) {
         // Asked first, before the probe (design D4 of own-git-transfer-argv): a refused object is a
         // fact about origin's history, decided from the stderr alone, so no round trip is spent
         // learning whether origin answers — it did.

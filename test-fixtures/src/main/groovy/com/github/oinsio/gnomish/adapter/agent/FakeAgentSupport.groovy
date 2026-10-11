@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
  * script must be invoked as {@code sh <path>} (see {@code fake-agent/README.md})
  * and needs {@code GNOMISH_FAKE_SCENARIO} set before it runs. One committed
  * stand-in preset does both for every scenario — {@code agent}, or
- * {@code agent-judged-by-<judgeModel>} for the two-role binary — reached through a
+ * {@code agent-judged} for the two-role binary — reached through a
  * symbolic link named after the scenario, which the preset reads as
  * {@code GNOMISH_FAKE_SCENARIO}; so a real {@code CliStageExecutor} (running the
  * round through the task environment port) can invoke it as a plain binary path
@@ -38,6 +38,16 @@ import java.util.concurrent.ConcurrentHashMap
  * <p>Not production code: test-support only, never PIT-mutated.
  */
 final class FakeAgentSupport {
+
+    /**
+     * The one judge model the two-role binary routes to {@link #JUDGE_SCENARIO}: a judge check
+     * a judged spec declares names this model (FR26 of supervise-daemon-loops-and-embed-dashboard:
+     * one preset, so one name).
+     */
+    static final String JUDGE_MODEL = 'judge-model'
+
+    /** The scenario a judge vote of the two-role binary plays: a pass verdict. */
+    static final String JUDGE_SCENARIO = 'judge-verdict-pass'
 
     /** One link per (preset, scenario) per JVM, named after the scenario; removed at exit. */
     private static final Map<String, String> LINKS = new ConcurrentHashMap<>()
@@ -56,16 +66,14 @@ final class FakeAgentSupport {
 
     /**
      * One binary for both roles (FR6, D4 of remove-interactive-console): an invocation whose
-     * {@code --model} is {@code judgeModel} plays {@code judgeScenario}, every other invocation
+     * {@code --model} is {@link #JUDGE_MODEL} plays {@link #JUDGE_SCENARIO}, every other invocation
      * plays {@code scenario}.
      *
      * @param scenario the scenario an executor round plays
-     * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
-     * @param judgeScenario the scenario a judge vote plays
      * @return {@link FactoryProperties} whose {@code agentCliBinary} is the two-role binary
      */
-    static FactoryProperties propertiesFor(String scenario, String judgeModel, String judgeScenario) {
-        propertiesOver(wrapperFor(scenario, judgeModel, judgeScenario))
+    static FactoryProperties propertiesJudged(String scenario) {
+        propertiesOver(wrapperFor(scenario, true))
     }
 
     /**
@@ -74,12 +82,11 @@ final class FakeAgentSupport {
      * {@code --factory.agent-cli-binary=<path>}.
      *
      * @param scenario the scenario an executor round plays
-     * @param judgeModel the judge check's model id, or {@code null} for an executor-only binary
-     * @param judgeScenario the scenario a judge vote plays, or {@code null} with {@code judgeModel}
+     * @param judged whether a {@link #JUDGE_MODEL} invocation plays {@link #JUDGE_SCENARIO}
      * @return the absolute path of the scenario's link to the preset
      */
-    static String wrapperFor(String scenario, String judgeModel = null, String judgeScenario = null) {
-        String preset = presetFor(judgeModel, judgeScenario)
+    static String wrapperFor(String scenario, boolean judged = false) {
+        String preset = judged ? 'agent-judged' : 'agent'
         LINKS.computeIfAbsent("${preset}/${scenario}".toString()) {
             Path dir = Files.createDirectories(LINK_ROOT.resolve(preset))
             dir.toFile().deleteOnExit()
@@ -90,8 +97,8 @@ final class FakeAgentSupport {
     }
 
     /**
-     * A binary that plays {@code judgeScenario} when the invocation's {@code --model} is
-     * {@code judgeModel} and {@code executorScenario} otherwise, and records every invocation's
+     * A binary that plays {@link #JUDGE_SCENARIO} when the invocation's {@code --model} is
+     * {@link #JUDGE_MODEL} and {@code executorScenario} otherwise, and records every invocation's
      * argv through the fake's {@code GNOMISH_FAKE_CAPTURE_ARGV} hook — the shape an E2E spec needs
      * to drive an executor round and a judge vote through one binary and then read back what each
      * actually launched with (M1 of fix-operator-blockers). The preset sets every variable itself,
@@ -99,15 +106,11 @@ final class FakeAgentSupport {
      * the executor scenario, beside {@code argvCapture}, whose log the capture is.
      *
      * @param executorScenario the scenario an executor round plays
-     * @param judgeModel the judge check's model id, which selects {@code judgeScenario}
-     * @param judgeScenario the scenario a judge vote plays
      * @param argvCapture the host file every invocation's argv lands in: {@code <executorScenario>.log}
      * @return {@link FactoryProperties} whose {@code agentCliBinary} is the per-run link
      */
-    static FactoryProperties propertiesCapturingArgv(
-            String executorScenario, String judgeModel, String judgeScenario, Path argvCapture) {
-        propertiesOver(StandIn.link(linkBeside(argvCapture, executorScenario),
-                "${presetFor(judgeModel, judgeScenario)}-capturing").toString())
+    static FactoryProperties propertiesCapturingArgv(String executorScenario, Path argvCapture) {
+        propertiesOver(StandIn.link(linkBeside(argvCapture, executorScenario), 'agent-judged').toString())
     }
 
     /**
@@ -139,16 +142,6 @@ final class FakeAgentSupport {
             throw new IllegalArgumentException("a fake-agent scenario is a plain name, not '${scenario}'")
         }
         scenario
-    }
-
-    private static String presetFor(String judgeModel, String judgeScenario) {
-        if ((judgeModel == null) != (judgeScenario == null)) {
-            throw new IllegalArgumentException('judgeModel and judgeScenario are set together or not at all')
-        }
-        if (judgeModel != null && judgeScenario != 'judge-verdict-pass') {
-            throw new IllegalArgumentException("no agent preset judges with ${judgeScenario}; add one to the stand-in library")
-        }
-        judgeModel == null ? 'agent' : "agent-judged-by-${judgeModel}"
     }
 
     private static Path linkRoot() {

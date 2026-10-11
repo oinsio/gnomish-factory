@@ -33,12 +33,12 @@ public final class FactoryCloneHardening {
     /** Name of the empty hooks directory created under the clone's git dir. */
     static final String EMPTY_HOOKS_DIR = "gnomish-empty-hooks";
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
     /**
      * @param runner the git subprocess runner
      */
-    public FactoryCloneHardening(GitProcessRunner runner) {
+    public FactoryCloneHardening(GitRunner runner) {
         this.runner = runner;
     }
 

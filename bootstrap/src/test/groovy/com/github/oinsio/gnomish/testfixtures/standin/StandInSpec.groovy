@@ -8,21 +8,29 @@ import spock.lang.TempDir
 /**
  * FR24 of supervise-daemon-loops-and-embed-dashboard (design D23, ADR 0015): {@link StandIn}, the
  * one owner of stand-in binaries in test sources, hands out committed presets and creates nothing
- * but symbolic links to them — never an executable file.
+ * but symbolic links — never an executable file; a preset's own link is made once per JVM (D26).
  */
 class StandInSpec extends Specification {
 
     @TempDir
     Path tempDir
 
-    def "FR24: a preset is handed out by its committed link, its answers by reference"() {
+    def "FR24: a preset is handed out by one link per JVM, made outside the library, its answers by reference"() {
+        given:
+        Path git = StandIn.git('action-answer')
+
         expect:
-        StandIn.git('action-answer') == StandIn.library().resolve('links/action-answer')
+        StandIn.git('action-answer') == git
+        Files.isSymbolicLink(git)
+        git.fileName.toString() == 'action-answer'
+        Files.readSymbolicLink(git) == StandIn.library().resolve('stand-in.sh').toAbsolutePath()
+        !git.toAbsolutePath().startsWith(StandIn.library().toAbsolutePath())
+        StandIn.preset('action-broken').parent == git.parent
         StandIn.data('common#url') == 'https://example.invalid/repo.git\n'
-        StandIn.data('common#empty-line') == '\n'
+        StandIn.data('stderr#warn') == 'warn\n'
     }
 
-    def "FR24: a preset that records, reads per-run files or takes its link's name is not handed out by its committed link"() {
+    def "FR24: a preset that records, reads per-run files or takes its link's name is not handed out by its own link"() {
         when:
         StandIn.git(preset)
 

@@ -66,7 +66,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
     private static final Logger log = LoggerFactory.getLogger(MidRoundHarvestListener.class);
 
     private final TaskExecutionEnvironment environment;
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
     private final BranchPush push;
     private final String branch;
@@ -89,7 +89,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
      */
     public MidRoundHarvestListener(
             TaskExecutionEnvironment environment,
-            GitProcessRunner runner,
+            GitRunner runner,
             Path cloneDir,
             InstantSource clock,
             Duration minInterval,

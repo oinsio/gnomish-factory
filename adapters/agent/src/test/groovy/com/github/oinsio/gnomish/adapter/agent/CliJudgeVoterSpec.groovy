@@ -41,7 +41,7 @@ class CliJudgeVoterSpec extends Specification {
     }
 
     private static VerifyCheck.Judge checkFor(Map<String, Object> settings = [:], String criteriaFile = 'criteria.md') {
-        new VerifyCheck.Judge(criteriaFile, 'claude-fake-judge-1', settings, 1)
+        new VerifyCheck.Judge(criteriaFile, FakeAgentSupport.JUDGE_MODEL, settings, 1)
     }
 
     // Delegates to FakeAgentSupport#defaultTaskContext, the single owner of this fixture value.
@@ -180,7 +180,7 @@ class CliJudgeVoterSpec extends Specification {
     // the judge scenario — so a fake-agent journey can carry a judge check without a console.
     def "one binary drives an executor round and a judge vote, selected by the judge model"() {
         given: 'one fake-agent binary routing the judge check\'s model to a pass verdict'
-        def properties = FakeAgentSupport.propertiesFor('plain-round', 'claude-fake-judge-1', 'judge-verdict-pass')
+        def properties = FakeAgentSupport.propertiesJudged('plain-round')
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def law = PipelineLaw.ofContent([
             'criteria.md' : 'The output must be correct.',

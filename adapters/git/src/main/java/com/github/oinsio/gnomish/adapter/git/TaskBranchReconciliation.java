@@ -20,7 +20,7 @@ final class TaskBranchReconciliation {
     private final LocalBranchTip localTip;
     private final OriginReconciliation reconciliation;
 
-    TaskBranchReconciliation(GitProcessRunner runner) {
+    TaskBranchReconciliation(GitRunner runner) {
         this.localTip = new LocalBranchTip(runner);
         this.reconciliation = new OriginReconciliation(runner);
     }

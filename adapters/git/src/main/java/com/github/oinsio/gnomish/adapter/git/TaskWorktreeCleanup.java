@@ -31,12 +31,12 @@ public final class TaskWorktreeCleanup {
 
     private static final Logger log = LoggerFactory.getLogger(TaskWorktreeCleanup.class);
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
     /**
      * @param runner the git subprocess runner
      */
-    public TaskWorktreeCleanup(GitProcessRunner runner) {
+    public TaskWorktreeCleanup(GitRunner runner) {
         this.runner = runner;
     }
 

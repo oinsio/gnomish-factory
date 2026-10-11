@@ -41,7 +41,7 @@ import java.util.Optional;
  */
 public final class GitTaskStore implements TaskStoreGit {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final UsageHistoryWalker usageWalker;
     private final ClaimEpochSource epochs;
     private final GitInfrastructureRetry retry;
@@ -58,8 +58,7 @@ public final class GitTaskStore implements TaskStoreGit {
      *     push's suppressor measures on — the composition root's one (FR18, FR20 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskStore(
-            GitProcessRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry, InstantSource clock) {
+    public GitTaskStore(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry, InstantSource clock) {
         this.runner = runner;
         this.usageWalker = new UsageHistoryWalker(runner, retry);
         this.epochs = epochs;

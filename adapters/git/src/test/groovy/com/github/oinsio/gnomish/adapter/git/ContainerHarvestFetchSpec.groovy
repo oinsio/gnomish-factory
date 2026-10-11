@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
-import com.github.oinsio.gnomish.testfixtures.standin.StandIn
-import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
+import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.file.Path
-import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -16,55 +14,68 @@ import spock.lang.TempDir
  * failure). The argv is the transfer owner's for a container source (FR4, FR6
  * of own-git-transfer-argv), pinned here as the exact list so a flag that
  * leaves the owner's common set is seen at this consumer too. The real
- * box-to-factory transport is exercised by the Docker-gated specs; here a
- * recording fake git binary pins the exact argv without a daemon.
+ * box-to-factory transport is exercised by the Docker-gated specs; here the
+ * runner's port is scripted in process ({@link ScriptedGit}, design D27 of
+ * supervise-daemon-loops-and-embed-dashboard), which pins the exact argv the
+ * fetch hands the runner and the classification of each answer without a daemon.
  */
-class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixture {
+class ContainerHarvestFetchSpec extends Specification {
 
     @TempDir
     Path tempDir
 
     // The runner prefixes its own stall-detection options onto a fetch (FR4 of
-    // bound-subprocess-commands); what this spec pins is the caller's half of the argv, which
-    // follows them.
+    // bound-subprocess-commands), pinned by the runner's own specs; what this spec pins is the
+    // caller's half of the argv, exactly as the fetch hands it to the runner.
     def "FR5, FR4, FR6: fetch runs the owner's container argv — common set, ext transport, unforced refspec"() {
-        given: 'a fake git binary that records its argv'
-        def git = StandIn.recording(tempDir, 'record-argv')
+        given: 'a git whose fetch succeeds'
+        def git = new ScriptedGit().answer(['fetch'], 0)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir)
-                .fetch('gnomish-box-k7', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('gnomish-box-k7', 'gnomish/task-1')
 
         then: 'the owner\'s exact list: no protocol.ext.allow — the allowlist alone enables ext'
-        StandInLog.argv(StandInLog.blocks(git).last()) == stallDetectionArgv() + [
-            '-c',
-            'fetch.recurseSubmodules=no',
-            '-c',
-            'submodule.recurse=false',
-            '-c',
-            'fetch.prune=false',
-            '-c',
-            'maintenance.auto=false',
-            '-c',
-            'gc.auto=0',
-            '-c',
-            'fetch.fsckObjects=true',
-            '-c',
-            'transfer.fsckObjects=true',
-            '-c',
-            'fetch.fsck.badTimezone=ignore',
-            '-c',
-            'fetch.fsck.missingSpaceBeforeDate=ignore',
-            '-c',
-            'fetch.fsck.zeroPaddedFilemode=ignore',
-            'fetch',
-            '--no-tags',
-            '--no-recurse-submodules',
-            '--no-write-fetch-head',
-            '--end-of-options',
-            'ext::docker exec -i gnomish-box-k7 %S /gnomish/work',
-            'gnomish/task-1:gnomish/task-1',
+        git.calls()*.argv == [
+            [
+                '-c',
+                'fetch.recurseSubmodules=no',
+                '-c',
+                'submodule.recurse=false',
+                '-c',
+                'fetch.prune=false',
+                '-c',
+                'maintenance.auto=false',
+                '-c',
+                'gc.auto=0',
+                '-c',
+                'fetch.fsckObjects=true',
+                '-c',
+                'transfer.fsckObjects=true',
+                '-c',
+                'fetch.fsck.badTimezone=ignore',
+                '-c',
+                'fetch.fsck.missingSpaceBeforeDate=ignore',
+                '-c',
+                'fetch.fsck.zeroPaddedFilemode=ignore',
+                'fetch',
+                '--no-tags',
+                '--no-recurse-submodules',
+                '--no-write-fetch-head',
+                '--end-of-options',
+                'ext::docker exec -i gnomish-box-k7 %S /gnomish/work',
+                'gnomish/task-1:gnomish/task-1',
+            ]
         ]
+    }
+
+    /** What git prints for each refusal the fetch classifies, as git prints it. */
+    private static final String REWRITE = '! [rejected] gnomish/task-1 -> gnomish/task-1 (non-fast-forward)\n'
+    private static final String DAEMON_DOWN = 'docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n'
+    private static final String NOT_A_REPOSITORY = "fatal: '/gnomish/work' does not appear to be a git repository\n"
+
+    /** A git whose one fetch fails with {@code stderr}. */
+    private static ScriptedGit refusing(String stderr) {
+        new ScriptedGit().answer(['fetch'], 128, '', stderr)
     }
 
     // FR5, NFR-R1, UX3 of own-git-transfer-argv (design D4): asked before the daemon and
@@ -72,10 +83,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     //     report naming the message id and the object.
     def "FR5: an object refused by validation is a boundary violation naming the object, never a plain failure"() {
         given:
-        def git = StandIn.git('harvest-fsck-refused')
+        def git = refusing(FetchRefusalSpec.FETCH_REFUSAL)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         def ex = thrown(HarvestRefusedException)
@@ -88,10 +99,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: a non-fast-forward refusal surfaces as the history-rewrite violation"() {
         given:
-        def git = StandIn.git('harvest-rejected')
+        def git = refusing(REWRITE)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         def ex = thrown(HarvestRefusedException)
@@ -101,10 +112,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "NFR-R1: a daemon outage during harvest classifies as infrastructure, never a harvest failure"() {
         given:
-        def git = StandIn.git('harvest-daemon-down')
+        def git = refusing(DAEMON_DOWN)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         thrown(DockerUnavailableException)
@@ -112,10 +123,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: any other fetch failure is a plain harvest failure carrying git's stderr"() {
         given:
-        def git = StandIn.git('harvest-not-a-repository')
+        def git = refusing(NOT_A_REPOSITORY)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         def ex = thrown(HarvestFailedException)
@@ -124,10 +135,10 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
 
     def "FR5: a clean fetch throws nothing"() {
         given:
-        def git = StandIn.recording(tempDir, 'record-argv')
+        def git = new ScriptedGit().answer(['fetch'], 0)
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString()), tempDir).fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         noExceptionThrown()
@@ -137,23 +148,15 @@ class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixt
     // transcript, and git writes its non-fast-forward refusal at the very end — so the transcript
     // must not be classified at all. It is a plain harvest failure, named as unfinished.
     def "FR7: a fetch cut off on its deadline is an unfinished harvest, not a rewrite refusal"() {
-        given: 'a git that never returns, against a deadline far shorter than its stall'
-        def git = stallingGit()
+        given: 'a fetch the runner cut off on its deadline, its partial transcript ending in a rewrite refusal'
+        def git = new ScriptedGit().answer(['fetch'], GitCommandResult.of(143, '', REWRITE, Termination.TIMED_OUT))
 
         when:
-        new ContainerHarvestFetch(new GitProcessRunner(git.toString(), Duration.ofSeconds(2)), tempDir)
-                .fetch('box', 'gnomish/task-1')
+        new ContainerHarvestFetch(git, tempDir).fetch('box', 'gnomish/task-1')
 
         then:
         def ex = thrown(HarvestFailedException)
         ex.message.contains('was cut off on its deadline')
         !ex.message.contains('history was rewritten')
-    }
-
-    // Long enough that the 2s deadline is the only thing that can end this fetch, short enough
-    // that a mutant which drops the bound fails on the stand-in's own exit instead of hanging. Only
-    // the fetch stalls: the runner's clone-key resolution in front of it answers at once.
-    private Path stallingGit() {
-        StallingGit.git('stall-fetch')
     }
 }

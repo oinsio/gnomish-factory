@@ -1,10 +1,12 @@
 #!/bin/sh
-# The committed stand-in binary (ADR 0015). Every preset is a symbolic link `links/<preset>` to
-# this one script and a section `[<preset>]` in one of the tables `tables/*.params`, several
-# presets to a file. A spec runs the link itself, or a per-run link to it that StandIn creates
-# where it needs a name, a log or files beside it; either way the preset is the committed link's
-# name. Files the rows name are paths relative to this library: `data/` answers, `steps/` shell run
-# through sh. One row per line; `#` starts a comment line:
+# The committed stand-in binary (ADR 0015). Every preset is a section `[<preset>]` in one of the
+# tables `tables/*.params`, several presets to a file, and reaches this script through a symbolic
+# link named after it, which StandIn creates once per JVM (`<jvm-dir>/<preset> -> stand-in.sh`). A
+# spec runs that link itself, or a per-run link to it that StandIn creates where it needs a name, a
+# log or files beside it; either way the preset is the name of the last link before this script,
+# and the library is this script's own directory. Files the rows name are paths relative to this
+# library: `data/` answers, `steps/` shell run through sh. One row per line; `#` starts a comment
+# line:
 #
 #   <match> <action> [arguments]
 #
@@ -12,6 +14,8 @@
 # against the argument at its position after the leading `-c <name>=<value>` pairs are dropped
 # (`rev-parse,--git-common-dir`, `ls-remote,origin,HEAD`). The word `@name` stands for the per-run
 # link's own name, literally: one preset refuses or stalls whichever subcommand its link is named.
+# Kept in sync with ScriptedGit (adapters/git specs, the in-process fake of the git runner's port):
+# both drop the leading `-c` pairs and match each prefix word as a glob at its position.
 #
 # Rows are tried top to bottom. A step runs and the table goes on; a terminal action ends the run.
 #   steps:    record [VAR ...]   append a block to `$0.log`: argv=<all arguments>, arg.N=<the Nth>
@@ -39,35 +43,46 @@
 #
 # <file> is a path relative to this library (`steps/…`), one answer of a sectioned file under
 # `data/` (`data/stderr#unable-to-access`: the lines of `[unable-to-access]`, up to the blank line
-# before the next section), `-` for nothing, or `@name`: the
-# per-run file `$0.name` beside a per-run link, which the spec writes. <code> is a number or
+# before the next section; `data/stderr-fetch#@name`: the answer the per-run link is named after,
+# so one preset serves every answer of a file), `-` for nothing, or `@name`: the per-run file
+# `$0.name` beside a per-run link, which the spec writes. <code> is a number or
 # `@name`, read from that file. <word> is taken as written, or `@name` for that file's path.
 #
 # A preset writes only beside a per-run link — its `$0.log`, or a `$0.name` a `write` row names:
-# a `record`, `write`, `export-name` or `@name` (in any column) reached through the committed link is
-# refused (exit 97), so the library stays read-only and a link's name is never mistaken for a value.
+# a `record`, `write`, `export-name` or `@name` (in any column) reached through the preset's own link
+# is refused (exit 97), so a run writes only into the test's directory and a link's name is never
+# mistaken for a value.
 # A preset with no section, or in two, and an invocation no row matches are broken presets, not
 # defaults: exit 97 with the reason on stderr.
+#
+# STAND_IN_REACHED, when set, names a file each matched row appends `<preset> <row>` to (rows
+# counted from 1 within the section, comments and blanks left out) — the library's own spec reads
+# it to find a row no invocation reaches. No consumer sets it.
 
+# Walks the chain from $0 to this script: the last link before it names the preset, and `direct` is
+# set when that link is $0 itself — a run through the preset's own link, not a per-run one.
 invoked=$0
-target=$(readlink "$invoked")
-case "$target" in
-    '')
-        echo "stand-in: $invoked is not a link to a preset" >&2
-        exit 97
-        ;;
-    */stand-in.sh | stand-in.sh)
-        direct=yes
-        links=$(dirname "$invoked")
-        preset=${invoked##*/}
-        ;;
-    *)
-        direct=
-        links=$(dirname "$target")
-        preset=${target##*/}
-        ;;
-esac
-library="$links/.."
+current=$invoked
+direct=yes
+while :; do
+    target=$(readlink "$current")
+    case "$target" in
+        '')
+            echo "stand-in: $invoked is not a link to a preset" >&2
+            exit 97
+            ;;
+        /*) ;;
+        *) target="$(dirname "$current")/$target" ;;
+    esac
+    case "$target" in
+        */stand-in.sh) break ;;
+    esac
+    direct=
+    current=$target
+done
+preset_dir=$(dirname "$current")
+preset=${current##*/}
+library=$(cd "$(dirname "$target")" && pwd -P)
 table="[$preset]"
 found=$(grep -l -x -F "[$preset]" "$library"/tables/*.params)
 case "$found" in
@@ -105,6 +120,10 @@ file_of() {
         *#*)
             resolved="$library/${1%%#*}"
             answer=${1#*#}
+            if [ "$answer" = "@name" ]; then
+                [ -z "$direct" ] || broken "#@name needs a per-run link"
+                answer=${invoked##*/}
+            fi
             grep -q -x -F "[$answer]" "$resolved" 2>/dev/null || broken "$1 names no answer"
             ;;
         *) resolved="$library/$1" ;;
@@ -227,7 +246,7 @@ path_without_self() {
     saved=$IFS
     IFS=:
     for entry in $PATH; do
-        if [ "$entry" != "$own" ] && [ "$entry" != "$links" ]; then
+        if [ "$entry" != "$own" ] && [ "$entry" != "$preset_dir" ]; then
             kept="${kept:+$kept:}$entry"
         fi
     done
@@ -239,14 +258,19 @@ exec 3<<EOF
 $section
 EOF
 recorded=
+row_number=0
 while IFS= read -r row <&3; do
     case "$row" in
         '' | '#'*) continue ;;
     esac
+    row_number=$((row_number + 1))
     read -r match action args <<EOF
 $row
 EOF
     matches "$match" "$@" || continue
+    if [ -n "${STAND_IN_REACHED:-}" ]; then
+        printf '%s %s\n' "$preset" "$row_number" >> "$STAND_IN_REACHED"
+    fi
     case "$action" in
         record) record "$args" "$@" ;;
         stdout) file_of "$args"; emit ;;

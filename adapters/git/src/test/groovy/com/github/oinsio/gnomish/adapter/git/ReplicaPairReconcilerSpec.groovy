@@ -8,8 +8,6 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import com.github.oinsio.gnomish.testfixtures.standin.StandIn
-import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -298,18 +296,39 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         tip(env.clone, "refs/heads/${branchName}") == originTip
     }
 
+    /** What git says when the ref swap loses to another writer. */
+    private static final String CANNOT_LOCK_REF = 'error: cannot lock ref'
+
+    /** What git says when the working-tree resync cannot take the index. */
+    private static final String LOCK_INDEX = 'fatal: could not lock the index'
+
+    /**
+     * A git over two unrelated tips — the local one all {@code a}, origin's tracking ref all
+     * {@code b}, no common ancestor — whose fetch succeeds; the rows after it decide the swap.
+     */
+    private static ScriptedGit diverged(ScriptedGit git = new ScriptedGit()) {
+        git.answer(['fetch'], 0)
+        .answer(['merge-base'], 1)
+        .answer([
+            'rev-parse',
+            '--verify',
+            '--quiet',
+            'refs/remotes/*'
+        ], 0, 'b' * 40 + '\n')
+        .answer(['rev-parse'], 0, 'a' * 40 + '\n')
+    }
+
     def "FR8: a local tip that keeps moving loses the compare-and-swap and is never overwritten blindly"() {
         given: 'a git whose ref swap always loses, standing in for a second writer on the branch'
-        def losingSwapGit = StandIn.recording(tempDir, 'reconcile-swap-loses')
-        def clone = initWorkingRepo(tempDir, 'clone-cas-loser')
-        commit(clone, 'a.txt', 'first')
+        def losingSwapGit = diverged(new ScriptedGit().answer(['update-ref'], 1, '', CANNOT_LOCK_REF + '\n'))
+        def clone = tempDir
 
         and: 'a sink for the lines it emits on its way to refusing'
         List<ILoggingEvent> events = []
 
         when:
         capture(events) {
-            ReplicaPairReconciler.forWorktree(new GitProcessRunner(losingSwapGit.toString()), clone, underTenure)
+            ReplicaPairReconciler.forWorktree(losingSwapGit, clone, underTenure)
             .reconcile('PROJ-1', branchName)
         }
 
@@ -319,10 +338,10 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         ex.message.contains('second writer')
 
         and: "the diagnosis carries git's own account of the losing swap, not only the assertion"
-        ex.message.contains(StandIn.data('stderr#cannot-lock-ref').trim())
+        ex.message.contains(CANNOT_LOCK_REF)
 
         and: 'it spent exactly the bounded passes trying, not one more'
-        StandInLog.blocks(losingSwapGit).size() == 3
+        losingSwapGit.calls(['update-ref']).size() == 3
 
         and: 'FR14, FR15: every lost pass leaves one coded WARN naming the task and the pass number'
         def lost = events.findAll {
@@ -343,12 +362,10 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
     def "FR8: a losing swap that said nothing is named as such in the second-writer diagnosis"() {
         given: 'a losing-swap git whose update-ref fails silently'
-        def clone = initWorkingRepo(tempDir, 'clone-cas-loser-silent')
-        commit(clone, 'a.txt', 'first')
+        def git = diverged(new ScriptedGit().answer(['update-ref'], 1))
 
         when:
-        ReplicaPairReconciler.forWorktree(
-                new GitProcessRunner(StandIn.git('reconcile-swap-loses-silently').toString()), clone, underTenure)
+        ReplicaPairReconciler.forWorktree(git, tempDir, underTenure)
                 .reconcile('PROJ-1', branchName)
 
         then:
@@ -362,10 +379,14 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     // tip, where salvage reads it as the interrupted round's work and commits it straight back.
     def "FR8: a working-tree resync that fails refuses the reconciliation instead of reporting success"() {
         given: 'a git that swaps the diverged ref but cannot finish the resync'
-        def clone = initWorkingRepo(tempDir, "clone-${failing}-fails")
+        def git = diverged(new ScriptedGit()
+                .answer([failing], 1, '', LOCK_INDEX + '\n')
+                .answer(['reset'], 0)
+                .answer(['clean'], 0)
+                .answer(['update-ref'], 0))
 
         when:
-        ReplicaPairReconciler.forWorktree(new GitProcessRunner(StandIn.link(tempDir.resolve(failing), 'reconcile-diverged-fails').toString()), clone, underTenure)
+        ReplicaPairReconciler.forWorktree(git, tempDir, underTenure)
                 .reconcile('PROJ-1', branchName)
 
         then: 'the failure is named, with the branch, both tips and the remedy'
@@ -374,7 +395,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         ex.message.contains('a' * 40)
         ex.message.contains('b' * 40)
         ex.message.contains("git ${command}")
-        ex.message.contains(StandIn.data('stderr#lock-index').trim())
+        ex.message.contains(LOCK_INDEX)
         ex.message.contains('resume the task')
 
         where:

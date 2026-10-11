@@ -21,11 +21,11 @@ import org.jspecify.annotations.Nullable;
  */
 final class ResumeBaseResolution {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final OriginRemote origin;
     private final BaseRefresh refresh;
 
-    ResumeBaseResolution(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    ResumeBaseResolution(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.origin = new OriginRemote(runner);
         this.refresh = new BaseRefresh(runner, retry);

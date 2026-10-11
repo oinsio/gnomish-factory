@@ -21,9 +21,9 @@ import java.nio.file.Path;
 @SuppressWarnings("ClassCanBeRecord")
 final class OriginProbe {
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
-    OriginProbe(GitProcessRunner runner) {
+    OriginProbe(GitRunner runner) {
         this.runner = runner;
     }
 

@@ -43,7 +43,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     private static final Duration MID_ROUND_MIN_INTERVAL = Duration.ofSeconds(30);
 
     private final EnvironmentLease lease;
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final Path cloneDir;
     private final String taskId;
     private final String branch;
@@ -61,7 +61,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      */
     public SandboxRoundEnvironmentSource(
             EnvironmentLease lease,
-            GitProcessRunner runner,
+            GitRunner runner,
             Path cloneDir,
             String taskId,
             CurrentRound rounds,

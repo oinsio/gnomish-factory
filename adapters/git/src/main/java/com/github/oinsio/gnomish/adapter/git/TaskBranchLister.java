@@ -59,10 +59,10 @@ public final class TaskBranchLister {
     private static final String LOCAL_PREFIX = "refs/heads/gnomish/";
     private static final String REMOTE_PREFIX = "refs/remotes/origin/gnomish/";
 
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
     private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
 
-    public TaskBranchLister(GitProcessRunner runner) {
+    public TaskBranchLister(GitRunner runner) {
         this.runner = runner;
     }
 

@@ -32,7 +32,7 @@ import java.util.Optional;
 public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
     private final RoundEnvironmentSource host;
-    private final GitProcessRunner runner;
+    private final GitRunner runner;
 
     /**
      * Shared by every round of this task (FR4 of harden-logging-observability, design D4): the
@@ -51,7 +51,7 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
      * @param runner the git subprocess runner the listeners poll and push through; never null
      * @param clock the time source the task's push-failure suppressor measures on; never null
      */
-    public MidRoundPushRounds(RoundEnvironmentSource host, GitProcessRunner runner, InstantSource clock) {
+    public MidRoundPushRounds(RoundEnvironmentSource host, GitRunner runner, InstantSource clock) {
         this.host = host;
         this.runner = runner;
         this.pushSuppressor = RepeatSuppressor.withDefaultRollUp(clock);

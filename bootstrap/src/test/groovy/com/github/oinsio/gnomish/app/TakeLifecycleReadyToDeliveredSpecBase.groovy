@@ -47,7 +47,7 @@ abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification imple
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
-    private static final String JUDGE_MODEL = 'claude-fake-judge-1'
+    private static final String JUDGE_MODEL = FakeAgentSupport.JUDGE_MODEL
 
     @TempDir
     Path tempDir
@@ -119,7 +119,7 @@ tracker:
     }
 
     private FactoryProperties fakeAgent() {
-        FakeAgentSupport.propertiesCapturingArgv('plain-round', JUDGE_MODEL, 'judge-verdict-pass', argvCapture)
+        FakeAgentSupport.propertiesCapturingArgv('plain-round', argvCapture)
     }
 
     protected static boolean carriesPair(List<String> argv, String flag, String value) {

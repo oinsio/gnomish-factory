@@ -17,10 +17,11 @@ import spock.lang.TempDir
  * committed: the rewrite lands a cursorless {@code state.json} and the lifecycle commit that
  * follows makes the loss permanent.
  *
- * <p>Driven through the runner's git-binary seam: a stand-in {@code git} that stalls on the read,
- * interrupted mid-wait — the outcome no real repository can be asked to produce.
+ * <p>Driven through the runner's port ({@link StalledReadGit}, design D27 of
+ * supervise-daemon-loops-and-embed-dashboard): a scripted git that blocks on the read until
+ * interrupted — the outcome no real repository can be asked to produce.
  */
-class StateFileWriteTerminationSpec extends Specification implements StallingReadGitFixture {
+class StateFileWriteTerminationSpec extends Specification implements StalledReadGit {
 
     @TempDir
     Path tempDir
@@ -28,7 +29,7 @@ class StateFileWriteTerminationSpec extends Specification implements StallingRea
     def "NFR-R2: an interrupted cursor read is unavailability, never a cursorless rewrite"() {
         given: 'a lifecycle write whose tip read stalls'
         Path worktree = Files.createDirectories(tempDir.resolve('worktree'))
-        def runner = new GitProcessRunner(stallingGit(tempDir).toString())
+        def runner = stallingGit(tempDir)
 
         when: 'the read is cut off before git exits'
         Throwable thrown = null
@@ -40,7 +41,7 @@ class StateFileWriteTerminationSpec extends Specification implements StallingRea
             }
         })
         writer.start()
-        awaitReadStarted(tempDir)
+        awaitReadStarted(tempDir, writer)
         writer.interrupt()
         writer.join(Duration.ofSeconds(30).toMillis())
 
