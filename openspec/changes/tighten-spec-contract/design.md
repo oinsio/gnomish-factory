@@ -3,7 +3,8 @@
 ## Context
 
 See proposal.md — Why. The facts the decisions rest on, all verified on 2026-10-09 against
-OpenSpec 1.14.1 and a scratch project:
+OpenSpec 1.14.1 and a scratch project (counts refreshed on 2026-10-11, after the archives of
+`kill-expensive-mutants` and `supervise-daemon-loops-and-embed-dashboard`):
 
 - OpenSpec measures a requirement as every non-blank, non-fenced line between
   `### Requirement:` and the first `####` heading; a physical line matching `**Key**:` is
@@ -13,15 +14,18 @@ OpenSpec 1.14.1 and a scratch project:
   `**Implements**:` and `**Notes**:` survive `openspec archive` verbatim.
 - `openspec validate <change> --strict` checks the length of `ADDED` requirements only; the
   merged main spec is checked by `validate --specs --strict` at the archive stage.
-- 508 requirements in 48 main specs, all traced by `<!-- implements … -->`; 266 exceed the
-  limit without the comments; 138 of those carry `SHALL`/`MUST` past the 500th character,
-  111 carry explanation only, 17 carry `never`/`only`/`at most` wording. 1 369 scenarios;
-  four features in `TakeBareAutoSpec` already carry an informal `// Scenario:` comment; tests
-  otherwise cite `FR` ids.
-- 28 unarchived changes; 18 carry 62 `MODIFIED` requirement headings; 22 carry a long `ADDED`
+- 537 requirements in 50 main specs, all traced by `<!-- implements … -->`; about 271 exceed
+  the limit without the comments (266 on 2026-10-09, of which 138 carried `SHALL`/`MUST` past
+  the 500th character, 111 explanation only, 17 `never`/`only`/`at most` wording). 1 457
+  scenarios; twenty informal `// Scenario:` comments already sit in three `:bootstrap` specs
+  (`TakeBareAutoSpec` 11, `TakeDispositionSpec` 6, `serve/TakeSlotRunnerSpec` 3), none in the
+  `<spec-id> / <title>` form; tests otherwise cite `FR` ids.
+- 26 unarchived changes; 17 carry 77 `MODIFIED` requirement headings; 24 carry a long `ADDED`
   requirement. The OpenSpec `MODIFIED` merge is replace-only (`delta-specs.md`).
 - The project's build-side gates are Gradle tasks in `build-logic` with a functional spec each
-  (`TestTimeInjectionCheck`, `ParameterCountLimit`, `TestEnvironmentHygiene`); architecture
+  (`TestTimeInjectionCheck`, `TestEnvironmentHygiene`, `LogExpectationGateCheck`; the
+  parameter-count gate is an Error Prone check in the `build-checks` included build, only its
+  functional spec lives in `build-logic`); architecture
   specs in `:bootstrap` hold allowlists in code and assert them reached.
 
 ## Goals / Non-Goals
@@ -72,7 +76,7 @@ when one feature covers several scenarios); the checker requires both directions
 rename leave a dangling marker that excuses nothing. The spec id prefix is needed because titles
 repeat across capabilities (`Works`, `Empty queue`). *Alternative rejected:* naming the Spock
 feature exactly as the scenario — Spock feature names are prose chosen for the test's reader,
-and 1 369 renames would touch every spec file for no behavior; an annotation — Groovy specs
+and 1 457 renames would touch every spec file for no behavior; an annotation — Groovy specs
 could carry one, but shell and functional-test fixtures could not.
 
 **D5 — One checker class, three callers.** `SpecContractCheck` in `build-logic`, a cacheable
@@ -132,9 +136,11 @@ the list; writing tests and fixes until time runs out — unbounded, with no rec
 left.
 
 **Sync surfaces.** `scripts/check-spec-contract.sh` and the two stage YAML verification commands
-are launchers only (one line each invoking the task); no rule lives in them. The four informal
-`// Scenario:` comments in `TakeBareAutoSpec` are converted to the marker form in task 5.3, so
-no second spelling of the link remains. The three documents that describe the format
+are launchers only (one line each invoking the task); no rule lives in them. The twenty informal
+`// Scenario:` comments in `TakeBareAutoSpec`, `TakeDispositionSpec` and `TakeSlotRunnerSpec` are
+converted to the marker form in task 5.3, and the checker reports any `// Scenario:` line that is
+not in the `<spec-id> / <title>` form as a malformed marker, so no second spelling of the link
+remains or returns. The three documents that describe the format
 (`traceability.md`, `delta-specs.md`, `rules.specs` in `openspec/config.yaml`) are prose, each
 with one example, and the checker is what keeps them honest. No code of this change implements
 a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is touched.
@@ -144,7 +150,7 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
 | Owner                           | Value (type)                                             | Consumers                                                                                                                                                                                                  | Old way removed                                                                                                                                                                                                                             | Enforced by                                                                                                                  |
 |---------------------------------|----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | The `**Implements**:` line (D1) | the requirement's traceability ids, as one metadata line | every requirement under `openspec/specs/`; every requirement in `openspec/changes/<unarchived>/specs/`; `traceability.md`, `delta-specs.md`, `rules.specs` (the three places that tell an author the form) | `<!-- implements … -->` in Requirement/Scenario specs, deleted outside the archive by the generated deltas (D3) and the queue rework (D8); the YAML-like `# implements` form is not replaced — it lives in blocks OpenSpec does not measure | `SpecContractCheck`: a comment-form hit in the scanned trees is a failure; a requirement with zero or two lines is a failure |
-| The scenario title (D4)         | the identity of a scenario, as `<spec-id> / <title>`     | the spec's `#### Scenario:` heading; the `// Scenario:` marker in the test that exercises it; the exemption list entry for a scenario verified elsewhere                                                   | the informal `// Scenario:` comments in `TakeBareAutoSpec` (converted); the implicit "the FR id covers it" link (kept for FR traceability, no longer the only link)                                                                         | `SpecContractCheck` in both directions, exemption list asserted reached                                                      |
+| The scenario title (D4)         | the identity of a scenario, as `<spec-id> / <title>`     | the spec's `#### Scenario:` heading; the `// Scenario:` marker in the test that exercises it; the exemption list entry for a scenario verified elsewhere                                                   | the informal `// Scenario:` comments in `TakeBareAutoSpec`, `TakeDispositionSpec` and `TakeSlotRunnerSpec` (converted; a malformed `// Scenario:` line is a finding); the implicit "the FR id covers it" link (kept for FR traceability, no longer the only link)                                                                         | `SpecContractCheck` in both directions, exemption list asserted reached                                                      |
 | `SpecContractCheck` (D5)        | the verdict on the project's spec-contract rules         | root `check`; `scripts/check-spec-contract.sh`; the fix-artifacts and archive stage verification commands                                                                                                  | none existed; the launchers are forbidden to hold a rule by the functional spec, which runs the script and the stage command against the same fixture tree and expects the same findings                                                    | `SpecContractCheckFunctionalSpec`                                                                                            |
 
 ## Risks / Trade-offs
@@ -167,7 +173,7 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
 - [A scenario's "test" is a functional spec, an architecture spec or a shell fixture] → all
   live under a scanned tree (`src/test`, `build-logic/src/functionalTest`); the marker is a
   comment and works in every language there.
-- [The queue rework touches 28 changes other work may be editing] → sequenced first, and each
+- [The queue rework touches 26 changes other work may be editing] → sequenced first, and each
   change's rework is one task validated by `openspec validate <change> --strict`.
 
 ## Migration Plan

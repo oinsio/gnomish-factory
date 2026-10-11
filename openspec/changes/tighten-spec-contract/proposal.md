@@ -5,9 +5,9 @@
 OpenSpec 1.14.1 (installed by Homebrew on 2026-10-08) raised its "requirement text is longer
 than 500 characters" finding from `INFO` to `WARNING`, which `--strict` treats as an error. The
 factory's archive stage runs `openspec validate --specs --strict` and its fix-artifacts stage runs
-`openspec validate <change> --strict`, so every task now stops at one of them: 43 of the 48 main
-specs fail (305 findings over 508 requirements), and 22 of the 28 queued changes carry a long
-`ADDED` requirement of their own. Task #92 (`kill-expensive-mutants`) was the first to escalate
+`openspec validate <change> --strict`, so every task now stops at one of them: 44 of the 50 main
+specs fail (307 findings over 537 requirements), and 24 of the 26 queued changes carry a long
+`ADDED` requirement of their own (counts of 2026-10-11). Task #92 (`kill-expensive-mutants`) was the first to escalate
 and was finished by hand.
 
 The limit is not configurable and is the upstream's deliberate direction, and it agrees with
@@ -17,7 +17,7 @@ behaviors no scenario states at all — and a scenario no test exercises is a co
 checks. So this change does not pin the CLI and does not trim text to fit. It moves the
 traceability comments out of the measured text, shortens every requirement to the one behavior
 it names, turns the normative remainder into scenarios or requirements of their own, and makes
-"every scenario has a test" a gate rather than an intention — for all 1 369 scenarios the
+"every scenario has a test" a gate rather than an intention — for all 1 457 scenarios the
 specs hold today.
 
 ## What Changes
@@ -43,7 +43,7 @@ specs hold today.
 - **MODIFIED** — the rules that tell authors and gnomes how to write specs
   (`traceability.md`, `delta-specs.md`, `testing.md`, `rules.specs` in the OpenSpec
   configuration, `fix-uncommitted.md`) and the developer guide.
-- **MODIFIED** — the 28 queued changes under `openspec/changes/`: their deltas are rewritten to
+- **MODIFIED** — the 26 queued changes under `openspec/changes/`: their deltas are rewritten to
   the new format, their `MODIFIED` requirements layered on this change's text
   (`delta-specs.md`, "Overlapping MODIFIED requirements"), and their long `ADDED` requirements
   shortened by the same rules.
@@ -114,8 +114,9 @@ specs hold today.
   `ADDED` requirement with its own scenario. The decision for every such sentence is recorded in
   the change's inventory table before the edit is made.
 - **FR5 — Scenario ↔ test link.** For every `#### Scenario: <title>` under a requirement of a
-  main spec `<spec-id>`, at least one file under a module's `src/test` (or `build-logic`'s
-  functional-test tree) contains the marker `// Scenario: <spec-id> / <title>` with the title
+  main spec `<spec-id>`, at least one file under a test tree — every module's `src/test`
+  (`*/src/test`, `*/*/src/test`), the test trees of the `build-checks` included build
+  (`build-checks/*/src/test`) and `build-logic/src/functionalTest` — contains the marker `// Scenario: <spec-id> / <title>` with the title
   verbatim; and every marker in those trees names a scenario that exists. A scenario verified
   by something that is not a test is listed in the checker's exemption list with the mechanism
   that verifies it; the list is asserted reached, so a stale entry fails.
@@ -195,16 +196,16 @@ specs hold today.
 
 ## Success Metrics
 
-- **M1** — `openspec validate --specs --strict`: 48 of 48 main specs pass (baseline 5 of 48,
-  2026-10-09, OpenSpec 1.14.1).
+- **M1** — `openspec validate --specs --strict`: 50 of 50 main specs pass (baseline 6 of 50,
+  2026-10-11, OpenSpec 1.14.1).
 - **M2** — `grep -rn "<!-- implements" openspec/specs openspec/changes --exclude-dir=archive`
-  returns nothing (baseline: every one of 508 requirements).
-- **M3** — Every scenario of every main spec (1 369 at baseline) is either linked by a marker
+  returns nothing (baseline: every one of 537 requirements).
+- **M3** — Every scenario of every main spec (1 457 at baseline) is either linked by a marker
   or listed as an exemption; `checkSpecContract` is green inside root `check`.
 - **M4** — The exemption list holds only scenarios verified outside a test; its size is reported
   at the end of the change and justified entry by entry.
-- **M5** — All 28 queued changes pass `openspec validate <change> --strict` and
-  `checkSpecContract --changes` (baseline 6 of 28 pass strict).
+- **M5** — All 26 queued changes pass `openspec validate <change> --strict` and
+  `checkSpecContract --changes` (baseline 2 of 26 pass strict).
 - **M6** — The checker's wall time over the whole tree is under five seconds.
 
 ## Open Questions
@@ -216,7 +217,8 @@ specs hold today.
   the decision points: what stays here is done here; what goes to a new change is carried
   meanwhile by a `pending-test: <change>` exemption or a pending-marked test, so the gate is
   green without hiding the gap. The operator decides at tasks 5.2 and 6.8.
-- **Q3 — Where the inventory tables live.** Proposed under `temporary-docs/gnomish/<task>/` as
+- **Q3 — Where the inventory tables live.** Decided: under `temporary-docs/tighten-spec-contract/`
+  (one directory for every task of the change, so the decision points see every row), as
   working documents of the tasks; nothing durable references them.
 
 ## Capabilities
@@ -230,7 +232,7 @@ None.
 - `quality-gates`: adds the spec-contract gate (traceability line, notes, retired comment
   form), the scenario ↔ test gate and the one-checker-two-launchers rule as behaviors of the
   single verification command.
-- Every other non-archived capability under `openspec/specs/` — the 47 remaining spec files,
+- Every other non-archived capability under `openspec/specs/` — the 49 remaining spec files,
   from `agent-executor` to `verification/verification-hardening` — gets a delta whose
   `MODIFIED` blocks carry its requirements in the new format and within the limit (FR8). These
   deltas are generated and edited during apply (tasks 3 and 4), not written at proposal time:
@@ -251,10 +253,10 @@ and by the functional spec of the checker.
   verification command each.
 - `.claude/rules/traceability.md`, `delta-specs.md`, `testing.md`; `.claude/commands/fix-uncommitted.md`;
   `openspec/config.yaml`; `docs/guides/developer-guide.md`; `docs/glossary.md`.
-- `openspec/changes/tighten-spec-contract/specs/` — 48 deltas; `openspec/changes/*/specs/` — the
-  28 queued changes' deltas.
-- Every module's `src/test` — markers above features; new specs where a scenario had no test.
+- `openspec/changes/tighten-spec-contract/specs/` — 50 deltas; `openspec/changes/*/specs/` — the
+  26 queued changes' deltas.
+- Every test tree (FR5) — markers above features; new specs where a scenario had no test.
 - No production Java; no dependency change.
 - Sequenced **first** in the queue: until it is archived, the archive stage is red for every
-  task, and `supervise-daemon-loops-and-embed-dashboard` (in progress, 33 of 47 tasks) is
-  either archived by hand like #92 or waits for this change.
+  task (`kill-expensive-mutants` and `supervise-daemon-loops-and-embed-dashboard` were
+  archived by hand before this change started).

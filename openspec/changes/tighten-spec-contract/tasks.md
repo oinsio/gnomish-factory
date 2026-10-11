@@ -30,36 +30,43 @@ note) and one per capability for group 5 (`scenarios-<spec-id>.md`: each scenari
 linked `<test file>` / probable / missing / exempt `<mechanism>`). They are working documents;
 nothing durable references them.
 
-## 1. The checker, unwired (D5, D6, D7; FR1, FR2, FR5, FR6, NFR-R1, NFR-R3, NFR-O1, NFR-S1, NFR-C1; M6)
+## 1. The checker, unwired (D5, D6, D7; FR1, FR2, FR5, FR6, NFR-R1, NFR-R3, NFR-O1, NFR-S1, NFR-C1; UX1; M6)
 
 - [ ] 1.1 Fix Q1 and write the reader: `SpecContractReader` in
       `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/` reads one spec file into
       requirement blocks — heading, body lines, metadata lines (`^\*\*[^*]+\*\*:`), scenario
       headings (`^####\s`), with fenced blocks masked — and one test file into its
       `// Scenario: <spec-id> / <title>` markers (also inside block comments). Verify: a Spock
-      spec in `build-logic/src/test` with fixtures for each shape OpenSpec documents (a
+      spec in `build-logic/src/functionalTest` (the module's only test suite; the reader needs
+      no TestKit) with fixtures for each shape OpenSpec documents (a
       metadata-only body, a fenced `#### Scenario:` that is not a scenario, a `###` divider
-      ending a body, a marker inside `/* */`), one feature per shape, named by FR1/FR2/FR5.
-- [ ] 1.2 Write `SpecContractCheck` (a `@CacheableTask`, inputs: `openspec/specs/**`, the
-      unarchived deltas when `changes` is set, every `src/test` tree and
-      `build-logic/src/functionalTest`; one output marker file): rules FR1 (exactly one
+      ending a body, a marker inside `/* */`, a `// Scenario:` line not in the
+      `<spec-id> / <title>` form, reported as malformed), one feature per shape, named by
+      FR1/FR2/FR5.
+- [ ] 1.2 Write `SpecContractCheck` (a `@CacheableTask`, inputs: the spec tree — `openspec/specs/**`
+      by default, or the directory `specsDir` names, so a previewed tree can stand in for the
+      real one — the unarchived deltas when `changes` is set, and the test trees: `*/src/test`,
+      `*/*/src/test`, `build-checks/*/src/test` and `build-logic/src/functionalTest`; one
+      output marker file): rules FR1 (exactly one
       `**Implements**:` per requirement; no `<!-- implements` in scanned trees), FR2 (notes one
       line, no `SHALL`/`MUST`, ordinary text after a metadata line is a wrapped note), FR5 (both
-      directions, exemption entries `scenario`, `verifiedBy`, asserted reached; `pending-test:`
-      as a `verifiedBy` form per D9), a `spec` filter property for per-task runs, findings in the
+      directions, a `// Scenario:` line not in the `<spec-id> / <title>` form reported as a
+      malformed marker, exemption entries `scenario`, `verifiedBy`, asserted reached;
+      `pending-test:` as a `verifiedBy` form per D9), a `spec` filter property for per-task runs, findings in the
       file:line / rule / fix wording of `TestTimeInjectionCheck` and one summary line. Verify:
       `SpecContractCheckFunctionalSpec` (TestKit, a mini project with a spec tree and a test
       tree) — one feature per scenario of the `quality-gates` delta, each shown red with the
       rule removed; wall time of the task over a copy of the real `openspec/specs` and test trees
       under five seconds, recorded in the task report (M6).
 - [ ] 1.3 Register the task in the root `build.gradle` as `checkSpecContract` with an empty
-      exemption block and the `--changes` / `-PspecContractChanges` and `-PspecContractScope`
-      properties, **not** yet a dependency of `check` (D7); add `scripts/check-spec-contract.sh`
+      exemption block and the `--changes` / `-PspecContractChanges`, `-PspecContractScope`
+      (a comma-separated list of spec ids) and `-PspecContractSpecsDir` (the spec tree to read
+      instead of `openspec/specs`, used by groups 5 and 7 against the preview) properties, **not** yet a dependency of `check` (D7); add `scripts/check-spec-contract.sh`
       (one `./gradlew -q checkSpecContract` with arguments passed through; bash 3 compatible like
       `uncommitted-files.sh`). Verify: `scripts/check-spec-contract.sh --changes` on the current
       tree runs and reports — this is the first inventory: the count of requirements without the
-      line (expected 508), of comment-form hits, of unlinked scenarios (expected close to
-      1 369); numbers recorded in the task report. `./gradlew check` unchanged (the task is not
+      line (expected 537), of comment-form hits, of unlinked scenarios (expected close to
+      1 457), of malformed markers (expected 20); numbers recorded in the task report. `./gradlew check` unchanged (the task is not
       wired).
 - [ ] 1.4 Add the verification command to `.gnomish/stages/fix-artifacts/stage.yaml`
       (`./gradlew -q checkSpecContract -PspecContractChanges=true`, after the strict validate)
@@ -109,19 +116,20 @@ nothing durable references them.
       script's own last output (a `.generated` sidecar hash) is refused unless `--force`.
       Verify: a `verify` subcommand compares, per requirement, the id set extracted from the
       main spec's comments with the id set of the delta's line, the heading set, and the
-      scenario count, and exits non-zero on any difference; run on the real tree: 508
+      scenario count, and exits non-zero on any difference; run on the real tree: 537
       requirements, 0 differences.
 - [ ] 3.2 Run the generator; commit nothing (the human commits); run
       `openspec validate tighten-spec-contract --strict` (expected: valid — `MODIFIED` length is
-      not checked) and `scripts/check-spec-contract.sh --changes -PspecContractScope=changes`
-      (expected: no FR1/FR2 finding inside this change's deltas). Verify: both outputs in the
+      not checked) and `scripts/check-spec-contract.sh --changes`
+      (expected: no FR1/FR2 finding under `openspec/changes/tighten-spec-contract/specs`; the
+      main specs and the other changes still report, as in 1.3). Verify: both outputs in the
       task report; `grep -rn "<!-- implements" openspec/changes/tighten-spec-contract` empty.
 - [ ] 3.3 Strict preview of the untouched migration: run the recipe, `openspec validate --specs
-      --strict` in the scratch worktree. Expected: still 43 failing specs, now 266 findings
+      --strict` in the scratch worktree. Expected: still 44 failing specs, now about 271 findings
       (the comments no longer count) and no finding of any other kind — this is the baseline
       group 4 works down. Verify: the per-spec counts recorded in the task report and matched
-      against the table in design Context (31 for `git-task-persistence`, 21 for
-      `tracker-take`, …); any new kind of finding is a generator defect fixed here.
+      against the per-capability counts in the group-4 task headings (32 for
+      `git-task-persistence`, 21 for `tracker-take`, …); any new kind of finding is a generator defect fixed here.
 
 ## 4. Requirements within the limit (D2; FR3, FR4; UX2; M1)
 
@@ -142,34 +150,36 @@ has one row per normative sentence.
 - [ ] 4.3 `tracker-take` (21 long of 27).
 - [ ] 4.4 `execution-environment` (15 of 26).
 - [ ] 4.5 `github-tracker` (15 of 22).
-- [ ] 4.6 `tracker-port` (14 of 22).
-- [ ] 4.7 `observability/dashboard-page` (12 of 26) and `observability/tracker-board` (5 of 8).
-- [ ] 4.8 `factory-serve` (11 of 19) and `serve-observability` (4 of 24).
+- [ ] 4.6 `tracker-port` (15 of 22).
+- [ ] 4.7 `observability/dashboard-page` (12 of 29) and `observability/tracker-board` (5 of 8).
+- [ ] 4.8 `factory-serve` (12 of 23) and `serve-observability` (4 of 26).
 - [ ] 4.9 `agent-executor` (11 of 19).
 - [ ] 4.10 `manual-run` (10 of 18), `cli-arguments` (3 of 3), `operator-console` (1 of 3).
-- [ ] 4.11 `stage-engine` (11 of 17) and `pipeline-config` (6 of 23).
-- [ ] 4.12 `quality-gates` (8 of 23), `module-layering` (4 of 6), `build/sandbox-module-split`
+- [ ] 4.11 `stage-engine` (12 of 17) and `pipeline-config` (6 of 23).
+- [ ] 4.12 `quality-gates` (8 of 29), `module-layering` (4 of 6), `build/sandbox-module-split`
       (1 of 2); `build/build-conventions` and `build/test-fixtures-module` are already within
       the limit — confirm in the preview and leave their generated deltas untouched.
 - [ ] 4.13 `lifecycle/claim-heartbeat` (8 of 12), `lifecycle/task-branch-contract` (7 of 8),
-      `lifecycle/subprocess-supervision` (1 of 2); `lifecycle/factory-bootstrap` confirmed clean.
+      `lifecycle/subprocess-supervision` (1 of 2); `lifecycle/factory-bootstrap`,
+      `daemon-supervision` and `time-source` confirmed clean — confirm in the preview and leave
+      their generated deltas untouched.
 - [ ] 4.14 `factory-logging` (7 of 12), `untrusted-text` (4 of 5), `status-report` (4 of 6).
 - [ ] 4.15 `sandbox-lifecycle` (7 of 10), `sandbox-egress` (5 of 10), `factory-egress-allowlist`
       (1 of 3).
 - [ ] 4.16 `verification/github-external-check` (5 of 11), `verification/verification-hardening`
       (2 of 8), `verification/check-provider-model` (1 of 8), `verification/http-check-provider`
       (1 of 4), `plugin/plugin-api-contract` (2 of 7), `plugin/adapter-binding-registry` (1 of 8),
-      `plugin/github-plugin` (1 of 3); `verification/dependency-verification` and
-      `plugin/plugin-discovery` confirmed clean.
+      `plugin/github-plugin` (1 of 3), `plugin/plugin-discovery` (1 of 6);
+      `verification/dependency-verification` confirmed clean.
 - [ ] 4.17 `project-licensing` (5 of 8), `base-ref-resolution` (4 of 7), `git-transfer` (3 of 9),
       `task-inspection` (3 of 5).
 - [ ] 4.18 `project-registry` (3 of 4), `operator-configuration` (3 of 3), `release-distribution`
       (2 of 4), `vendor-connection-profile` (2 of 3), `secrets-provider` (1 of 4).
-- [ ] 4.19 Whole-corpus preview: the strict preview with `--specs`; expected 48 of 48 passing
+- [ ] 4.19 Whole-corpus preview: the strict preview with `--specs`; expected 50 of 50 passing
       (M1). Verify: the output in the task report; any remaining finding goes back to the task
       that owns the capability, not fixed here.
 
-## 5. Every scenario has a test (D4, D9; FR5, FR9; M3, M4)
+## 5. Every scenario has a test (D4, D9; FR5, FR9; NFR-C2; M3, M4)
 
 - [ ] 5.1 Inventory, automated first pass: a one-off script (scratch, not committed) matches
       every scenario title of the previewed main specs (group 4's result, including the new
@@ -186,23 +196,25 @@ has one row per normative sentence.
       closed with its disposition, before 5.3 starts.
 - [ ] 5.3 Markers and tests for the capabilities of tasks 4.1–4.3 (`git-task-persistence`,
       `tracker-take`): confirm each "probable" by reading the test; place the marker above the
-      feature (converting the four informal `// Scenario:` comments of `TakeBareAutoSpec` to the
-      form); write a Spock feature for each "missing" scenario by TDD (red on the behavior the
+      feature (converting the twenty informal `// Scenario:` comments of `TakeBareAutoSpec`,
+      `TakeDispositionSpec` and `serve/TakeSlotRunnerSpec` to the form — the checker reports
+      each one left as a malformed marker); write a Spock feature for each "missing" scenario by TDD (red on the behavior the
       scenario states, green, marker placed) or record it as an exemption with its mechanism. A
       feature that stays red because the code does not do what the scenario states is a
       revealed defect: add a `findings.md` row, keep the feature under `@PendingFeature` with
       the finding id, fix nothing here (D9).
       Verify: `./gradlew checkSpecContract -PspecContractScope=git-task-persistence,tracker-take`
-      green against the previewed specs (the task takes the preview tree's `openspec/specs` as
-      an input override for this purpose — add `-PspecContractSpecsDir` in 1.2 if not present);
+      green against the previewed specs (`-PspecContractSpecsDir=<preview>` from 1.3 points the task at the
+      preview tree's `openspec/specs`);
       the module specs the task touched run by name; no `.@` field read introduced.
 - [ ] 5.4 Same for tasks 4.4–4.6 (`execution-environment`, `github-tracker`, `tracker-port`).
 - [ ] 5.5 Same for tasks 4.7–4.8 (`observability/*`, `factory-serve`, `serve-observability`).
 - [ ] 5.6 Same for tasks 4.9–4.11 (`agent-executor`, `manual-run`, `cli-arguments`,
       `operator-console`, `stage-engine`, `pipeline-config`).
 - [ ] 5.7 Same for tasks 4.12–4.13 (`quality-gates`, `module-layering`, `build/*`,
-      `lifecycle/*`) — here most "tests" are `build-logic` functional specs and `:bootstrap`
-      architecture specs; a scenario verified only by CI (`Continuous integration`, `Security
+      `lifecycle/*`, `daemon-supervision`, `time-source`) — here most "tests" are `build-logic`
+      functional specs, `build-checks` specs, `:bootstrap` architecture specs and the
+      `app/daemon` and time-source specs of `:application` and `:domain`; a scenario verified only by CI (`Continuous integration`, `Security
       scanning`) is an exemption naming the workflow file.
 - [ ] 5.8 Same for tasks 4.14–4.16 (`factory-logging`, `untrusted-text`, `status-report`,
       `sandbox-*`, `factory-egress-allowlist`, `verification/*`, `plugin/*`).
@@ -252,10 +264,9 @@ are listed in the task report.
 - [ ] 6.6 `fix-docker-exec-env-argv`, `fix-terminal-receipt-convergence`,
       `harden-verification-integrity`, `own-git-invocation-policy`,
       `migrate-verify-to-executor-contract`.
-- [ ] 6.7 `kill-expensive-mutants` and `supervise-daemon-loops-and-embed-dashboard` — each only
-      if it is still under `openspec/changes/` when this task runs (both may have been archived
-      by hand meanwhile; then record "already archived" and skip). Verify as above, plus
-      `openspec list --json` in the task report showing which of the two remained.
+- [ ] 6.7 `add-stage-iteration`; then `openspec list --json` in the task report, proving that
+      every change it lists is named in 6.1–6.7 — a change that entered the queue after this
+      proposal was written is reworked here too, and added to this list.
 - [ ] 6.8 **Decision point (D9, FR11).** Present every open row of `findings.md` added since
       5.2 — the queued scenarios without a test from 6.1–6.7, any defect revealed in 5.3–5.10 —
       to the operator, who sorts each into "this change" or "new change `<name>`". For a
@@ -293,12 +304,10 @@ are listed in the task report.
 
 ## Workflow follow-up
 
-- `/opsx:archive tighten-spec-contract` merges the 48 deltas; immediately after the merge,
+- `/opsx:archive tighten-spec-contract` merges the 50 deltas; immediately after the merge,
   `openspec validate --specs --strict` and `./gradlew checkSpecContract` (now without the
   preview override) are green on the real tree — the archive stage's verification commands from
   1.4 run exactly these. If either is red at archive, the merge is wrong, never the delta.
-- `supervise-daemon-loops-and-embed-dashboard`, if still in progress, is archived by hand with
-  the comment form (its deltas were rewritten in 6.7 only if it was still queued) — or waits.
 - Every new change named under `## Decisions` is proposed right after archive, with its
   findings (the `pending-test:` entries, the `@PendingFeature` tests, the queued scenarios) as
   the seed of its task list.

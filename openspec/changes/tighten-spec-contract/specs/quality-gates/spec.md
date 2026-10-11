@@ -57,7 +57,7 @@ the test sources SHALL name a scenario that exists. A scenario verified by a mec
 not a test SHALL be listed in the gate's exemption list with that mechanism, and the list is
 asserted reached: an entry naming no scenario fails the gate.
 **Implements**: FR5 of tighten-spec-contract
-**Notes**: `<spec-id>` is the capability path OpenSpec lists (`quality-gates`, `verification/verification-hardening`); the title is the text after `#### Scenario:` with surrounding whitespace trimmed. Test sources are every module's `src/test` and the functional-test tree of `build-logic`.
+**Notes**: `<spec-id>` is the capability path OpenSpec lists (`quality-gates`, `verification/verification-hardening`); the title is the text after `#### Scenario:` with surrounding whitespace trimmed. Test sources are every module's `src/test` (`*/src/test`, `*/*/src/test`), the test trees of the `build-checks` included build (`build-checks/*/src/test`) and `build-logic/src/functionalTest`.
 
 #### Scenario: A scenario with no marker fails the gate
 - **WHEN** a main spec holds a scenario whose title appears in no marker of any test source and in no exemption entry
@@ -66,6 +66,10 @@ asserted reached: an entry naming no scenario fails the gate.
 #### Scenario: A dangling marker fails the gate
 - **WHEN** a test source carries a marker whose spec id or title names no scenario of a main spec
 - **THEN** `checkSpecContract` fails, naming the test file and line and the nearest existing title
+
+#### Scenario: A malformed marker fails the gate
+- **WHEN** a test source carries a `// Scenario:` line that is not in the `<spec-id> / <title>` form
+- **THEN** `checkSpecContract` fails, naming the test file and line and the form to write
 
 #### Scenario: A renamed scenario breaks the link on both sides
 - **WHEN** a scenario title is changed in the main spec and its marker is not
@@ -88,7 +92,7 @@ The spec-contract rules SHALL be implemented once, as a Gradle task `checkSpecCo
 root `check` task depends on. The manual launcher `scripts/check-spec-contract.sh` and the
 verification commands of the fix-artifacts and archive stages SHALL run that task rather than a
 second implementation; the task SHALL read files only and produce no subprocess.
-**Implements**: FR6, NFR-R1, NFR-C1 of tighten-spec-contract
+**Implements**: FR6, NFR-R1, NFR-O1, NFR-S1, NFR-C1, UX1 of tighten-spec-contract
 
 #### Scenario: Root check runs the gate
 - **WHEN** a developer runs `./gradlew check` on a tree that violates one spec-contract rule
@@ -101,6 +105,10 @@ second implementation; the task SHALL read files only and produce no subprocess.
 #### Scenario: Findings read like the other gates
 - **WHEN** the gate fails
 - **THEN** every finding names the file, the line, the rule and what to write instead, and the run ends with one summary line of scenarios checked, linked and exempt
+
+#### Scenario: Spec and test text is never executed
+- **WHEN** a spec or test file under a scanned tree contains shell-like text (`$(…)`, backquotes, a pipe) in a requirement, a note or a marker
+- **THEN** `checkSpecContract` reads it as data, starts no process, and quotes it verbatim in any finding it names
 
 #### Scenario: The gate is cacheable
 - **WHEN** `./gradlew check` runs twice with no change under `openspec/` or any test tree
