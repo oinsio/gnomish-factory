@@ -543,6 +543,11 @@ trusted/task tier split, and the law-root rule.
 - **Sweep verdict** — the one classification a sweep emits per evaluated
   object: `checked-alive`, `kept-under-threshold`, `stopped-orphan`,
   `disposed-aged`, `disposed-reconstructible`, or `skipped-no-verdict`.
+- **Skipped-verdict source** — where a `skipped-no-verdict` failed: `tracker`
+  (the liveness oracle reached no verdict, so ownership is unknown) or
+  `runtime` (the container runtime refused the stop or dispose, or the object
+  could not be inspected). The snapshot's sweep entry carries the last one of
+  the last tick, and the dashboard's stall alarm names it.
 - **Environment reaper** — the sweep's aged-disposal step: it disposes kept
   environments (stopped boxes, container-less remnants) past the configured
   reap age. *Not:* the **reaper** of Task coordination above, which reaps
@@ -588,7 +593,7 @@ trusted/task tier split, and the law-root rule.
   `gnomish run --mode git|in-place` choice (the "run modes" of the manual-run
   capability), which decides whether a run uses a task branch, not where its
   stages execute. *Never:* sandbox flag.
-- **Container environment factory** — the installation's box equipment, held
+- **Container environment factory** — the installation's **box equipment**, held
   once per **ownership mode**: the operator sandbox settings, the **box
   timing**, the guard config root and the ownership mode itself — what the
   installation decides about every box before any task exists. Its one method
@@ -627,6 +632,18 @@ trusted/task tier split, and the law-root rule.
   by. All of it is
   about time; a host directory such as the guard config root is deliberately
   not in it. Type: `BoxTiming`.
+- **Box equipment** — the installation's half of every **box**, as one value:
+  the `docker` command seam, the operator sandbox settings, the **box
+  timing**, the guard config root and the **ownership mode**. The **container
+  environment factory** builds it once; every constructor down the
+  round-environment chain takes it whole beside a task's own inputs (the
+  environment key, the **box git link**, the child environment allowlist, the
+  **project identity**), never its members as loose parameters next to them.
+  It owns the projections every box shares: the **task container settings**,
+  a role's guard config directory, and a task's ownership (its mode beside the
+  task's project identity). Type: `BoxEquipment` (introduced by
+  `tighten-spec-contract`, D12). *Not:* a task's inputs, which vary per task
+  and never ride in it.
 - **Project identity** — the label scoping a sweep to its own project: a
   stable digest of the clone's **normalized** `origin` remote URL, or an
   explicit operator override. Normalization removes the URL's userinfo,
@@ -825,6 +842,16 @@ ADR 0013.
   Owned by `ShutdownPhase` in `:logtext`. *Not:* the drain — draining is the
   work the stop does, the phase is the fact that it is happening. *Never:*
   shutting-down flag.
+- **JSON contract** — a JSON document the factory writes for a reader outside
+  the writing code, carrying an integer `version` and pinned byte-exactly by a
+  committed reference file: the status report, the board, the serve snapshot
+  and the ledger. A version is **released** once a tagged release has shipped a
+  build that writes it; a breaking change (a field renamed, removed or retyped,
+  a token's meaning changed) to a released version bumps `version` and adds a
+  new reference file, an additive change keeps the version and regenerates the
+  reference (`docs/adr/0016-json-contract-versioning.md`). *Not:* the product
+  version, which names the factory build, nor the plugin-contract version.
+  *Never:* schema version, API version.
 
 ## Plugin contract
 

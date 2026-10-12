@@ -2,7 +2,7 @@
 
 Sequenced **first** in the queue (proposal, Impact): every archive stage is red until this change
 lands. Per-task verification follows `verification-scope.md`; the whole-tree `./gradlew check`
-ran in task 7.4 and runs once more, in task 8.16, after group 8 changes the test trees.
+ran in task 7.4, once more in task 8.16, and a last time in task 9.17, after group 9.
 Production Java is touched only for a finding sorted into this change at a decision point (proposal NG5, FR11; design D9); such a fix runs the scoped PIT of
 `verification-scope.md` for the classes it changes. Group 1 and group 7 run `build-logic`'s
 functional tests through the root build (`./gradlew :build-logic:functionalTest` via the root,
@@ -392,6 +392,189 @@ is sorted at 8.14. Verify per task: the named specs green; `./gradlew checkSpecC
       with `-PspecContractSpecsDir=<preview>`, `scripts/check-spec-contract.sh --changes`.
       Verify: as 7.4.
 
+## 9. The 8.14 follow-ups, fixed here (D11–D17; FR13–FR16; NFR-S2, NFR-S3; M8, M9)
+
+The sixteen findings 8.14 sorted to new changes are fixed in this change (`## Decisions`,
+"Revision 2026-10-12, second"). Each task fixes one finding (or one named pair) by TDD: the
+`@PendingFeature` of its test removed, the feature red for the reason the finding records, the
+fix, green — the test's assertion unchanged unless the task says why; the finding id in the task
+report and in the `findings.md` row's resolution ("done (9.n): …"). Production classes changed
+run the scoped PIT of `verification-scope.md`. A single-owner task (marked *single-owner*) ends
+its report with the sweep of `implementation.md`: the grep it ran, every hit, what happened to
+it. Anything new a task finds is a `findings.md` row, not a fix on the way. Verify per task: the
+named specs green; the scoped PIT green; `./gradlew checkSpecContract
+-PspecContractSpecsDir=<preview> -PspecContractScope=<spec-ids>` green for the capability the
+finding names.
+
+- [x] 9.1 F113 — `build/quality-gates` / `An override reaches every configuration that resolves
+      the artifact`: carry the jackson-bom override (2.22.3, the catalog's pin) to the
+      `build-logic` classpaths and the root buildscript `classpath` (a `gradle.properties`
+      buildscript override, as for `tools.jackson`), regenerate `build-logic/gradle.lockfile` and
+      `buildscript-gradle.lockfile` (`--write-locks` on those configurations only). Verify:
+      `SecurityOverrideLockStateSpec` green without `@PendingFeature`; no lockfile in the tree
+      names `jackson-bom` or `jackson-databind` 2.22.1 (`grep -rn "2.22.1" --include='*.lockfile' .`
+      empty); OSV-Scanner over the regenerated lockfiles reports none of the three GHSA ids.
+- [x] 9.2 F111 — `build/quality-gates` / `Dead private code fails compilation`: first find why
+      `UnusedMethod` and `UnusedVariable` stay silent under `java-conventions` while NullAway fires
+      (the probe of the finding: Error Prone 2.50.0, JDK 25 — check the check names, the
+      `disableWarningsInGeneratedCode` / `-XepDisableAllChecks` / `allErrorsAsWarnings` settings,
+      and the check's own suppression rules) and record the cause in the `findings.md` row; fix
+      the convention; then compile the whole build and delete every dead method, field and local
+      the checks now report — a hit that is not dead (reflective or framework entry) is suppressed
+      on its own declaration with the reason (`@SuppressWarnings("UnusedMethod") // <reason>`), and
+      the list of suppressions is in the task report. Verify: `StaticAnalysisGateFunctionalSpec`
+      green without `@PendingFeature` (via the root: `./gradlew :build-logic:functionalTest
+      --tests StaticAnalysisGateFunctionalSpec`); `./gradlew compileJava compileTestGroovy`
+      green; scoped PIT for each production class that lost code.
+- [x] 9.3 F100 — `observability/status-report` / `A breaking change to a released contract bumps
+      the version`: write `docs/adr/0016-json-contract-versioning.md` (D17; FR15) — the
+      contracts it governs (status report, board, serve snapshot, ledger) and their reference
+      files (`status-report-v1.reference.json`, `board-v1.reference.json`,
+      `snapshot-v1.reference.json`), what "released" means (shipped in a tagged release), what is
+      breaking (a field renamed, removed or retyped; a token's meaning changed) and what is
+      additive, and the rule (breaking → `version` bump and a new reference file; additive → same
+      version, reference regenerated); add it to `docs/adr/` index if one exists and to the
+      glossary only if it coins a term. Replace the scenario's `pending-test:
+      document-contract-versioning` entry with `=> docs/adr/0016-json-contract-versioning.md`
+      (the documentation-fact form of `The policy ADR defines its three rules`). Verify:
+      `checkSpecContract` green for `observability/status-report`.
+- [x] 9.4 F90 — `observability/dashboard-page` / `Silent stall becomes loud`: carry the source of
+      the last skipped verdict (tracker or runtime, the vocabulary `sandbox-lifecycle` names) in
+      `SweepVital` (`SweepVitalAssembler`, `SweepCounts` as needed), write it in
+      `SnapshotJsonMapper` and read it in `SnapshotJsonReader` in this task (declared pair; the
+      wire token gets a round-trip feature over every constant), regenerate
+      `snapshot-v1.reference.json` as an additive field under ADR 0016, and name it in the stall
+      alarm (`SandboxHygieneAlertEvaluator`, `DashboardAlertLabels`). Verify:
+      `DashboardHygieneBlockSpec` green without `@PendingFeature`; the snapshot mapper/reader
+      round-trip and reference specs green.
+- [x] 9.5 F109 — `verification/github-external-check` / `A green check is auditable from the
+      tracker`: render a passing check's run URL in the text report on the comment plane
+      (`TakeFinishReport` → `StatusTextRenderer(ReportPlane.COMMENT)`), the URL neutralized as
+      every other untrusted field there; a check with no URL renders as today. Verify:
+      `TakeFinishReportRunUrlSpec` green without `@PendingFeature`; the `StatusTextRenderer`
+      specs and the status-report reference specs green (the `--json` shape unchanged).
+- [x] 9.6 F106 — `operator/operator-configuration` / `List-valued keys are replaced whole`: in
+      `OperatorConfigLoader`, a list a higher source sets shadows every indexed key of the same
+      list from lower sources before binding (a higher `[project-a]` over a lower `[host-a,
+      host-b, host-c]` binds `[project-a]`); maps keep merging key by key. Verify:
+      `OperatorConfigCollectionsSpec` green without `@PendingFeature`, its map-merge twin green.
+- [x] 9.7 F79 — `tracker/github-tracker` / `Each removed claim gets its own removal marker`: a
+      removal re-driven over a claim its own marker already voided (`ClaimFacts.Dead`) scopes its
+      marker by the epoch the voided claim comment still carries — so the re-drive finds and
+      reuses its own marker instead of posting a second — and deletes that claim comment
+      (`GithubStaleClaimRemoval.retire`, `postRemovalMarker`). The two-tenure half stays as is.
+      Verify: `GithubTenureMarkersSpec` green without `@PendingFeature`; `GithubStaleClaimRemovalSpec`
+      and `GithubTrackerContractSpec` green; the in-memory adapter's contract features green.
+- [x] 9.8 F74 — `lifecycle/task-branch-contract` / `A split tenure record cannot be assembled`
+      (*single-owner*, design table row `GitTaskBackend.taskGit`): add the public assembly
+      `GitTaskBackend.taskGit(…)` in `:adapters:git` over one `ClaimEpochBook`; make the
+      constructors of `GitTaskStore`, `GitTaskBranches` and `GitTaskWorktrees` package-private;
+      move `ManualRunConfiguration`'s constructions and `TaskGitFixture` to the assembly, and every
+      test construction outside `adapters/git`'s package to `TaskGitFixture` or the assembly.
+      Rewrite `SplitTenureRecordSpec`'s probe sources to the new surface: the control compiles the
+      assembly, the split shape (writers constructed with a second book) must not compile. Sweep:
+      `grep -rn "new GitTaskStore(\|new GitTaskBranches(\|new GitTaskWorktrees(" --include='*.java'
+      --include='*.groovy' .` — every hit outside `adapters/git/src` gone. Verify:
+      `SplitTenureRecordSpec` (both features) green without `@PendingFeature`;
+      `ClaimlessGitBoundarySpec`, `TaskGitSpec`, the kill-point specs and the `:application` take
+      specs named by the sweep green.
+- [x] 9.9 F82 — `sandbox/execution-environment` / `No constructor mixes installation equipment and
+      task inputs` (*single-owner*, row `BoxEquipment`): introduce `BoxEquipment` (a record in
+      `sandbox/docker/.../sandbox/environment`) holding `DockerCli`, `BoxGitLink`,
+      `SandboxProperties`, `BoxTiming`, `ChildEnvAllowlist`, the base `Path` and `ObjectOwnership`
+      — exactly the installation half `ContainerEquipmentSplitSpec` types; `ContainerEnvironmentFactory`
+      builds it once; `ContainerEnvironmentBuilder`, `ContainerTaskExecutionEnvironment` and
+      `ContainerEnvironments` take it plus the task's own inputs. Check the record against the
+      three tests of `process-invariants.md` (recurs, names a concept, absorbs behavior); add a
+      glossary entry for **box equipment** if none covers it. Sweep: the three constructors' call
+      sites (`ContainerEnvironmentFactory`, `ContainerEnvironmentBuilder`) and their specs. Verify:
+      `ContainerEquipmentSplitSpec` green without `@PendingFeature`; the `sandbox/docker`
+      environment specs green; scoped PIT of the four classes.
+- [ ] 9.10 F119 — `build/module-layering` / `A use case reaches its collaborator through a port`
+      (*single-owner*, row `WorkspaceFactory` / `ConsoleIO`): add a `WorkspaceFactory` port owned
+      by `:application` (or `:domain`, beside `Workspace`, if the engine consumes it) and hand it,
+      with the `ConsoleIO`, to `TakeEngineExecution`, `PipelineStartup`, `GitModeRunner`,
+      `GitResumeContinuation` and `ConsoleTakeoverConfirmation` from the composition root; move
+      `DirectoryWorkspace` and `SystemConsoleIO` construction to `:bootstrap` (the classes may stay
+      in `:application` only if `UseCasePortSpec` names them as adapters it keeps — it does not
+      today). Apply the facade/parameter-object clauses of `process-invariants.md` where a
+      signature grows (the take chain reads `SlotWiring`). Sweep: `grep -rn "new DirectoryWorkspace(\|new
+      SystemConsoleIO(" application/src/main` empty. Verify: `UseCasePortSpec` green without
+      `@PendingFeature`; the specs of the five classes and `ServeRuntimeWiringSpec` green.
+- [ ] 9.11 F107 — `operator/secrets-provider` / `One seam to audit` (*single-owner*, row
+      `SecretsProvider`; NFR-S3): `AgentAiSeam` reads the agent credentials
+      (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`) through a
+      `SecretsProvider` handed to `ExecutorRoundExecution` and `JudgeRoundExecution`, and
+      `ChildEnvAllowlist.of` takes the provider's lookup instead of `System::getenv` at
+      `RunAssembler` and `ContainerRunSupportFactory`; the env-file adapter stays the only reader
+      of the process environment. Then `Shared agent token from the host folder` holds for an
+      agent round too — add or extend its feature. Sweep: `grep -rn "System.getenv" --include='*.java'
+      */src/main */*/src/main` — every hit is the secrets adapter or listed in
+      `SecretsPortBoundarySpec` with a non-credential reason. Verify: `SecretsPortBoundarySpec`
+      green without `@PendingFeature`; `AgentCredentialSeamBoundarySpec`, the `ChildEnvAllowlist`
+      specs, the agent round specs green.
+- [ ] 9.12 F85 — `sandbox/sandbox-egress` / `Guard crash burns no attempt` (D14): give
+      `EgressGuard` a liveness probe without the restart; call it at the close of every
+      container round and before an in-box retry's next round; a dead guard classifies the round
+      as an infrastructure failure (no attempt burned, grading skipped) with an operator-visible
+      reason; the next materialize restarts the guard as today. Check the round-close path
+      against `crash-consistency.md` items 1–3 (a kill between the probe and the classification
+      lands in a named shape) and record the answer in the task report. Verify:
+      `EgressGuardRecoverySpec` green without `@PendingFeature`, its restart feature green; the
+      sandbox round-outcome specs green.
+- [ ] 9.13 F122 — `lifecycle/task-branch-contract` / delivery (*single-owner*, row "The
+      round-record walk"; D13; NFR-S2): replace the subject search in `GitShowTip.cleanupCommit`
+      with the walk — from the tip down the first-parent line, each attempt commit's round token
+      (parsed by the same function the live path uses, crash-consistency item 14) skips the
+      gnome's range; a cleanup commit counts only where the walk lands. Keep the STARTED anchor
+      and the task-id check of FR14. Sweep: every reader of the delivery fact
+      (`DeliveredBranchReader`, `RefTipSource`, `BranchTipFactsReader`, `TipEnvelopeReader`) goes
+      through the one walk; `grep -rn "cleanupSubject\|gnomish: cleanup" adapters/git/src/main`
+      shows only the writer (`ServiceCommitMessages`, `CleanupCommit`) and the walk. Verify:
+      `DeliveryAncestrySpec` green without `@PendingFeature` (both message rows), every existing
+      delivery feature unchanged and green; the branch-shape classifier specs and the kill-point
+      specs that reach Delivered green.
+- [ ] 9.14 F93 — `observability/dashboard-page`, six scenarios (`Dead renderer banners the page`,
+      `Fresh page shows no banner`, `Refresh does not reset scroll`, `Relative time ticks`,
+      `Phone-width render does not overflow`, `Both themes legible`; D15; FR14): add the
+      Testcontainers Selenium module to the version catalog and to `:bootstrap`'s end-to-end test
+      dependencies (dependency verification metadata and lockfiles updated); write one spec per
+      behavior group in the Docker-dependent layer, loading the dashboard file the production
+      renderer wrote (no hand-written HTML), driving the page clock the script reads, asserting
+      in a headless Chrome; place the six markers; delete the six `pending-test:
+      add-dashboard-browser-tests` entries. Check the spec against "Fixtures assemble through
+      production owners" and "Test processes never inherit the operator's environment"
+      (`testing.md`). Verify: the new specs green; `checkSpecContract` green for
+      `observability/dashboard-page`; the dependency-verification and license gates green.
+- [ ] 9.15 F115, F120 — retire the one-time scenarios (D16; FR16): in this change's deltas, turn
+      `Full clean-build time not regressed` (`build/build-conventions`) and `Behavior-preserving
+      split` (`build/module-layering`) into `REMOVED` blocks with **Reason** and **Migration**;
+      turn `Source file size cap`, `Shared app-layer assembly fixture` (`build/quality-gates`),
+      `Use-case dependencies inverted onto ports` (`build/module-layering`), `Single-purpose gate
+      convention` (`build/build-conventions`) and `Sandbox port contract preserved;
+      AdapterBinding opened by change C` (`build/sandbox-module-split`) into a `REMOVED` block
+      plus an `ADDED` requirement under a new heading — the current text (8.15's included) and
+      every standing scenario verbatim, the one-time scenario dropped, the `**Implements**:` line
+      kept, a `**Notes**:` line naming the archived change whose acceptance the dropped scenario
+      was. Delete the seven `pending-test: retire-one-time-scenarios` entries; markers of the
+      standing scenarios stay as they are. Verify: the strict preview of the four capabilities
+      (`openspec validate <spec-id> --type spec --strict`); `checkSpecContract` green for them;
+      `grep -rn "retire-one-time-scenarios" config/ */src/test` empty.
+- [ ] 9.16 Queued changes: a plain bullet in the `tasks.md` of each change whose planned code group
+      9 moved, naming the finding and what the change must keep — `add-claim-return` (F79: the
+      epoch-scoped re-drive survives the `GithubClaimRetirement` generalization of its 3.2),
+      `extract-agent-round-runner`, `fix-docker-exec-env-argv`, `define-executor-contract` (F107:
+      credentials reach the agent and the child environment through `SecretsProvider`; deleting
+      `AgentAiSeam` keeps that route), `add-command-executor` and `fix-docker-exec-env-argv` (F82:
+      the container chain takes `BoxEquipment`). Verify: `openspec validate <change> --strict` and
+      `scripts/check-spec-contract.sh --changes` green for the five.
+- [ ] 9.17 Final gate: every `findings.md` row of the sixteen carries "done (9.n)"; `grep -rn
+      "@PendingFeature" --include='*.groovy' .` (outside `build/`) lists exactly F97 (M9); every
+      `pending-test:` entry names `add-subprocess-access-log` (3 entries, M8); none of the twelve
+      follow-up change names of 8.14 is left in a test tree or `config/`; then the checks of 7.4
+      once more — `./gradlew check` with `-PspecContractSpecsDir=<preview>`,
+      `scripts/check-spec-contract.sh --changes`. Verify: as 7.4.
+
 ## Workflow follow-up
 
 - Since 7.2 root `check` runs `checkSpecContract`, which is red on the real tree until this
@@ -412,9 +595,9 @@ is sorted at 8.14. Verify per task: the named specs green; `./gradlew checkSpecC
   `enforce-artifact-contracts`, then the rest of the queue named in 6.1–6.7.
 - `retire-misnamed-scenarios` and `restore-renamed-scenarios` (F1, F39, F28 titles) follow the
   step-by-step plan agreed with the operator on 2026-10-11 (two changes, archived back to back).
-- Every new change named under `## Decisions` is proposed right after archive, with its
-  findings (the `pending-test:` entries, the `@PendingFeature` tests, the queued scenarios) as
-  the seed of its task list.
+- The new changes still named under `## Decisions` — `retire-misnamed-scenarios` and
+  `restore-renamed-scenarios` — are proposed right after archive, with their findings as the
+  seed of their task lists. The twelve follow-ups of 8.14 are withdrawn (group 9).
 
 ## Decisions
 
@@ -577,3 +760,16 @@ Findings:
 - F122 — lifecycle/task-branch-contract / delivery read from a commit subject the gnome can
   write — revealed defect — new change `bind-delivery-to-factory-record`. The test predates this
   change (#71); its `@PendingFeature` reason now names the finding and the change.
+
+### Revision 2026-10-12, second (operator)
+
+- The twelve follow-up changes named at 8.14 and in the 2026-10-12 follow-up are withdrawn; their
+  findings are fixed in this change, group 9 (design D11–D17), each by the first disposition its
+  `findings.md` row proposed: F113 (9.1), F111 (9.2), F100 (9.3), F90 (9.4), F109 (9.5), F106
+  (9.6), F79 (9.7), F74 (9.8), F82 (9.9), F119 (9.10), F107 (9.11), F85 (9.12), F122 (9.13),
+  F93 (9.14), F115 and F120 (9.15).
+- F122: delivery is found by walking the factory's round records, not by a signed commit or the
+  tracker (D13). F93: Selenium in a Testcontainers browser (D15). F115, F120: `REMOVED` blocks,
+  and an `ADDED` requirement under a new heading where standing scenarios remain (D16) — a second
+  exception to NG4.
+- F97 stays with `add-claim-return` (plain bullet in its `tasks.md`).

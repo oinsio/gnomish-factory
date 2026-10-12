@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.json;
 
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The JSON contract's {@code vitals.sweep} entry (NFR-O1 of add-serve-sandbox-lifecycle): the
@@ -18,6 +19,9 @@ import java.util.List;
  * @param kept the bounded kept-environment inventory
  * @param keptTotal how many kept environments the tick saw, before truncation
  * @param consecutiveSkippedTicks ticks in a row that ended without a claim verdict
+ * @param lastSkipSource {@code "tracker"} or {@code "runtime"}: where the last tick's last skipped
+ *     verdict failed; null when that tick skipped nothing, absent from documents written before
+ *     the field (additive under ADR 0016)
  */
 public record SweepDto(
         String lastTickAt,
@@ -25,4 +29,5 @@ public record SweepDto(
         SweepCountsDto counts,
         List<KeptEnvironmentDto> kept,
         int keptTotal,
-        int consecutiveSkippedTicks) {}
+        int consecutiveSkippedTicks,
+        @Nullable String lastSkipSource) {}

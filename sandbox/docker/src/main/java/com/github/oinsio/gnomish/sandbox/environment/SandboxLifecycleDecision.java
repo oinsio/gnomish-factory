@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
@@ -82,7 +83,7 @@ final class SandboxLifecycleDecision {
         }
         Gate gate = trackedGate(c, liveness);
         if (gate == Gate.SKIPPED) {
-            emit(c, object.name(), SweepVerdictCategory.SKIPPED_NO_VERDICT, "no liveness verdict", age);
+            emitSkipped(c, object.name(), SkippedVerdictSource.TRACKER, "no liveness verdict", age);
             return true;
         }
         if (gate == Gate.ALIVE) {
@@ -125,7 +126,7 @@ final class SandboxLifecycleDecision {
             if (actions.stop(object)) {
                 emit(c, object.name(), SweepVerdictCategory.STOPPED_ORPHAN, reason, runningAge);
             } else {
-                emit(c, object.name(), SweepVerdictCategory.SKIPPED_NO_VERDICT, "stop failed: " + reason, runningAge);
+                emitSkipped(c, object.name(), SkippedVerdictSource.RUNTIME, "stop failed: " + reason, runningAge);
             }
             return;
         }
@@ -170,7 +171,7 @@ final class SandboxLifecycleDecision {
         if (actions.dispose(c, object)) {
             emit(c, object.name(), category, reason, age);
         } else {
-            emit(c, object.name(), SweepVerdictCategory.SKIPPED_NO_VERDICT, "dispose failed: " + reason, age);
+            emitSkipped(c, object.name(), SkippedVerdictSource.RUNTIME, "dispose failed: " + reason, age);
         }
     }
 
@@ -199,7 +200,7 @@ final class SandboxLifecycleDecision {
             // SKIPPED_NO_VERDICT here would be a WARN about work that actually got done.
             return;
         }
-        emit(c, object.name(), SweepVerdictCategory.SKIPPED_NO_VERDICT, reason, null);
+        emitSkipped(c, object.name(), SkippedVerdictSource.RUNTIME, reason, null);
     }
 
     private static Gate trackedGate(SandboxLifecycleClassification c, LivenessVerdict liveness) {
@@ -221,7 +222,30 @@ final class SandboxLifecycleDecision {
             String reason,
             @Nullable Duration age) {
         listener.onVerdict(
-                new SweepVerdict(category, name, roleLabel(c), c.mode().label(), c.baseTaskKey(), reason, age));
+                new SweepVerdict(category, name, roleLabel(c), c.mode().label(), c.baseTaskKey(), reason, age, null));
+    }
+
+    /**
+     * The one way this matrix reports a skipped verdict, so each skip names where it failed
+     * (`sandbox-lifecycle`: "a tracker or runtime error during evaluation"; F90 of
+     * tighten-spec-contract): the liveness oracle's no-verdict is the tracker's, a refused action
+     * or an unreadable object is the runtime's.
+     */
+    private void emitSkipped(
+            SandboxLifecycleClassification c,
+            String name,
+            SkippedVerdictSource source,
+            String reason,
+            @Nullable Duration age) {
+        listener.onVerdict(new SweepVerdict(
+                SweepVerdictCategory.SKIPPED_NO_VERDICT,
+                name,
+                roleLabel(c),
+                c.mode().label(),
+                c.baseTaskKey(),
+                reason,
+                age,
+                source));
     }
 
     private enum Gate {

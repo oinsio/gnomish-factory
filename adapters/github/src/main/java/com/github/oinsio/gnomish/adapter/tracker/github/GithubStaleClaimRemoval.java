@@ -50,7 +50,10 @@ import org.slf4j.LoggerFactory;
  * by the epoch of the claim being removed rather than by a tenure this reaper does not hold: a
  * re-driven removal of the same dead claim updates its own marker (UX3), while a later reap of a
  * later tenure posts its own — which the lease anchor depends on, since it takes the latest
- * boundary by position and updating a comment in place does not move it.
+ * boundary by position and updating a comment in place does not move it. A dead footprint is a
+ * claim comment a boundary already voided and that is still in the thread; it is scoped by that
+ * comment's epoch and deleted like a live one, so a removal killed after its marker — whose
+ * marker voids the claim it removes — re-drives onto its own marker (F79 of tighten-spec-contract).
  *
  * <p>A removal is a destructive action taken against another instance's tenure, so the one that
  * happens is an INFO anchor naming the holder whose claim was retired; the far more common
@@ -106,9 +109,7 @@ public final class GithubStaleClaimRemoval {
         }
         return switch (current) {
             case ClaimFacts.Live live -> removeLiveClaim(ref, id, thread.get(), live);
-            // A dead footprint has no comment left to delete: the boundary marker and the label
-            // flip still run, which is exactly what retires the footprint and returns the task.
-            case ClaimFacts.Dead dead -> retire(ref, id, dead.lastKnownHolder(), null, null);
+            case ClaimFacts.Dead dead -> removeDeadFootprint(ref, id, thread.get(), dead);
             // No footprint at all is the one input with nothing to retire; reporting the absent
             // facts converges rather than posting a boundary for a tenure that left no trace.
             case ClaimFacts.None ignored -> convergeAbort(ref, "the tenure left no footprint", null);
@@ -119,7 +120,29 @@ public final class GithubStaleClaimRemoval {
     private RemoveStaleClaimResult removeLiveClaim(
             TaskRef ref, GithubTaskId id, List<GithubClaimComment.Candidate> thread, ClaimFacts.Live live) {
         GithubClaimComment.Candidate claim = GithubClaimComment.resolve(thread).orElseThrow();
-        return retire(ref, id, live.holder(), claim.id(), live.version());
+        ClaimVersion version = live.version();
+        String human = "🤖 gnomish: stale claim removed — dead holder %s, removed comment %d, observed version %s@%s"
+                .formatted(live.holder(), claim.id(), version.markerId(), version.updatedAt());
+        return retire(ref, id, live.holder(), claim, human);
+    }
+
+    /**
+     * The dead-footprint path: a boundary already voided the claim comment, which is still in the
+     * thread — the footprint is made of it, so it exists whenever the facts say {@code Dead}. The
+     * removal is scoped by the epoch that voided comment still carries and deletes it, exactly as
+     * the live path does. That is what makes a removal killed after its own marker re-drivable: the
+     * marker voids the claim, the re-read reports a dead footprint, and the re-drive scopes by the
+     * same epoch, finds its own marker and updates it instead of posting a second (F79 of
+     * tighten-spec-contract).
+     */
+    private RemoveStaleClaimResult removeDeadFootprint(
+            TaskRef ref, GithubTaskId id, List<GithubClaimComment.Candidate> thread, ClaimFacts.Dead dead) {
+        GithubClaimComment.Candidate claim =
+                GithubClaimComment.lastClaim(thread).orElseThrow();
+        String human =
+                "🤖 gnomish: stale claim removed — dead holder %s, no live claim comment left, removed voided comment %d"
+                        .formatted(dead.lastKnownHolder(), claim.id());
+        return retire(ref, id, dead.lastKnownHolder(), claim, human);
     }
 
     /**
@@ -136,19 +159,13 @@ public final class GithubStaleClaimRemoval {
     /**
      * The removal physics, shared by both footprint shapes: the boundary marker FIRST — it names
      * the dead (or last-known) holder and anchors the next lease round's verify-read — then the
-     * dead claim comment's deletion when there is one, then the ready flip. Constructive before
-     * destructive, so a kill anywhere leaves a shape the sweep still enumerates.
+     * claim comment's deletion, then the ready flip. Constructive before destructive, so a kill
+     * anywhere leaves a shape the sweep still enumerates.
      */
     private RemoveStaleClaimResult retire(
-            TaskRef ref,
-            GithubTaskId id,
-            String deadHolder,
-            @Nullable Long commentId,
-            @Nullable ClaimVersion observedVersion) {
-        postRemovalMarker(id, deadHolder, commentId, observedVersion);
-        if (commentId != null) {
-            deleteClaimComment(id, commentId);
-        }
+            TaskRef ref, GithubTaskId id, String deadHolder, GithubClaimComment.Candidate claim, String human) {
+        postRemovalMarker(id, claim, human);
+        deleteClaimComment(id, claim.id());
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, readyLabel);
         log.info(
                 "removed stale claim of instance {} on task {}; the task is back in circulation", deadHolder, ref.id());
@@ -178,18 +195,13 @@ public final class GithubStaleClaimRemoval {
         return Optional.of(GithubClaimComment.parse(response.body()));
     }
 
-    private void postRemovalMarker(
-            GithubTaskId id, String deadHolder, @Nullable Long commentId, @Nullable ClaimVersion observedVersion) {
-        String human = observedVersion == null
-                ? "🤖 gnomish: stale claim removed — dead holder %s, no live claim comment left".formatted(deadHolder)
-                : "🤖 gnomish: stale claim removed — dead holder %s, removed comment %d, observed version %s@%s"
-                        .formatted(deadHolder, commentId, observedVersion.markerId(), observedVersion.updatedAt());
-        // Scoped by the epoch of the claim being removed, so a re-driven removal of the same tenure
-        // updates its own marker while a later reap posts its own (FR11, UX3). A dead footprint has
-        // no epoch to scope by — the removal is then scoped by the holder it retires.
-        String scope = observedVersion == null
-                ? deadHolder
-                : Long.toString(observedVersion.epoch().token());
+    private void postRemovalMarker(GithubTaskId id, GithubClaimComment.Candidate claim, String human) {
+        // Scoped by the epoch of the claim being removed — live, or voided and still in the thread —
+        // so a re-driven removal of the same tenure updates its own marker while a later reap posts
+        // its own (FR11, UX3). The epoch is minted where every claim version is (versionOf).
+        String scope = Long.toString(GithubClaimComment.versionOf(claim.id(), claim.updatedAt())
+                .epoch()
+                .token());
         markerWriter.write(
                 id,
                 new GithubMarkerWrite(

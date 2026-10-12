@@ -401,7 +401,7 @@ ready with point calls. Before acting it SHALL re-read the claim facts and
 compare them against the caller's observation, changing nothing when they no
 longer match.
 **Implements**: FR4, FR5 of add-claim-heartbeat; NFR-R2, NFR-O1 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract
-**Notes**: All instances operate under one token, so deleting another instance's claim comment is physically possible. An observed dead footprint is the `ClaimAbandoned` repair: a footprint with no live version.
+**Notes**: All instances operate under one token, so deleting another instance's claim comment is physically possible. An observed dead footprint is the `ClaimAbandoned` repair: a footprint with no live version. On GitHub that footprint is a claim comment a boundary already voided and that is still in the thread; the removal scopes its marker by the epoch that comment carries and deletes it, so a removal killed after its own marker and re-driven lands on that marker.
 
 #### Scenario: Removal leaves an audit trail
 - **WHEN** a reaper removes a stale claim
@@ -429,10 +429,10 @@ longer match.
   the result reports the live claim facts
 
 #### Scenario: A vanished footprint still gets the marker and the flip
-- **WHEN** `removeStaleClaim` runs for an observed dead footprint whose claim
-  comment no longer exists
-- **THEN** the adapter attempts no deletion, still posts the boundary marker
-  naming the last-known holder, and flips the label to ready
+- **WHEN** `removeStaleClaim` runs for an observed dead footprint whose voided
+  claim comment a racing remover deletes after the pre-action re-read
+- **THEN** the delete answered 404 is tolerated, and the adapter still posts
+  the boundary marker naming the last-known holder and flips the label to ready
 
 #### Scenario: Racing removals converge
 - **WHEN** two reapers remove the same stale claim concurrently

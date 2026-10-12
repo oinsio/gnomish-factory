@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 
 /**
@@ -30,6 +31,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
 
         then:
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].reason() == 'stop failed: unowned running main-box'
     }
 
@@ -42,6 +44,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
 
         then:
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].reason() == 'dispose failed: unowned guard'
     }
 
@@ -53,6 +56,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
 
         then:
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].reason() == 'dispose failed: unowned remnant, past reap threshold'
     }
 
@@ -74,6 +78,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
         then:
         noExceptionThrown()
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].reason() == 'dispose failed: unowned remnant, past reap threshold'
     }
 
@@ -107,6 +112,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
 
         then:
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].reason() == 'dispose failed: unowned remnant, past reap threshold'
     }
 }

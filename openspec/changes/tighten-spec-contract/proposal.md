@@ -52,6 +52,10 @@ specs hold today.
   `operator/`, `pipeline/`, `release/`, `sandbox/`, `serve/`, `tracker/`); the spec id is the
   path, and the main spec, every unarchived delta, every marker and every exemption file follow
   it.
+- **MODIFIED** — production code, the build and one ADR, for the defects the new tests revealed:
+  the sixteen findings sorted at decision point 8.14 to follow-up changes are fixed here instead
+  (operator revision of 2026-10-12, design D11), so the change leaves no `@PendingFeature` of its
+  own and no `pending-test:` entry except those a queued change delivers.
 
 ## Goals
 
@@ -77,6 +81,8 @@ specs hold today.
   headings: both are the identities other artifacts and the queued deltas reference. One
   exception, decided by the operator at task 5.2: a scenario proven wrong against the code and
   its tests (a finding sorted into this change) is reworded or renamed, citing the finding id.
+  A second exception, decided on 2026-10-12: a requirement holding a one-time scenario (F115,
+  F120) is removed, and its standing part re-added under a new heading (design D16).
 - **NG5** — No undecided production code change. A production edit happens in this change only
   for a finding the operator sorted into it at a decision point (FR11); nothing is fixed on
   the way, and nothing found is dropped.
@@ -165,6 +171,21 @@ specs hold today.
   one file. Test markers and exemption files carry the same id. The move changes no content:
   `git` reports every moved spec as a 100% rename. New capabilities of queued changes are placed
   into a group in the same task.
+- **FR13 — Revealed defects closed.** The defects F74, F79, F82, F85, F90, F106, F107, F109,
+  F111, F113, F119 and F122 are fixed in production code or the build by TDD: each test that
+  revealed one loses its `@PendingFeature` and passes, unchanged in what it asserts, and the
+  scenario it carries is true of the code.
+- **FR14 — Dashboard browser tests.** The six dashboard scenarios whose behavior lives in the
+  page's script and stylesheet (F93) are exercised by tests that load the rendered page in a
+  real browser; their `pending-test:` entries are deleted.
+- **FR15 — Contract-versioning policy.** The factory's versioned JSON contracts (status report,
+  board, serve snapshot, ledger) have one written policy — what counts as released, what is a
+  breaking change, when `version` is bumped and the reference regenerated (F100); the scenario
+  that states it is exempt by naming that record, not by a `pending-test:` entry.
+- **FR16 — One-time scenarios retired.** The seven scenarios of F115 and F120, measured against
+  the state before an archived refactoring, leave the main specs; a requirement that held only
+  such scenarios is removed, and one that held standing scenarios too keeps them under a new
+  heading. Their `pending-test:` entries are deleted.
 
 ### Non-Functional — Reliability
 
@@ -188,6 +209,12 @@ specs hold today.
 
 - **NFR-S1** — The checker treats spec and test text as data: nothing from a file is executed,
   evaluated or interpolated into a command.
+- **NFR-S2** — A commit the gnome writes on its own branch, whatever its message, never makes
+  the task read as delivered (F122): delivery is recognised only on a commit the factory's own
+  round records place outside every round the gnome ran.
+- **NFR-S3** — No class outside the secrets adapter reads a credential from the process
+  environment (F107): the agent's credentials and the child environment's credential layer come
+  through `SecretsProvider`.
 
 ### Non-Functional — Cost
 
@@ -224,7 +251,9 @@ specs hold today.
   `spec: <old>`) outside `openspec/changes/archive/` returns nothing.
 - **M8** — `pending-test:` entries name only a queued change that delivers the behavior
   (baseline 2026-10-12: 302 entries naming six test-only changes, 3 naming
-  `add-subprocess-access-log`); after group 8: 3.
+  `add-subprocess-access-log`); after group 8: 17; after group 9: 3.
+- **M9** — `@PendingFeature` across every test tree: exactly one, F97, carried by the queued
+  `add-claim-return` (baseline after 8.15: 13).
 
 ## Open Questions
 
@@ -236,7 +265,8 @@ specs hold today.
   meanwhile by a `pending-test: <change>` exemption or a pending-marked test, so the gate is
   green without hiding the gap. The operator decides at tasks 5.2 and 6.8. Revised 2026-10-12:
   the operator folded the six area follow-ups back into this change (group 8); `pending-test:`
-  is kept only for a scenario whose behavior a queued change still delivers.
+  is kept only for a scenario whose behavior a queued change still delivers. Revised again
+  2026-10-12: the sixteen findings 8.14 sorted to new changes are fixed here (group 9, D11).
 - **Q3 — Where the inventory tables live.** Decided: under `temporary-docs/tighten-spec-contract/`
   (one directory for every task of the change, so the decision points see every row), as
   working documents of the tasks; nothing durable references them.
@@ -279,7 +309,19 @@ and by the functional spec of the checker.
   into groups (FR12, task 7.3a); `config/spec-contract-exemptions/` — 33 files renamed; about
   2 000 markers re-prefixed.
 - Every test tree (FR5) — markers above features; new specs where a scenario had no test.
-- No production Java; no dependency change.
+- Production Java only for findings sorted into this change: from 5.2–8.14 the fixes listed under
+  `## Decisions` in `tasks.md`; from group 9 (FR13) `:adapters:git` (task-git assembly, delivery
+  walk), `:adapters:github` (stale-claim removal), `:sandbox:docker` (box equipment, egress-guard
+  probe), `:application` (sweep vital, finish report, workspace and console ports),
+  `:bootstrap` (composition root, operator configuration, secrets routing).
+- Build: the Error Prone unused-code checks restored in `java-conventions` (F111); the jackson
+  override carried to the `build-logic` and root buildscript classpaths, both lockfiles
+  regenerated (F113); one new test dependency, the Testcontainers Selenium module, in
+  `:bootstrap`'s end-to-end layer (FR14).
+- `docs/adr/0016-json-contract-versioning.md` (FR15).
+- Five queued changes get a plain bullet each in their `tasks.md` where group 9 moves code they
+  plan to touch (`add-claim-return`, `extract-agent-round-runner`, `fix-docker-exec-env-argv`,
+  `define-executor-contract`, `add-command-executor`).
 - Sequenced **first** in the queue: until it is archived, the archive stage is red for every
   task (`kill-expensive-mutants` and `supervise-daemon-loops-and-embed-dashboard` were
   archived by hand before this change started).

@@ -1,7 +1,10 @@
 package com.github.oinsio.gnomish.serveobservability;
 
+import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource;
 import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The snapshot's {@code vitals.sweep} entry (NFR-O1 of add-serve-sandbox-lifecycle): when the
@@ -33,6 +36,9 @@ import java.util.List;
  *     kept.size()} exactly when the inventory was truncated; never negative
  * @param consecutiveSkippedTicks how many ticks in a row ended with at least one
  *     skipped-no-verdict object; {@code 0} once a tick reaches verdicts again
+ * @param lastSkipSource where the last tick's last skipped verdict failed — the tracker or the
+ *     runtime — named by the stall alarm; null when that tick skipped nothing, or when the
+ *     snapshot predates the field (D17, F90 of tighten-spec-contract)
  */
 public record SweepVital(
         Instant lastTickAt,
@@ -40,7 +46,8 @@ public record SweepVital(
         SweepCounts counts,
         List<KeptEnvironmentEntry> kept,
         int keptTotal,
-        int consecutiveSkippedTicks) {
+        int consecutiveSkippedTicks,
+        @Nullable SkippedVerdictSource lastSkipSource) {
 
     /** How many kept environments the inventory carries before truncating (NFR-O1). */
     public static final int MAX_KEPT_INVENTORY = 20;
@@ -54,8 +61,15 @@ public record SweepVital(
     /**
      * Whether the inventory dropped entries — the fact the snapshot must state rather than imply.
      *
+     * <p>{@code @DoNotMutate} (`testing.md`, JVMTI redefinition limit): since F90 of
+     * tighten-spec-contract added the {@code lastSkipSource} component, PIT's conditional mutants
+     * of this record's methods end in RUN_ERROR with no test run — "class redefinition failed:
+     * attempted to change the class NestHost, NestMembers, Record, or PermittedSubclasses
+     * attribute" (hcoles/pitest#1285). Covered by {@code SweepVitalSpec}'s truncation features.
+     *
      * @return true when {@code keptTotal} exceeds the carried entries
      */
+    @DoNotMutate
     public boolean keptTruncated() {
         return keptTotal > kept.size();
     }
@@ -64,7 +78,11 @@ public record SweepVital(
      * Kept as a shared static method rather than inline in the compact constructor: PIT's record
      * filter suppresses all mutations inside a record's canonical constructor, which would silently
      * exempt this validation from the 100% mutation gate.
+     *
+     * <p>{@code @DoNotMutate}: the JVMTI redefinition limit of {@link #keptTruncated()}. Covered by
+     * {@code SweepVitalSpec}'s negative-count features.
      */
+    @DoNotMutate
     private static int requireNonNegative(int value, String component) {
         if (value < 0) {
             throw new IllegalArgumentException("SweepVital." + component + " must not be negative");

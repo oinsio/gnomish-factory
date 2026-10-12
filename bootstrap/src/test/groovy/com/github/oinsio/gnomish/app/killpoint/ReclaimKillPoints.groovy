@@ -2,11 +2,12 @@ package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
+import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -19,9 +20,11 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
+import java.util.function.UnaryOperator
 
 /**
  * The two reclaim cycles as kill-point table rows (FR6, NFR-R1 of fix-claim-epoch-fence): a tip
@@ -179,9 +182,10 @@ final class ReclaimKillPoints {
         "${world.taskId}: the reclaiming instance quarantined a tip written by an ended tenure (${shape.label()})"
     }
 
-    private static GitTaskBranches reclaimingBranches(KillPointWorld world) {
+    private static TaskBranchGit reclaimingBranches(KillPointWorld world) {
         def reclaimerEpochs = new ClaimEpochBook()
         reclaimerEpochs.issued(world.taskId, RECLAIM_EPOCH)
-        new GitTaskBranches(new GitProcessRunner(), reclaimerEpochs, VirtualTimeGitRetries.gitInfrastructure())
+        GitTaskBackend.taskGit(new GitProcessRunner(), VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(),
+                UnaryOperator.identity(), reclaimerEpochs).branches()
     }
 }

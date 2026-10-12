@@ -20,7 +20,8 @@ class SweepTickLogSpec extends Specification {
     def log = new SweepTickLog(REAP_AGE, clock, 20)
 
     private static SweepVerdict verdict(SweepVerdictCategory category, String taskKey = 'task-1', Duration age = null) {
-        new SweepVerdict(category, 'obj', 'main-box', 'tracked', taskKey, 'reason', age)
+        new SweepVerdict(category, 'obj', 'main-box', 'tracked', taskKey, 'reason', age,
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
     }
 
     // NFR-O1: no tick has completed, so the snapshot honestly says "no sweep data yet".
@@ -243,5 +244,34 @@ class SweepTickLogSpec extends Specification {
         record.counts().isEmpty()
         record.consecutiveSkippedTicks() == 0
         log.consecutiveSkippedTicks() == 0
+    }
+
+    // F90 of tighten-spec-contract: the stall alarm names where the verdicts failed, so the tick
+    //     keeps its last skipped verdict's source — a reached verdict after it does not erase it,
+    //     and the next tick that skips nothing carries none.
+    def "a tick records the source of its last skipped verdict, and a clean tick records none"() {
+        given:
+        def skipped = { SkippedVerdictSource source ->
+            new SweepVerdict(SweepVerdictCategory.SKIPPED_NO_VERDICT, 'obj', 'main-box', 'tracked', 'task-1',
+            'reason', null, source)
+        }
+
+        when:
+        log.beginTick()
+        log.onVerdict(skipped(SkippedVerdictSource.TRACKER))
+        log.onVerdict(skipped(SkippedVerdictSource.RUNTIME))
+        def first = log.endTick()
+        log.beginTick()
+        log.onVerdict(skipped(SkippedVerdictSource.TRACKER))
+        log.onVerdict(verdict(SweepVerdictCategory.CHECKED_ALIVE))
+        def second = log.endTick()
+        log.beginTick()
+        log.onVerdict(verdict(SweepVerdictCategory.CHECKED_ALIVE))
+        def third = log.endTick()
+
+        then:
+        first.lastSkipSource() == SkippedVerdictSource.RUNTIME
+        second.lastSkipSource() == SkippedVerdictSource.TRACKER
+        third.lastSkipSource() == null
     }
 }

@@ -30,12 +30,16 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     private final ClaimEpochSource epochs;
 
     /**
+     * Package-private: outside this package the writer is built only by {@link
+     * GitTaskBackend#taskGit}, over the one tenure record its bundle carries (F74 of
+     * tighten-spec-contract), so no assembly can hand the writers a second book.
+     *
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
      * @param epochs the tenure a salvage commit is stamped with (FR13 of
      *     harden-task-branch-contract), and the one the reconciler's automatic discard is gated on
      *     (FR8); {@link ClaimEpochSource#NONE} where no claim is held
      */
-    public GitTaskWorktrees(GitRunner runner, ClaimEpochSource epochs) {
+    GitTaskWorktrees(GitRunner runner, ClaimEpochSource epochs) {
         this.runner = runner;
         this.cleanup = new TaskWorktreeCleanup(runner);
         this.epochs = epochs;

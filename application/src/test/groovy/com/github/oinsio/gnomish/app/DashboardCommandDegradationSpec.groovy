@@ -190,6 +190,6 @@ class DashboardCommandDegradationSpec extends Specification implements Applicati
         where:
         description | sweep | hygieneText | alarms
         'missing' | null | 'Sandbox sweep has not run yet' | []
-        'stale' | new SweepVital(NOW.minusSeconds(3600), 300L, SweepCounts.NONE, [], 0, 0) | 'Sandbox hygiene' | ['sandbox sweep not running']
+        'stale' | new SweepVital(NOW.minusSeconds(3600), 300L, SweepCounts.NONE, [], 0, 0, null) | 'Sandbox hygiene' | ['sandbox sweep not running']
     }
 }

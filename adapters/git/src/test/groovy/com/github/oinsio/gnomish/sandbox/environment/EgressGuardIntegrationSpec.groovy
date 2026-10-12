@@ -183,12 +183,8 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         commitAll(source)
         gitOutput(source, 'branch', 'task/egress')
         env = new ContainerTaskExecutionEnvironment(
-                docker,
-                key,
-                new BoxGitLink(source, new ContainerHarvestFetch(new GitProcessRunner(), source)),
-                new TaskContainerSettings(EgressProbeImage.ensureBuilt(), 'runc', LIMITS, false),
-                clock,
-                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+                BoxEquipmentFixture.forBox(docker, EgressProbeImage.ensureBuilt(), LIMITS, clock),
+                key, new BoxGitLink(source, new ContainerHarvestFetch(new GitProcessRunner(), source)), ChildEnvAllowlist.none(), 'proj-1')
         env.materialize('task/egress', null)
     }
 }

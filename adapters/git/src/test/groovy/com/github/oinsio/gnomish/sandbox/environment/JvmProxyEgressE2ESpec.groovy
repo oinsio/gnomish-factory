@@ -146,12 +146,8 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
         commitAll(source)
         gitOutput(source, 'branch', 'task/jvm-proxy')
         env = new ContainerTaskExecutionEnvironment(
-                docker,
-                key,
-                new BoxGitLink(source, new ContainerHarvestFetch(new GitProcessRunner(), source)),
-                new TaskContainerSettings(JvmProxyEgressImage.ensureBuilt(), 'runc', LIMITS, false),
-                clock,
-                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+                BoxEquipmentFixture.forBox(docker, JvmProxyEgressImage.ensureBuilt(), LIMITS, clock),
+                key, new BoxGitLink(source, new ContainerHarvestFetch(new GitProcessRunner(), source)), ChildEnvAllowlist.none(), 'proj-1')
         env.materialize('task/jvm-proxy', null)
     }
 }

@@ -152,6 +152,102 @@ still be a `git mv`. *Alternative rejected:* renaming leaves to drop repeated pr
 (`sandbox/sandbox-egress` → `sandbox/egress`) — the marker edit stops being mechanical and
 every id in prose, findings and follow-up proposals stops matching.
 
+**D11 — The follow-ups of 8.14 are fixed here (operator, 2026-10-12, second revision).** The
+sixteen findings 8.14 sorted to new changes — F74, F79, F82, F85, F90, F93, F100, F106, F107,
+F109, F111, F113, F115, F119, F120, F122 — are fixed in this change, group 9 (FR13–FR16). Each
+takes the disposition its `findings.md` row proposed first: the code is made true to the
+scenario, never the scenario restated to the code. F97 stays with `add-claim-return`, which
+replaces the release it names. *Rationale:* every one of them already has its failing test and
+its evidence in this change; twelve small changes would each re-read the same context, and the
+`@PendingFeature` markers would stand in the tree for as long as the queue takes. *Alternative
+rejected:* the 8.14 sort (twelve follow-up changes proposed after archive) — the operator's
+decision; it keeps this change smaller but leaves known defects, two of them security
+(F107, F122), behind a green gate.
+
+**D12 — Assembly escape hatches close at the type (F74, F82, F119; `implementation.md` item 3).**
+*F74:* `:adapters:git` gets one public assembly, `GitTaskBackend.taskGit(runner, retry, clock,
+book, …)`, that builds `GitTaskStore`, `GitTaskBranches` and `GitTaskWorktrees` over the one
+`ClaimEpochBook` it puts into the `TaskGit` it returns; the three writers' constructors become
+package-private, so an assembly whose writers stamp from one book while the tracker fills another
+no longer compiles (`SplitTenureRecordSpec` rewritten against the new surface: the split shape
+calls the writer constructors and fails to compile; the control calls the assembly).
+*F82:* the installation's box equipment (`DockerCli`, `SandboxProperties`, `BoxTiming`, the
+guard config root, `OwnershipMode`) becomes one value, `BoxEquipment`, built once by
+`ContainerEnvironmentFactory`; `ContainerEnvironmentBuilder`, `ContainerTaskExecutionEnvironment`
+and `ContainerEnvironments` take that value plus the task's own inputs (the key, `BoxGitLink`,
+`ChildEnvAllowlist`, the project identity, the denial restoration read), never both halves as
+loose parameters. *Amended at task 9.9:* the first list put `BoxGitLink`, `ChildEnvAllowlist`
+and `ObjectOwnership` in the installation half; they are a task's inputs (the
+`sandbox/execution-environment` requirement "Container environment factory" and
+`ContainerEquipmentSplitSpec` type them so, and `forTask` receives them), and `ObjectOwnership`
+is the installation's mode beside the task's project identity, so `BoxEquipment.ownership(projectId)`
+composes it. A record holding both halves could not be built once, and would only move the mixed
+list into its own constructor. *F119:* the use cases take a
+`WorkspaceFactory` port (per-worktree `Workspace`) and a `ConsoleIO`, both supplied by
+`:bootstrap`; `:application` no longer constructs `DirectoryWorkspace` or `SystemConsoleIO`.
+*Rationale:* each finding is a type that accepts what the owner was introduced to replace; only
+a signature change makes the wrong assembly unconstructible. *Alternative rejected:* restating
+the THENs to name the boundary specs that catch the split today — the operator chose the fix
+(D11), and a whole-tree scan is a weaker guard than the compiler.
+
+**D13 — Delivery is found by walking the factory's own round records (F122, NFR-S2).** The
+classifier no longer asks "is there a commit with the cleanup subject after STARTED". It walks the
+first-parent line down from the tip: the tip-most factory commit is the starting point; every
+attempt commit names, in its subject, the round token — the tip the round opened on — so the
+commits between that token and the attempt commit are the gnome's and are skipped whole, and the
+walk continues at the token. A cleanup commit counts only where the walk lands on it; one inside
+a gnome range never does, whatever its message. *Rationale:* the round token is already the
+identity crash-consistency item 13 uses for liveness; the gnome writes only inside a round, and
+the range a round covers is fixed by commits the factory wrote after the round closed. No key, no
+second medium. *Alternatives rejected:* signing the factory's commits — in host mode the gnome
+runs as the same OS user and can read the key; reading delivery from the tracker — the branch
+classifier would read a second medium, against crash-consistency item 11.
+
+**D14 — The egress guard is probed at the close of every round (F85).** The close of a round in
+container mode, and an in-box retry before its next round, call the guard's liveness probe (the
+check `EgressGuard.ensureRunning` performs, without the restart); a guard found dead classifies
+the round as an infrastructure failure — no attempt burned, the round's grading skipped — and the
+next materialize restarts it as today. *Rationale:* the denial read is fail-open by design (its
+own scenario), so it cannot be the detector; a probe at the boundary is. *Alternative rejected:*
+restating the THEN to "restarted at the next materialize" — leaves a broken round graded as a
+quality failure.
+
+**D15 — Dashboard browser tests run Selenium in a Testcontainers browser (F93, FR14).** The six
+scenarios load the rendered dashboard file in a headless Chrome from the Testcontainers Selenium
+module (`BrowserWebDriverContainer`), in `:bootstrap`'s Docker-dependent end-to-end layer
+(`docker-test-conventions`), on the page the production renderer wrote; time is driven by the page
+clock the script reads, set from the spec. *Rationale:* the behaviors are the script's and the
+stylesheet's (tick, banner, scroll restore, layout at phone width, themes) — only a layout engine
+observes them; Testcontainers is the project's tool for the end-to-end layer. *Alternatives
+rejected:* Playwright for Java — downloads browsers into the user cache on first use, so the build
+is no longer hermetic; HtmlUnit — no layout, so width and theme legibility cannot be asserted.
+
+**D16 — A one-time scenario leaves by REMOVED, its standing neighbours by ADDED under a new
+heading (F115, F120, FR16).** OpenSpec refuses a `MODIFIED` block that drops a scenario. So
+`Full clean-build time not regressed` and `Behavior-preserving split` (every scenario one-time)
+become `REMOVED` blocks; `Source file size cap`, `Shared app-layer assembly fixture`, `Use-case
+dependencies inverted onto ports`, `Single-purpose gate convention` and `Sandbox port contract
+preserved; AdapterBinding opened by change C` become a `REMOVED` block plus an `ADDED` requirement
+under a new heading carrying the requirement's text and its standing scenarios verbatim (their
+markers unchanged, since the scenario titles are). No queued delta modifies any of the seven
+headings (checked 2026-10-12). *Rationale:* the one route OpenSpec allows inside one change.
+*Alternatives rejected:* rewording each THEN into a standing property under the same title —
+titles like `Existing sandbox specs pass unchanged` would then misname their scenario; the
+two-change route of F1 — two more changes for what one delta can carry.
+
+**D17 — The remaining fixes take the finding's first disposition.** F79: a removal re-driven over
+a voided claim scopes its marker by the epoch the voided claim comment still carries and deletes
+that comment, so a re-drive lands on its own marker. F90: the sweep vital carries the source of
+the last skipped verdict and the stall alarm names it. F100: `docs/adr/0016-json-contract-versioning.md`
+states the policy and the scenario's exemption names it. F106: a higher source's list shadows
+the lower source's indexed keys whole (`OperatorConfigLoader`). F107: the agent credential seam
+and the child environment's credential layer read through `SecretsProvider` (NFR-S3). F109: the
+text report renders a passing check's run URL. F111: the cause of the inert `UnusedMethod` /
+`UnusedVariable` checks is found and recorded, the checks fire again, and the dead code they
+then report is deleted. F113: the jackson override reaches the `build-logic` and root buildscript
+classpaths and both lockfiles are regenerated. *Rationale:* D11. *Alternative rejected:* the second
+disposition each row offered (restate the THEN) — the operator's decision.
+
 **Sync surfaces.** `scripts/check-spec-contract.sh` and the two stage YAML verification commands
 are launchers only (one line each invoking the task); no rule lives in them. The twenty informal
 `// Scenario:` comments in `TakeBareAutoSpec`, `TakeDispositionSpec` and `TakeSlotRunnerSpec` are
@@ -160,7 +256,12 @@ not in the `<spec-id> / <title>` form as a malformed marker, so no second spelli
 remains or returns. The three documents that describe the format
 (`traceability.md`, `delta-specs.md`, `rules.specs` in `openspec/config.yaml`) are prose, each
 with one example, and the checker is what keeps them honest. No code of this change implements
-a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is touched.
+a rule that exists elsewhere. Two declared pairs of `manual-sync-pairs.md` are touched by findings
+fixed here, both ends in the same task: `ClaimLeases` / `GithubIndexRepair` (F81, 8.15 — the
+in-memory end now names the shape the GitHub end does) and `SnapshotJsonMapper` /
+`SnapshotJsonReader` (F90 — the new sweep-vital field is written and read in task 9.4, and the
+snapshot reference regenerated). `ChildEnvAllowlist` keeps its single `compose` formula; F107
+changes where its credential values come from, not the composition.
 
 **Single-owner mechanisms.**
 
@@ -169,6 +270,11 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
 | The `**Implements**:` line (D1) | the requirement's traceability ids, as one metadata line | every requirement under `openspec/specs/`; every requirement in `openspec/changes/<unarchived>/specs/`; `traceability.md`, `delta-specs.md`, `rules.specs` (the three places that tell an author the form) | `<!-- implements … -->` in Requirement/Scenario specs, deleted outside the archive by the generated deltas (D3) and the queue rework (D8); the YAML-like `# implements` form is not replaced — it lives in blocks OpenSpec does not measure | `SpecContractCheck`: a comment-form hit in the scanned trees is a failure; a requirement with zero or two lines is a failure |
 | The scenario title (D4)         | the identity of a scenario, as `<spec-id> / <title>`     | the spec's `#### Scenario:` heading; the `// Scenario:` marker in the test that exercises it; the exemption list entry for a scenario verified elsewhere                                                   | the informal `// Scenario:` comments in `TakeBareAutoSpec`, `TakeDispositionSpec` and `TakeSlotRunnerSpec` (converted; a malformed `// Scenario:` line is a finding); the implicit "the FR id covers it" link (kept for FR traceability, no longer the only link)                                                                         | `SpecContractCheck` in both directions, exemption list asserted reached                                                      |
 | `SpecContractCheck` (D5)        | the verdict on the project's spec-contract rules         | root `check`; `scripts/check-spec-contract.sh`; the fix-artifacts and archive stage verification commands                                                                                                  | none existed; the launchers are forbidden to hold a rule by the functional spec, which runs the script and the stage command against the same fixture tree and expects the same findings                                                    | `SpecContractCheckFunctionalSpec`, `SpecContractScenarioLinkFunctionalSpec`, `SpecContractLauncherFunctionalSpec`, `StageSpecContractCommandSpec`, `SpecContractRuleExampleFunctionalSpec` (the `delta-specs.md` example passes the gate) (split for file size) |
+| `GitTaskBackend.taskGit` (D12, F74) | the task-git bundle over one tenure record (`TaskGit` holding one `ClaimEpochBook`) | `bootstrap/.../ManualRunConfiguration.java` (four constructions today); `test-fixtures/.../TaskGitFixture.groovy`; the test constructions listed by `grep -rn "new GitTaskStore(\|new GitTaskBranches(\|new GitTaskWorktrees("` in `:application` and `:bootstrap` test trees, each moved to the assembly or to `TaskGitFixture` (task 9.8: `GitModeMidRoundPushSpec`, `killpoint/ReclaimKillPoints`, `killpoint/CreationWorld`, `killpoint/KillPointWorld`, `take/RevocationHandlerSpec`) | the public constructors `GitTaskStore(…, ClaimEpochSource, …)`, `GitTaskBranches(…, ClaimEpochSource, …)`, `GitTaskWorktrees(…, ClaimEpochSource)` become package-private; `:adapters:git`'s own specs keep using them from the package | the compiler (`SplitTenureRecordSpec`, both shapes compiled); for Groovy sources, which the compiler does not hold to package-private access, `SplitTenureRecordSpec`'s whole-tree scan for hand-built writers outside `adapters/git`; `ClaimlessGitBoundarySpec`; `LayerReachSpec` names `GitTaskBackend` as the one adapter class that may name `ClaimEpochBook` and asserts it holds no field (task 9.8) |
+| `BoxEquipment` (D12, F82)       | the installation's box equipment, one value               | `sandbox/docker/.../ContainerEnvironmentFactory.java` (holds it); `ContainerEnvironmentBuilder`, `ContainerTaskExecutionEnvironment`, `ContainerEnvironments` (take it); test constructions through `test-fixtures/.../BoxEquipmentFixture.groovy` or `new BoxEquipment(` (`ContainerEnvironmentsFixture`, `ContainerEnvironmentsSeamSpec`, `ScriptedSandboxDocker`, task 9.9) | the three mixed constructors' loose equipment parameters; the per-task `new DockerCli(` in `forTask`, the `new ObjectOwnership(` in `forTask` and the `new TaskContainerSettings(` and `guardConfigRoot.resolve(` in `ContainerEnvironmentBuilder.build` (now `BoxEquipment.docker`, `ownership`, `containerSettings`, `guardConfig`) | `ContainerEquipmentSplitSpec` (reflection over the chain's constructors and static factories); the compiler (no constructor of the three accepts the loose members) |
+| `WorkspaceFactory` / `ConsoleIO` from the root (D12, F119) | the per-worktree `Workspace`; the console | `application/.../TakeEngineExecution.java`, `PipelineStartup.java`, `GitModeRunner.java`, `GitResumeContinuation.java` (workspace); `ConsoleTakeoverConfirmation.java` (console) | `new DirectoryWorkspace(` and `new SystemConsoleIO(` in `application/src/main`; the two adapters move to `:bootstrap` or stay constructed only there (`FactoryApplication`, `OperatorConfigLoader`, `ManualRunConfiguration` construct the console today) | `UseCasePortSpec` |
+| The round-record walk (D13, F122) | delivery of a task branch (`boolean`, the classifier's fact) | `adapters/git/.../GitShowTip.java` (`cleanupCommit`), `DeliveredBranchReader.java`, `RefTipSource.java`, `BranchTipFactsReader.java` → `BranchShapeClassifier` | the subject search for `gnomish: cleanup` over the first-parent line after STARTED, deleted | `DeliveryAncestrySpec` (the gnome-subject feature green, the existing delivery features unchanged) |
+| `SecretsProvider` (D17, F107)   | a credential value (`Optional<String>` through the port)  | `adapters/agent/.../ExecutorRoundExecution.java`, `JudgeRoundExecution.java` (via `AgentAiSeam`); `bootstrap/.../RunAssembler.java`, `ContainerRunSupportFactory.java` (via `ChildEnvAllowlist.of`) | `System.getenv()` in `AgentAiSeam.fromFactoryEnvironment`; `System::getenv` handed to `ChildEnvAllowlist.of`                                                                                                                         | `SecretsPortBoundarySpec`, `AgentCredentialSeamBoundarySpec` |
 
 ## Risks / Trade-offs
 
@@ -193,6 +299,17 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
   comment and works in every language there.
 - [The queue rework touches 26 changes other work may be editing] → sequenced first, and each
   change's rework is one task validated by `openspec validate <change> --strict`.
+- [Group 9 grows the change past the four weeks `process-invariants.md` allows] → the operator's
+  decision (D11); each finding is one task with its own TDD cycle and scoped PIT, so the group can
+  stop after any task with the rest still carried by their `@PendingFeature` markers.
+- [Restored unused-code checks report dead code across the whole build (F111)] → the task deletes
+  what they report; a finding that is not dead (reflection, a framework entry point) is suppressed
+  on its declaration with the reason, and the count is in the task report.
+- [Group 9 moves code queued changes plan to touch] → `add-claim-return` (F79,
+  `GithubStaleClaimRemoval`), `extract-agent-round-runner`, `fix-docker-exec-env-argv` and
+  `define-executor-contract` (F107, `AgentAiSeam`, `ChildEnvAllowlist`), `add-command-executor`
+  and `fix-docker-exec-env-argv` (F82, the container chain) each get a plain bullet in their
+  `tasks.md` (task 9.16), the precedent of F59 and F66–F69.
 
 ## Migration Plan
 
@@ -201,5 +318,6 @@ deltas, id set proven (group 3). 4. Editorial pass per capability (group 4). 5. 
 decision point, markers, tests (group 5). 6. Queue rework (group 6). 7. Scratch-worktree sync,
 strict validation, wiring into `check`, regroup of `openspec/specs/` by D10 (7.3a–7.3d), full
 `check` once (group 7). 8. Tests for the scenarios carried by `pending-test` (group 8),
-decision point, whole-tree `check` once more. Rollback before archive is
+decision point, whole-tree `check` once more. 9. The 8.14 follow-ups fixed here (group 9, D11–D17),
+then the whole-tree `check` once more. Rollback before archive is
 deleting the change; after archive, the comment form is gone and a rollback is a new change.

@@ -43,6 +43,10 @@ buildscript {
         // httpclient5: a plugin drags in 5.6.1 (GHSA-hjcp-jmpx-g3qm); it is what
         // strictly requires the httpcore5 pair above, so the three move together.
         resolutionStrategy.force "org.apache.httpcomponents.client5:httpclient5:${buildscriptHttpclient5Version}"
+        // com.fasterxml.jackson (Jackson 2.x): a plugin drags in 2.22.1, whose databind carries
+        // the advisories gradle.properties names. Forcing the bom moves the whole family through
+        // its constraints. Same version as the catalog's pin (F113 of tighten-spec-contract).
+        resolutionStrategy.force "com.fasterxml.jackson:jackson-bom:${buildscriptJackson2BomVersion}"
     }
 }
 

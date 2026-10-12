@@ -13,7 +13,7 @@ class SweepVitalSpec extends Specification {
     static final Instant TICK_AT = Instant.parse('2026-08-06T09:00:00Z')
 
     private static SweepVital vital(List<KeptEnvironmentEntry> kept, int keptTotal) {
-        new SweepVital(TICK_AT, 300L, SweepCounts.NONE, kept, keptTotal, 0)
+        new SweepVital(TICK_AT, 300L, SweepCounts.NONE, kept, keptTotal, 0, null)
     }
 
     // NFR-O1: "the inventory SHALL be bounded in size, truncation stated in the snapshot".
@@ -48,7 +48,7 @@ class SweepVitalSpec extends Specification {
 
     def "a negative counter is rejected, naming the component"() {
         when:
-        new SweepVital(TICK_AT, 300L, SweepCounts.NONE, [], keptTotal, consecutiveSkippedTicks)
+        new SweepVital(TICK_AT, 300L, SweepCounts.NONE, [], keptTotal, consecutiveSkippedTicks, null)
 
         then:
         def error = thrown(IllegalArgumentException)

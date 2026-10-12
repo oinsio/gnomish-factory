@@ -35,8 +35,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     private ContainerTaskExecutionEnvironment env(String image = 'gnomish/img') {
         new ContainerTaskExecutionEnvironment(
-                docker, KEY, new BoxGitLink(SOURCE_CLONE, harvester), new TaskContainerSettings(image, 'runc', LIMITS, false),
-                clock, ChildEnvAllowlist.none(), OWNERSHIP)
+                BoxEquipmentFixture.forBox(docker, image, LIMITS, clock, OWNERSHIP.mode()),
+                KEY, new BoxGitLink(SOURCE_CLONE, harvester), ChildEnvAllowlist.none(), OWNERSHIP.projectId())
     }
 
     def setup() {
@@ -557,8 +557,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             -> factoryEnv
         })
         def e = new ContainerTaskExecutionEnvironment(
-                docker, KEY, new BoxGitLink(SOURCE_CLONE, harvester), new TaskContainerSettings('gnomish/img', 'runc', LIMITS, false),
-                clock, allowlist, OWNERSHIP)
+                BoxEquipmentFixture.forBox(docker, 'gnomish/img', LIMITS, clock, OWNERSHIP.mode()),
+                KEY, new BoxGitLink(SOURCE_CLONE, harvester), allowlist, OWNERSHIP.projectId())
         e.materialize('task/x', null)
 
         when: 'an exec with a factory-set fragment starts (the recording fake then stops it)'

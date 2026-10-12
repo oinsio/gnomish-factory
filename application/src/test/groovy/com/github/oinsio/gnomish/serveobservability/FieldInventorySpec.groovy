@@ -72,6 +72,7 @@ class FieldInventorySpec extends Specification {
         untilReapSeconds : FieldCategory.COUNTER,
         keptTotal : FieldCategory.COUNTER,
         consecutiveSkippedTicks: FieldCategory.COUNTER,
+        lastSkipSource : FieldCategory.STATE,
         checkedAlive : FieldCategory.COUNTER,
         keptUnderThreshold : FieldCategory.COUNTER,
         stoppedOrphan : FieldCategory.COUNTER,

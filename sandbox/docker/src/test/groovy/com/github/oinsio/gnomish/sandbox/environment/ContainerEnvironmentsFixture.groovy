@@ -35,9 +35,8 @@ trait ContainerEnvironmentsFixture {
             Supplier<DenialRestoration> restoration = {
                 -> DenialRestoration.none()
             }) {
-        new ContainerEnvironments(docker, key, new ContainerEnvironmentBuilder(
-                        docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                        timing, allowlist, Path.of('/factory/guard-config'),
-                        new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')), restoration, timing)
+        new ContainerEnvironments(
+                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.TRACKED),
+                key, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1', restoration)
     }
 }

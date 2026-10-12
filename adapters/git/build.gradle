@@ -116,6 +116,18 @@ dependencies {
 // own exceptions, next to the mutation scope they narrow). Moved here with the
 // specs they name when task 10.2 carved the git seam out of `:adapters`.
 pitest {
+    // Arid wiring (`.claude/rules/testing.md`, "Per-class exemptions (`excludedClasses`, arid
+    // wiring)"): `GitTaskBackend` is the one public assembly of the task-git bundle (design D12, F74
+    // of tighten-spec-contract). It carries no decision — its only body builds the three writers
+    // and the base-ref reader over its own parameters and returns them in a `TaskGit` — so its every
+    // mutant is a nulled return a spec could kill only by asserting "method calls method". The
+    // bundle it builds is driven end to end in `:bootstrap`, through `ManualRunConfiguration` and
+    // `TaskGitFixture`: `ServeClaimEpochStampSpec`, `InMemoryTakeLifecycleCrashReapReclaimSpec` and
+    // `InMemoryTakeLifecycleEscalateResumeSpec` assert on a real origin that the commits carry the
+    // epoch the bundle's own book recorded, which a split or a null bundle would break.
+    excludedClasses = [
+        'com.github.oinsio.gnomish.adapter.git.GitTaskBackend',
+    ]
     // add-sandbox-core (tasks 4.5, 4.6, 5.5, 6.5, 9.2-9.4): the Docker-gated integration
     // suites below drive a real daemon — real containers, volumes and networks through
     // subprocess `docker`/`git`. A mutant that breaks a wait/retry/kill loop in that

@@ -35,6 +35,7 @@ public final class SweepTickLog implements SweepVerdictListener {
 
     private final Map<SweepVerdictCategory, Integer> tally = new EnumMap<>(SweepVerdictCategory.class);
     private final Map<String, Duration> keptAges = new LinkedHashMap<>();
+    private @Nullable SkippedVerdictSource lastSkipSource;
     private volatile @Nullable SweepTickRecord lastTick;
     private volatile int consecutiveSkippedTicks;
 
@@ -55,11 +56,15 @@ public final class SweepTickLog implements SweepVerdictListener {
     public synchronized void beginTick() {
         tally.clear();
         keptAges.clear();
+        lastSkipSource = null;
     }
 
     @Override
     public synchronized void onVerdict(SweepVerdict verdict) {
         tally.merge(verdict.category(), 1, Integer::sum);
+        if (verdict.skipSource() != null) {
+            lastSkipSource = verdict.skipSource();
+        }
         if (verdict.category() != SweepVerdictCategory.KEPT_UNDER_THRESHOLD) {
             return;
         }
@@ -80,7 +85,12 @@ public final class SweepTickLog implements SweepVerdictListener {
         consecutiveSkippedTicks =
                 tally.containsKey(SweepVerdictCategory.SKIPPED_NO_VERDICT) ? consecutiveSkippedTicks + 1 : 0;
         SweepTickRecord record = new SweepTickRecord(
-                clock.instant(), Map.copyOf(tally), inventory, keptAges.size(), consecutiveSkippedTicks);
+                clock.instant(),
+                Map.copyOf(tally),
+                inventory,
+                keptAges.size(),
+                consecutiveSkippedTicks,
+                lastSkipSource);
         lastTick = record;
         return record;
     }

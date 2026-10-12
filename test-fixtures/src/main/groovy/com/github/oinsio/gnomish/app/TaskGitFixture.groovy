@@ -1,14 +1,10 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.GitBaseRefs
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
-import com.github.oinsio.gnomish.adapter.git.GitTaskStore
-import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
+import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.util.function.UnaryOperator
 
@@ -47,28 +43,31 @@ final class TaskGitFixture {
      * same fake).
      */
     static TaskGit real(GitProcessRunner runner) {
-        def epochs = new ClaimEpochBook()
-        build(runner, epochs, epochs)
+        build(runner, new ClaimEpochBook())
     }
 
     /**
-     * A {@link TaskGit} whose writers hold no claim tenure at all: the bundle still carries a
-     * tenure record, because no {@link TaskGit} may be built without one (FR4 of
-     * fix-claim-epoch-fence), but its writers are wired to {@link ClaimEpochSource#NONE} rather
-     * than to it. For the commands that never claim — {@code status}, {@code usage}, {@code board}
-     * — where the distinction is the point of the spec; every other spec wants {@link #real()}.
+     * A {@link TaskGit} for the commands that never claim — {@code status}, {@code usage},
+     * {@code board} — where the distinction is the point of the spec; every other spec wants
+     * {@link #real()}. The bundle still carries a tenure record, because no {@link TaskGit} may be
+     * built without one (FR4 of fix-claim-epoch-fence), and its writers stamp from that record, the
+     * only shape the assembly admits (F74 of tighten-spec-contract): what makes it claimless is that
+     * nothing ever fills the book, since the commands it serves wrap no tracker with it, so every
+     * task answers empty and no commit is stamped — exactly a git layer that holds no tenure.
      */
     static TaskGit realClaimless() {
-        build(new GitProcessRunner(), ClaimEpochSource.NONE, new ClaimEpochBook())
+        build(new GitProcessRunner(), new ClaimEpochBook())
     }
 
-    /** The one construction every form shares: {@code stamps} feeds the writers, {@code record} the bundle. */
-    private static TaskGit build(GitProcessRunner runner, ClaimEpochSource stamps, ClaimEpochBook record) {
+    /**
+     * The one construction every form shares: the production assembly over one book, which feeds
+     * the writers and is the bundle's record alike (design D12 of tighten-spec-contract).
+     */
+    private static TaskGit build(GitProcessRunner runner, ClaimEpochBook epochs) {
         // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
         // startup reads origin's default branch through it. Its retry runs on virtual time, so a
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.
-        new TaskGit(new GitTaskStore(runner, stamps, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()), new GitTaskBranches(runner, stamps, VirtualTimeGitRetries.gitInfrastructure()),
-                new GitTaskWorktrees(runner, stamps), UnaryOperator.identity(),
-                new GitBaseRefs(runner, VirtualTimeGitRetries.gitInfrastructure()), record)
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(),
+                UnaryOperator.identity(), epochs)
     }
 }

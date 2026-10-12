@@ -10,7 +10,6 @@ import static com.github.oinsio.gnomish.architecture.SecurityOverrideSources.sec
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
-import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -69,7 +68,6 @@ class SecurityOverrideLockStateSpec extends Specification {
     }
 
     // Scenario: build/quality-gates / An override reaches every configuration that resolves the artifact
-    @PendingFeature(reason = 'F113 (fix-buildscript-jackson-lock): build-logic and the root buildscript classpath still lock jackson-bom 2.22.1')
     def "FR4: an override reaches every committed lockfile listing its artifact, the separate builds included"() {
         expect: 'a lockfile the override does not reach is named as a stale entry'
         stale(catalogPins(), lockfiles()) == []

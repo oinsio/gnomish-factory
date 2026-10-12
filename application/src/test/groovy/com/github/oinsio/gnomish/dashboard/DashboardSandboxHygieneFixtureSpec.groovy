@@ -71,13 +71,13 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
         def html = renderCycle().render(new BoardSectionView(null, null, null), NOW, null)
 
         then: 'cleaned = disposedAged(1) + disposedReconstructible(3) = 4, stopped = 1,'
-        // 'checked and untouched = checkedAlive(4) + keptUnderThreshold(2) = 6, skipped = 0'
+        // 'checked and untouched = checkedAlive(4) + keptUnderThreshold(2) = 6, skipped = 1'
         html.contains('<span class="row__label">cleaned</span><span class="row__count num" title="4">4</span>')
         html.contains('<span class="row__label">stopped</span><span class="row__count num" title="1">1</span>')
         html.contains(
                 '<span class="row__label">checked and untouched</span><span class="row__count num" title="6">6</span>')
         html.contains(
-                '<span class="row__label">skipped without verdict</span><span class="row__count num" title="0">0</span>')
+                '<span class="row__label">skipped without verdict</span><span class="row__count num" title="1">1</span>')
 
         and: 'the per-object depth the redesign dropped is absent: no kept inventory, no actions table'
         !html.contains('time to reap')

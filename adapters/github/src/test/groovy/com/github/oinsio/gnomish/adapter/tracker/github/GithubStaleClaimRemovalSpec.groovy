@@ -355,32 +355,60 @@ class GithubStaleClaimRemovalSpec extends Specification {
         thrown(GithubStaleClaimException)
     }
 
-    // FR19 of harden-task-branch-contract: a dead footprint — a thread naming a former holder with
-    //     no live claim comment left — is an eligible input, not a filtered-out one. There is no
-    //     comment to delete, so the boundary marker and the label flip alone retire the footprint.
-    // Scenario: tracker/github-tracker / A vanished footprint still gets the marker and the flip
+    // FR19 of harden-task-branch-contract: a dead footprint — a thread whose claim comment a
+    //     boundary already voided — is an eligible input, not a filtered-out one. The voided comment
+    //     is still in the thread (it is what the footprint is made of), so the removal scopes its
+    //     marker by the epoch that comment carries and deletes it, as the live path does (F79 of
+    //     tighten-spec-contract: the marker was scoped by the holder and the comment was left).
     // Scenario: tracker/tracker-port / Dead footprint is removable without a live version
-    def "FR19: a dead footprint is removable without a live version"() {
-        given: 'the thread names a former holder but its claim comment is gone, with no boundary after it'
+    def "FR19: a dead footprint is removable without a live version — scoped by the voided claim's epoch, which is deleted"() {
+        given: 'the thread names a former holder whose claim comment 600 an abort already voided'
         stubComments(80, '[' + claimComment(600, 'gnomish-factory-dead', '2026-07-23T10:00:00Z')
                 + ',' + abortComment(601) + ']')
         stubMarkerPost(80)
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/600'))
+                .willReturn(aResponse().withStatus(204)))
         stubLabelTransition(80)
 
         when: 'the reaper removes against the dead footprint it observed'
         def result = newRemoval().removeStaleClaim(refFor(80), new ClaimFacts.Dead('gnomish-factory-dead'))
 
-        then: 'the removal completes: the boundary marker names the last-known holder, the label flips'
+        then: 'the boundary marker names the last-known holder and is scoped by the voided claim`s epoch'
         result instanceof RemoveStaleClaimResult.Removed
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/80/comments'))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"intent":"stale_claim_removed@600"')))
+                .withRequestBody(WireMock.matchingJsonPath('$.body',
+                WireMock.containing('dead holder gnomish-factory-dead'))))
+
+        and: 'the voided claim comment is deleted and the label flips to ready'
+        wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/600')))
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/80/labels'))
+                .withRequestBody(WireMock.containing(READY_LABEL)))
+    }
+
+    // FR19: the voided claim comment can vanish between the re-read and the delete (a racing
+    //     remover took it): the 404 is tolerated, and the marker and the flip still retire the task.
+    // Scenario: tracker/github-tracker / A vanished footprint still gets the marker and the flip
+    def "FR19: a dead footprint whose comment vanished after the re-read still gets the marker and the flip"() {
+        given: 'the re-read still shows the voided claim comment, but a racing remover deletes it first'
+        stubComments(83, '[' + claimComment(610, 'gnomish-factory-dead', '2026-07-23T10:00:00Z')
+                + ',' + abortComment(611) + ']')
+        stubMarkerPost(83)
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/610'))
+                .willReturn(aResponse().withStatus(404)))
+        stubLabelTransition(83)
+
+        when:
+        def result = newRemoval().removeStaleClaim(refFor(83), new ClaimFacts.Dead('gnomish-factory-dead'))
+
+        then: 'the removal completes: the marker names the last-known holder, the label flips'
+        result instanceof RemoveStaleClaimResult.Removed
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/83/comments'))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"stale_claim_removed"')))
                 .withRequestBody(WireMock.matchingJsonPath('$.body',
                 WireMock.containing('dead holder gnomish-factory-dead'))))
-        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/80/labels'))
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/83/labels'))
                 .withRequestBody(WireMock.containing(READY_LABEL)))
-
-        and: 'no comment deletion is attempted — there is none left to delete'
-        wireMock.findAll(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/600'))).isEmpty()
     }
 
     // FR19: the dead-footprint removal is guarded by the footprint, so a live claim that appeared

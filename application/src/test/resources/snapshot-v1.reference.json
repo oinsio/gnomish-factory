@@ -55,7 +55,7 @@
         "stoppedOrphan" : 1,
         "disposedAged" : 1,
         "disposedReconstructible" : 3,
-        "skippedNoVerdict" : 0
+        "skippedNoVerdict" : 1
       },
       "kept" : [ {
         "taskKey" : "task-40",
@@ -67,7 +67,8 @@
         "untilReapSeconds" : 86400
       } ],
       "keptTotal" : 2,
-      "consecutiveSkippedTicks" : 0
+      "consecutiveSkippedTicks" : 1,
+      "lastSkipSource" : "runtime"
     }
   },
   "tracker" : {

@@ -27,9 +27,8 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
 
     private ContainerTaskExecutionEnvironment env(DockerCli docker) {
         new ContainerTaskExecutionEnvironment(
-                docker, 'k1', new BoxGitLink(Path.of('/factory/clone'), harvester),
-                new TaskContainerSettings('gnomish/img', 'runc', LIMITS, false), clock,
-                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+                BoxEquipmentFixture.forBox(docker, 'gnomish/img', LIMITS, clock),
+                'k1', new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1')
     }
 
     def "FR24: exec passes -i and ChildProcessStdin.feed really delivers the stdin bytes to the child"() {

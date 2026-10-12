@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.serveobservability.SweepCounts
 import com.github.oinsio.gnomish.serveobservability.SweepVital
@@ -15,8 +16,9 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
 
     static final Instant TICK_AT = Instant.parse('2026-08-06T09:00:00Z')
 
-    private static SweepVital vital(Instant lastTickAt = TICK_AT, int consecutiveSkipped = 0) {
-        new SweepVital(lastTickAt, 300L, SweepCounts.NONE, [], 0, consecutiveSkipped)
+    private static SweepVital vital(Instant lastTickAt = TICK_AT, int consecutiveSkipped = 0,
+            SkippedVerdictSource source = null) {
+        new SweepVital(lastTickAt, 300L, SweepCounts.NONE, [], 0, consecutiveSkipped, source)
     }
 
     private static SweepActionRow row(SweepVerdictCategory category, String mode, String object = 'box') {
@@ -48,10 +50,11 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
         7200 | true
     }
 
-    // NFR-O3: "three consecutive ticks report skipped-no-verdict" is the stall signal.
-    def "the consecutive-skip condition fires at three ticks and names the run length"() {
+    // NFR-O3: "three consecutive ticks report skipped-no-verdict" is the stall signal; F90 of
+    //     tighten-spec-contract: the condition carries the failing verdict source to name.
+    def "the consecutive-skip condition fires at three ticks and names the run length and source"() {
         given:
-        def view = new SandboxHygieneView(vital(TICK_AT, consecutive), [])
+        def view = new SandboxHygieneView(vital(TICK_AT, consecutive, SkippedVerdictSource.TRACKER), [])
 
         when:
         def flagged = SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT)
@@ -67,10 +70,10 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
         1 | []
         2 | []
         3 | [
-            new AlertCondition.SweepTicksSkipped(3)
+            new AlertCondition.SweepTicksSkipped(3, SkippedVerdictSource.TRACKER)
         ]
         7 | [
-            new AlertCondition.SweepTicksSkipped(7)
+            new AlertCondition.SweepTicksSkipped(7, SkippedVerdictSource.TRACKER)
         ]
     }
 

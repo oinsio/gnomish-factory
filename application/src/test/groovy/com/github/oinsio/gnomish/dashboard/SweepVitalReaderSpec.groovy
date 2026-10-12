@@ -18,7 +18,7 @@ import spock.lang.Specification
 class SweepVitalReaderSpec extends Specification {
 
     static final SweepVital SWEEP = new SweepVital(
-    Instant.parse('2026-08-06T09:00:00Z'), 300L, SweepCounts.NONE, [], 0, 0)
+    Instant.parse('2026-08-06T09:00:00Z'), 300L, SweepCounts.NONE, [], 0, 0, null)
 
     private static Snapshot withSweep() {
         def base = DaemonSnapshotFixtures.snapshot(new LifecycleState.Running())

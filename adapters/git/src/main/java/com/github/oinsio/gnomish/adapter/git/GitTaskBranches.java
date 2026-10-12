@@ -44,6 +44,10 @@ public final class GitTaskBranches implements TaskBranchGit {
     private final BranchShapeClassifier classifier;
 
     /**
+     * Package-private: outside this package the writer is built only by {@link
+     * GitTaskBackend#taskGit}, over the one tenure record its bundle carries (F74 of
+     * tighten-spec-contract), so no assembly can hand the writers a second book.
+     *
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
      * @param epochs the tenure whose epoch a container resume branch is stamped with; {@link
      *     ClaimEpochSource#NONE} where no claim is held — spelled out rather than defaulted, so a
@@ -52,7 +56,7 @@ public final class GitTaskBranches implements TaskBranchGit {
      *     composition root's, so no collaborator builds its own (FR18 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskBranches(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
+    GitTaskBranches(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.hardening = new FactoryCloneHardening(runner);
         this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
         this.locator = new TaskBranchLocator(runner, retry);

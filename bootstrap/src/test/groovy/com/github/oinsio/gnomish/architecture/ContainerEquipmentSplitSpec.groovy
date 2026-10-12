@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.TaskContainerSettings
 import java.lang.reflect.Executable
 import java.lang.reflect.Modifier
-import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -38,7 +37,13 @@ class ContainerEquipmentSplitSpec extends Specification {
     /** The parameter types that carry a task's inputs (the restoration read by its generic type). */
     static final Set<Class<?>> TASK = [BoxGitLink, ChildEnvAllowlist] as Set
 
+    /**
+     * The chain's classes. {@code BoxEquipment} is the installation half as one value (design D12
+     * of tighten-spec-contract): scanning its constructor too keeps a task input from riding into
+     * it, which would move the mixed parameter list into the record instead of removing it.
+     */
     static final List<Class<?>> BUILDERS = [
+        Class.forName('com.github.oinsio.gnomish.sandbox.environment.BoxEquipment'),
         ContainerEnvironmentFactory,
         ContainerEnvironments,
         Class.forName('com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentBuilder'),
@@ -66,7 +71,6 @@ class ContainerEquipmentSplitSpec extends Specification {
     }
 
     // Scenario: sandbox/execution-environment / No constructor mixes installation equipment and task inputs
-    @PendingFeature(reason = 'F82 (close-assembly-escape-hatches): ContainerEnvironmentBuilder, ContainerTaskExecutionEnvironment and ContainerEnvironments take installation equipment and task inputs in one constructor')
     def "FR20: no constructor or static factory of the round-environment chain takes both halves in one parameter list"() {
         when:
         def mixed = BUILDERS.collectMany { constructionPaths(it) }

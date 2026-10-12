@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource;
+
 /**
  * Human-readable labels for each {@link AlertCondition} variant, for the
  * status card's alert lines (FR9 of redesign-dashboard). Split out of {@link
@@ -34,14 +36,32 @@ final class DashboardAlertLabels {
             case AlertCondition.TrackerFailuresPresent ignored -> "tracker failures";
             case AlertCondition.ReaperDegraded ignored -> "reaper degraded";
             case AlertCondition.SweepTickOverdue ignored -> "sandbox sweep not running";
-            case AlertCondition.SweepTicksSkipped skipped ->
-                "sandbox cleanup stalled: " + skipped.consecutiveTicks()
-                        + " consecutive ticks reached no claim verdict";
+            case AlertCondition.SweepTicksSkipped skipped -> sweepStalledLabel(skipped);
             case AlertCondition.StoppedOrphanIncident incident ->
                 "an instance died or hung: stopped " + incident.objectName() + " of task " + incident.taskKey() + " ("
                         + incident.reason() + ")";
             case AlertCondition.RemoteGateOpen gate -> remoteGateOpenLabel(gate);
         };
+    }
+
+    /**
+     * NFR-O3 of add-serve-sandbox-lifecycle: says cleanup is not running and names the failing
+     * verdict source (D17, F90 of tighten-spec-contract); a snapshot written before the source
+     * was carried has none to name, and the line then says only what it knows.
+     */
+    private static String sweepStalledLabel(AlertCondition.SweepTicksSkipped skipped) {
+        String stalled = "sandbox cleanup stalled: " + skipped.consecutiveTicks()
+                + " consecutive ticks reached no claim verdict";
+        SkippedVerdictSource source = skipped.source();
+        if (source == null) {
+            return stalled;
+        }
+        String named =
+                switch (source) {
+                    case TRACKER -> "tracker";
+                    case RUNTIME -> "runtime";
+                };
+        return stalled + " (failing verdict source: " + named + ")";
     }
 
     /**

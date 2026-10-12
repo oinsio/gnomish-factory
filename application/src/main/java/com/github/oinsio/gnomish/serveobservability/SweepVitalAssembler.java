@@ -41,7 +41,8 @@ public final class SweepVitalAssembler {
                 SweepCounts.of(lastTick.counts()),
                 toEntries(lastTick.kept()),
                 lastTick.keptTotal(),
-                lastTick.consecutiveSkippedTicks());
+                lastTick.consecutiveSkippedTicks(),
+                lastTick.lastSkipSource());
     }
 
     private static List<KeptEnvironmentEntry> toEntries(List<KeptEnvironment> kept) {

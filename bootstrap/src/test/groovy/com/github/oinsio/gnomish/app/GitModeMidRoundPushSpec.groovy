@@ -3,15 +3,12 @@ package com.github.oinsio.gnomish.app
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
-import com.github.oinsio.gnomish.adapter.git.GitTaskStore
-import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
+import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -80,15 +77,16 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
         gnome
     }
 
-    /** The production TaskGit shape: real git backend plus the real mid-round push decoration. */
+    /**
+     * The production TaskGit shape: the production assembly plus the real mid-round push
+     * decoration. Plain {@code run} claims nothing, so the bundle's book is never filled and no
+     * commit is stamped — the tenure the production {@code run} wiring has.
+     */
     private static TaskGit taskGit() {
         def runner = new GitProcessRunner()
-        new TaskGit(
-                new GitTaskStore(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()),
-                new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()),
-                new GitTaskWorktrees(runner, ClaimEpochSource.NONE), { RoundEnvironmentSource rounds ->
-                    new MidRoundPushRounds(rounds, runner, new VirtualClock())
-                }, new ClaimEpochBook())
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(), { RoundEnvironmentSource rounds ->
+            new MidRoundPushRounds(rounds, runner, new VirtualClock())
+        }, new ClaimEpochBook())
     }
 
     // M1: gnome commit mid-round -> next progress event -> the remote tip equals the new commit,

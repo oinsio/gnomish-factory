@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
@@ -23,7 +24,8 @@ class SweepVitalAssemblerSpec extends Specification {
     def tickLog = new SweepTickLog(Duration.ofDays(7), clock, 20)
 
     private static SweepVerdict verdict(SweepVerdictCategory category, String taskKey = 'task-1', Duration age = null) {
-        new SweepVerdict(category, 'obj', 'main-box', 'tracked', taskKey, 'reason', age)
+        new SweepVerdict(category, 'obj', 'main-box', 'tracked', taskKey, 'reason', age,
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
     }
 
     // NFR-O1: "no tick yet" is its own state, distinct from a tick that counted zero.
@@ -52,10 +54,12 @@ class SweepVitalAssemblerSpec extends Specification {
         ]
         vital.keptTotal() == 1
         vital.consecutiveSkippedTicks() == 0
+        vital.lastSkipSource() == null
     }
 
-    // NFR-O3: the consecutive-skip run reaches the snapshot, since no single tick's counts show it.
-    def "the consecutive skipped-tick run is carried through"() {
+    // NFR-O3: the consecutive-skip run reaches the snapshot, since no single tick's counts show it;
+    //     F90 of tighten-spec-contract: so does the source the stall alarm names.
+    def "the consecutive skipped-tick run and its last source are carried through"() {
         given:
         2.times {
             tickLog.beginTick()
@@ -65,6 +69,7 @@ class SweepVitalAssemblerSpec extends Specification {
 
         expect:
         SweepVitalAssembler.assemble(tickLog, INTERVAL).consecutiveSkippedTicks() == 2
+        SweepVitalAssembler.assemble(tickLog, INTERVAL).lastSkipSource() == SkippedVerdictSource.RUNTIME
     }
 
     // NFR-O1: the cadence is the reader's staleness yardstick, so it comes from the caller's own

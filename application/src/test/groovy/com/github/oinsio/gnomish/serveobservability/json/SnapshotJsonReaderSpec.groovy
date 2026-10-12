@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.json
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -86,13 +87,14 @@ class SnapshotJsonReaderSpec extends Specification {
         and: 'vitals sweep — fromSweep, fromSweepCounts, and the kept inventory (NFR-O1)'
         parsed.vitals().sweep().lastTickAt() == Instant.parse('2026-08-02T08:58:00Z')
         parsed.vitals().sweep().intervalSeconds() == 300L
-        parsed.vitals().sweep().counts() == new SweepCounts(4, 2, 1, 1, 3, 0)
+        parsed.vitals().sweep().counts() == new SweepCounts(4, 2, 1, 1, 3, 1)
         parsed.vitals().sweep().kept() == [
             new KeptEnvironmentEntry('task-40', 172800L, 432000L),
             new KeptEnvironmentEntry('task-41', 518400L, 86400L)
         ]
         parsed.vitals().sweep().keptTotal() == 2
-        parsed.vitals().sweep().consecutiveSkippedTicks() == 0
+        parsed.vitals().sweep().consecutiveSkippedTicks() == 1
+        parsed.vitals().sweep().lastSkipSource() == SkippedVerdictSource.RUNTIME
 
         and: 'tracker — fromTracker and fromInstant present-branch'
         parsed.tracker().lastSuccessAt() == Instant.parse('2026-08-02T08:59:55Z')

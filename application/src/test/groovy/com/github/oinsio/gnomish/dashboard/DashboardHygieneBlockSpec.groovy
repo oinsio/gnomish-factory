@@ -5,10 +5,10 @@ import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emp
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.serveobservability.SweepCounts
 import com.github.oinsio.gnomish.serveobservability.SweepVital
 import java.time.Instant
-import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -28,7 +28,7 @@ class DashboardHygieneBlockSpec extends Specification {
     // Scenario: observability/dashboard-page / Observation times are explicit
     def "a completed tick renders the four groups as the quietest block"() {
         given:
-        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(1, 0, 0, 2, 0, 0), [], 0, 0)
+        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(1, 0, 0, 2, 0, 0), [], 0, 0, null)
 
         when:
         def html = renderer.render(
@@ -71,13 +71,12 @@ class DashboardHygieneBlockSpec extends Specification {
 
     // NFR-O3 of add-serve-sandbox-lifecycle: a run of no-verdict ticks is a stall, not a quiet host —
     //     the alarm says cleanup is not running and names the source whose verdicts failed (a
-    //     tracker or runtime error, per the sandbox-lifecycle capability). The snapshot carries no
-    //     source to name, so the line cannot (F90).
+    //     tracker or runtime error, per the sandbox-lifecycle capability). The sweep vital carries
+    //     the last skip's source and the line names it (F90, D17 of tighten-spec-contract).
     // Scenario: observability/dashboard-page / Silent stall becomes loud
-    @PendingFeature(reason = 'F90 (surface-check-urls-and-sweep-sources): the sweep vital carries no verdict source, so the stall alarm cannot name it')
     def "three consecutive no-verdict ticks raise a stall alarm naming the failing verdict source"() {
         given:
-        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(0, 0, 0, 0, 0, 2), [], 0, 3)
+        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(0, 0, 0, 0, 0, 2), [], 0, 3, SkippedVerdictSource.TRACKER)
 
         when:
         def html = markup(renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(),

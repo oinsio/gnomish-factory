@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.app.git.ProjectScope
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 
 /**
@@ -47,6 +48,7 @@ class SandboxLifecycleNoVerdictPassSpec extends SandboxLifecycleSweepSpecBase {
         and: 'the tracked box is skipped with no verdict, and nothing is done to it'
         def tracked = verdicts.find { it.objectName() == 'gnomish-box-t1' }
         tracked.category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        tracked.skipSource() == SkippedVerdictSource.TRACKER
         !docker.runs.contains(DockerCommands.stop('gnomish-box-t1'))
 
         and: 'the pass continued past it and acted on the object that needed no tracker read'

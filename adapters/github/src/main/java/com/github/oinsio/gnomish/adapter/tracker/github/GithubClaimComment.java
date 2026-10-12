@@ -112,6 +112,23 @@ final class GithubClaimComment {
         return Optional.ofNullable(winner);
     }
 
+    /**
+     * The last claim comment still visible in the thread, whatever boundary voided it, or empty when
+     * the thread carries no claim marker. It is the comment a dead footprint is made of: {@link
+     * GithubTrackerFacts} names its holder, and the stale-claim removal scopes its marker by its
+     * epoch and deletes it — one derivation, so the two can never pick different comments (F79 of
+     * tighten-spec-contract).
+     */
+    static Optional<Candidate> lastClaim(List<Candidate> comments) {
+        for (int i = comments.size() - 1; i >= 0; i--) {
+            Candidate candidate = comments.get(i);
+            if (candidate.marker().kind() == GithubMarkerKind.CLAIM) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static Optional<Integer> latestBoundaryIndex(List<Candidate> comments) {
         Integer index = null;
         for (int i = 0; i < comments.size(); i++) {

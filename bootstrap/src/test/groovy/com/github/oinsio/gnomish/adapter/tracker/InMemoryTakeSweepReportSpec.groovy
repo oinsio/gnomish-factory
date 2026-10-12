@@ -55,10 +55,10 @@ class InMemoryTakeSweepReportSpec extends Specification implements AbortLifecycl
     private static final SandboxLifecyclePass ONE_STOPPED_TWO_DISPOSED = { Path dir, LivenessVerdict liveness ->
         def summary = new SweepSummaryListener(new Slf4jSweepVerdictListener())
         summary.onVerdict(new SweepVerdict(SweepVerdictCategory.STOPPED_ORPHAN, 'gnomish-box-t1', 'main-box', 'tracked', 't1',
-                'unowned running main box', Duration.ofHours(3)))
+                'unowned running main box', Duration.ofHours(3), null))
         ['t2', 't3'].each {
             summary.onVerdict(new SweepVerdict(SweepVerdictCategory.DISPOSED_AGED, "gnomish-vol-${it}".toString(), 'volume',
-            'tracked', it, 'unowned remnant past the reap age', Duration.ofDays(9)))
+            'tracked', it, 'unowned remnant past the reap age', Duration.ofDays(9), null))
         }
         summary.summaryLine()
     } as SandboxLifecyclePass

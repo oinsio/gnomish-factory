@@ -72,11 +72,10 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         environments(KEY, ChildEnvAllowlist.none()).ownershipMode() == OwnershipMode.TRACKED
 
         and:
-        new ContainerEnvironments(docker, KEY, new ContainerEnvironmentBuilder(
-                        docker, new BoxGitLink(Path.of('/factory/clone'), harvester), sandbox,
-                        timing, ChildEnvAllowlist.none(),
-                        Path.of('/factory/guard-config'), new ObjectOwnership(OwnershipMode.MANUAL, 'proj-1')),
-                { -> DenialRestoration.none() }, timing)
+        new ContainerEnvironments(
+                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL),
+                KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
+                { -> DenialRestoration.none() })
                 .ownershipMode() == OwnershipMode.MANUAL
     }
 

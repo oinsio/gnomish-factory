@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.architecture
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
+import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.AllowedBases
 import com.github.oinsio.gnomish.baseref.BaseDecision
@@ -105,10 +106,14 @@ class LayerReachSpec extends Specification {
                 .any { it.targetClass.name == ClaimEpochSource.name }
         ClaimEpochSource.protectionDomain.codeSource.location.path.contains('/gnomish-plugin-api/')
 
-        and: 'no adapter reaches the application-side record behind it'
+        and: 'no adapter reaches the application-side record behind it — but the task-git assembly'
         noClasses().that().resideInAPackage("${ROOT}.adapter..")
+                .and().doNotHaveFullyQualifiedName(GitTaskBackend.name)
                 .should().dependOnClassesThat().resideInAPackage("${ROOT}.app.lease..")
                 .check(production)
+
+        and: 'which names the book only to put the caller\'s one into the bundle it builds, keeping none (F74 of tighten-spec-contract)'
+        production.get(GitTaskBackend.name).fields.isEmpty()
 
         and: 'and no adapter implements a tenure record of its own'
         noClasses().that().resideInAPackage("${ROOT}.adapter..")

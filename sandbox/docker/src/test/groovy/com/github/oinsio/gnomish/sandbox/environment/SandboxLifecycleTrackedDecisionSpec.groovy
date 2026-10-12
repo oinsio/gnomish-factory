@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import java.time.Duration
 
@@ -65,6 +66,7 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
 
         then:
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.TRACKER
         docker.runs.isEmpty()
         0 * disposal.dispose(_)
 

@@ -69,13 +69,17 @@ class ClaimlessGitBoundarySpec extends Specification {
      * defaults the tenure to empty for the single-adapter specs of the adapter test trees, which
      * never claim through a bundle. Before D21 both spelled no token only because the tenureless
      * {@code create} overload picked the empty source inside the adapter.
+     *
+     * <p>{@code TaskGitFixture} left this list with F74 of tighten-spec-contract (design D12): its
+     * writers can no longer be handed the empty source, since the git writers are built only by
+     * {@code GitTaskBackend.taskGit} over the bundle's own book. Its claimless form is a bundle
+     * whose book nothing fills, which stamps nothing for the same reason the empty source did.
      */
     private static final List<String> CLAIMLESS_PRODUCTION = [
         'application/src/main/java/com/github/oinsio/gnomish/app/TrackerWiring.java',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/SeededCloneFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/adapter/git/TaskSeedFixture.groovy',
         'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/FixedTrackerAdapterContext.groovy',
-        'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/app/TaskGitFixture.groovy',
     ]
 
     /** Where the process's one tenure record is built: the Spring bean, and the fixture's stand-in for it. */
@@ -90,7 +94,9 @@ class ClaimlessGitBoundarySpec extends Specification {
      * {@code take}, {@code serve}, or a tracker-backed resume) moves onto the bundle's tenure
      * record; a spec that never claims is listed here with the reason it never does.
      *
-     * <p>Five reasons, and no others:
+     * <p>Four reasons, and no others (the claimless branch readers of the kill-point worlds and
+     * the mid-round push spec left with F74 of tighten-spec-contract: they build through
+     * {@code TaskGitFixture} or {@code GitTaskBackend.taskGit} now and spell no empty source):
      *
      * <ul>
      *   <li><b>The read-only commands.</b> {@code status} and {@code usage} read a branch and write
@@ -112,9 +118,6 @@ class ClaimlessGitBoundarySpec extends Specification {
      *       specs of make-checkpoint-gate-durable (task 5.3) parks through the same round adapters
      *       and continues through {@code run --resume}, and asserts the continuation commit, not a
      *       claim.
-     *   <li><b>Claimless branch readers.</b> The two kill-point worlds build a {@code
-     *       GitTaskBranches} only to classify a tip. Classification takes no epoch at all since FR1,
-     *       and these readers never write, so there is no tenure for them to stamp from.
      *   <li><b>The board-reader discriminator.</b> {@code BoardReaderSplitFactory} builds no git
      *       layer and hands out no tenure: it only compares the context it receives with the empty
      *       source, the one fact that tells the embedded dashboard's reader from the claiming
@@ -133,7 +136,6 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerRunTerminationSweepSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerTerminalDriveSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitKillResumeSalvageCompletionSpec.groovy',
-        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitModeMidRoundPushSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunRunnerSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundTokenIdentitySpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundFlowSpecBase.groovy',
@@ -144,8 +146,6 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleRemnantReapE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleZombieE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxTransientFilesE2ESpec.groovy',
-        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/killpoint/CreationWorld.groovy',
-        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/killpoint/KillPointWorld.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusCommandSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusInterruptedHonestySpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusUsageReadOnlySpec.groovy',

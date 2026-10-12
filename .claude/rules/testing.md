@@ -141,7 +141,10 @@ that quarantined every legitimate reclaim in production was invisible (`fix-clai
   allowlisted file, so the next fixture that bypasses the owner fails the build rather than
   passing quietly. `ClaimlessGitBoundarySpec` in `:bootstrap` is the precedent.
 - **A fixture that legitimately needs the claimless variant says so in its name**
-  (`TaskGitFixture.realClaimless()`) and is listed in the scan with its reason.
+  (`TaskGitFixture.realClaimless()`). A source that spells the empty tenure itself
+  (`ClaimEpochSource.NONE`) is listed in the scan with its reason; `realClaimless()` needs no row,
+  since the writers can only be built over the bundle's own book (`GitTaskBackend.taskGit`, F74 of
+  `tighten-spec-contract`) and its claimless form is a book nothing fills.
 
 ## Test processes never inherit the operator's environment
 

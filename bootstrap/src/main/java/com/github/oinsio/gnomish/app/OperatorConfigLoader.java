@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.project.OperatorFile;
 import com.github.oinsio.gnomish.app.project.ProjectName;
 import com.github.oinsio.gnomish.app.project.ProjectRegistry;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
+import com.github.oinsio.gnomish.config.ListShadowing;
 import com.github.oinsio.gnomish.config.OperatorConfigCheck;
 import com.github.oinsio.gnomish.config.OperatorLogFile;
 import com.github.oinsio.gnomish.config.OperatorSources;
@@ -35,7 +36,8 @@ import org.springframework.core.env.ConfigurableEnvironment;
  * unregistered {@code --dir} — is collected by {@link OperatorConfigCheck}, printed once to
  * standard error, and thrown as one {@link ConfigurationViolationsException} (exit 2). A
  * configuration with no violation also decides the process's log file ({@link OperatorLogFile},
- * FR11) — before Logback starts, which is why it is decided here.
+ * FR11) — before Logback starts, which is why it is decided here. Once the sources are in place, a
+ * list a higher source sets replaces the lower sources' list whole ({@link ListShadowing}).
  *
  * <p>The directory is resolved once per process (FR3, D9): the subcommand from {@link
  * Subcommand#parse}, the directory from {@link ArgumentsParsingSupport#projectDir} / {@link
@@ -96,6 +98,7 @@ public final class OperatorConfigLoader implements EnvironmentPostProcessor, Ord
             OperatorConfigCheck.Blocks blocks =
                     new OperatorConfigCheck(home, reader).check(environment, registry, project, refusals);
             OperatorSources.add(environment, blocks.project(), blocks.host());
+            ListShadowing.apply(environment.getPropertySources());
             OperatorLogFile.publish(environment, home, project);
         } catch (ConfigurationViolationsException report) {
             errorConsole.print(report.getMessage() + ConsoleIO.LINE_END);

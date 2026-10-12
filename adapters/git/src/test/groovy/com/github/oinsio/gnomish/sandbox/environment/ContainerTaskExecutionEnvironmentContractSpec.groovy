@@ -59,9 +59,8 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
         def key = 'sbx-contract-' + System.nanoTime()
         def harvester = new ContainerHarvestFetch(new GitProcessRunner(), source)
         def env = new ContainerTaskExecutionEnvironment(
-                new DockerCli(), key, new BoxGitLink(source, harvester),
-                new TaskContainerSettings(GitSandboxImage.IMAGE, 'runc', LIMITS, false), clock,
-                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+                BoxEquipmentFixture.forBox(new DockerCli(), GitSandboxImage.IMAGE, LIMITS, clock),
+                key, new BoxGitLink(source, harvester), ChildEnvAllowlist.none(), 'proj-1')
         env.materialize(BRANCH, null)
         Optional.of(env)
     }

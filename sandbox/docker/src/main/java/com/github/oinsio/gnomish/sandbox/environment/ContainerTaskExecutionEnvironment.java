@@ -35,8 +35,9 @@ import org.slf4j.LoggerFactory;
  * infrastructure failures, no attempt burned (NFR-R1).
  *
  * <p>Implements FR3, FR4, FR10, FR11, NFR-R1, NFR-R2 of add-sandbox-core; FR6 of
- * add-parameter-count-gate (the equipment arrives as {@link BoxGitLink} and {@link
- * TaskContainerSettings}, and the materialize half is an instance held here).
+ * add-parameter-count-gate (the materialize half is an instance held here); FR13 of
+ * tighten-spec-contract (the installation's equipment arrives as one {@link BoxEquipment}, the
+ * task's inputs beside it).
  */
 public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnvironment {
 
@@ -64,30 +65,33 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     private @Nullable String branch;
 
     /**
+     * Takes the installation's {@link BoxEquipment} whole beside the task's own inputs (design D12
+     * of tighten-spec-contract). A leaf, yet not one that declares exact members: the members it
+     * uses — the docker seam, the container settings, the clock — are the installation half, and
+     * declaring them loose beside the link and the allowlist is exactly the mixed parameter list
+     * the {@code sandbox/execution-environment} capability rules out.
+     *
+     * @param equipment the installation's box equipment: the docker seam, the operator-configured
+     *     image (required to bind the container adapter, validated as the settings are built),
+     *     runtime, limits and disk-quota opt-in, and the exec clock; never null
+     * @param key the environment key the box's Docker objects are named by; never blank
      * @param link the factory's local clone the working copy is seeded from (design D3, FR3) and
      *     the factory-side fetch behind {@link #harvest} (FR5); never null
-     * @param settings the operator-configured image (required to bind the container adapter,
-     *     validated where the value is built), runtime, limits and disk-quota opt-in; never null
      * @param allowlist the layered child-environment allowlist (D6, FR9); the container base is
      *     empty — only composed {@code --env} entries reach an exec child, the image's own {@code
      *     ENV} supplies the runtime environment; never null
-     * @param ownership the mode and project identity stamped on every object this environment
-     *     creates; never null
+     * @param projectId the project identity stamped, beside the installation's ownership mode, on
+     *     every object this environment creates; never blank
      */
     ContainerTaskExecutionEnvironment(
-            DockerCli docker,
-            String key,
-            BoxGitLink link,
-            TaskContainerSettings settings,
-            InstantSource clock,
-            ChildEnvAllowlist allowlist,
-            ObjectOwnership ownership) {
-        this.docker = docker;
+            BoxEquipment equipment, String key, BoxGitLink link, ChildEnvAllowlist allowlist, String projectId) {
+        this.docker = equipment.docker();
         this.key = key;
         this.link = link;
-        this.clock = clock;
+        this.clock = equipment.timing().equipment().clock();
         this.allowlist = allowlist;
-        this.materializer = new ContainerMaterializer(docker, key, link.sourceClone(), settings, ownership);
+        this.materializer = new ContainerMaterializer(
+                docker, key, link.sourceClone(), equipment.containerSettings(), equipment.ownership(projectId));
     }
 
     @Override

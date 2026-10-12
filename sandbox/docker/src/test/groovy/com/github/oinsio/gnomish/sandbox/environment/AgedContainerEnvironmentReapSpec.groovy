@@ -134,9 +134,9 @@ class AgedContainerEnvironmentReapSpec extends Specification {
             (args[0] == 'inspect' && !host.objects.containsKey(args.last())
             ? DockerResult.of(1, '', 'Error: No such object') : host.commands().call(args))
         }
-        new ContainerTaskExecutionEnvironment(docker, KEY, new BoxGitLink(CLONE, { String c, String b -> } as ContainerHarvest),
-        new TaskContainerSettings(IMAGE, 'runc', new ResourceLimits('2', '2g', 512L, '10g'), false), new VirtualClock(NOW),
-        ChildEnvAllowlist.none(), OWNERSHIP).materialize(BRANCH, null)
+        new ContainerTaskExecutionEnvironment(
+                BoxEquipmentFixture.forBox(docker, IMAGE, new ResourceLimits('2', '2g', 512L, '10g'), new VirtualClock(NOW), OWNERSHIP.mode()),
+                KEY, new BoxGitLink(CLONE, { String c, String b -> } as ContainerHarvest), ChildEnvAllowlist.none(), OWNERSHIP.projectId()).materialize(BRANCH, null)
         docker
     }
 }

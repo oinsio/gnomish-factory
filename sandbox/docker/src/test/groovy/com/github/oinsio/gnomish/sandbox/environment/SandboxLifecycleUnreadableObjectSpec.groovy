@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.app.git.ProjectScope
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 
 /**
@@ -43,6 +44,7 @@ class SandboxLifecycleUnreadableObjectSpec extends SandboxLifecycleSweepSpecBase
         then: 'the object is accounted for, naming the read failure, and nothing was disposed'
         verdicts.size() == 1
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].objectName() == 'gnomish-box-t1'
         verdicts[0].reason().contains('could not be read')
 
@@ -74,6 +76,7 @@ class SandboxLifecycleUnreadableObjectSpec extends SandboxLifecycleSweepSpecBase
         then:
         verdicts.size() == 1
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
     }
 
     // Scenario: sandbox/sandbox-lifecycle / Unreadable object still gets a verdict
@@ -118,6 +121,7 @@ class SandboxLifecycleUnreadableObjectSpec extends SandboxLifecycleSweepSpecBase
         then:
         verdicts.size() == 1
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
+        verdicts[0].skipSource() == SkippedVerdictSource.RUNTIME
         verdicts[0].objectName() == 'gnomish-vol-t1'
     }
 }

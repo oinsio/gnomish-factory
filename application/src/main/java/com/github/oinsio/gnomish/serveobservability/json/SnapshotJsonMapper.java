@@ -146,7 +146,8 @@ public final class SnapshotJsonMapper {
                 toSweepCounts(sweep.counts()),
                 sweep.kept().stream().map(SnapshotJsonMapper::toKept).toList(),
                 sweep.keptTotal(),
-                sweep.consecutiveSkippedTicks());
+                sweep.consecutiveSkippedTicks(),
+                SkippedVerdictSourceWire.toWire(sweep.lastSkipSource()));
     }
 
     private static KeptEnvironmentDto toKept(KeptEnvironmentEntry entry) {

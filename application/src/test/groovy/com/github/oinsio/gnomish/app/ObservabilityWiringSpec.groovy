@@ -122,7 +122,7 @@ class ObservabilityWiringSpec extends Specification {
 
         when:
         wiring.sweepLedgerWriter().onTickCompleted(
-                new SweepTickRecord(now, [:], [], 0, 0))
+                new SweepTickRecord(now, [:], [], 0, 0, null))
 
         then:
         Files.readString(ledgerFile(now)).contains('"type":"sweepTick"')

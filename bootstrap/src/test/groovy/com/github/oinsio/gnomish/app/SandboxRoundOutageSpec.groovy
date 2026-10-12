@@ -10,13 +10,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.environment.BoxEquipmentFixture
 import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink
 import com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.DockerCli
 import com.github.oinsio.gnomish.sandbox.environment.HostExecHandle
-import com.github.oinsio.gnomish.sandbox.environment.ObjectOwnership
-import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
-import com.github.oinsio.gnomish.sandbox.environment.TaskContainerSettings
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.time.Duration
@@ -63,10 +61,9 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
     def "FR10: a box whose docker never answers ends the round on the docker deadline, as cannot-execute"() {
         given: 'a container box whose docker accepts every command and then never answers, bounded at one second'
         def stalling = new DockerCli(StandIn.docker('docker-stall').toString(), Duration.ofSeconds(1))
-        def box = new ContainerTaskExecutionEnvironment(stalling, 'wedged-' + System.nanoTime(),
-                new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)),
-                new TaskContainerSettings('gnomish/absent-image', 'runc', new ResourceLimits('1', '64m', 32L, '1g'), false),
-                new VirtualClock(), ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+        def box = new ContainerTaskExecutionEnvironment(
+                BoxEquipmentFixture.forBox(stalling, 'gnomish/absent-image', new ResourceLimits('1', '64m', 32L, '1g'), new VirtualClock()),
+                'wedged-' + System.nanoTime(), new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)), ChildEnvAllowlist.none(), 'proj-1')
 
         when:
         def started = System.nanoTime()

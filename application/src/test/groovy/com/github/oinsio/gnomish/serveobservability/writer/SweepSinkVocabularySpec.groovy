@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.Slf4jSweepVerdictListener
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
@@ -46,7 +47,8 @@ class SweepSinkVocabularySpec extends Specification implements RotatingLedgerApp
     def "FR9: a #category verdict reads the same in take's log and in the daemon's log and ledger"() {
         given: 'the verdict the sweep gives an unowned stopped main box'
         def verdict = new SweepVerdict(category, 'gnomish-box-7', 'main-box', 'tracked', 'task-7',
-                'unowned stopped main-box', Duration.ofDays(8))
+                'unowned stopped main-box', Duration.ofDays(8),
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
         def ledger = new SweepLedgerWriter(ledgerAppenderFor(homeDir.resolve('serve'), NOW),
                 new InstanceInfo('gnome-1', 'host1', '1.0.0'), new VirtualClock(NOW))
 
@@ -90,7 +92,7 @@ class SweepSinkVocabularySpec extends Specification implements RotatingLedgerApp
     def "FR9: a kept-under-threshold verdict reads the same in both logs and writes no ledger line"() {
         given: 'the verdict the sweep gives an unowned stopped main box under the age threshold'
         def verdict = new SweepVerdict(SweepVerdictCategory.KEPT_UNDER_THRESHOLD, 'gnomish-box-7', 'main-box', 'tracked',
-                'task-7', 'unowned stopped main-box', Duration.ofDays(1))
+                'task-7', 'unowned stopped main-box', Duration.ofDays(1), null)
         def ledger = new SweepLedgerWriter(ledgerAppenderFor(homeDir.resolve('serve'), NOW),
                 new InstanceInfo('gnome-1', 'host1', '1.0.0'), new VirtualClock(NOW))
 

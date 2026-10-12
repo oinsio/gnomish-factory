@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -72,8 +73,10 @@ public sealed interface AlertCondition
      * ticking but deciding nothing, so orphans accumulate silently.
      *
      * @param consecutiveTicks how many ticks in a row ended skipped
+     * @param source where the last tick's last skipped verdict failed, named by
+     *     the alarm; null only for a snapshot written before the field existed
      */
-    record SweepTicksSkipped(int consecutiveTicks) implements AlertCondition {}
+    record SweepTicksSkipped(int consecutiveTicks, @Nullable SkippedVerdictSource source) implements AlertCondition {}
 
     /**
      * UX2: a {@code tracked} running box was stopped because its claim went

@@ -88,10 +88,9 @@ class ContainerFreshSegmentSpec extends Specification implements BareGitRepoFixt
         def key = 'fresh-' + System.nanoTime()
         lease = new EnvironmentLease({
             ->
-            new ContainerTaskExecutionEnvironment(new DockerCli(), key,
-            new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)),
-            new TaskContainerSettings(GitSandboxImage.IMAGE, 'runc', LIMITS, false), new VirtualClock(),
-            ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+            new ContainerTaskExecutionEnvironment(
+                    BoxEquipmentFixture.forBox(new DockerCli(), GitSandboxImage.IMAGE, LIMITS, new VirtualClock()),
+                    key, new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)), ChildEnvAllowlist.none(), 'proj-1')
         }, BRANCH, segments)
 
         when: 'the first stage poisons the box outside its working copy and commits its work'

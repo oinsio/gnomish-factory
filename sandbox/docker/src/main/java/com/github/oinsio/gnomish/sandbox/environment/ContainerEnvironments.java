@@ -28,39 +28,43 @@ import java.util.function.Supplier;
  *
  * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core; FR2, FR8 of
  * add-serve-sandbox-lifecycle; FR17, FR19 of make-checkpoint-gate-durable; FR18, FR22 of
- * supervise-daemon-loops-and-embed-dashboard.
+ * supervise-daemon-loops-and-embed-dashboard; FR13 of tighten-spec-contract.
  */
 public final class ContainerEnvironments {
 
-    private final DockerCli docker;
+    private final BoxEquipment equipment;
     private final String baseKey;
     private final ContainerEnvironmentBuilder builder;
     private final Supplier<DenialRestoration> restoration;
-    private final BoxTiming timing;
 
     /**
-     * @param docker the docker subprocess seam shared by every role; never null
+     * Takes the installation's box equipment whole beside this task's own inputs (design D12 of
+     * tighten-spec-contract): a relay for the equipment — it reads the docker seam and the timing
+     * itself and hands the whole value to the per-role {@link ContainerEnvironmentBuilder} it
+     * builds, so the builder and this seam can never hold two different installations.
+     *
+     * @param equipment the installation's box equipment every role is built with; never null
      * @param baseKey the sanitized task identifier keying the round environment; never blank
-     * @param builder the per-role assembly holding everything else a role's environment is built
-     *     from — this seam can no longer build one itself; never null
+     * @param link the factory clone the boxes are seeded from and the fetch back into it; never null
+     * @param allowlist the run's layered child-env allowlist (D6, FR9 of add-sandbox-core); never
+     *     null
+     * @param projectId the project identity stamped beside the ownership mode on every object this
+     *     task creates (FR8 of add-serve-sandbox-lifecycle); never blank
      * @param restoration what the task branch tip records about denials already reported, read
      *     afresh each time a round environment is built (design D11 of
      *     make-checkpoint-gate-durable); never null
-     * @param timing the installation's box timing every role is built with — the same value the
-     *     builder holds — exposed through {@link #timing()} to the run that owns this seam; never
-     *     null
      */
     ContainerEnvironments(
-            DockerCli docker,
+            BoxEquipment equipment,
             String baseKey,
-            ContainerEnvironmentBuilder builder,
-            Supplier<DenialRestoration> restoration,
-            BoxTiming timing) {
-        this.docker = docker;
+            BoxGitLink link,
+            ChildEnvAllowlist allowlist,
+            String projectId,
+            Supplier<DenialRestoration> restoration) {
+        this.equipment = equipment;
         this.baseKey = baseKey;
-        this.builder = builder;
+        this.builder = new ContainerEnvironmentBuilder(equipment, link, allowlist, projectId);
         this.restoration = restoration;
-        this.timing = timing;
     }
 
     /**
@@ -74,7 +78,7 @@ public final class ContainerEnvironments {
      * @return the box timing; never null
      */
     public BoxTiming timing() {
-        return timing;
+        return equipment.timing();
     }
 
     /**
@@ -87,7 +91,7 @@ public final class ContainerEnvironments {
      * @return the ownership mode every object of this task is labelled with; never null
      */
     public OwnershipMode ownershipMode() {
-        return builder.ownershipMode();
+        return equipment.ownershipMode();
     }
 
     /**
@@ -147,7 +151,7 @@ public final class ContainerEnvironments {
      * executing, while volume and network remain for salvage and resume.
      */
     public void stopKeeping() {
-        new ContainerEnvironmentKeeper(docker).stopKeeping(baseKey);
+        new ContainerEnvironmentKeeper(equipment.docker()).stopKeeping(baseKey);
     }
 
     /**
@@ -158,7 +162,7 @@ public final class ContainerEnvironments {
      * branch instead of reattaching to the surviving volume.
      */
     public void disposeExisting() {
-        new ContainerEnvironmentDisposal(docker).dispose(baseKey);
+        new ContainerEnvironmentDisposal(equipment.docker()).dispose(baseKey);
     }
 
     private SelfCheckedEnvironment environment(String key) {

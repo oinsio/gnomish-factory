@@ -20,7 +20,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
-import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -40,7 +39,6 @@ class TakeFinishReportRunUrlSpec extends Specification {
     Tracker tracker = Mock()
 
     // Scenario: verification/github-external-check / A green check is auditable from the tracker
-    @PendingFeature(reason = 'F109 (surface-check-urls-and-sweep-sources): the finish report renders a check as a count and a duration, never its run URL')
     def "NFR-O2: the finish comment surfaces the run URL a passing external check carried"() {
         given: 'a task whose one round passed an external check carrying the run URL'
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('external:ci')), new Verdict.Pass(RUN_URL),

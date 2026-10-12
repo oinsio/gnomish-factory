@@ -53,10 +53,9 @@ class ContainerBoxBoundarySpec extends Specification implements BareGitRepoFixtu
     }
 
     private ContainerTaskExecutionEnvironment box(String key = 'bnd-' + System.nanoTime()) {
-        def e = new ContainerTaskExecutionEnvironment(new DockerCli(), key,
-                new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)),
-                new TaskContainerSettings(GitSandboxImage.IMAGE, 'runc', LIMITS, false), new VirtualClock(),
-                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+        def e = new ContainerTaskExecutionEnvironment(
+                BoxEquipmentFixture.forBox(new DockerCli(), GitSandboxImage.IMAGE, LIMITS, new VirtualClock()),
+                key, new BoxGitLink(clone, new ContainerHarvestFetch(runner, clone)), ChildEnvAllowlist.none(), 'proj-1')
         envs << e
         e
     }

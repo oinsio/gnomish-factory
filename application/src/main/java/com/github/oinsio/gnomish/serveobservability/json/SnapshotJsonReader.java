@@ -137,7 +137,8 @@ public final class SnapshotJsonReader {
                                 new KeptEnvironmentEntry(kept.taskKey(), kept.ageSeconds(), kept.untilReapSeconds()))
                         .toList(),
                 dto.keptTotal(),
-                dto.consecutiveSkippedTicks());
+                dto.consecutiveSkippedTicks(),
+                SkippedVerdictSourceWire.fromWire(dto.lastSkipSource()));
     }
 
     private static SweepCounts fromSweepCounts(SweepCountsDto dto) {

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.sandboxlifecycle;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What one completed sweep tick observed (NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle): when it
@@ -23,13 +24,16 @@ import java.util.Map;
  * @param keptTotal how many kept environments the tick actually saw, before truncation
  * @param consecutiveSkippedTicks ticks in a row (including this one) that ended with at least one
  *     skipped-no-verdict object; {@code 0} when this tick reached verdicts for everything
+ * @param lastSkipSource where this tick's last skipped verdict failed (tracker or runtime); null
+ *     exactly when the tick skipped nothing (D17, F90 of tighten-spec-contract)
  */
 public record SweepTickRecord(
         Instant tickAt,
         Map<SweepVerdictCategory, Integer> counts,
         List<KeptEnvironment> kept,
         int keptTotal,
-        int consecutiveSkippedTicks) {
+        int consecutiveSkippedTicks,
+        @Nullable SkippedVerdictSource lastSkipSource) {
 
     public SweepTickRecord {
         counts = Map.copyOf(counts);

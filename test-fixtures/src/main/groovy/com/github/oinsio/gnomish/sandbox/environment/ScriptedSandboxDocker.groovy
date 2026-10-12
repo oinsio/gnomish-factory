@@ -104,14 +104,13 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         // A fixed instant git accepts as a commit date (the epoch is rejected), never the
                         // wall clock (FR21 of supervise-daemon-loops-and-embed-dashboard).
                         new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), { d -> } as Sleeper), DEFAULT_COMMAND_TIMEOUT)
-        new ContainerEnvironments(this, key, new ContainerEnvironmentBuilder(
-                        this,
-                        new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
-                        sandbox,
-                        timing,
-                        ChildEnvAllowlist.none(),
-                        guardRoot,
-                        new ObjectOwnership(mode, projectId)), restoration, timing)
+        new ContainerEnvironments(
+                new BoxEquipment(this, sandbox, timing, guardRoot, mode),
+                key,
+                new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
+                ChildEnvAllowlist.none(),
+                projectId,
+                restoration)
     }
 
     /** Reads a fake-agent scenario's scripted stream from the {@code fake-agent} resources beside this fixture. */

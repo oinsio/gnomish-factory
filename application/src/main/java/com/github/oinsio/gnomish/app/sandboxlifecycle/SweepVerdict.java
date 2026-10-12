@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.sandboxlifecycle;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 
@@ -23,6 +24,9 @@ import org.jspecify.annotations.Nullable;
  *     actually made from. Every verdict the sweep emits carries one (`sandbox-lifecycle`,
  *     "Uniform verdict events"); the field stays nullable so a sink tolerates a future producer
  *     that reaches a verdict without measuring an age at all, and every sink must handle that.
+ * @param skipSource where the evaluation failed — present exactly when {@code category} is
+ *     {@link SweepVerdictCategory#SKIPPED_NO_VERDICT}, null for every verdict that was reached
+ *     (D17, F90 of tighten-spec-contract: the dashboard's stall alarm names it)
  */
 public record SweepVerdict(
         SweepVerdictCategory category,
@@ -31,4 +35,33 @@ public record SweepVerdict(
         String mode,
         String taskKey,
         String reason,
-        @Nullable Duration age) {}
+        @Nullable Duration age,
+        @Nullable SkippedVerdictSource skipSource) {
+
+    public SweepVerdict {
+        requireSourceOnSkipOnly(category, skipSource);
+    }
+
+    /**
+     * A skipped verdict without its source would leave the stall alarm nothing to name, and a
+     * reached verdict with one would claim a failure that did not happen. Kept as a shared static
+     * method rather than inline in the compact constructor: PIT's record filter suppresses all
+     * mutations inside a record's canonical constructor.
+     *
+     * <p>{@code @DoNotMutate} (`testing.md`, JVMTI redefinition limit): PIT's mutant of the first
+     * comparison ends in RUN_ERROR with no test run — "class redefinition failed: attempted to
+     * change the class NestHost, NestMembers, Record, or PermittedSubclasses attribute"
+     * (hcoles/pitest#1285); its sibling mutants are killed. Covered by {@code SweepVerdictSpec},
+     * both directions.
+     */
+    @DoNotMutate
+    private static void requireSourceOnSkipOnly(
+            SweepVerdictCategory category, @Nullable SkippedVerdictSource skipSource) {
+        boolean skipped = category == SweepVerdictCategory.SKIPPED_NO_VERDICT;
+        if (skipped != (skipSource != null)) {
+            throw new IllegalArgumentException(
+                    "SweepVerdict.skipSource must be present exactly when the category is SKIPPED_NO_VERDICT, got "
+                            + category + " with " + skipSource);
+        }
+    }
+}

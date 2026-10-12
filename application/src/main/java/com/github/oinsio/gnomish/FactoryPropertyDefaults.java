@@ -104,14 +104,18 @@ final class FactoryPropertyDefaults {
      * factory.check} and {@code factory.connections} are open-ended sets of named subsections whose
      * content only the provider's own {@code CheckSubsectionValidator} may grade (FR4, FR5, FR16,
      * design D12 of add-plugin-architecture) — which is why the vendor-shaped {@code Check.Github}
-     * record with its both-or-neither constructor is gone from core.
+     * record with its both-or-neither constructor is gone from core. The one reshaping done here is
+     * structural, not interpretive: a list the Binder turned into an index-keyed map is a list again
+     * ({@link IndexedLists}, finding F130 of tighten-spec-contract), so every raw subsection reaches
+     * its provider in the shape the operator wrote.
      */
     static Map<String, Map<String, Object>> subsections(@Nullable Map<String, Map<String, Object>> sections) {
         if (sections == null) {
             return Map.of();
         }
         var copy = new LinkedHashMap<String, Map<String, Object>>();
-        sections.forEach((name, content) -> copy.put(name, content == null ? Map.of() : Map.copyOf(content)));
+        sections.forEach((name, content) ->
+                copy.put(name, content == null ? Map.of() : Map.copyOf(IndexedLists.inSubsection(content))));
         return Map.copyOf(copy);
     }
 }

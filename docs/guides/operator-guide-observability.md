@@ -66,9 +66,12 @@ for the exact shape:
 category: `checkedAlive`, `keptUnderThreshold`, `stoppedOrphan`, `disposedAged`,
 `disposedReconstructible`, `skippedNoVerdict`), `kept[]` (each kept environment's
 `taskKey`, `ageSeconds`, `untilReapSeconds`) with `keptTotal` stating any
-truncation, and `consecutiveSkippedTicks`. It is `null` until the daemon's first
-sweep tick completes, and absent from snapshots written before the sweep landed —
-both mean "no sweep data yet", never "a tick that counted zero". The ledger's
+truncation, `consecutiveSkippedTicks`, and `lastSkipSource` (`tracker` or
+`runtime`: where the last tick's last skipped verdict failed, `null` when that
+tick skipped nothing — the source the dashboard's stall alarm names; absent from
+snapshots written before the field). The entry is `null` until the daemon's
+first sweep tick completes, and absent from snapshots written before the sweep
+landed — both mean "no sweep data yet", never "a tick that counted zero". The ledger's
 `sweepAction` and `sweepTick` lines carry the per-action history the snapshot
 deliberately does not.
 

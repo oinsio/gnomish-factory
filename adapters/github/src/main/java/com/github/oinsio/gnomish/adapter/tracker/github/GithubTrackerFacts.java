@@ -61,7 +61,9 @@ final class GithubTrackerFacts {
             return new ClaimFacts.Live(
                     claim.marker().instance(), GithubClaimComment.versionOf(claim.id(), claim.updatedAt()));
         }
-        return lastClaimHolder(comments).<ClaimFacts>map(ClaimFacts.Dead::new).orElseGet(ClaimFacts.None::new);
+        return GithubClaimComment.lastClaim(comments)
+                .<ClaimFacts>map(claim -> new ClaimFacts.Dead(claim.marker().instance()))
+                .orElseGet(ClaimFacts.None::new);
     }
 
     /**
@@ -112,16 +114,5 @@ final class GithubTrackerFacts {
             case STALE_CLAIM_REMOVED -> BoundaryKind.STALE_CLAIM_REMOVED;
             case CLAIM, ACK, NOTE, PROGRESS, INDEX_REPAIR -> null;
         };
-    }
-
-    /** The instance of the last claim marker still visible in the thread, or empty when none is. */
-    private static Optional<String> lastClaimHolder(List<GithubClaimComment.Candidate> comments) {
-        for (int i = comments.size() - 1; i >= 0; i--) {
-            GithubClaimComment.Candidate candidate = comments.get(i);
-            if (candidate.marker().kind() == GithubMarkerKind.CLAIM) {
-                return Optional.of(candidate.marker().instance());
-            }
-        }
-        return Optional.empty();
     }
 }

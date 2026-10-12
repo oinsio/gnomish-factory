@@ -2,9 +2,7 @@ package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
-import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -12,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.RunOrder
 import com.github.oinsio.gnomish.app.TakeOrder
+import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.*
@@ -105,7 +104,7 @@ class KillPointWorld implements BareGitRepoFixture {
 
     /** The classified shape's label, read through the production classifier over the real tip. */
     String shape() {
-        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(repoDir, taskId).label()
+        TaskGitFixture.realClaimless().branches().classifyShape(repoDir, taskId).label()
     }
 
     /**

@@ -28,7 +28,8 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
                 'tracked',
                 'task-7',
                 'unowned running main-box',
-                age)
+                age,
+                null)
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.5 touched this spec. */
@@ -43,7 +44,8 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
     }
 
     private static SweepVerdict of(SweepVerdictCategory category) {
-        new SweepVerdict(category, 'gnomish-task-7-box', 'main-box', 'tracked', 'task-7', 'reason', null)
+        new SweepVerdict(category, 'gnomish-task-7-box', 'main-box', 'tracked', 'task-7', 'reason', null,
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
     }
 
     // NFR-O4: one line per verdict, carrying EVERY field of the event — a sink that dropped the

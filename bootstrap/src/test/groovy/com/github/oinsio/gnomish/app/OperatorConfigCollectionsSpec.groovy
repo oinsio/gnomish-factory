@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import java.nio.file.Path
 import org.springframework.boot.context.properties.bind.Binder
-import spock.lang.PendingFeature
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -59,7 +58,6 @@ class OperatorConfigCollectionsSpec extends Specification {
     }
 
     // Scenario: operator/operator-configuration / List-valued keys are replaced whole
-    @PendingFeature(reason = 'F106 (fix-list-config-merge): a list inside a raw subtree merges index by index across sources')
     def "FR5: a list-valued key set by both files is the project file's list alone"() {
         given: 'the host file sets a longer list than the project file'
         harness.hostConfig('''\
@@ -80,6 +78,28 @@ class OperatorConfigCollectionsSpec extends Specification {
 
         then: 'no element of the host list survives, not even past the project list\'s end'
         scopes == ['project-a']
+    }
+
+    // FR5 (F106): the command line spells a list as one comma-separated value; it claims the list whole
+    def "FR5: a comma-separated list on the command line replaces the files' list whole"() {
+        given:
+        harness.projectConfig('widgets', '''\
+            factory:
+              connections:
+                acme:
+                  scopes: [project-a, project-b]
+            '''.stripIndent())
+
+        when:
+        def loaded = harness.load([
+            'status',
+            "--dir=$widgets".toString(),
+            '--factory.connections.acme.scopes=cli-a,cli-b'
+        ])
+        def scopes = Binder.get(loaded.environment).bindOrCreate('factory', FactoryProperties).connections().acme.scopes
+
+        then:
+        scopes == 'cli-a,cli-b'
     }
 
     private FactoryProperties bound() {

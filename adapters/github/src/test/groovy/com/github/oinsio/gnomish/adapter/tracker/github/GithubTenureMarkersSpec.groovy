@@ -10,7 +10,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
-import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -130,7 +129,6 @@ class GithubTenureMarkersSpec extends Specification {
     // marker by the holder instead of the epoch, and posts a second comment.
     // Scenario: tracker/github-tracker / Each removed claim gets its own removal marker
     // Scenario: tracker/github-tracker / Every marker kind is written through the upsert
-    @PendingFeature(reason = 'F79 (fix-stale-claim-removal-redrive): a removal re-driven after its marker landed posts a second marker scoped by the holder')
     def "a removal killed after its marker and re-driven updates its own marker"() {
         given:
         openReady()

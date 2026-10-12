@@ -9,7 +9,7 @@ import spock.lang.Specification
 class SweepVerdictFanoutSpec extends Specification {
 
     private static SweepVerdict verdict(String name) {
-        new SweepVerdict(SweepVerdictCategory.CHECKED_ALIVE, name, 'main-box', 'tracked', 'task-1', 'reason', null)
+        new SweepVerdict(SweepVerdictCategory.CHECKED_ALIVE, name, 'main-box', 'tracked', 'task-1', 'reason', null, null)
     }
 
     // FR9: every sink sees every verdict.

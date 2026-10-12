@@ -15,18 +15,20 @@ import java.util.function.Supplier;
  *
  * <p>The split is by lifetime, not by count: an installation input has its home in the
  * constructor and a per-task input in {@link #forTask}, so a new input of either kind pressures
- * neither. The per-task {@link DockerCli} is created here from the timing, because it is
- * deliberately package-private — app-layer assemblies name only the environment-facing types.
+ * neither. The constructor gathers the installation half into one {@link BoxEquipment}, built
+ * once and handed whole to every task's {@link ContainerEnvironments} (design D12 of
+ * tighten-spec-contract), so no constructor down the chain takes that half as loose parameters
+ * beside a task's inputs. The installation's {@link DockerCli} is created here from the timing,
+ * because it is deliberately package-private — app-layer assemblies name only the
+ * environment-facing types.
  *
  * <p>Implements FR17, FR19 of make-checkpoint-gate-durable; FR5, FR10 of
- * bound-subprocess-commands (the docker command bound threaded from the composition root).
+ * bound-subprocess-commands (the docker command bound threaded from the composition root); FR13
+ * of tighten-spec-contract.
  */
 public final class ContainerEnvironmentFactory {
 
-    private final SandboxProperties sandbox;
-    private final BoxTiming timing;
-    private final Path guardConfigRoot;
-    private final OwnershipMode ownershipMode;
+    private final BoxEquipment equipment;
 
     /**
      * @param sandbox the operator sandbox config: image, runtime, limits, allowlist; never null
@@ -39,15 +41,12 @@ public final class ContainerEnvironmentFactory {
      */
     public ContainerEnvironmentFactory(
             SandboxProperties sandbox, BoxTiming timing, Path guardConfigRoot, OwnershipMode ownershipMode) {
-        this.sandbox = sandbox;
-        this.timing = timing;
-        this.guardConfigRoot = guardConfigRoot;
-        this.ownershipMode = ownershipMode;
+        this.equipment = new BoxEquipment(
+                new DockerCli(timing.dockerCommandTimeout()), sandbox, timing, guardConfigRoot, ownershipMode);
     }
 
     /**
-     * Builds one task's environment seam over a fresh docker subprocess seam bounded by the
-     * installation's command timeout.
+     * Builds one task's environment seam over the installation's box equipment.
      *
      * @param baseKey the sanitized task identifier keying the round environment; never blank
      * @param link the factory clone working copies are seeded from and the fetch behind {@code
@@ -67,13 +66,6 @@ public final class ContainerEnvironmentFactory {
             ChildEnvAllowlist allowlist,
             String projectId,
             Supplier<DenialRestoration> restoration) {
-        var docker = new DockerCli(timing.dockerCommandTimeout());
-        var ownership = new ObjectOwnership(ownershipMode, projectId);
-        return new ContainerEnvironments(
-                docker,
-                baseKey,
-                new ContainerEnvironmentBuilder(docker, link, sandbox, timing, allowlist, guardConfigRoot, ownership),
-                restoration,
-                timing);
+        return new ContainerEnvironments(equipment, baseKey, link, allowlist, projectId, restoration);
     }
 }

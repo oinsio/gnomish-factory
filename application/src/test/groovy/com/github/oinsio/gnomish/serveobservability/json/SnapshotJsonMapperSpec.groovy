@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.json
 
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SkippedVerdictSource
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -152,6 +153,7 @@ class SnapshotJsonMapperSpec extends Specification {
     }
 
     // NFR-O1 of add-serve-sandbox-lifecycle.
+    // F90 of tighten-spec-contract: and the source of the tick's last skipped verdict.
     def "vitals sweep renders the last tick's time, cadence, counts, and bounded kept inventory"() {
         given:
         def sweep = mapper.toDto(referenceSnapshot()).vitals().sweep()
@@ -159,13 +161,14 @@ class SnapshotJsonMapperSpec extends Specification {
         expect:
         sweep.lastTickAt() == "2026-08-02T08:58:00Z"
         sweep.intervalSeconds() == 300L
-        sweep.counts() == new SweepCountsDto(4, 2, 1, 1, 3, 0)
+        sweep.counts() == new SweepCountsDto(4, 2, 1, 1, 3, 1)
         sweep.kept() == [
             new KeptEnvironmentDto("task-40", 172800L, 432000L),
             new KeptEnvironmentDto("task-41", 518400L, 86400L)
         ]
         sweep.keptTotal() == 2
-        sweep.consecutiveSkippedTicks() == 0
+        sweep.consecutiveSkippedTicks() == 1
+        sweep.lastSkipSource() == "runtime"
     }
 
     // NFR-O1: a snapshot assembled before the first sweep tick renders the section as JSON null,
@@ -289,13 +292,14 @@ class SnapshotJsonMapperSpec extends Specification {
                 new SweepVital(
                         Instant.parse("2026-08-02T08:58:00Z"),
                         300L,
-                        new SweepCounts(4, 2, 1, 1, 3, 0),
+                        new SweepCounts(4, 2, 1, 1, 3, 1),
                         [
                             new KeptEnvironmentEntry("task-40", 172800L, 432000L),
                             new KeptEnvironmentEntry("task-41", 518400L, 86400L)
                         ],
                         2,
-                        0))
+                        1,
+                        SkippedVerdictSource.RUNTIME))
         def tracker = new TrackerHealth(Instant.parse("2026-08-02T08:59:55Z"), 0)
         def remote = [origin: new RemoteHealth(
             "origin", false, null, null, null, 0, Instant.parse("2026-08-02T08:59:50Z"))]

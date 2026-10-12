@@ -52,7 +52,8 @@ public final class SandboxHygieneAlertEvaluator {
                 flagged.add(new AlertCondition.SweepTickOverdue());
             }
             if (sweep.consecutiveSkippedTicks() >= CONSECUTIVE_SKIPPED_THRESHOLD) {
-                flagged.add(new AlertCondition.SweepTicksSkipped(sweep.consecutiveSkippedTicks()));
+                flagged.add(
+                        new AlertCondition.SweepTicksSkipped(sweep.consecutiveSkippedTicks(), sweep.lastSkipSource()));
             }
         }
         for (SweepActionRow row : view.recentActions()) {

@@ -28,7 +28,8 @@ class ObservedSandboxLifecyclePassSpec extends Specification {
     def completedTicks = []
 
     private static SweepVerdict verdict(SweepVerdictCategory category) {
-        new SweepVerdict(category, 'obj', 'main-box', 'tracked', 'task-1', 'reason', null)
+        new SweepVerdict(category, 'obj', 'main-box', 'tracked', 'task-1', 'reason', null,
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
     }
 
     /**

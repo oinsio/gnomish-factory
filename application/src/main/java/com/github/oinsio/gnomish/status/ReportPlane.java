@@ -90,7 +90,7 @@ public enum ReportPlane {
 
     /**
      * Renders one line of untrusted text that is not yet carried — a finding's message or locator,
-     * which passes the findings funnel on every plane.
+     * or a passing check's platform run URL — which passes the findings funnel on every plane.
      *
      * @param text the raw line; never null
      * @return the plane's rendering, one line; never null

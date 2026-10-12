@@ -120,7 +120,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
     // Scenario: observability/dashboard-page / Hygiene alerts stay out of the block
     def "a sandbox-hygiene alert surfaces in the status card, and the hygiene block stays unstyled"() {
         given: 'a sweep whose last tick is far past three times its own cadence'
-        def sweep = new SweepVital(NOW.minusSeconds(3600), 300L, new SweepCounts(0, 0, 0, 0, 0, 0), [], 0, 0)
+        def sweep = new SweepVital(NOW.minusSeconds(3600), 300L, new SweepCounts(0, 0, 0, 0, 0, 0), [], 0, 0, null)
 
         when:
         def html = renderer.render(

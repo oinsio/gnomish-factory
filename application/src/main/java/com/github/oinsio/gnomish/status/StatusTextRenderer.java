@@ -107,6 +107,9 @@ public final class StatusTextRenderer {
         out.append("Attempts:\n");
         for (AttemptRecord attempt : report.attempts()) {
             out.append("  ").append(renderAttemptSummary(attempt)).append('\n');
+            for (String runUrl : StatusLineFormatter.runUrlLines(attempt, plane)) {
+                out.append("    ").append(runUrl).append('\n');
+            }
             appendDenials(out, attempt);
         }
     }

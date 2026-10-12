@@ -1,6 +1,6 @@
 spec: observability/status-report
 
-# A versioning policy for authors, verified by no test or build step: the reference comparison
-# fails on a renamed or removed field, but whether the author then bumps the version or
-# regenerates the file is a review decision; finding F100 proposes recording the policy in an ADR.
-A breaking change to a released contract bumps the version => pending-test: document-contract-versioning
+# Documentation facts: the file named is the scenario's subject. The reference comparison fails on
+# a renamed or removed field; whether the author then bumps the version or regenerates the file is
+# the policy the ADR states (finding F100).
+A breaking change to a released contract bumps the version => docs/adr/0016-json-contract-versioning.md

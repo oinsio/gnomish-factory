@@ -9,7 +9,8 @@ class SweepSummaryListenerSpec extends Specification {
     def listener = new SweepSummaryListener(delegate)
 
     private static SweepVerdict verdict(SweepVerdictCategory category) {
-        new SweepVerdict(category, 'n', 'main-box', 'tracked', 'k1', 'reason', null)
+        new SweepVerdict(category, 'n', 'main-box', 'tracked', 'k1', 'reason', null,
+                category == SweepVerdictCategory.SKIPPED_NO_VERDICT ? SkippedVerdictSource.RUNTIME : null)
     }
 
     def "forwards every verdict to the delegate"() {

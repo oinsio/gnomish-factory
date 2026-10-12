@@ -7,6 +7,8 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Package-private line-formatting helpers for {@link StatusTextRenderer}: one
@@ -79,6 +81,25 @@ final class StatusLineFormatter {
      */
     private static String oneLine(String text, ReportPlane plane) {
         return plane.line(text);
+    }
+
+    /**
+     * One line per check of the round that passed carrying the platform's run URL — the label and
+     * the URL — so a green external check is auditable from the report the take publishes to the
+     * tracker (NFR-O2 of add-sandbox-core; finding F109 of tighten-spec-contract). A check with no
+     * run URL renders nothing. The URL is the platform's answer, untrusted and not yet carried, so
+     * it takes the plane's {@link ReportPlane#line} exit, the one finding text takes; the label is a
+     * carrier and takes {@link ReportPlane#render}. Both planes show it, as they show every other
+     * line of the report: only the neutralization differs by plane.
+     */
+    static List<String> runUrlLines(AttemptRecord record, ReportPlane plane) {
+        List<String> lines = new ArrayList<>();
+        for (CheckResult check : record.checkResults()) {
+            if (check.verdict() instanceof Verdict.Pass(String runUrl) && runUrl != null) {
+                lines.add(plane.render(check.checkRef().label()) + " passed: " + plane.line(runUrl));
+            }
+        }
+        return lines;
     }
 
     static String resultLabel(AttemptRecord.Result result) {

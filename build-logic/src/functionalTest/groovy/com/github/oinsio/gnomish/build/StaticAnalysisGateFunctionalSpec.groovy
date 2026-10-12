@@ -5,7 +5,6 @@ import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 
 import java.nio.file.Path
 import org.gradle.testkit.runner.BuildResult
-import spock.lang.PendingFeature
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -90,7 +89,6 @@ public final class Mini {
     }
 
     // Scenario: build/quality-gates / Dead private code fails compilation
-    @PendingFeature(reason = 'F111 (restore-unused-code-checks): UnusedMethod and UnusedVariable never fire under java-conventions; dead private code compiles')
     def "FR9: an unused private #kind fails compileJava with #check named"() {
         given:
         write(SOURCE, javaClass("""\
@@ -112,10 +110,13 @@ public final class Mini {
         failed.task(':compileJava').outcome == FAILED
         failed.output.contains("[${check}]")
 
+        // F111: Error Prone exempts by design every member whose name begins with "unused" (any
+        // case), so a fixture named that way compiles clean and proves nothing; the names here
+        // are ordinary ones, as dead code in production would carry.
         where:
         kind       | member                                          || check
-        'method'   | 'private static int unused() { return 1; }'     || 'UnusedMethod'
-        'variable' | 'private static final int UNUSED = 1;'          || 'UnusedVariable'
+        'method'   | 'private static int helper() { return 1; }'     || 'UnusedMethod'
+        'variable' | 'private static final int LIMIT = 1;'           || 'UnusedVariable'
     }
 
     // The contrast the three failures are read against: the same convention compiles clean code.

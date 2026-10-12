@@ -48,6 +48,10 @@ public final class GitTaskStore implements TaskStoreGit {
     private final InstantSource clock;
 
     /**
+     * Package-private: outside this package the writer is built only by {@link
+     * GitTaskBackend#taskGit}, over the one tenure record its bundle carries (F74 of
+     * tighten-spec-contract), so no assembly can hand the writers a second book.
+     *
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
      * @param epochs the tenure the collaborators this facade hands out stamp their commits with
      *     (FR13 of harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is
@@ -58,7 +62,7 @@ public final class GitTaskStore implements TaskStoreGit {
      *     push's suppressor measures on — the composition root's one (FR18, FR20 of
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
-    public GitTaskStore(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry, InstantSource clock) {
+    GitTaskStore(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry, InstantSource clock) {
         this.runner = runner;
         this.usageWalker = new UsageHistoryWalker(runner, retry);
         this.epochs = epochs;

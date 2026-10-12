@@ -17,6 +17,14 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
+// The catalog's jackson override (GHSA ids in [versions].jackson) reaches this build's own
+// classpaths too: the plugin markers below drag in jackson-bom 2.22.1, and forcing the bom moves
+// the whole Jackson 2.x family through its constraints. Read from the catalog, which this build
+// imports, so the version is the one the modules pin (F113 of tighten-spec-contract).
+configurations.configureEach {
+    resolutionStrategy.force "${libs.jackson.bom.get().module}:${libs.versions.jackson.get()}"
+}
+
 // A plugin applied from a precompiled script plugin must be on this build's
 // implementation classpath, declared by its marker coordinates. `pluginId` and
 // `version` come from the shared catalog so no version is written twice.
