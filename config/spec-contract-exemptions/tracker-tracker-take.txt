@@ -1,0 +1,15 @@
+spec: tracker/tracker-take
+
+# Verified by the operator guide: the scenario is the content of the named document.
+Guide covers the operator surface => docs/guides/operator-guide.md
+Guide states when recovery is automatic => docs/guides/operator-guide.md (section "Stuck `Working`: Three Ways Back")
+Guide covers configuration and hand-off => docs/guides/operator-guide.md (sections "Quick Start", "Handing Off a Task")
+Guide covers the escalation round-trip and the snapshot => docs/guides/operator-guide.md (sections "Escalation, Decision, and Acknowledgement Flow", "Snapshot Behavior")
+Guide covers reaping, takeover and the cron limitation => docs/guides/operator-guide.md (section "Stuck `Working`: Three Ways Back")
+Guide covers heartbeat settings, boards and the fork warning => docs/guides/operator-guide.md (sections "Projects v2 Boards: Display Only", "Fork Warning: Check `tracker.github.repo`")
+Guide explains the stalled factory => docs/guides/operator-guide-serve.md (section "Feed states and the WIP-limit message")
+Guide states the autonomy gate => docs/guides/operator-guide-autonomy-gate.md
+Guide covers the serve lifecycle and its knobs => docs/guides/operator-guide-serve.md (sections "Lifecycle", "Instance knobs vs. protocol constants")
+Guide explains the write budget and the WIP boundary => docs/guides/operator-guide-serve.md (sections "The write-budget coupling: ΣN and the beat interval", "The WIP method boundary")
+Guide keeps gnome-branch CI unprivileged => docs/guides/operator-guide-autonomy-gate.md (section "CI hygiene for `gnomish/*` branches")
+Guide points cron at drain mode => docs/guides/operator-guide-serve.md (section "Cron operation: `serve --drain` is now the path")

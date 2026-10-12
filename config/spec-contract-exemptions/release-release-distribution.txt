@@ -1,0 +1,10 @@
+spec: release/release-distribution
+
+# Verified by a mechanism other than a test: the workflow named.
+Release build carries the tag's version => .github/workflows/release.yml (step "Build the distribution twice and compare" builds with -PreleaseVersion from the tag; step "Unpacked archive reports the tag's version" runs bin/gnomish --version from the built archive and fails unless it prints the tag's version); the snapshot half is accepted as checked link by link (F121): ReleaseVersionSpec (release version to project version), BuildInfoSpec (project version to jar build info), FactoryVersionSpec (build info to FactoryVersion), ObservabilityAssemblySpec (FactoryVersion to the snapshot's factoryVersion)
+Version mismatch blocks publishing => .github/workflows/release.yml (step "Unpacked archive reports the tag's version" fails before any publishing step)
+The SBOM is bound to the archives => .github/workflows/release.yml (step "Attest SBOM" binds gnomish-<version>-cyclonedx.json to both archives; step "Publish the release" uploads it)
+Hand-written notes win => .github/workflows/release.yml (step "Publish the release": --notes-file docs/releases/<tag>.md when the file exists)
+The reproducibility comparison leaves the SBOM out => .github/workflows/release.yml (step "Build the distribution twice and compare" compares only the tar sums)
+Notes are generated without a notes file => .github/workflows/release.yml (step "Publish the release": --generate-notes when no notes file exists)
+The release does not re-run the verification suite => .github/workflows/release.yml (builds only distTar, distZip and cyclonedxDirectBom; the preflight requires the commit's green CI run)

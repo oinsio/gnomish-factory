@@ -1,0 +1,4 @@
+spec: plugin/plugin-discovery
+
+# Verified by a mechanism other than a test: the build script and committed data named.
+The reshape is a recorded break => gnomish-plugin-api/build.gradle (the 0.10.0 -> 0.11.0 comment names the FR23 break) and gnomish-plugin-api/compat-baseline/ (regenerated in the same change)

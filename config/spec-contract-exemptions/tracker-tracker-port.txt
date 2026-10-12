@@ -1,0 +1,8 @@
+spec: tracker/tracker-port
+
+# Verified by the adapter author guide: the scenario is the content of the named document.
+Guide is self-sufficient => docs/guides/adapter-author-guide.md (sections "2. Per-operation port semantics", "3. The contract suite is law")
+The guide maps physical states by example => docs/guides/adapter-author-guide.md (sections "4.1 GitHub labels (as-built)", "4.2 Redmine statuses — a thought-through sketch (NOT implemented)")
+The guide states the fact obligations => docs/guides/adapter-author-guide.md (sections "5. Snapshot, decision, and abort-fact obligations", "6.2 Designator obligations (base-ref resolution)")
+The guide states the subsection ownership => docs/guides/adapter-author-guide.md (sections "6. Config-subsection ownership", "6.1 Mandatory: declare your credential env vars for the scrub")
+The guide records the known limitations => docs/guides/adapter-author-guide.md (section "7. Known limitations")

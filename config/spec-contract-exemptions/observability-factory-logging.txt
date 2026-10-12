@@ -1,0 +1,6 @@
+spec: observability/factory-logging
+
+# Documentation facts: the file named is the scenario's subject.
+The policy ADR defines its three rules => docs/adr/0004-logging-policy.md
+Emitters have a one-page checklist => .claude/rules/logging.md (section "Before you commit the line, check")
+

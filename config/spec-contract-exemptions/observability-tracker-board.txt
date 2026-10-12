@@ -1,0 +1,4 @@
+spec: observability/tracker-board
+
+# Verified by the operator guide: the scenario is the content of the named document.
+Guide enables the external monitor => docs/guides/operator-guide.md (section "Monitoring the Queue over `--json` (external alerts)")

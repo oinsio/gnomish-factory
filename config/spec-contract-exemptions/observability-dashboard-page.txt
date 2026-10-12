@@ -1,0 +1,10 @@
+spec: observability/dashboard-page
+
+# Static-page behaviour run in a browser (the inline script, the stylesheet): the build has no
+# browser harness to run it; proposed for a follow-up change by finding F93, sorted at task 8.14.
+Dead renderer banners the page => pending-test: add-dashboard-browser-tests
+Fresh page shows no banner => pending-test: add-dashboard-browser-tests
+Refresh does not reset scroll => pending-test: add-dashboard-browser-tests
+Relative time ticks => pending-test: add-dashboard-browser-tests
+Phone-width render does not overflow => pending-test: add-dashboard-browser-tests
+Both themes legible => pending-test: add-dashboard-browser-tests

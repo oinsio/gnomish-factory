@@ -1,0 +1,5 @@
+spec: build/build-conventions
+
+# One-time refactoring acts with no standing behaviour to test (finding F120 of task 8.13); sorted at decision point 8.14.
+Clean build stays within the monolith baseline => pending-test: retire-one-time-scenarios
+The published-api module's build is unchanged => pending-test: retire-one-time-scenarios

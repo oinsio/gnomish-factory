@@ -1,0 +1,9 @@
+spec: plugin/plugin-api-contract
+
+# Verified by a mechanism other than a test: the build gate, the compiled module or the committed data named.
+api artifact excludes application and bootstrap internals => gnomish-plugin-api/build.gradle (layering-conventions gate: allowedProjects names only :domain, :operatorevent and :untrustedtext; run by check) and gnomish-plugin-api/sample/build.gradle (the sample compiles against the exposed tracker port, both SPI factories, SecretsProvider, TrackerSubsectionValidator, AttemptCommitWorkspace and FindingsSanitizer from this artifact alone; compiled by check)
+A third party compiles against a single declared dependency => gnomish-plugin-api/sample/build.gradle (the sample tracker and check adapters compile with api project(':gnomish-plugin-api') as the only dependency; compiled by check)
+The first-party vendor bundle satisfies the same constraint => adapters/github/build.gradle (layering-conventions gate: allowedProjects names neither :application nor :bootstrap; run by check)
+Sample check factory compiles against the api alone => gnomish-plugin-api/sample/build.gradle (no test source set; layering allowedProjects permits only :domain, :gnomish-plugin-api and their transitive leaves; compiled by check)
+A typed-field break is bumped and re-baselined together => gnomish-plugin-api/build.gradle (version comment naming each break with its MINOR bump) and gnomish-plugin-api/compat-baseline/ (regenerated in the same change)
+The baseline covers the published jar set => gnomish-plugin-api/compat-baseline/ (holds the gnomish-plugin-api, domain, untrustedtext and operatorevent jars the japicmp gate compares against)

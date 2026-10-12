@@ -1,0 +1,22 @@
+spec: release/project-licensing
+
+# Verified by a mechanism other than a test: the workflow, build script, data file or document named.
+Dual-licensed dependency is recorded => NOTICE (names Logback and Jakarta Annotations as used under EPL-2.0, each with its source repository URL)
+NOTICE stays minimal => NOTICE (lists no dependency version, so a version bump needs no edit)
+NOTICE names only the dual-licensed choices => NOTICE (lists only the two dual-licensed libraries; no license text, no version)
+A reviewer questions an LGPL string in metadata => docs/adr/0009-project-license.md (section "LGPL is not on the allowlist") and NOTICE (the EPL-2.0 option for Logback)
+The ADR states the dual-license rule => docs/adr/0009-project-license.md (a choice of licenses is the licensee's choice; the permissive option is taken and recorded in NOTICE)
+First pull request from an unsigned account => .github/workflows/cla.yml (CLA Assistant on pull_request_target with one signing comment; a signing reply re-runs the check on the same pull request)
+Later pull request from a signed account => .github/workflows/cla.yml (signatures/cla.json on the cla-signatures branch covers every later pull request)
+Maintainer pull request => .github/workflows/cla.yml (allowlist: the repository owner needs no signature)
+A signature is durable and needs no new push => .github/workflows/cla.yml (signature recorded on the cla-signatures branch; the issue_comment trigger turns the check green without a push)
+The contributing guide describes the agreement => CONTRIBUTING.md (section "Contributor License Agreement (CLA)")
+The check runs no pull-request code and writes little => .github/workflows/cla.yml (no checkout step; permissions contents, pull-requests and statuses write only)
+The check's job is bounded by thirty minutes => .github/workflows/cla.yml (job cla: timeout-minutes: 30)
+Would-be contributor reads the guide => CONTRIBUTING.md (first paragraph: pull requests are not accepted for now, and the three ways to contribute today)
+Plugin author announces a plugin => .github/ISSUE_TEMPLATE/plugin-announcement.yml (five fields, the license among them, equal to the registry's columns)
+Operator reads the registry => docs/community-plugins.md (the "Listed as-is" disclaimer and the license column)
+Registry is reachable => README.md and docs/guides/adapter-author-guide.md (both link docs/community-plugins.md)
+The terms are in the glossary => docs/glossary.md (entries "Community plugin registry" and "Plugin announcement")
+The announcement form's fields are the registry's columns => .github/ISSUE_TEMPLATE/plugin-announcement.yml (field ids name, link, adapts, maintainer, license) and docs/community-plugins.md (the same columns; section "Announce a plugin")
+Operator reads the terms => README.md (section "License")

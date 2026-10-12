@@ -1,0 +1,4 @@
+spec: plugin/adapter-binding-registry
+
+# Verified by a mechanism other than a test: the workflow named.
+Existing execution-environment specs pass with assertions unchanged => .github/workflows/ci.yml (./gradlew check runs every execution-environment spec, each linked to its scenario by its own marker)

@@ -1,0 +1,5 @@
+spec: serve/daemon-supervision
+
+# Verified by a mechanism other than a test: the workflow, build script, data file or document named.
+Guidance exists before the code => .claude/rules/daemon-loops.md, docs/adr/0013-supervised-daemon-loop.md, docs/glossary.md (entry "Supervised daemon loop")
+
