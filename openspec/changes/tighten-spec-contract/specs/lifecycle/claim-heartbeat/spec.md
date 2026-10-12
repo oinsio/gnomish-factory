@@ -283,10 +283,18 @@ next observation.
 A terminal outcome SHALL be durable in the task branch before its tracker
 write. When the tracker is down at the finish line, the instance SHALL hold
 the task and retry the terminal write with backoff. Resume SHALL begin with a
-reconcile step: a terminal outcome recorded in the branch without its tracker
-counterpart means the resuming instance completes the deferred tracker write
-(finish or park) and runs zero engine rounds — bookkeeping, never replay.
-**Implements**: FR10 of add-claim-heartbeat; NFR-C1 of add-claim-heartbeat
+reconcile step: a terminal outcome recorded at the branch's registered commit
+without its tracker counterpart means the resuming instance completes the
+deferred tracker write (finish or park) and runs zero engine rounds —
+bookkeeping, never replay.
+**Implements**: FR10 of add-claim-heartbeat; NFR-C1 of add-claim-heartbeat; NFR-S2 of tighten-spec-contract
+**Notes**: "Recorded in the branch" means recorded at the factory register (task-branch-contract, "Classification reads the factory register"), never at a tip the gnome wrote.
+
+#### Scenario: A gnome-written terminal outcome is not reconciled
+- **WHEN** a resume finds `Completed` in a `task.json` the gnome committed above
+  the register and `Working` in the tracker
+- **THEN** no finish is posted and no cleanup is written; the run proceeds from
+  the registered commit's shape
 
 #### Scenario: Outcome survives holder death during retries
 - **WHEN** an instance completes a task during a tracker outage, commits the

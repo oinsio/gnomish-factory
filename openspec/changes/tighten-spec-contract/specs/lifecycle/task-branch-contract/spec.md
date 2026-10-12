@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Total branch-shape classification
-A classifier SHALL map any task branch tip — its file set, envelope versions and recorded position — to exactly one named shape from a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be modelled as a sealed hierarchy so readers switch without a default branch.
+A classifier SHALL map any task branch — the envelope at its registered commit (see "Classification reads the factory register"), that commit's file set, envelope versions and recorded position, and the tip's relation to it — to exactly one named shape from a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be modelled as a sealed hierarchy so readers switch without a default branch.
 
 The happy path, and the group quarantined on first classification:
 
@@ -308,3 +308,43 @@ No durable write on the task branch SHALL encode a state a reader interprets as 
 #### Scenario: No in-memory attempt reset precedes its write
 - **WHEN** a component resets the attempt history in memory
 - **THEN** the decision commit, the approval write or the resumed write that grants the reset has already landed
+
+## ADDED Requirements
+
+### Requirement: Classification reads the factory register
+Every reader of task-branch state SHALL take the envelope, the position, the outcome, the base pin and the delivery fact from the task's registered commit — the commit `refs/gnomish-factory/<task>` names — never from the branch tip. The tip SHALL contribute one fact: equal to the registered commit, a descendant of it, or neither. `Delivered` SHALL mean the registered commit is the cleanup commit. A record the gnome writes above the register SHALL change no shape and open no gate.
+**Implements**: FR13, NFR-S2 of tighten-spec-contract
+**Notes**: The register is the one ref only a factory closing push moves (git-task-persistence, "Factory register ref"); a commit id is content-addressed, so the gnome cannot forge one.
+**Notes**: Host mode carries no integrity claim against the gnome (design D19 of tighten-spec-contract); there the register is a detection, not a guarantee.
+
+#### Scenario: The tip equals the register
+- **WHEN** the branch tip and the registered commit are the same commit
+- **THEN** the shape is the one that commit's envelope describes, exactly as a tip read would have described it before the register existed
+
+#### Scenario: A tip above the register is an open gnome range
+- **WHEN** the branch tip descends from the registered commit and is not equal to it
+- **THEN** the shape is the registered commit's, and the commits above the register are the open round's gnome range — salvaged or admitted by the round-close owner, never classified
+
+#### Scenario: A register that is not an ancestor of the tip quarantines
+- **WHEN** the registered commit is neither the tip nor an ancestor of it, or the register ref is missing for a branch that has a STARTED commit
+- **THEN** the shape is `Unknown` with a diagnosis naming the register and the tip, and the existing budgeted recovery owner handles it
+
+#### Scenario: A gnome commit carrying the cleanup subject does not deliver the task
+- **WHEN** the gnome commits on its own branch with a message carrying `gnomish: cleanup`, as the subject or anywhere in the message, and the register names a commit below it
+- **THEN** the branch does not classify as `Delivered`, on every reading path including `status`, take and serve
+
+#### Scenario: A gnome-written Completed outcome is not a pending cleanup
+- **WHEN** a gnome commit above the register rewrites `task.json` with `outcome: COMPLETED`, alone or with a matching `state.json`
+- **THEN** the branch does not classify as `CompletedUncleaned`, no cleanup is written, and no tracker finish is posted
+
+#### Scenario: A gnome-written gate position opens no gate
+- **WHEN** a gnome commit above the register writes an `AwaitingApproval(stage)` position with a `paused` outcome
+- **THEN** the branch does not classify as `AwaitingApproval`, and the pickup performs no approval write
+
+#### Scenario: A gnome-written base pin binds no law
+- **WHEN** a gnome commit above the register rewrites the base pin in `task.json`
+- **THEN** resume binds the law from the pin the registered commit carries, and the rewritten pin is never read
+
+#### Scenario: No reader takes an envelope fact from the tip
+- **WHEN** a production class in the git adapter or the application layer reads a factory-owned envelope file by the branch tip or `HEAD` outside the register owner
+- **THEN** the architecture gate fails the build naming the file
