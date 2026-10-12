@@ -23,7 +23,8 @@ import spock.lang.TempDir
  * supervise-daemon-loops-and-embed-dashboard (design D22): {@code containerRuntimeProbe} and
  * {@code sandboxModeSelector} join (the execution-mode decision is built once by the root); FR9,
  * FR10 (design D11, D12): {@code serveDashboard} joins (the page inside serve, holding the tracker
- * wiring only as its board-reader role).
+ * wiring only as its board-reader role). F119 of tighten-spec-contract (design D12): {@code
+ * workspaceFactory} joins (the host workspace realization the root hands to the use cases).
  */
 class ApplicationBeanInventorySpec extends Specification {
 
@@ -99,6 +100,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'trackerSubsectionValidatorRegistry',
         'trackerWiring',
         'usageCommand',
+        'workspaceFactory',
     ]
 
     // Design D8 of add-project-registry: booted through the CommandExit argument registration,

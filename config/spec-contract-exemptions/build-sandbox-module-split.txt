@@ -1,4 +1,0 @@
-spec: build/sandbox-module-split
-
-# One-time refactoring acts with no standing behaviour to test (finding F120 of task 8.13); sorted at decision point 8.14.
-Existing sandbox specs pass unchanged => pending-test: retire-one-time-scenarios

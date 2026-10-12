@@ -12,13 +12,8 @@ A sandbox backend declares only its permitted edges => build-logic/src/main/groo
 No production module depends on the test fixtures => build-logic/src/main/groovy/layering-conventions.gradle (verifyModuleLayering, run by check) (production classpaths only; no module's layering block lists :test-fixtures)
 Only bootstrap reaches every adapter => build-logic/src/main/groovy/layering-conventions.gradle (verifyModuleLayering, run by check) (only bootstrap/build.gradle's layering block lists every adapter module)
 A leaf edge declared ahead of its use fails the gate => build.gradle (dependencyAnalysis issues: onAny severity 'fail'; buildHealth wired into check)
-Full suite passes after the split => .github/workflows/ci.yml (runs ./gradlew check)
 
 # Not built yet: the access-log emitter and the gitobjects observer hook land with add-subprocess-access-log (findings.md F29).
 Shared logging support lives in logtext => pending-test: add-subprocess-access-log
 Access-log emission adds no edge to gitobjects => pending-test: add-subprocess-access-log
 The gitobjects observer hook defaults to a no-op => pending-test: add-subprocess-access-log
-
-# One-time refactoring acts with no standing behaviour to test (finding F120 of task 8.13); sorted at decision point 8.14.
-A relocated port keeps its signature => pending-test: retire-one-time-scenarios
-Spec edits are confined to construction sites => pending-test: retire-one-time-scenarios

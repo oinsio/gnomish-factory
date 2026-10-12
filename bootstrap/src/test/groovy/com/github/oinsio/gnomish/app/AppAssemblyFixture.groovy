@@ -246,6 +246,11 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
         def errorConsole = LiveConsoleIO.onStderr()
         def checkClientRegistry = [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
+        // The root's one secrets port, as its secretsProvider bean builds it, over a factory home of
+        // its own with no secrets folder: every value — a check credential, and every child
+        // environment's base set, passthrough and AI seam (NFR-S3 of tighten-spec-contract) —
+        // resolves from the test JVM's environment, whose GNOMISH_* variables the build strips.
+        def secrets = new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null)
         // The root's host workspace realization (F119 of tighten-spec-contract): one instance, handed
         // to the startup and the assembly as the context hands its bean.
         def workspaceFactory = manualRun.workspaceFactory()
@@ -260,7 +265,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                         new FilesExistCheckRunner(),
                         new ShellCommandCheckRunner(instantSource),
                         checkClientRegistry,
-                        MapSecretsProvider.NONE,
+                        secrets,
                         factoryProperties,
                         timeEquipment),
                 timeEquipment,
@@ -273,7 +278,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         // supports take it and the graph's one time equipment, as the context wires them.
         def modeSelector = new SandboxBindingConfiguration().sandboxModeSelector(
                 bindingProperties, sandboxProperties, DiscoveredBindings.real(), runtimeProbe)
-        def containerSupports = new ContainerSupports(checkClientRegistry, factoryProperties, sandboxProperties,
+        def containerSupports = new ContainerSupports(checkClientRegistry, assembly.checks, factoryProperties, sandboxProperties,
                 modeSelector, git, timeEquipment)
         def trackerWiring = new TrackerWiring(trackerAdapterRegistry, MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), timeEquipment)
         def serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null, null)

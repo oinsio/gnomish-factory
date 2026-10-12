@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.testfixtures
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.ChildEnvValues
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 
 /**
@@ -20,7 +21,12 @@ import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironmen
  * the same daemon the test JVM does. Values are composed through the production owner,
  * {@link ChildEnvAllowlist}, over the test JVM's own environment.
  *
- * <p>Implements FR22, M10 of make-checkpoint-gate-durable.
+ * <p>The production allowlist resolves its values through the factory's secrets port, never the
+ * process environment (NFR-S3 of tighten-spec-contract); a spec that runs a host child over the
+ * test JVM's own base set takes {@link #hostAllowlist} instead, whose values are {@link
+ * #PROCESS_VALUES} — the test-side stand-in for the port's environment fallback.
+ *
+ * <p>Implements FR22, M10 of make-checkpoint-gate-durable; NFR-S3 of tighten-spec-contract.
  */
 final class TestChildEnvironment {
 
@@ -40,7 +46,32 @@ final class TestChildEnvironment {
     /** Name prefixes a child keeps: Testcontainers' own client configuration. */
     static final List<String> PREFIXES = ['TESTCONTAINERS_'].asImmutable()
 
+    /**
+     * The test JVM's own environment as an allowlist's values, blank as absent — what the
+     * production secrets port's last step reads, without its secrets folders.
+     */
+    static final ChildEnvValues PROCESS_VALUES = { String name ->
+        Optional.ofNullable(System.getenv(name)).filter { !it.isBlank() }
+    } as ChildEnvValues
+
     private TestChildEnvironment() {}
+
+    /** No passthrough, no declared credentials, values from the test JVM's environment. */
+    static ChildEnvAllowlist hostAllowlist() {
+        ChildEnvAllowlist.of([], [], PROCESS_VALUES)
+    }
+
+    /** The given passthrough and declared credentials, values from the test JVM's environment. */
+    static ChildEnvAllowlist hostAllowlist(List<String> passthroughNames, Collection<String> credentialNames) {
+        ChildEnvAllowlist.of(passthroughNames, credentialNames, PROCESS_VALUES)
+    }
+
+    /** A spec's planted factory environment as an allowlist's values, read live at each lookup. */
+    static ChildEnvValues valuesOf(Map<String, String> environment) {
+        { String name ->
+            Optional.ofNullable(environment[name])
+        } as ChildEnvValues
+    }
 
     /**
      * Clears {@code builder}'s inherited environment and puts back {@link #NAMES} and every
@@ -58,7 +89,7 @@ final class TestChildEnvironment {
         }.sort())
         Map<String, String> environment = builder.environment()
         environment.clear()
-        environment.putAll(ChildEnvAllowlist.none().compose(names, [:]))
+        environment.putAll(hostAllowlist().compose(names, [: ]))
         environment
     }
 }

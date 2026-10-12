@@ -490,7 +490,7 @@ finding names.
       sites (`ContainerEnvironmentFactory`, `ContainerEnvironmentBuilder`) and their specs. Verify:
       `ContainerEquipmentSplitSpec` green without `@PendingFeature`; the `sandbox/docker`
       environment specs green; scoped PIT of the four classes.
-- [ ] 9.10 F119 — `build/module-layering` / `A use case reaches its collaborator through a port`
+- [x] 9.10 F119 — `build/module-layering` / `A use case reaches its collaborator through a port`
       (*single-owner*, row `WorkspaceFactory` / `ConsoleIO`): add a `WorkspaceFactory` port owned
       by `:application` (or `:domain`, beside `Workspace`, if the engine consumes it) and hand it,
       with the `ConsoleIO`, to `TakeEngineExecution`, `PipelineStartup`, `GitModeRunner`,
@@ -501,7 +501,7 @@ finding names.
       signature grows (the take chain reads `SlotWiring`). Sweep: `grep -rn "new DirectoryWorkspace(\|new
       SystemConsoleIO(" application/src/main` empty. Verify: `UseCasePortSpec` green without
       `@PendingFeature`; the specs of the five classes and `ServeRuntimeWiringSpec` green.
-- [ ] 9.11 F107 — `operator/secrets-provider` / `One seam to audit` (*single-owner*, row
+- [x] 9.11 F107 — `operator/secrets-provider` / `One seam to audit` (*single-owner*, row
       `SecretsProvider`; NFR-S3): `AgentAiSeam` reads the agent credentials
       (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`) through a
       `SecretsProvider` handed to `ExecutorRoundExecution` and `JudgeRoundExecution`, and
@@ -513,7 +513,7 @@ finding names.
       `SecretsPortBoundarySpec` with a non-credential reason. Verify: `SecretsPortBoundarySpec`
       green without `@PendingFeature`; `AgentCredentialSeamBoundarySpec`, the `ChildEnvAllowlist`
       specs, the agent round specs green.
-- [ ] 9.12 F85 — `sandbox/sandbox-egress` / `Guard crash burns no attempt` (D14): give
+- [x] 9.12 F85 — `sandbox/sandbox-egress` / `Guard crash burns no attempt` (D14): give
       `EgressGuard` a liveness probe without the restart; call it at the close of every
       container round and before an in-box retry's next round; a dead guard classifies the round
       as an infrastructure failure (no attempt burned, grading skipped) with an operator-visible
@@ -522,19 +522,87 @@ finding names.
       lands in a named shape) and record the answer in the task report. Verify:
       `EgressGuardRecoverySpec` green without `@PendingFeature`, its restart feature green; the
       sandbox round-outcome specs green.
-- [ ] 9.13 F122 — `lifecycle/task-branch-contract` / delivery (*single-owner*, row "The
-      round-record walk"; D13; NFR-S2): replace the subject search in `GitShowTip.cleanupCommit`
-      with the walk — from the tip down the first-parent line, each attempt commit's round token
-      (parsed by the same function the live path uses, crash-consistency item 14) skips the
-      gnome's range; a cleanup commit counts only where the walk lands. Keep the STARTED anchor
-      and the task-id check of FR14. Sweep: every reader of the delivery fact
-      (`DeliveredBranchReader`, `RefTipSource`, `BranchTipFactsReader`, `TipEnvelopeReader`) goes
-      through the one walk; `grep -rn "cleanupSubject\|gnomish: cleanup" adapters/git/src/main`
-      shows only the writer (`ServiceCommitMessages`, `CleanupCommit`) and the walk. Verify:
-      `DeliveryAncestrySpec` green without `@PendingFeature` (both message rows), every existing
-      delivery feature unchanged and green; the branch-shape classifier specs and the kill-point
-      specs that reach Delivered green.
-- [ ] 9.14 F93 — `observability/dashboard-page`, six scenarios (`Dead renderer banners the page`,
+- [ ] 9.13a F122, F135 — the factory register, written (*single-owner*, row "The factory
+      register"; D13; NFR-S2; third revision 2026-10-12 replaces the round-record walk): one
+      writer of `refs/gnomish-factory/<task>`, the closing push — `git push --atomic origin
+      <branch> <register>` built by the one transfer owner (`git-transfer`), for every closing
+      commit of both media: STARTED (`GitTaskRepository.createTask`, `GitObjectsTaskRepository`),
+      the host round commit (`GitAttemptPersistence`), the snapshot and state harvests
+      (`EnvironmentAttemptPersistence`), outcome, approval, appended decision, resumed write,
+      salvage (`WorktreeSalvage`, `EnvironmentSalvage`), cleanup (`CleanupCommit`), the
+      tracker-write-confirmed commit. The mid-round pushes (`MidRoundPushListener`,
+      `MidRoundHarvestListener`) push the branch alone. Every touchpoint fetch
+      (`OriginReconciliation`, the take and status reads) fetches both refs through the transfer
+      owner. The pair `GitAttemptPersistence` / `EnvironmentAttemptPersistence` is touched at
+      both ends; its `manual-sync-pairs.md` row gains "the register moves with the closing push"
+      to its invariant. Verify: `FactoryRegisterIdentitySpec` on a bare origin — after every
+      closing path of both media, register and branch tip are one commit; a refused push of
+      either ref lands neither (the atomic scenario, against a stand-in origin preset that
+      refuses one ref).
+- [ ] 9.13b F122, F135 — the factory register, read (*single-owner*, row "The factory
+      register"; D13; NFR-S2): a `RegisteredCommit` value, read once per pickup from the fetched
+      register, is the revision every envelope reader takes: `RefTipSource` and `GitShowTip`
+      (facts and `cleanupCommit` at the register; the `rev-list --first-parent --grep` walk and
+      the STARTED-ownership probe deleted — `Delivered` is "the registered commit is the cleanup
+      commit"), `BranchTipFactsReader` → `BranchShapeClassifier` (a new fact: the tip's relation
+      to the register — equal, descendant, neither — with `Unknown` plus diagnosis for neither
+      or a missing register), `SnapshotTipCheck` (the subject parsed at the register only),
+      `DeliveredBranchReader`, `ResumeLawBinding` (the pin at the register), the reconcile of
+      `claim-heartbeat`. Sweep: `grep -rn "readAtTip(EnvelopePaths\." adapters/git/src/main
+      application/src/main` shows only the register owner; `grep -rn "rev-list.*--grep\|gnomish:
+      cleanup" adapters/git/src/main` shows only `ServiceCommitMessages` and `CleanupCommit`. A
+      `:bootstrap` architecture spec (`EnvelopeRegisterOwnerSpec`, the `EnvelopeMediumBoundarySpec`
+      shape) scans both trees for envelope reads outside the owner, every allowlisted file
+      asserted reached. Tests first, red for the finding's reason: `DeliveryAncestrySpec` loses
+      its `@PendingFeature` (both message rows); new features for the delta's scenarios — a
+      gnome-written `Completed` is not `CompletedUncleaned` and posts no finish (F135, in
+      `BranchShapeClassifierSpec` and the take-route spec), a gnome-written gate position opens no
+      gate, a gnome-written pin binds no law, a snapshot subject above the register is not a
+      snapshot, a non-ancestor register is `Unknown`; the "tip equals register" feature shows every
+      existing classifier row unchanged. Verify: those specs green; every existing delivery,
+      classifier and kill-point spec green; scoped PIT on the readers.
+- [ ] 9.13c F135 — the admission gate at the harvest (*single-owner*, row "The harvest
+      admission"; D18; NFR-S2): the harvest fetch targets `refs/gnomish-quarantine/<task>` (the
+      transfer owner's refspec, nothing else writes it); one range inspection
+      (`GnomeRangeInspection`, replacing `RoundBoundaryCheck` and `HarvestedBoundaryCheck` — both
+      deleted, the `manual-sync-pairs.md` row removed) judges `register..fetched`: descendant of
+      the current branch tip, no second parent, no change under `FactoryOwnedPaths` except this
+      round's decision path, no `gnomish: ` subject; clean → `update-ref` the branch, then push;
+      violated → the existing boundary-violation report naming the commit, the branch unmoved;
+      cannot-verify → the existing infrastructure arm. Callers: `MidRoundHarvestListener`, the
+      snapshot and state harvests of `EnvironmentAttemptPersistence`, `EnvironmentSalvage`;
+      `BranchPush.pushBestEffort` deleted (the admission pushes what it admitted). The host round
+      close (`GitAttemptPersistence.persist`) runs the same inspection over `previousTip..HEAD`
+      and restores `FactoryOwnedPaths` from the registered commit before `git add -A`, reporting
+      a restored edit as a violation; `recordOutcome` on a violation builds the Aborted envelope
+      from the registered commit (`GitTaskRepository`, `GitObjectsTaskRepository`). Sweep:
+      `grep -rn "RoundBoundaryCheck\|HarvestedBoundaryCheck\|new BranchPush(" --include='*.java'
+      .` empty outside the inspection's own file. Tests first: `GnomeRangeInspectionSpec` (every
+      refusal row, the branch tip unchanged after each, cannot-verify on a failing git);
+      `HarvestAdmissionSpec` against `ScriptedGit`; the host feature "an uncommitted envelope edit
+      does not ride the round commit" (the F135 host route) and "a violation's Aborted outcome is
+      built from the registered envelope"; the kill-point row "killed between admission and push"
+      (the register unmoved, re-admitted on the next harvest; the second recovery a no-op); the
+      `ContainerGitMechanicsSpec` and end-to-end harvest features unchanged and green. Verify:
+      those specs green; scoped PIT on the inspection, the admission and both persistences.
+- [ ] 9.13d D19 — the record: a new row in `docs/sandbox-threat-registry.md` (the next free
+      number; envelope and service-subject forgery on the task branch read as the factory's
+      record — delivery, cleanup, gate approval, law pin; mitigation: the register and the
+      admission, container tier; host tier: no claim, detections as signals); a glossary entry
+      "Factory register" under "Crash consistency" and the "Branch shape" entry amended ("classified
+      at the registered commit"); crash-consistency item 13's "identity the orchestrator minted"
+      list gains the registered commit; `docs/adr/0007-pipeline-law-source.md` amended — resume
+      reads the pin at the register, the host limitation named; `manual-sync-pairs.md` rows per
+      9.13a and 9.13c. Verify: the doc links resolve; `grep -rn "round-record walk\|bind-delivery-
+      to-factory-record" docs/ openspec/changes/tighten-spec-contract .claude/ */src/test` empty.
+- [ ] 9.13e F122, F135 — the sweep report (`implementation.md`): the consumer lists of both
+      single-owner rows checked off with evidence; the three greps of 9.13b and 9.13c with their
+      hits and what happened to each; the escape hatches closed (`RefTipSource`, `GitShowTip` and
+      `DeliveredBranchReader` take a `RegisteredCommit`, never a bare ref or `HEAD`; the harvest
+      refspec names the quarantine ref); `findings.md` rows F122 and F135 marked done with the
+      task ids. Verify: `./gradlew :adapters:git:test :application:test` green, the two new
+      architecture specs green, `checkSpecContract --changes` green for the three edited deltas.
+- [x] 9.14 F93 — `observability/dashboard-page`, six scenarios (`Dead renderer banners the page`,
       `Fresh page shows no banner`, `Refresh does not reset scroll`, `Relative time ticks`,
       `Phone-width render does not overflow`, `Both themes legible`; D15; FR14): add the
       Testcontainers Selenium module to the version catalog and to `:bootstrap`'s end-to-end test
@@ -546,7 +614,7 @@ finding names.
       production owners" and "Test processes never inherit the operator's environment"
       (`testing.md`). Verify: the new specs green; `checkSpecContract` green for
       `observability/dashboard-page`; the dependency-verification and license gates green.
-- [ ] 9.15 F115, F120 — retire the one-time scenarios (D16; FR16): in this change's deltas, turn
+- [x] 9.15 F115, F120 — retire the one-time scenarios (D16; FR16): in this change's deltas, turn
       `Full clean-build time not regressed` (`build/build-conventions`) and `Behavior-preserving
       split` (`build/module-layering`) into `REMOVED` blocks with **Reason** and **Migration**;
       turn `Source file size cap`, `Shared app-layer assembly fixture` (`build/quality-gates`),
@@ -560,7 +628,7 @@ finding names.
       standing scenarios stay as they are. Verify: the strict preview of the four capabilities
       (`openspec validate <spec-id> --type spec --strict`); `checkSpecContract` green for them;
       `grep -rn "retire-one-time-scenarios" config/ */src/test` empty.
-- [ ] 9.16 Queued changes: a plain bullet in the `tasks.md` of each change whose planned code group
+- [x] 9.16 Queued changes: a plain bullet in the `tasks.md` of each change whose planned code group
       9 moved, naming the finding and what the change must keep — `add-claim-return` (F79: the
       epoch-scoped re-drive survives the `GithubClaimRetirement` generalization of its 3.2),
       `extract-agent-round-runner`, `fix-docker-exec-env-argv`, `define-executor-contract` (F107:
@@ -773,3 +841,18 @@ Findings:
   and an `ADDED` requirement under a new heading where standing scenarios remain (D16) — a second
   exception to NG4.
 - F97 stays with `add-claim-return` (plain bullet in its `tasks.md`).
+
+### Revision 2026-10-12, third (operator)
+
+- Task 9.13 as written could not be done: the round-record walk of the former D13 has no sound
+  starting point (mid-round pushes put gnome commits at the tip, nothing in a commit tells a
+  factory commit from a gnome one, host round commits carry no token, a forged snapshot subject
+  jumps the walk), and the same root cause admits a forged envelope without any subject (F135,
+  found by 9.13; the host `git add -A` carry and the Aborted-over-forged-envelope route found by
+  the 2026-10-12 architect audit). The operator decided: host mode carries no integrity claim
+  against the gnome (D19); the factory register is a ref pushed atomically with the branch, not a
+  tracker record (D13 as revised); and the fix stays in this change rather than opening
+  `bind-delivery-to-factory-record` — 9.13 becomes 9.13a–9.13e (D13, D18, D19; NFR-S2 as
+  revised; FR13 gains F135).
+- The `@PendingFeature` reason of `DeliveryAncestrySpec` names a change that no longer exists;
+  9.13b removes the annotation, so no rename is owed.

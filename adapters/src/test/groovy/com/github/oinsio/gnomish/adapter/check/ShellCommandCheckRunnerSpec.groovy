@@ -5,8 +5,8 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import java.nio.file.Files
 import java.nio.file.Path
@@ -330,7 +330,7 @@ exit 0''')
     // Scenario: cli/manual-run / No factory variable leaks into a check
     def "FR11: withChildEnv excludes the declared credential var from a check's environment"() {
         given: 'an allowlist declaring HOME a credential and a check that reports HOME and USER, then exits 1'
-        def credentialAwareRunner = runner.withChildEnv(ChildEnvAllowlist.of([], ['HOME']))
+        def credentialAwareRunner = runner.withChildEnv(TestChildEnvironment.hostAllowlist([], ['HOME']))
         def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; '
                 + 'if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi; exit 1')
 
@@ -345,12 +345,14 @@ exit 0''')
     }
 
     // FR9 of add-sandbox-core: the base set reaches a check with no tracker and no passthrough.
+    //     NFR-S3 of tighten-spec-contract: its values resolve through the run's allowlist (the
+    //     secrets port, in production; the test JVM's environment here), which the root always binds
     def "FR9: with no tracker configured a base variable still reaches the check"() {
-        given: 'the default runner (empty allowlist) and a check reporting HOME, then exiting 1'
+        given: 'a runner over an allowlist with no passthrough and no credential, and a check reporting HOME, then exiting 1'
         def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; exit 1')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
 
         then:
         verdict instanceof Verdict.Fail
@@ -380,7 +382,9 @@ exit 0''')
         ] as Set
 
         when:
-        def verdict = runner.run(check, workspace())
+        // The root's allowlist shape (no passthrough, no credential) over the test JVM's real
+        // environment, so the base set is really consulted (NFR-S3 of tighten-spec-contract).
+        def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
 
         then: 'every observed name is allowlisted or shell-internal'
         verdict instanceof Verdict.Fail

@@ -46,6 +46,7 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -108,7 +109,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         def source = new SandboxRoundEnvironmentSource(lease, runner, clone, TASK, rounds, new VirtualClock())
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, LAW, source)
+                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), TASK, rounds, ClaimEpochSource.NONE)
         engine(definition, executor, persistence, checks, Files.createDirectories(tempDir.resolve('workspace')))
     }
@@ -124,8 +125,8 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
     TaskOutcome runHost(PipelineDefinition definition, Path worktree, FactoryProperties agent,
             ScriptedCommandCheckRunner checks) {
         def clock = new VirtualClock()
-        def executor = new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener, LAW,
-        CliStageExecutor.hostRounds(clock, ChildEnvAllowlist.none()))
+        def executor = new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener, TestChildEnvironment.hostAllowlist(), LAW,
+        CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
         engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE), checks, worktree)
     }
 

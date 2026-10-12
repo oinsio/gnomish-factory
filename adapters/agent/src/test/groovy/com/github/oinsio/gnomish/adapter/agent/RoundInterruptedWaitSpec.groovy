@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -40,7 +41,7 @@ class RoundInterruptedWaitSpec extends Specification {
                         new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
                 new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',
@@ -67,7 +68,7 @@ class RoundInterruptedWaitSpec extends Specification {
                         new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
                 new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
                 environment,

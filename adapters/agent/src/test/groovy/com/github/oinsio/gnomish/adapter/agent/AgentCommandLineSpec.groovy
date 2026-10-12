@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Files
@@ -40,7 +41,7 @@ class AgentCommandLineSpec extends Specification {
                 new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
                 new VirtualClock(),
                 { event -> },
-                new AgentRoundResultExtractor())
+                new AgentRoundResultExtractor(), ChildEnvAllowlist.none())
     }
 
     private List<String> executorArgv() {

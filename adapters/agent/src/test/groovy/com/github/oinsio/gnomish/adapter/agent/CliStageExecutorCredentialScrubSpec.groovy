@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Files
@@ -74,7 +74,7 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
                 wrapperReporting(),
                 clock,
                 { event -> } as AgentProgressListener,
-                ChildEnvAllowlist.of([], [CREDENTIAL_VAR]),
+                TestChildEnvironment.hostAllowlist([], [CREDENTIAL_VAR]),
                 LAW)
 
         when:
@@ -87,7 +87,7 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
     def "with nothing declared, the same base variable reaches the spawned process"() {
         given:
         def executor = new CliStageExecutor(
-                wrapperReporting(), clock, { event -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW)
+                wrapperReporting(), clock, { event -> } as AgentProgressListener, TestChildEnvironment.hostAllowlist(), LAW)
 
         when:
         executor.execute(requestFor(workspaceDir))

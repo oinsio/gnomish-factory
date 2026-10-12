@@ -57,6 +57,30 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         outcome.finalState().attemptsUsed() == 1
     }
 
+    // D14 of tighten-spec-contract (F85): the agent of the second round still reports a result, so
+    //     without the close-of-round probe that round would be graded and burn the second attempt
+    // Scenario: sandbox/sandbox-egress / Guard crash burns no attempt
+    def "NFR-R1: a guard that dies while a round runs makes it cannot-execute, with the attempt count unchanged"() {
+        given: 'a first round that fails its check; the guard then dies while the second round runs'
+        def box = localBox()
+        box.guardDiesAtProbe = 3
+
+        when:
+        def outcome = run(pipeline(3), box, 'plain-round', ScriptedCommandCheckRunner.fixed(new Verdict.Fail([])))
+
+        then: 'the second round was probed at its close and not graded: the task escalates as cannot-execute'
+        box.guardProbes == 4
+        outcome instanceof TaskOutcome.Escalated
+        def report = (outcome as TaskOutcome.Escalated).report()
+        report instanceof EscalationReport.CannotExecute
+
+        and: 'the operator-visible reason names the guard container'
+        (report as EscalationReport.CannotExecute).cause().forConsole().contains('gnomish-guard-task-1')
+
+        and: 'only the first round, a quality failure, counted against the stage'
+        outcome.finalState().attemptsUsed() == 1
+    }
+
     // Scenario: sandbox/execution-environment / A wedged registry does not hang the take
     def "FR10: a box whose docker never answers ends the round on the docker deadline, as cannot-execute"() {
         given: 'a container box whose docker accepts every command and then never answers, bounded at one second'

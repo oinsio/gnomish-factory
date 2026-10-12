@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -43,7 +44,7 @@ class AgentRoundTeardownSpec extends Specification {
         }
         ExecutorRoundExecution.run(
                 new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', grace, null, null, null),
-                new VirtualClock(), { event -> }, new AgentRoundResultExtractor()),
+                new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
                 new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',

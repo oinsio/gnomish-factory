@@ -34,6 +34,9 @@ pitest {
         // Spawn the packaged jar via `java -jar`, reading `e2e.jarPath`, which only the `test`
         // task wires from the bootJar output (M1/M4; task 9.1 of add-manual-run, and
         // FactoryApplicationSpec's "bootJar stays headless" feature, task 6.5 of add-tracker-port).
+        // The same glob holds `e2e.dashboard`'s browser specs (design D15 of tighten-spec-contract),
+        // which drive a headless Chromium in a Docker container; the dashboard classes they render
+        // through are mutated by `:application`'s own in-process specs.
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
         // Specs over build outputs only `test` wires, shell scripts and workflow files

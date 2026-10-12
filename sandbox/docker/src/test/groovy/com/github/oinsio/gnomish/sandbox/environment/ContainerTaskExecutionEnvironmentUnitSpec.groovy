@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -553,9 +554,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR9: exec passes exactly the composed allowlist as --env entries, with an empty container base"() {
         given: 'an allowlist passing JAVA_HOME through, over a factory env that also holds a noise key'
         def factoryEnv = [JAVA_HOME: '/jdk', AWS_SECRET_ACCESS_KEY: 'never', PATH: '/usr/bin']
-        def allowlist = ChildEnvAllowlist.over(['JAVA_HOME'], [], {
-            -> factoryEnv
-        })
+        def allowlist = ChildEnvAllowlist.of(['JAVA_HOME'], [], TestChildEnvironment.valuesOf(factoryEnv))
         def e = new ContainerTaskExecutionEnvironment(
                 BoxEquipmentFixture.forBox(docker, 'gnomish/img', LIMITS, clock, OWNERSHIP.mode()),
                 KEY, new BoxGitLink(SOURCE_CLONE, harvester), allowlist, OWNERSHIP.projectId())

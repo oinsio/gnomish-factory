@@ -46,7 +46,11 @@ class UseCasePortSpec extends Specification {
      * the agent and git adapters and the shared test fixtures read them by type and cannot reach
      * {@code :bootstrap}. What this list pins is that only the composition root constructs them.
      */
-    private static final List<Class<?>> SELF_SUPPLIED_PORTS = [ConsoleIO, Workspace, WorkspaceFactory]
+    private static final List<Class<?>> SELF_SUPPLIED_PORTS = [
+        ConsoleIO,
+        Workspace,
+        WorkspaceFactory
+    ]
 
     /** The layers that own use cases and their ports. */
     private static final List<String> USE_CASE_MODULES = ['/application/', '/domain/']

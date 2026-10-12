@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -46,6 +47,14 @@ class AgentRoundLaunchSpec extends Specification {
 
     final List<ExecCommand> launched = []
 
+    /** The factory's values: every seam variable planted, beside a variable the seam never names. */
+    static final Map<String, String> FACTORY_VALUES = AgentAiSeam.NAMES.collectEntries {
+        [(it): "value-of-${it}".toString()]
+    } + [AWS_SECRET_ACCESS_KEY: 'never']
+
+    /** The run's allowlist over {@link #FACTORY_VALUES} — what the root binds to the secrets port. */
+    final ChildEnvAllowlist childEnv = ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(FACTORY_VALUES))
+
     /** A box that records every launch and answers it with the scenario's recorded stdout. */
     private TaskExecutionEnvironment box(String scenario) {
         Stub(TaskExecutionEnvironment) {
@@ -60,7 +69,7 @@ class AgentRoundLaunchSpec extends Specification {
         RoundEnvironmentSource rounds = { req ->
             new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
         }
-        new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, LAW, rounds).execute(request)
+        new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds).execute(request)
     }
 
     private void judgeVote(String model = 'claude-fake-judge-1') {
@@ -68,7 +77,7 @@ class AgentRoundLaunchSpec extends Specification {
             box('judge-verdict-pass')
         }
         new CliJudgeVoter(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener,
-        ChildEnvAllowlist.none(), LAW, judges)
+        childEnv, LAW, judges)
         .vote(new VerifyCheck.Judge('criteria.md', model, [:], 1), FakeAgentSupport.defaultTaskContext(),
         new DirectoryWorkspace(workspaceDir))
     }
@@ -158,12 +167,14 @@ class AgentRoundLaunchSpec extends Specification {
         carriesPair(launched[1].command(), '--model', 'claude-judge-from-manifest')
     }
 
-    // FR5 of fix-operator-blockers: both roles hand the port the seam the factory environment holds;
-    //     the five names are pinned by AgentAiSeamSpec, the values are read live from this process
+    // FR5 of fix-operator-blockers: both roles hand the port the seam the factory's values hold;
+    //     the five names are pinned by AgentAiSeamSpec. NFR-S3 of tighten-spec-contract: the values
+    //     come from the run's allowlist (the secrets port, in production), planted here, never from
+    //     this process's environment — so every name is present and the comparison is not vacuous
     // Scenario: executor/agent-executor / The AI seam carries five variables
     def "FR5: every agent round and judge vote receives the AI seam with its current values"() {
         given:
-        def seam = AgentAiSeam.fromFactoryEnvironment()
+        def seam = FACTORY_VALUES.subMap(AgentAiSeam.NAMES)
 
         when:
         executorRound(FakeAgentSupport.requestFor(workspaceDir))
@@ -178,6 +189,9 @@ class AgentRoundLaunchSpec extends Specification {
             'ANTHROPIC_MODEL'
         ] as Set
         launched.size() == 2
-        launched.every { it.env().subMap(AgentAiSeam.NAMES) == seam }
+        seam.size() == 5
+        launched.every {
+            it.env().subMap(AgentAiSeam.NAMES) == seam && !it.env().containsKey('AWS_SECRET_ACCESS_KEY')
+        }
     }
 }

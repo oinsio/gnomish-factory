@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -28,6 +29,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * <p>{@code launchFails} additionally stands in for an environment that cannot start the
  * process at all — the third shape of a round that dies before its close, beside the
  * {@code roundTimeout} kill and the missing result event.
+ *
+ * <p>{@code guardDiesAtProbe} stands in for a guard that dies (D14 of tighten-spec-contract):
+ * the guard probes are counted across every round of this source, and the probe with that
+ * 0-based index and every later one throw the guard's own infrastructure failure. {@code null}
+ * (the default) is a guard that never dies.
  */
 final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
@@ -35,6 +41,10 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
     private final List<List<Finding>> answers
     private final boolean launchFails
     private final AtomicInteger reads = new AtomicInteger()
+    private final AtomicInteger probes = new AtomicInteger()
+
+    /** The 0-based index of the first guard probe that finds the guard dead; null: never. */
+    Integer guardDiesAtProbe
 
     ScriptedDenialRounds(RoundEnvironmentSource delegate, List<List<Finding>> answers, boolean launchFails = false) {
         this.delegate = delegate
@@ -57,6 +67,18 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
     private boolean launchFails() {
         launchFails
+    }
+
+    /** The number of guard probes so far, across every round opened from this source. */
+    int probes() {
+        probes.get()
+    }
+
+    private void probe() {
+        int index = probes.getAndIncrement()
+        if (guardDiesAtProbe != null && index >= guardDiesAtProbe) {
+            throw new GuardUnavailableException('egress guard for k1 (container gnomish-guard-k1) is not running')
+        }
     }
 
     @Override
@@ -160,6 +182,11 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         @Override
         CapabilityPassport passport() {
             delegate.passport()
+        }
+
+        @Override
+        void probeGuard() {
+            source.probe()
         }
 
         @Override

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -57,7 +58,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
     // handed to forTask is the one the built seam scrubs with
     def "a factory-built seam scrubs exactly the credentials of the allowlist it was given"() {
         expect:
-        factoryBuilt(OwnershipMode.TRACKED, ChildEnvAllowlist.of([], ['GNOMISH_PROBE_TOKEN']))
+        factoryBuilt(OwnershipMode.TRACKED, TestChildEnvironment.hostAllowlist([], ['GNOMISH_PROBE_TOKEN']))
         .scrubsCredential('GNOMISH_PROBE_TOKEN')
 
         and:
@@ -82,7 +83,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
     // FR9: the probe answers what the composed allowlist actually does, never a hardwired boolean
     def "scrubsCredential is true only for a name the allowlist scrubs"() {
         expect: 'a declared credential name is scrubbed'
-        environments(KEY, ChildEnvAllowlist.of([], ['GNOMISH_PROBE_TOKEN'])).scrubsCredential('GNOMISH_PROBE_TOKEN')
+        environments(KEY, TestChildEnvironment.hostAllowlist([], ['GNOMISH_PROBE_TOKEN'])).scrubsCredential('GNOMISH_PROBE_TOKEN')
 
         and: 'a name no allowlist declares passes through, so the probe says not scrubbed'
         !environments(KEY, ChildEnvAllowlist.none()).scrubsCredential('GNOMISH_PROBE_TOKEN')

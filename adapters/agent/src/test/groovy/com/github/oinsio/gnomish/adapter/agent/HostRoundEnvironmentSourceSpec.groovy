@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -26,7 +26,7 @@ class HostRoundEnvironmentSourceSpec extends Specification {
     def "openRound exposes the transport's decision-file path and the matching env fragment"() {
         given:
         def source = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), new VirtualClock(), ChildEnvAllowlist.none())
+                new DecisionFileTransport(decisionRoot), new VirtualClock(), TestChildEnvironment.hostAllowlist())
 
         when:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))

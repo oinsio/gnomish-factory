@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.adapter.check
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import java.time.InstantSource
 
@@ -34,7 +34,7 @@ class TempDirCheckEnvironments implements CheckEnvironmentSource {
 
     @Override
     Acquired acquire(VerifyCheck.Command check, Workspace workspace) {
-        def environment = new HostTaskExecutionEnvironment(directory, clock, ChildEnvAllowlist.none())
+        def environment = new HostTaskExecutionEnvironment(directory, clock, TestChildEnvironment.hostAllowlist())
         environment.materialize('acceptance', null)
         new Acquired() {
 

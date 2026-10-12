@@ -76,6 +76,13 @@
   with a real command stage (modifies the working copy, then a failing-then-passing
   retry): harvest/attempt commits carry the command's effects, findings reach the
   next attempt, zero model invocations for the stage (FR9, M1, M2, G2)
+- F82 (carried from `tighten-spec-contract`): the container chain takes `BoxEquipment` —
+  `ContainerEnvironments`, `ContainerEnvironmentBuilder` and `ContainerTaskExecutionEnvironment`
+  take the installation's one `BoxEquipment` plus the task's own inputs (`BoxGitLink`,
+  `ChildEnvAllowlist`, the project identity, the key), never a loose `DockerCli`, pinned by
+  `ContainerEquipmentSplitSpec`. 7.1's container-mode spec builds its environment through that
+  value (`BoxEquipmentFixture` in `:test-fixtures`), and the command executor reaches the box only
+  through `TaskExecutionEnvironment.exec` (design D2), adding no equipment parameter.
 - [ ] 7.2 Update `docs/glossary.md`: the Executor entry gains `command` (a declared
   shell command run in the task environment), disambiguated from the `command`
   verify check; verify by reading the rendered entry (process rule: glossary in the

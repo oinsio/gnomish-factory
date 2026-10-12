@@ -33,6 +33,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -159,7 +160,7 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         def source = new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), world.repoDir, TAKE_TASK_ID, rounds,
                 new VirtualClock())
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(asks ? 'decision-needed' : 'plain-round'),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, TAKE_LAW, source)
+                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), TAKE_LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, new GitProcessRunner(), world.repoDir, objects,
                 TAKE_TASK_ID, rounds, world.epochs)
         def clock = new VirtualClock()

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -65,7 +66,7 @@ class HostChildEnvironmentSpec extends Specification {
     def "FR9: a host child receives exactly the documented base set, and SSH_AUTH_SOCK is absent"() {
         given: 'a factory environment holding the base names, SSH_AUTH_SOCK and a cloud key; no passthrough'
         def env = new HostTaskExecutionEnvironment(workingCopy, new VirtualClock(),
-                ChildEnvAllowlist.over([], [], { -> operatorShell() }))
+                ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(operatorShell())))
 
         expect: 'the adapter’s base set is the documented minimum'
         HostTaskExecutionEnvironment.BASE_ENV_NAMES == DOCUMENTED_MINIMUM
@@ -84,7 +85,7 @@ class HostChildEnvironmentSpec extends Specification {
         given: 'a passthrough name and a factory-set variable beside the base set'
         def shell = operatorShell() + [JAVA_HOME: '/opt/jdk-secret-path']
         def env = new HostTaskExecutionEnvironment(workingCopy, new VirtualClock(),
-                ChildEnvAllowlist.over(['JAVA_HOME'], [], { -> shell }))
+                ChildEnvAllowlist.of(['JAVA_HOME'], [], TestChildEnvironment.valuesOf(shell)))
 
         when: 'one process is executed'
         def events = LogCaptureSupport.capture(ChildEnvAllowlist, Level.DEBUG) {

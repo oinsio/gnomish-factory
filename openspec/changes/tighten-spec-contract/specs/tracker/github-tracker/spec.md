@@ -571,13 +571,13 @@ issue still carrying a claim footprint instead of losing races to a ghost.
 ### Requirement: Factory comments are written find-then-upsert
 Every factory-authored comment other than the claim SHALL be written through
 one shared find-then-upsert behavior: locate an existing comment by its hidden
-content-identity marker and update it in place; post a new comment only when no
-match exists. The claim comment SHALL be posted and then verified by reading
-the thread back, the read-back deleting any duplicate it finds (design D6). The identity SHALL be scoped so that re-driving one logical write
-converges while a new occurrence does not: the intent is the marker kind
-qualified by its occurrence — the claim epoch for a write under the writer's
-own claim — never by the task alone.
+content-identity marker and update it in place; post a new one only when none
+matches. The claim comment SHALL be posted, then verified by a read-back
+of the thread that deletes any duplicate. The identity SHALL be the marker kind
+qualified by its occurrence (the claim epoch, for a write under the writer's
+own claim), never the task alone.
 **Implements**: FR11, FR13, UX3 of harden-task-branch-contract
+**Notes**: Scoping by occurrence is what lets a re-driven logical write converge while a new occurrence lands as a new comment; the claim's read-back is design D6 of harden-task-branch-contract.
 **Notes**: Scoping by task alone would freeze the lease anchor: abort, park, finish and stale-claim removal are claim boundaries, the lease anchors on the latest boundary by position in the thread, and an in-place update does not move a comment.
 **Notes**: The claim mints the epoch and so cannot be scoped by it; it must obtain a fresh comment id to race with, which is why its find is fused into the lease race's verify-read rather than paid for as a separate read.
 

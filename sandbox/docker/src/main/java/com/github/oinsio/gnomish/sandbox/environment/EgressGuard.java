@@ -30,7 +30,9 @@ import org.slf4j.LoggerFactory;
  * and task labels, so disposal ({@code ContainerEnvironmentDisposal}) and the
  * startup orphan sweep reclaim it exactly like the box, volume, and network
  * (NFR-R2). Denials are read back as structured findings via {@link
- * #readDenials()} (NFR-O1).
+ * #readDenials()} (NFR-O1). {@link #probeRunning()} is the same liveness check without the
+ * repair, for the round boundaries where a dead guard must surface rather than be healed (design
+ * D14 of tighten-spec-contract).
  *
  * <p>Every {@link GuardUnavailableException} names the guard container concretely ({@code
  * gnomish-guard-<key>}), so an operator starts {@code docker logs} from the message alone
@@ -39,7 +41,8 @@ import org.slf4j.LoggerFactory;
  * never an environment value or a credential (NFR-S1).
  *
  * <p>Implements FR7, NFR-O1, NFR-R1 of add-sandbox-core; FR2, NFR-S1 of
- * polish-sandbox-forensics.
+ * polish-sandbox-forensics; NFR-R1 of add-sandbox-core as probed per round by D14 of
+ * tighten-spec-contract.
  */
 @UntrustedParser
 public final class EgressGuard {
@@ -91,8 +94,8 @@ public final class EgressGuard {
      */
     public void ensureRunning() {
         EgressGuardConfig.render(configDir, allowlist);
-        DockerResult state = docker.run(GuardCommands.inspectGuardRunning(key));
-        if (state.ok() && running(state)) {
+        DockerResult state = inspect();
+        if (live(state)) {
             return;
         }
         if (state.ok()) {
@@ -102,8 +105,8 @@ public final class EgressGuard {
             log.info("egress guard for {} is missing; creating it", key);
             create();
         }
-        DockerResult repaired = docker.run(GuardCommands.inspectGuardRunning(key));
-        if (repaired.ok() && running(repaired)) {
+        DockerResult repaired = inspect();
+        if (live(repaired)) {
             return;
         }
         log.warn(
@@ -111,13 +114,36 @@ public final class EgressGuard {
                 key);
         repairStep("remove", docker.run(GuardCommands.removeGuard(key)));
         create();
-        DockerResult recreated = docker.run(GuardCommands.inspectGuardRunning(key));
-        if (!recreated.ok() || !running(recreated)) {
+        DockerResult recreated = inspect();
+        if (!live(recreated)) {
             throw new GuardUnavailableException(
                     "egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key)
                             + ") could not be started",
                     recreated.stderr());
         }
+    }
+
+    /**
+     * The guard's liveness probe without the restart (design D14 of tighten-spec-contract): the
+     * same check {@link #ensureRunning()} opens with — one inspect, read by the same predicate —
+     * and nothing else. Called at the close of every container round and before an in-box
+     * retry's next round, where a restart would hide the outage from the round it broke: a dead
+     * guard fails the round as an infrastructure failure, and the next materialize's self-check
+     * restarts it through {@link #ensureRunning()} as before (NFR-R1).
+     *
+     * @throws GuardUnavailableException if the guard container is stopped or missing
+     * @throws DockerUnavailableException if the runtime itself is unreachable
+     */
+    public void probeRunning() {
+        DockerResult state = inspect();
+        if (live(state)) {
+            return;
+        }
+        String guard = "egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key) + ")";
+        if (state.ok()) {
+            throw new GuardUnavailableException(guard + " is not running");
+        }
+        throw new GuardUnavailableException(guard + " is missing", state.stderr());
     }
 
     /**
@@ -275,6 +301,16 @@ public final class EgressGuard {
                     key,
                     result.stderr().forLog());
         }
+    }
+
+    /** The one liveness inspect, shared by the converging and the probing path (design D14). */
+    private DockerResult inspect() {
+        return docker.run(GuardCommands.inspectGuardRunning(key));
+    }
+
+    /** The one liveness predicate: the inspect answered, and the container runs. */
+    private static boolean live(DockerResult state) {
+        return state.ok() && running(state);
     }
 
     // @UntrustedParser warrant (design D11): the inspect answer becomes one boolean — is the guard

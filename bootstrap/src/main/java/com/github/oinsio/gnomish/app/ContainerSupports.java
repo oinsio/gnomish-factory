@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
@@ -9,7 +8,6 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
-import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +36,10 @@ import org.springframework.stereotype.Component;
 public final class ContainerSupports {
 
     private final Map<String, CheckClientFactory> checkClientRegistry;
+    // The installation's check equipment, asked only for the installation child-environment
+    // allowlist: it holds the secrets port, which this class never sees (NFR-S1; NFR-S3 of
+    // tighten-spec-contract).
+    private final CheckEquipment checks;
     private final FactoryProperties factoryProperties;
     private final SandboxProperties sandboxProperties;
     private final SandboxModeSelector modeSelector;
@@ -46,6 +48,8 @@ public final class ContainerSupports {
 
     /**
      * @param checkClientRegistry the discovered check providers; never null
+     * @param checks the installation's check equipment, which builds each mode's child-environment
+     *     allowlist over the secrets port; never null
      * @param factoryProperties the installation config; never null
      * @param sandboxProperties the operator sandbox config, read by the box equipment (the selector
      *     reads the same bound record for the image prerequisite: two readers, one record); never
@@ -56,12 +60,14 @@ public final class ContainerSupports {
      */
     ContainerSupports(
             Map<String, CheckClientFactory> checkClientRegistry,
+            CheckEquipment checks,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties,
             SandboxModeSelector modeSelector,
             TaskGit git,
             TimeEquipment time) {
         this.checkClientRegistry = checkClientRegistry;
+        this.checks = checks;
         this.factoryProperties = factoryProperties;
         this.sandboxProperties = sandboxProperties;
         this.modeSelector = modeSelector;
@@ -97,17 +103,20 @@ public final class ContainerSupports {
      * declarations (FR17, design D11 of add-plugin-architecture): a profile-resolved credential
      * name reaches the container's scrub set exactly as an inline one does (FR16, FR17, design
      * D8/D11), since the subsections are resolved against {@code factory.connections} before the
-     * providers are asked what they name. The installation's box equipment and the sandbox
+     * providers are asked what they name — by the check equipment, which also binds the
+     * allowlist's values to the secrets port (NFR-S3 of tighten-spec-contract). The installation's box equipment and the sandbox
      * lifecycle pass are built here once for the mode, by the record's installation constructor
      * on the root's time equipment, and shared by every run of it (design D12 of
      * make-checkpoint-gate-durable).
      */
     private ContainerSupportFactory supportFactory(OwnershipMode mode) {
-        List<String> checkCredentials = CheckProviderSeam.credentialEnvVars(
-                CheckProviderSeam.resolve(
-                        factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
-                checkClientRegistry);
         return new ContainerRunSupportFactory(
-                checkCredentials, checkClientRegistry, mode, epochs, sandboxProperties, factoryProperties, time);
+                checks.installationChildEnv(sandboxProperties.envPassthrough()),
+                checkClientRegistry,
+                mode,
+                epochs,
+                sandboxProperties,
+                factoryProperties,
+                time);
     }
 }

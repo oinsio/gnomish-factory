@@ -81,6 +81,11 @@ public final class LeasedEnvironment implements TaskExecutionEnvironment {
     }
 
     @Override
+    public void probeGuard() {
+        current.get().probeGuard();
+    }
+
+    @Override
     public DenialRead readDenials() {
         return current.get().readDenials();
     }

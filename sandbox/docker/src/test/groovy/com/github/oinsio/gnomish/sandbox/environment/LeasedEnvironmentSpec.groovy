@@ -127,4 +127,16 @@ class LeasedEnvironmentSpec extends Specification {
         'materialize' | ['gnomish/t', null]
         'dispose' | []
     }
+
+    // D14 of tighten-spec-contract: the guard probe is the leased box's, not the port's no-op default
+    def "probeGuard forwards to the leased environment, and its failure comes back"() {
+        when:
+        leased.probeGuard()
+
+        then:
+        1 * box.probeGuard() >> {
+            throw new GuardUnavailableException('guard down')
+        }
+        thrown(GuardUnavailableException)
+    }
 }

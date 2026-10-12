@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,20 +28,23 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Every exit that cannot produce a verdict passes through {@code cannotVerify}, which is
  * also the round's single WARN site: the vote's degraded result reaches the engine as a value,
- * so without a line here the six infrastructure failure classes (process start, round timeout,
- * wait interrupt, missing result event, drain timeout, drain interrupt) would be invisible to
- * the operator. One site, one line — the caller receives the same facts (FR5 of
- * harden-logging-observability).
+ * so without a line here the seven infrastructure failure classes (process start, round timeout,
+ * wait interrupt, missing result event, drain timeout, drain interrupt, a dead egress guard at
+ * either end of the round) would be invisible to the operator. One site, one line — the caller
+ * receives the same facts (FR5 of harden-logging-observability).
  *
  * <p>Kept in sync with {@link ExecutorRoundExecution}: both launch one agent round from the same
  * {@link AgentRoundEquipment} — the CLI binary through the environment port with the factory-set
  * AI seam variables, a {@link StreamDrain} started before the wait, the wait bounded by {@code
  * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
  * then {@code agentCliTailDrainGrace} for the tail — and each maps every failure of that launch
- * sequence through one site (here: {@code cannotVerify}; there: {@code ExecutorFailure}).
+ * sequence through one site (here: {@code cannotVerify}; there: {@code ExecutorFailure}). Both
+ * probe the environment's egress guard before the launch and again once the process has exited,
+ * before anything is graded (D14 of tighten-spec-contract).
  *
  * <p>Implements FR1, FR2, FR3, FR6, NFR-R1 of fix-round-stdout-drain; FR5 of
- * harden-logging-observability; FR6 of add-parameter-count-gate (design D6, Sync surfaces).
+ * harden-logging-observability; FR6 of add-parameter-count-gate (design D6, Sync surfaces);
+ * NFR-R1 of add-sandbox-core as probed per round by D14 of tighten-spec-contract.
  */
 final class JudgeRoundExecution {
 
@@ -63,10 +67,18 @@ final class JudgeRoundExecution {
         List<String> command = AgentCommandLine.fromRenderedFlags(
                 AgentRole.JUDGE, factoryProperties.agentCliBinary(), invocationFlags);
 
+        // D14 of tighten-spec-contract: the votes of one attempt commit share one judge box, so a
+        // guard that died after the previous vote is caught before this one starts.
+        Optional<Vote> deadBefore = deadGuard(check, environment);
+        if (deadBefore.isPresent()) {
+            return deadBefore.get();
+        }
+
         ExecHandle launched;
         try {
             // Factory-set protocol layer (D6, FR9): a judge vote needs only the AI seam variables.
-            launched = environment.exec(new ExecCommand(command, AgentAiSeam.fromFactoryEnvironment(), prompt, false));
+            launched = environment.exec(
+                    new ExecCommand(command, AgentAiSeam.variables(equipment.childEnv()), prompt, false));
         } catch (ProcessStartException e) {
             return cannotVerify(
                     check,
@@ -96,6 +108,13 @@ final class JudgeRoundExecution {
                         "agent round wait was interrupted and the process tree was killed",
                         UntrustedText.factory("roundTimeout: " + roundTimeout));
             }
+            // D14 of tighten-spec-contract: the close of the round probes the guard before
+            // the vote is graded — a guard that died mid-round broke the judge's cage, so the
+            // vote cannot verify rather than count.
+            Optional<Vote> deadAtClose = deadGuard(check, environment);
+            if (deadAtClose.isPresent()) {
+                return deadAtClose.get();
+            }
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
             Instant roundEnd = clock.instant();
@@ -112,6 +131,27 @@ final class JudgeRoundExecution {
             // Same never-throw contract, different cause: the wait was cut short by an interrupt,
             // so the vote reports that rather than blaming the tail-drain grace.
             return cannotVerify(check, "interrupted while waiting for the agent stdout drain", messageOf(e), e);
+        }
+    }
+
+    /**
+     * The guard's liveness probe at a round boundary (design D14 of tighten-spec-contract), on the
+     * judge's never-throw contract: a dead guard — or a runtime that cannot say — is a vote that
+     * cannot verify, through the same single WARN site as every other infrastructure exit. Empty
+     * when the guard runs, or when the environment has none (host mode).
+     */
+    private static Optional<Vote> deadGuard(VerifyCheck.Judge check, TaskExecutionEnvironment environment) {
+        try {
+            environment.probeGuard();
+            return Optional.empty();
+        } catch (RuntimeException e) {
+            // The guard's message names its container and folds in the runtime's own answer, so
+            // it leaves as container text, rendered by the carrier's log exit.
+            return Optional.of(cannotVerify(
+                    check,
+                    "the egress guard of the judge box is not running",
+                    UntrustedText.container(String.valueOf(e.getMessage())),
+                    e));
         }
     }
 

@@ -5,7 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -33,7 +33,7 @@ class HostFileChannelBoundarySpec extends Specification {
     HostTaskExecutionEnvironment env
 
     def setup() {
-        env = new HostTaskExecutionEnvironment(workingCopy, clock, ChildEnvAllowlist.none())
+        env = new HostTaskExecutionEnvironment(workingCopy, clock, TestChildEnvironment.hostAllowlist())
         env.materialize('task/channel', null)
     }
 

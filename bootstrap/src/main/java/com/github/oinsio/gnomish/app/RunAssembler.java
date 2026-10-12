@@ -85,10 +85,10 @@ final class RunAssembler {
         // The run's layered child-environment allowlist (D6, FR9 of add-sandbox-core): operator
         // passthrough plus the declared credential names — the tracker's, and the external-check
         // token when that adapter is configured (FR26) — validated here, before any dialog, so a
-        // credential name in passthrough fails the run at assembly time.
-        var childEnv = ChildEnvAllowlist.of(
-                assembly.sandboxProperties.envPassthrough(),
-                assembly.checks.credentialNames(definition, credentialEnvVarsToScrub));
+        // credential name in passthrough fails the run at assembly time. Its values come through
+        // the secrets port the check equipment holds (NFR-S3 of tighten-spec-contract).
+        var childEnv = assembly.checks.childEnv(
+                assembly.sandboxProperties.envPassthrough(), definition, credentialEnvVarsToScrub);
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
         var ports = new EnginePorts(

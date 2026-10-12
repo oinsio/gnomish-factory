@@ -184,6 +184,17 @@ archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" 
 # (setupSpec/cleanupSpec), matching this project's existing hand-rolled fixture style
 # (BareGitRepoFixture, E2eProcessHarness).
 testcontainers = { module = "org.testcontainers:testcontainers" }
+# Testcontainers Selenium module: BrowserWebDriverContainer, a headless Chromium in a container for the
+# dashboard browser specs of the Docker-dependent E2E layer (design D15, FR14 of tighten-spec-contract).
+# Version is Spring Boot BOM-managed (the testcontainers BOM, 2.0.5).
+testcontainers-selenium = { module = "org.testcontainers:testcontainers-selenium" }
+# Selenium's client: the WebDriver API, the remote driver that speaks to the container, and the
+# Chromium driver's options and CDP seam (prefers-color-scheme emulation, the page clock installed
+# before the document). Versions are Spring Boot BOM-managed (selenium-bom).
+selenium-api = { module = "org.seleniumhq.selenium:selenium-api" }
+selenium-remote-driver = { module = "org.seleniumhq.selenium:selenium-remote-driver" }
+selenium-chrome-driver = { module = "org.seleniumhq.selenium:selenium-chrome-driver" }
+selenium-chromium-driver = { module = "org.seleniumhq.selenium:selenium-chromium-driver" }
 # WireMock standalone server, embedded in-JVM (design: no Docker for HTTP contract tests).
 wiremock = { module = "org.wiremock:wiremock", version.ref = "wiremock" }
 # Jetty 11 BOM, imported as an enforcedPlatform on the test classpaths to pin

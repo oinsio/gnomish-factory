@@ -1,8 +1,14 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
+import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -127,8 +133,23 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
                 SandboxModeSelector.Plan.Mode.CONTAINER
     }
 
-    private ContainerSupports newSupports() {
-        new ContainerSupports([:], testProperties(), sandbox, selector, TaskGitFixture.real(), time)
+    // NFR-S3 of tighten-spec-contract (F107): a container run's child environment resolves every
+    //     value through the secrets port the supports were given, never the process environment
+    def "NFR-S3: each mode's child-environment allowlist resolves its values through the supports' secrets port"() {
+        given:
+        def supports = newSupports(new MapSecretsProvider([PATH: '/from-the-port']))
+
+        expect:
+        [
+            supports.manualSupport(),
+            supports.takeSupport().containerSupportFactory()
+        ].every {
+            ((ContainerRunSupportFactory) it).childEnv().compose(['PATH', 'UNSET_IN_PORT'], [:]) == [PATH: '/from-the-port']
+        }
+    }
+
+    private ContainerSupports newSupports(SecretsProvider secrets = MapSecretsProvider.NONE) {
+        new ContainerSupports([:], checksOver(secrets), testProperties(), sandbox, selector, TaskGitFixture.real(), time)
     }
 
     private static List<Segment> segments() {
@@ -147,5 +168,11 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md', [],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
+    }
+
+    /** The installation's check equipment over {@code secrets}, as the root's checkEquipment bean builds it. */
+    private static CheckEquipment checksOver(SecretsProvider secrets) {
+        new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), [:], secrets,
+        new FactoryProperties('container-supports', null, null, null), VirtualTimeEquipment.create())
     }
 }

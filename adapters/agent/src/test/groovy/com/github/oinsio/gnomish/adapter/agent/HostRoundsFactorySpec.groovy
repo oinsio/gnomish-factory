@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
@@ -25,7 +25,7 @@ class HostRoundsFactorySpec extends Specification {
     // and the seam's default no-op roundListener (the decorator overrides it, nothing else).
     def "hostRounds opens rounds identical to the host constructor's"() {
         given:
-        def source = CliStageExecutor.hostRounds(new VirtualClock(), ChildEnvAllowlist.none())
+        def source = CliStageExecutor.hostRounds(new VirtualClock(), TestChildEnvironment.hostAllowlist())
 
         when:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))

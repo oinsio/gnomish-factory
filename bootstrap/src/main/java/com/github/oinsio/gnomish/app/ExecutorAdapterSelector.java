@@ -49,6 +49,7 @@ final class ExecutorAdapterSelector {
                     assembly.factoryProperties,
                     assembly.time.clock(),
                     new LoggingAgentProgressListener(),
+                    childEnv,
                     law,
                     assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.time.clock(), childEnv)));
         }
@@ -56,6 +57,7 @@ final class ExecutorAdapterSelector {
                 assembly.factoryProperties,
                 assembly.time.clock(),
                 new LoggingAgentProgressListener(),
+                childEnv,
                 law,
                 sandbox.executorRounds());
         return new ResumeVerificationStageExecutor(cli, sandbox.rounds(), sandbox.pendingVerification());

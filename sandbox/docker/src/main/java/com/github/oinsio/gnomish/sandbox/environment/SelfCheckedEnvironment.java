@@ -139,6 +139,16 @@ public final class SelfCheckedEnvironment implements TaskExecutionEnvironment {
     }
 
     /**
+     * The guard's liveness probe without the restart (design D14 of tighten-spec-contract): a
+     * guard that died since the self-check fails the caller's round as an infrastructure
+     * failure; the next materialize restarts it.
+     */
+    @Override
+    public void probeGuard() {
+        guard.probeRunning();
+    }
+
+    /**
      * The guard's denials since the previous call — the per-round delta the guard's
      * own cursor maintains — paired with the position after them (design D7 of
      * fix-denial-attribution-durability), best-effort (an unreadable log reads as

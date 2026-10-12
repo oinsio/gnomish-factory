@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -212,12 +212,12 @@ tracker:
         declared == [RENAMED_CREDENTIAL]
 
         and: 'and it is scrubbed from a composed child environment even when a layer carries it'
-        !ChildEnvAllowlist.of([], declared)
+        !TestChildEnvironment.hostAllowlist([], declared)
         .compose([RENAMED_CREDENTIAL], [(RENAMED_CREDENTIAL): 'planted-token'])
         .containsKey(RENAMED_CREDENTIAL)
 
         when: 'an operator tries to pass that very variable through to the gnome'
-        ChildEnvAllowlist.of([RENAMED_CREDENTIAL], declared)
+        TestChildEnvironment.hostAllowlist([RENAMED_CREDENTIAL], declared)
 
         then:
         def e = thrown(IllegalArgumentException)

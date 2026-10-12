@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
-import com.github.oinsio.gnomish.DoNotMutate;
-import java.util.LinkedHashMap;
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import java.util.List;
 import java.util.Map;
 
@@ -11,10 +10,11 @@ import java.util.Map;
  * at its model provider — {@code ANTHROPIC_BASE_URL}, {@code
  * ANTHROPIC_AUTH_TOKEN}, {@code ANTHROPIC_MODEL} (the same three the Ollama E2E
  * path uses, D11 of add-agent-executor). With the layered child-environment
- * allowlist nothing is inherited implicitly, so these names are read live from
- * the factory environment and set explicitly on every agent round and judge
- * vote; a name unset in the factory environment is simply omitted (a logged-in
- * CLI resolves credentials from {@code HOME}). The change-B virtual-key gateway
+ * allowlist nothing is inherited implicitly, so these names are resolved live
+ * through the round's {@link ChildEnvAllowlist} — the secrets port, in
+ * production — and set explicitly on every agent round and judge vote; a name
+ * that does not resolve is simply omitted (a logged-in CLI resolves credentials
+ * from {@code HOME}). The change-B virtual-key gateway
  * plugs into this exact seam with no code change here.
  *
  * <p>The seam also carries the agent CLI's own credentials, {@code CLAUDE_CODE_OAUTH_TOKEN} (a
@@ -25,7 +25,8 @@ import java.util.Map;
  * two callers of this class — and off every {@code command} check (NFR-S3). This class is the
  * only production source that names the two variables ({@code AgentCredentialSeamBoundarySpec}).
  *
- * <p>Implements FR9 of add-sandbox-core; FR5, NFR-S3 of fix-operator-blockers.
+ * <p>Implements FR9 of add-sandbox-core; FR5, NFR-S3 of fix-operator-blockers; NFR-S3 of
+ * tighten-spec-contract.
  */
 final class AgentAiSeam {
 
@@ -40,33 +41,16 @@ final class AgentAiSeam {
     private AgentAiSeam() {}
 
     /**
-     * PIT M4 documented exception (build.gradle has the full rationale): {@code
-     * @DoNotMutate} because this is a one-line delegation to the JDK platform API
-     * {@code System.getenv()} with no seam to inject a fake environment into it
-     * (no precedent for that in this codebase's other env-touching adapters, and
-     * reflecting into {@code ProcessEnvironment} is blocked by module access on
-     * this JDK without a build-wide {@code --add-opens} that nothing else needs).
-     * The mutant that replaces this method's body with {@code emptyMap()} is
-     * indistinguishable from the real behavior whenever none of {@link #NAMES}
-     * happen to be set in the test process's environment — the common case,
-     * including CI. All of this method's actual logic is exhaustively covered
-     * via {@link #fromEnvironment(Map)}, which {@code AgentAiSeamSpec} drives
-     * directly with both present and absent variables.
+     * The seam variables present for one round or vote, resolved live through {@code childEnv} —
+     * whose values the composition root binds to the secrets port, so an agent credential comes
+     * from the same source as every other secret the factory holds (NFR-S3, finding F107 of
+     * tighten-spec-contract): a token in the host secrets folder reaches the agent CLI exactly as
+     * it reaches the tracker. A name that does not resolve is omitted.
+     *
+     * @param childEnv the round's child-environment allowlist; never null
+     * @return the present seam variables, in {@link #NAMES} order; never null
      */
-    @DoNotMutate
-    static Map<String, String> fromFactoryEnvironment() {
-        return fromEnvironment(System.getenv());
-    }
-
-    /** Testing seam: the same selection over a caller-supplied environment map. */
-    static Map<String, String> fromEnvironment(Map<String, String> factoryEnvironment) {
-        Map<String, String> seam = new LinkedHashMap<>();
-        for (String name : NAMES) {
-            String value = factoryEnvironment.get(name);
-            if (value != null) {
-                seam.put(name, value);
-            }
-        }
-        return seam;
+    static Map<String, String> variables(ChildEnvAllowlist childEnv) {
+        return childEnv.resolve(NAMES);
     }
 }

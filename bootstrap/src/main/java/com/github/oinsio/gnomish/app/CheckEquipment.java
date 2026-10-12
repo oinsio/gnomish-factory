@@ -22,18 +22,20 @@ import org.jspecify.annotations.Nullable;
  * CheckEquipment} row of collapse-composition-roots): the two built-in check runners, the
  * discovered check-client registry and the credential seam, over the operator's {@code
  * factory.check.<provider>} configuration. {@link RunAssembler} asks it for a run's three check
- * ports and for the credential names those ports' providers declare; nothing reads a member back
- * out.
+ * ports and for the run's child-environment allowlist, built over the credential names those ports'
+ * providers declare and over the secrets port; nothing reads a member back out.
  *
  * <p>The {@link SecretsProvider} is a member with no accessor (NFR-S1): a holder of the equipment
- * can have a provider resolve a credential on first poll, but cannot obtain the seam or hand it on.
+ * can have a provider resolve a credential on first poll, or a child environment resolve its values
+ * (NFR-S3 of tighten-spec-contract), but cannot obtain the seam or hand it on.
  * The {@link FactoryProperties} it holds are read for the check subsections and the connection
  * profiles only; the executor and judge settings the assembly reads from the same bean are no
  * concern of this class. The host's {@link TimeEquipment} is handed on to every check provider it
  * builds, on the provider's context (design D21 of supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR16, FR26 of add-sandbox-core; FR5, FR6, FR16, FR17 of add-plugin-architecture;
- * FR1, FR4, NFR-S1 of collapse-composition-roots; FR23 of supervise-daemon-loops-and-embed-dashboard.
+ * FR1, FR4, NFR-S1 of collapse-composition-roots; FR23 of supervise-daemon-loops-and-embed-dashboard;
+ * NFR-S3 of tighten-spec-contract.
  */
 @NullMarked
 public final class CheckEquipment {
@@ -80,6 +82,38 @@ public final class CheckEquipment {
     }
 
     /**
+     * The run's child-environment allowlist (D6, FR9 of add-sandbox-core): the operator's {@code
+     * passthroughNames}, the declared credential names below, and the secrets port as the source of
+     * every value it admits — base set, passthrough and the agent's AI seam variables alike — so no
+     * child environment reads the process environment around the port (NFR-S3, finding F107 of
+     * tighten-spec-contract). The port is handed into the allowlist as its value source and is not
+     * readable back out of it.
+     *
+     * @throws IllegalArgumentException if a passthrough name is a declared credential
+     */
+    ChildEnvAllowlist childEnv(
+            List<String> passthroughNames, PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
+        return ChildEnvAllowlist.of(
+                passthroughNames, credentialNames(definition, credentialEnvVarsToScrub), secretsProvider::find);
+    }
+
+    /**
+     * The installation's child-environment allowlist for container runs: the operator's {@code
+     * passthroughNames}, the credential names the configured check providers declare (the same
+     * declaration {@link #credentialNames} reads), and the secrets port as its value source (NFR-S3
+     * of tighten-spec-contract). A container run widens it with its own tracker and pipeline
+     * credential names ({@link ChildEnvAllowlist#declaring}).
+     *
+     * @throws IllegalArgumentException if a passthrough name is a configured provider's credential
+     */
+    ChildEnvAllowlist installationChildEnv(List<String> passthroughNames) {
+        return ChildEnvAllowlist.of(
+                passthroughNames,
+                CheckProviderSeam.credentialEnvVars(checkSubsections(), checkClientRegistry),
+                secretsProvider::find);
+    }
+
+    /**
      * The declared credential names the run's {@link ChildEnvAllowlist} refuses in passthrough
      * and scrubs from every composed child environment: the active tracker adapter's (supplied by
      * the caller) unioned with every configured check provider's own SPI declaration (FR17, design
@@ -96,7 +130,7 @@ public final class CheckEquipment {
      * arbitrary endpoints — from each check's own manifest params (FR11). A manifest-named
      * credential is therefore scrubbed and refused in passthrough exactly like a configured one.
      */
-    List<String> credentialNames(PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
+    private List<String> credentialNames(PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
         var names = new ArrayList<>(credentialEnvVarsToScrub);
         names.addAll(CheckProviderSeam.credentialEnvVars(checkSubsections(), checkClientRegistry));
         names.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.IsolationLevel
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -33,7 +34,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
 
     @Override
     protected Optional<TaskExecutionEnvironment> arrange() {
-        def e = new HostTaskExecutionEnvironment(workingCopy, clock, ChildEnvAllowlist.none())
+        def e = new HostTaskExecutionEnvironment(workingCopy, clock, TestChildEnvironment.hostAllowlist())
         e.materialize('task/contract', null)
         Optional.of(e)
     }
@@ -43,7 +44,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
         'TaskExecutionEnvironment (host)'
     }
 
-    private HostTaskExecutionEnvironment hostEnv(ChildEnvAllowlist allowlist = ChildEnvAllowlist.none()) {
+    private HostTaskExecutionEnvironment hostEnv(ChildEnvAllowlist allowlist = TestChildEnvironment.hostAllowlist()) {
         new HostTaskExecutionEnvironment(workingCopy, clock, allowlist)
     }
 
@@ -114,7 +115,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
     // set, so its absence can only come from the credential subtraction).
     def "a declared credential is excluded from the composed environment while a base variable survives"() {
         given: 'an allowlist declaring HOME a credential, both HOME and USER present in the factory environment'
-        def e = hostEnv(ChildEnvAllowlist.of([], ['HOME']))
+        def e = hostEnv(TestChildEnvironment.hostAllowlist([], ['HOME']))
 
         when: 'a command reports both'
         def report = 'if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi'
@@ -133,9 +134,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
     def "a passthrough name carries a live value into the child"() {
         given: 'an allowlist passing GNOMISH_TOOLCHAIN through, backed by a mutable env source'
         def factoryEnv = [GNOMISH_TOOLCHAIN: 'first']
-        def e = hostEnv(ChildEnvAllowlist.over(['GNOMISH_TOOLCHAIN'], [], {
-            -> factoryEnv
-        }))
+        def e = hostEnv(ChildEnvAllowlist.of(['GNOMISH_TOOLCHAIN'], [], TestChildEnvironment.valuesOf(factoryEnv)))
 
         when: 'the factory value changes between execs'
         def report = 'echo "[$GNOMISH_TOOLCHAIN]"'

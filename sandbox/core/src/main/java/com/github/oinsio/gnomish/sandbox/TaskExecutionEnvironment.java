@@ -116,6 +116,20 @@ public interface TaskExecutionEnvironment {
     CapabilityPassport passport();
 
     /**
+     * Confirms the egress guard still runs, without restarting it (design D14 of
+     * tighten-spec-contract): called at each round's close and before the next round in the same
+     * environment, so a round whose guard died is an infrastructure failure, never graded. The
+     * restart stays with the next materialize (NFR-R1 of add-sandbox-core). Not
+     * {@link #readDenials()}: that read is fail-open, and a dead guard reads like a quiet one.
+     * An environment without a guard has nothing to probe and returns.
+     *
+     * @throws RuntimeException an infrastructure failure naming the guard, when it is not running
+     */
+    default void probeGuard() {
+        // No egress guard: nothing to probe. Overridden by guarded environments.
+    }
+
+    /**
      * The egress denials this environment recorded since the previous call —
      * the per-round delta, so a consumer asking at round close receives exactly
      * that round's denials and never an earlier round's again — together with

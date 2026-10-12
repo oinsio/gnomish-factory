@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import spock.lang.Specification
 
 /**
@@ -10,6 +12,9 @@ import spock.lang.Specification
  *
  * <p>FR5 of fix-operator-blockers: the seam also carries the agent CLI's own credentials,
  * {@code CLAUDE_CODE_OAUTH_TOKEN} and {@code ANTHROPIC_API_KEY}.
+ *
+ * <p>NFR-S3 of tighten-spec-contract: the values are resolved through the round's allowlist — the
+ * secrets port, in production — never read from the process environment.
  */
 class AgentAiSeamSpec extends Specification {
 
@@ -22,7 +27,7 @@ class AgentAiSeamSpec extends Specification {
         ]
 
         expect: 'only the present seam names are selected, base-url first'
-        AgentAiSeam.fromEnvironment(factoryEnv) == [
+        seamOver(factoryEnv) == [
             ANTHROPIC_BASE_URL: 'http://localhost:11434',
             ANTHROPIC_AUTH_TOKEN: 'tok',
         ]
@@ -33,11 +38,11 @@ class AgentAiSeamSpec extends Specification {
     // Scenario: executor/agent-executor / An absent seam variable is omitted
     def "FR5: seam variable #name is selected with its live value when set and omitted when unset"() {
         expect: 'present: selected with the factory-environment value'
-        AgentAiSeam.fromEnvironment([(name): "value-of-${name}".toString(), PATH: '/usr/bin']) ==
+        seamOver([(name): "value-of-${name}".toString(), PATH: '/usr/bin']) ==
         [(name): "value-of-${name}".toString()]
 
         and: 'absent: omitted, not set to an empty value'
-        AgentAiSeam.fromEnvironment([PATH: '/usr/bin']).isEmpty()
+        seamOver([PATH: '/usr/bin']).isEmpty()
 
         where:
         name << AgentAiSeam.NAMES
@@ -56,11 +61,26 @@ class AgentAiSeamSpec extends Specification {
 
     def "an environment without seam variables yields an empty fragment"() {
         expect:
-        AgentAiSeam.fromEnvironment([PATH: '/usr/bin']) == [:]
+        seamOver([PATH: '/usr/bin']) == [:]
     }
 
-    def "the production selection reads the real factory environment"() {
-        expect: 'consistent with a direct selection over System.getenv()'
-        AgentAiSeam.fromFactoryEnvironment() == AgentAiSeam.fromEnvironment(System.getenv())
+    // NFR-S3 of tighten-spec-contract: the seam asks the allowlist's values for its five names and
+    //     nothing else, so the values come from the source the root binds to the secrets port
+    def "NFR-S3: the seam resolves its names through the allowlist's values, and asks for nothing else"() {
+        given:
+        def asked = []
+        def childEnv = ChildEnvAllowlist.of([], [], { String name ->
+            asked << name
+            Optional.of('v')
+        } as com.github.oinsio.gnomish.sandbox.ChildEnvValues)
+
+        expect:
+        AgentAiSeam.variables(childEnv).keySet().toList() == AgentAiSeam.NAMES
+        asked == AgentAiSeam.NAMES
+    }
+
+    /** The seam over a planted factory environment. */
+    private static Map<String, String> seamOver(Map<String, String> factoryEnv) {
+        AgentAiSeam.variables(ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(factoryEnv)))
     }
 }

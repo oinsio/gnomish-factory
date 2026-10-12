@@ -273,4 +273,21 @@ class SelfCheckedEnvironmentSpec extends Specification {
         expect:
         environment.readDenials().denials()*.finding() == []
     }
+
+    // D14 of tighten-spec-contract (F85): the round's guard probe reaches the guard through the
+    //     port type, and a dead guard surfaces instead of being restarted
+    def "D14: probeGuard reaches the guard through the port, and a dead guard is not restarted"() {
+        given: 'the guard container exists but no longer runs'
+        docker.onRun = { List<String> args ->
+            args == GuardCommands.inspectGuardRunning('k1') ? DockerResult.of(0, 'false\n', '') : DockerResult.of(0, '', '')
+        }
+        TaskExecutionEnvironment environment = checkedEnvironment()
+
+        when:
+        environment.probeGuard()
+
+        then:
+        thrown(GuardUnavailableException)
+        !docker.runs.contains(GuardCommands.startGuard('k1'))
+    }
 }

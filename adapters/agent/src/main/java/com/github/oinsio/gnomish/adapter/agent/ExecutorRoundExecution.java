@@ -31,10 +31,13 @@ import java.util.Optional;
  * AI seam variables, a {@link StreamDrain} started before the wait, the wait bounded by {@code
  * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
  * then {@code agentCliTailDrainGrace} for the tail — and each maps every failure of that launch
- * sequence through one site (here: {@link ExecutorFailure}; there: {@code cannotVerify}).
+ * sequence through one site (here: {@link ExecutorFailure}; there: {@code cannotVerify}). Both
+ * probe the environment's egress guard before the launch and again once the process has exited,
+ * before anything is graded (D14 of tighten-spec-contract).
  *
  * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain; FR1 of
- * fix-denial-attribution-durability; FR6 of add-parameter-count-gate (design D6, Sync surfaces).
+ * fix-denial-attribution-durability; FR6 of add-parameter-count-gate (design D6, Sync surfaces);
+ * NFR-R1 of add-sandbox-core as probed per round by D14 of tighten-spec-contract.
  */
 final class ExecutorRoundExecution {
 
@@ -70,13 +73,17 @@ final class ExecutorRoundExecution {
 
         // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
         // decision-file path — the only variables beyond base and passthrough a round sees.
-        Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.fromFactoryEnvironment());
+        Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.variables(equipment.childEnv()));
         env.putAll(round.decisionEnvFragment());
         // The launch is inside the wrapped region, not before it: a process that would not
         // start is a round that died before its close exactly like a roundTimeout kill, and
         // ExecutorFailure promises the denials of all three. A box whose materialization was
         // itself partly denied has them recorded before the first process ever runs.
         try {
+            // D14 of tighten-spec-contract: an in-box retry reuses the box, and with it a guard
+            // that may have died after the previous round closed. A dead guard fails this round
+            // before it starts, as infrastructure; a guard-less (host) environment answers at once.
+            round.environment().probeGuard();
             ExecHandle launched = launch(factoryProperties, round, command, prompt, env);
             // The stdout drain starts here, before the wait, and runs concurrently with the
             // process (FR1, D1 of fix-round-stdout-drain): deferring the read until after exit
@@ -98,6 +105,13 @@ final class ExecutorRoundExecution {
                             case ExecHandle.Wait.TimedOut ignored -> throw new RoundTimeoutException(roundTimeout);
                             case ExecHandle.Wait.Interrupted ignored -> throw new RoundInterruptedException();
                         };
+                // D14 of tighten-spec-contract: the close of the round probes the guard
+                // before anything is graded or committed. A guard that died while the round ran
+                // broke its cage, so the round dies here like any round that never reached its
+                // close — an infrastructure failure, no attempt burned, nothing graded; the next
+                // materialize restarts the guard. The denial read below cannot be the detector:
+                // it is fail-open by design, and a dead guard's log reads like a quiet one.
+                round.environment().probeGuard();
 
                 List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
                 Instant roundEnd = clock.instant();

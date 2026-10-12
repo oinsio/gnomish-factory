@@ -102,7 +102,8 @@ public final class CliJudgeVoter implements JudgeVoter {
      *     executor rounds; never null — pass a no-op ({@code event ->
      *     {}}) to reach none
      * @param childEnv the layered child-environment allowlist every vote's process environment is
-     *     composed from (D6, FR9 of add-sandbox-core); never null, {@link
+     *     composed from (D6, FR9 of add-sandbox-core), and the AI seam variables are resolved
+     *     through (NFR-S3 of tighten-spec-contract), in either environment; never null, {@link
      *     ChildEnvAllowlist#none()} when neither passthrough nor a tracker is involved
      * @param law the invocation's frozen pipeline law, the source of acceptance-criteria content
      *     (D14 of add-sandbox-core); never null
@@ -119,8 +120,8 @@ public final class CliJudgeVoter implements JudgeVoter {
             ChildEnvAllowlist childEnv,
             PipelineLaw law,
             @Nullable JudgeEnvironmentSource environmentSource) {
-        this.equipment =
-                new AgentRoundEquipment(factoryProperties, clock, progressListener, new AgentRoundResultExtractor());
+        this.equipment = new AgentRoundEquipment(
+                factoryProperties, clock, progressListener, new AgentRoundResultExtractor(), childEnv);
         this.law = law;
         this.promptBuilder = new JudgePromptBuilder(law);
         this.environmentSource =

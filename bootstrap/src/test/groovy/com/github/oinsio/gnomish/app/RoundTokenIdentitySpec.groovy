@@ -32,6 +32,7 @@ import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import java.nio.file.Files
@@ -167,7 +168,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
     private static StageExecutor agentOver(SandboxRoundEnvironmentSource source) {
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
         new CliStageExecutor(FakeAgentSupport.propertiesFor('decision-needed'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
-                { e -> } as AgentProgressListener, LAW, source)
+                { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
     }
 
     private void persistRound(LocalBoxEnvironment box, Path factoryClone, CurrentRound rounds) {

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
@@ -10,6 +9,7 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.HostExecHandle
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -79,7 +79,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixtu
         // make-checkpoint-gate-durable): nothing of the test JVM's environment is inherited — a
         // GNOMISH_DECISION_FILE the test run was handed never reaches the fake agent.
         builder.environment().clear()
-        builder.environment().putAll(ChildEnvAllowlist.none().compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES, command.env()))
+        builder.environment().putAll(TestChildEnvironment.hostAllowlist().compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES, command.env()))
         def process = builder.start()
         if (command.stdin() != null) {
             process.outputStream.withStream {

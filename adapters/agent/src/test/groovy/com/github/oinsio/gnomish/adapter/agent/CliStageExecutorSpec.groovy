@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -175,9 +176,9 @@ class CliStageExecutorSpec extends Specification {
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def hostSource = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), clock, ChildEnvAllowlist.none())
+                new DecisionFileTransport(decisionRoot), clock, TestChildEnvironment.hostAllowlist())
         def countingSource = new CountingRoundEnvironmentSource(hostSource)
-        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, LAW, countingSource)
+        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, countingSource)
 
         when:
         def result = executor.execute(requestFor())

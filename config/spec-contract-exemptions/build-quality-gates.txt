@@ -30,7 +30,3 @@ Every run attaches the license inventory => .github/workflows/license-gate.yml (
 An unchanged main is not re-mutated => .github/workflows/pitest-nightly.yml (job verified: the nightly-verified cache marker keyed by the commit)
 The nine Docker and Gitea suites are excluded => bootstrap/mutation-scope.gradle (pitest excludedTestClasses, with the in-process twin named per suite)
 The fake-docker suites stay in the scan => bootstrap/mutation-scope.gradle (pitest excludedTestClasses, the "Deliberately KEPT in scope" note)
-
-# One-time refactoring acts with no standing behaviour to test (finding F115 of task 8.12); sorted at decision point 8.14.
-Extracted units keep the same behaviour and observability => pending-test: retire-one-time-scenarios
-Fixture adoption preserves behavior => pending-test: retire-one-time-scenarios

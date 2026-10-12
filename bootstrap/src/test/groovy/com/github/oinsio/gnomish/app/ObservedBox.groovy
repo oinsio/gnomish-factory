@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
@@ -19,7 +20,7 @@ import org.jspecify.annotations.Nullable
  * with the number of processes still running in the box at that moment (a process counts as
  * running from {@code exec} until one of its waits returns) — and lets a spec stand in for what
  * the gnome or the runtime does at the agent's launch: write into the working copy, answer the
- * exec in place of the box, or make the denial source unreadable.
+ * exec in place of the box, make the denial source unreadable, or kill the egress guard.
  */
 class ObservedBox implements TaskExecutionEnvironment {
 
@@ -38,6 +39,15 @@ class ObservedBox implements TaskExecutionEnvironment {
 
     /** When set, the denial source cannot be read at all: {@link #readDenials} throws. */
     boolean denialSourceUnreadable = false
+
+    /**
+     * When set, the 0-based index of the first guard probe that finds the guard dead (D14 of
+     * tighten-spec-contract): that probe and every later one throw the guard's own failure.
+     */
+    Integer guardDiesAtProbe = null
+
+    /** The guard probes asked so far — two per round: its start and its close. */
+    int guardProbes = 0
 
     ObservedBox(TaskExecutionEnvironment box) {
         this.box = box
@@ -126,6 +136,14 @@ class ObservedBox implements TaskExecutionEnvironment {
     @Override
     CapabilityPassport passport() {
         box.passport()
+    }
+
+    @Override
+    void probeGuard() {
+        if (guardDiesAtProbe != null && guardProbes++ >= guardDiesAtProbe) {
+            throw new GuardUnavailableException('egress guard for task-1 (container gnomish-guard-task-1) is not running')
+        }
+        box.probeGuard()
     }
 
     @Override

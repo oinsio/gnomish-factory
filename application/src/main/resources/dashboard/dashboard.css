@@ -1,5 +1,7 @@
 /* Implements NFR-O1 of redesign-dashboard: every colour is a token in this
-   block or its dark-scheme override below — no colour literal past them. */
+   block or its dark-scheme override below — no colour literal past them.
+   Each scheme meets WCAG 2.2 AA on the page: text 4.5:1 against what it sits
+   on, bar segments 3:1 against their track (DashboardThemeBrowserSpec). */
 :root {
   color-scheme: light dark;
 
@@ -8,7 +10,7 @@
   --sunken:        #e8eaee;
   --text:          #14171a;
   --text-dim:      #5b6570;
-  --text-faint:    #8b95a1;
+  --text-faint:    #646e79;
   --border:        #dfe3e8;
   --border-strong: #c3cad2;
 
@@ -17,14 +19,14 @@
   --bad-fg:  #b3261e;  --bad-bg:  #fce9e8;  --bad-dot: #d9534f;
   --info-fg: #1f6feb;  --info-bg: #e8f0fd;
 
-  --seg-delivered: #4f9d3f;
-  --seg-waiting:   #d99a2b;
+  --seg-delivered: #438a36;
+  --seg-waiting:   #a9700c;
   --seg-aborted:   #d9534f;
-  --seg-revoked:   #8892a0;
+  --seg-revoked:   #747e8b;
 
-  --seg-cache-read:  #74c3a8;
-  --seg-cache-write: #2f8f74;
-  --seg-in:          #8b7fd4;
+  --seg-cache-read:  #3b937a;
+  --seg-cache-write: #1f6b57;
+  --seg-in:          #7569c8;
   --seg-out:         #574bb0;
 
   --radius: 10px;
@@ -41,7 +43,7 @@
     --sunken:        #22272e;
     --text:          #e6eaee;
     --text-dim:      #98a2ad;
-    --text-faint:    #6b7681;
+    --text-faint:    #8a949f;
     --border:        #262c34;
     --border-strong: #38414b;
 
@@ -49,6 +51,12 @@
     --warn-fg: #f0b458;  --warn-bg: #33260f;  --warn-dot: #d99a2b;
     --bad-fg:  #f28b84;  --bad-bg:  #38191a;  --bad-dot: #e05a54;
     --info-fg: #7fb0f0;  --info-bg: #12233a;
+
+    /* the teal pair and the violet out: their light-scheme values would sink
+       into the dark track or into their neighbour */
+    --seg-cache-read:  #74c3a8;
+    --seg-cache-write: #2f8f74;
+    --seg-out:         #9a90ea;
   }
 }
 
@@ -90,8 +98,9 @@ body {
 }
 .freshness svg { width: 16px; height: 16px; flex: none; }
 
+/* dimmed, never hidden: at .5 a card's name keeps 3:1 in both schemes */
 body.is-stale .card,
-body.is-stale .footnote { opacity: .45; }
+body.is-stale .footnote { opacity: .5; }
 
 /* --- cards ---------------------------------------------------------- */
 

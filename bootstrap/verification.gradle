@@ -7,6 +7,20 @@
 // convention plugin: nothing here is shared — `build-logic` is for configuration
 // more than one module applies.
 
+// The dashboard browser layer (design D15, FR14 of tighten-spec-contract): the specs under
+// `e2e.dashboard` load the page the production renderer wrote into a headless Chromium in a
+// Testcontainers `BrowserWebDriverContainer`, driven through Selenium's remote driver, the Chromium
+// options and its CDP seam (colour-scheme emulation, the page clock). Declared here, beside the
+// layer's other wiring, rather than in `build.gradle`, which is at the file-size cap. Versions are
+// BOM-managed (the testcontainers and selenium BOMs under Spring Boot's).
+dependencies {
+    testImplementation libs.testcontainers.selenium
+    testImplementation libs.selenium.api
+    testImplementation libs.selenium.remote.driver
+    testImplementation libs.selenium.chrome.driver
+    testImplementation libs.selenium.chromium.driver
+}
+
 // Test-task wiring specific to this module's E2E layers; the shared
 // useJUnitPlatform / heap / JaCoCo configuration comes from `test-conventions`.
 tasks.named('test') {

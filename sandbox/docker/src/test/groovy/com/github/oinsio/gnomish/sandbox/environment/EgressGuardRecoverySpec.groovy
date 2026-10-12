@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import java.nio.file.Path
 import java.time.Instant
-import spock.lang.PendingFeature
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -132,18 +131,56 @@ class EgressGuardRecoverySpec extends Specification {
         !docker.runs.any { it.first() == 'run' }
     }
 
-    // NFR-R1 of add-sandbox-core: the round's close is the factory's one contact with the guard per
-    //     round, so it is where a guard that died mid-round would have to surface as infrastructure
+    // NFR-R1 of add-sandbox-core, D14 of tighten-spec-contract: the round's close probes the guard,
+    //     so a guard that died mid-round surfaces as infrastructure. The probe, not the denial read:
+    //     the read is fail-open by its own scenario ("An unreadable denial source fails no attempt
+    //     and no report"), so the probe is the detector beside it (F85).
     // Scenario: sandbox/sandbox-egress / Guard crash burns no attempt
-    @PendingFeature(reason = 'F85 (probe-egress-guard-per-round): nothing observes the guard during or at the close of a round; the read of a dead guard answers like a quiet one')
-    def "NFR-R1: the close-of-round read of a guard that died mid-round reports it unavailable"() {
+    def "NFR-R1: the close-of-round probe of a guard that died mid-round reports it unavailable"() {
         given: 'the guard died while the round ran'
         running = false
 
         when:
-        guard().readDenials()
+        guard().probeRunning()
+
+        then: 'an infrastructure failure naming the guard container'
+        def e = thrown(GuardUnavailableException)
+        e.message.contains(FactoryDockerLabels.guardName('k1'))
+
+        and: 'D14: the probe does not restart the guard; the next materialize does'
+        !docker.runs.contains(GuardCommands.startGuard('k1'))
+        !running
+    }
+
+    // D14 of tighten-spec-contract: a guard container that is gone altogether is dead too, and the
+    //     runtime's own answer rides the message
+    def "D14: the probe of a guard whose container is missing reports it unavailable with docker's answer"() {
+        given:
+        docker.onRun = { List<String> args ->
+            args == GuardCommands.inspectGuardRunning('k1') ? DockerResult.of(1, '', 'No such object: gnomish-guard-k1') : ok('')
+        }
+
+        when:
+        guard().probeRunning()
 
         then:
-        thrown(GuardUnavailableException)
+        def e = thrown(GuardUnavailableException)
+        e.message.contains('missing')
+        e.message.contains('No such object')
+        docker.runs == [
+            GuardCommands.inspectGuardRunning('k1')
+        ]
+    }
+
+    // D14 of tighten-spec-contract: a live guard passes the probe with one inspect and nothing else
+    def "D14: the probe of a running guard passes with a single inspect"() {
+        when:
+        guard().probeRunning()
+
+        then:
+        notThrown(GuardUnavailableException)
+        docker.runs == [
+            GuardCommands.inspectGuardRunning('k1')
+        ]
     }
 }

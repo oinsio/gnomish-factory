@@ -114,6 +114,53 @@ second implementation; the task SHALL read files only and produce no subprocess.
 - **WHEN** `./gradlew check` runs twice with no change under `openspec/` or any test tree
 - **THEN** the second `checkSpecContract` is reported up to date
 
+### Requirement: Production source files stay within the size cap
+A production Java source file that a change adds or modifies SHALL stay within the 200-line
+hard cap of `.claude/rules/process-invariants.md`; a file that exceeds it SHALL be split along
+a responsibility seam into focused units, each within the cap, without changing observable
+behaviour.
+**Implements**: FR1, FR2 of fix-oversized-adapters
+**Notes**: The cap is a review rule, not a build gate: the implementation audit (`/audit-implementation`, project-rule conformance) checks the files a change touches against it, so a file over the cap that no change touches is not reported.
+**Notes**: The scenario `Extracted units keep the same behaviour and observability` was the acceptance of the archived change `fix-oversized-adapters` and left with the old heading `Source file size cap` (FR16 of tighten-spec-contract).
+
+#### Scenario: An oversized adapter is split into compliant units
+- **WHEN** a change adds or grows a production source file past the 200-line cap
+- **THEN** the implementation audit's project-rule conformance step
+  (`.claude/commands/audit-implementation.md`) reports the file against the hard cap of
+  `.claude/rules/process-invariants.md`
+- **AND** the remedy that rule asks for is a split along a responsibility seam, so the file and
+  every unit extracted from it are ≤ 200 lines
+
+### Requirement: App-layer specs build the assembly through one shared fixture
+The test suite SHALL provide a single shared fixture (a plain Groovy
+trait, no Spring test context) that constructs the standard app-layer
+engine-assembly collaborator set and its `FactoryProperties` test
+values; app-layer specs SHALL obtain the assembly through this fixture
+instead of inlining the construction block, keeping one construction
+site for the standard set in test sources, apart from the named
+deviations of `One construction site for the standard assembly`.
+**Implements**: FR1, FR2, FR3 of refactor-app-spec-fixtures
+**Notes**: The two named deviations are the fixture's own full-graph runner builder, which builds the assembly the composition root builds, and `ManualRunAssemblyCheckClientWiringSpec`, whose subject is a collaborator the fixture does not cover.
+**Notes**: The scenario `Fixture adoption preserves behavior` was the acceptance of the archived change `refactor-app-spec-fixtures` and left with the old heading `Shared app-layer assembly fixture` (FR16 of tighten-spec-contract).
+
+#### Scenario: One construction site for the standard assembly
+- **WHEN** test sources are searched for direct construction of the
+  standard engine assembly (`new ManualRunAssembly`)
+- **THEN** the standard set is constructed at one site — the shared fixture's
+  `newAssembly`
+- **AND** every other site is a named deviation: the fixture's full-graph
+  runner builder and `ManualRunAssemblyCheckClientWiringSpec`
+
+#### Scenario: A spec deviates from the fixture defaults
+- **WHEN** an app-layer spec needs a non-default collaborator (custom
+  console streams, agent binary, instance name)
+- **THEN** it passes the deviation as an argument of the fixture factory
+  method, whose parameters are positional with defaults (input, output,
+  properties, time equipment), with overloads taking only the properties,
+  or the properties and the time equipment
+- **AND** the parts after its last deviation remain defaulted and unspelled
+  at the call site; a default before a deviation may be spelled
+
 ## MODIFIED Requirements
 
 ### Requirement: Single verification command
@@ -236,8 +283,9 @@ artifacts.
 - **THEN** the job declares no `timeout-minutes` and is not held to the 30-minute bound
 
 ### Requirement: Security scanning
-CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every branch push and pull request, never on a tag push; CodeQL analysis of the codebase on every pull request and on pushes to `main`. An advisory on an artifact version that a committed lockfile resolves onto a production runtime classpath SHALL be fixed by a version pin and never allowlisted; the allowlist MAY name such an advisory only for a superseded conflict candidate whose metadata alone `gradle/verification-metadata.xml` records and no lockfile resolves.
+CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every branch push and pull request, never on a tag push; CodeQL analysis of the codebase on every pull request and on pushes to `main`. An advisory on an artifact version resolved onto a production runtime classpath SHALL be fixed by a version pin, never allowlisted.
 **Implements**: FR2, NFR-C1 of add-release-pipeline; FR1, FR2, FR6, FR7, FR8, FR9, NFR-S1, NFR-S2, NFR-S3 of fix-osv-dependency-gate
+**Notes**: A superseded conflict candidate, the case the allowlist entry of `A production-scope advisory is fixed, never suppressed` names, is a version whose metadata `gradle/verification-metadata.xml` records although no committed lockfile resolves it.
 **Notes**: Buildscript classpaths take their security overrides from `gradle.properties` because they cannot read the version catalog.
 
 #### Scenario: Vulnerable dependency fails CI
@@ -334,66 +382,6 @@ The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the
 #### Scenario: No archive records when it was built
 - **WHEN** the boot jar and the other archives are built
 - **THEN** none embeds a generated file that records when it was made: the boot jar's build info carries no build time, and the SBOM stays outside the jar
-
-### Requirement: Source file size cap
-A production Java source file that a change adds or modifies SHALL stay within the 200-line
-hard cap of `.claude/rules/process-invariants.md`; a file that exceeds it SHALL be split along
-a responsibility seam into focused units, each within the cap, without changing observable
-behaviour. The cap is a review rule, not a build gate: the implementation audit
-(`/audit-implementation`, project-rule conformance) checks the files a change touches against
-it, and files over the cap that no change touches are not reported.
-**Implements**: FR1, FR2 of fix-oversized-adapters
-
-#### Scenario: An oversized adapter is split into compliant units
-- **WHEN** a change adds or grows a production source file past the 200-line cap
-- **THEN** the implementation audit's project-rule conformance step
-  (`.claude/commands/audit-implementation.md`) reports the file against the hard cap of
-  `.claude/rules/process-invariants.md`
-- **AND** the remedy that rule asks for is a split along a responsibility seam, so the file and
-  every unit extracted from it are ≤ 200 lines
-
-#### Scenario: Extracted units keep the same behaviour and observability
-- **WHEN** logic is moved from an oversized file into a package-private collaborator
-- **THEN** the public entry point's behaviour, exit codes, and log output are unchanged
-- **AND** coverage and PIT mutation score on the affected classes are no lower than before
-
-### Requirement: Shared app-layer assembly fixture
-The test suite SHALL provide a single shared fixture (a plain Groovy
-trait, no Spring test context) that constructs the standard app-layer
-engine-assembly collaborator set and its `FactoryProperties` test
-values; app-layer specs SHALL obtain the assembly through this fixture
-instead of inlining the construction block, keeping one construction
-site for the standard set in test sources. The assembly's constructor
-is called elsewhere only at named deviations: the fixture's own
-full-graph runner builder, which builds the assembly the composition
-root builds, and a spec whose subject is a collaborator the fixture
-does not cover (`ManualRunAssemblyCheckClientWiringSpec`).
-**Implements**: FR1, FR2, FR3 of refactor-app-spec-fixtures
-
-#### Scenario: One construction site for the standard assembly
-- **WHEN** test sources are searched for direct construction of the
-  standard engine assembly (`new ManualRunAssembly`)
-- **THEN** the standard set is constructed at one site — the shared fixture's
-  `newAssembly`
-- **AND** every other site is a named deviation: the fixture's full-graph
-  runner builder and `ManualRunAssemblyCheckClientWiringSpec`
-
-#### Scenario: A spec deviates from the fixture defaults
-- **WHEN** an app-layer spec needs a non-default collaborator (custom
-  console streams, agent binary, instance name)
-- **THEN** it passes the deviation as an argument of the fixture factory
-  method, whose parameters are positional with defaults (input, output,
-  properties, time equipment), with overloads taking only the properties,
-  or the properties and the time equipment
-- **AND** the parts after its last deviation remain defaulted and unspelled
-  at the call site; a default before a deviation may be spelled
-
-#### Scenario: Fixture adoption preserves behavior
-- **WHEN** the app-layer specs are migrated to the shared fixture
-- **THEN** `./gradlew test` passes with the same number of executed
-  tests as before the migration
-- **AND** no production source changes and no assertion changes are part
-  of the migration
 
 ### Requirement: Hardware-derived heavy-JVM budget
 The build SHALL limit how many memory-heavy forked JVMs (test JVMs and the mutation engine)
@@ -924,3 +912,13 @@ repository SHALL stay in the scan.
 - **WHEN** PIT runs for `:bootstrap`
 - **THEN** `ContainerResumeEscalationSpec`, `ContainerResumeRunnerSpec` and
   `TransitionKillPointSpec` remain among its covering tests
+
+## REMOVED Requirements
+
+### Requirement: Source file size cap
+**Reason**: its scenario `Extracted units keep the same behaviour and observability` measured coverage and the PIT score against the state before the archived change `fix-oversized-adapters`; no test, build step or document can observe that state now (finding F115, FR16 of tighten-spec-contract).
+**Migration**: the requirement and its standing scenario `An oversized adapter is split into compliant units` continue under `Production source files stay within the size cap`, the explanation of the review rule moved to a note.
+
+### Requirement: Shared app-layer assembly fixture
+**Reason**: its scenario `Fixture adoption preserves behavior` counted executed tests and assertion changes against the suite before the archived change `refactor-app-spec-fixtures`; no test, build step or document can observe that state now (finding F115, FR16 of tighten-spec-contract).
+**Migration**: the requirement and its standing scenarios `One construction site for the standard assembly` and `A spec deviates from the fixture defaults` continue under `App-layer specs build the assembly through one shared fixture`, the named deviations stated by the first scenario and listed in a note.

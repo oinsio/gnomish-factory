@@ -172,9 +172,10 @@ specs hold today.
   `git` reports every moved spec as a 100% rename. New capabilities of queued changes are placed
   into a group in the same task.
 - **FR13 — Revealed defects closed.** The defects F74, F79, F82, F85, F90, F106, F107, F109,
-  F111, F113, F119 and F122 are fixed in production code or the build by TDD: each test that
-  revealed one loses its `@PendingFeature` and passes, unchanged in what it asserts, and the
-  scenario it carries is true of the code.
+  F111, F113, F119, F122 and F135 are fixed in production code or the build by TDD: each test
+  that revealed one loses its `@PendingFeature` and passes, unchanged in what it asserts, and
+  the scenario it carries is true of the code. F135 (found by task 9.13, the same root cause as
+  F122) gets its test in this change and is fixed with it.
 - **FR14 — Dashboard browser tests.** The six dashboard scenarios whose behavior lives in the
   page's script and stylesheet (F93) are exercised by tests that load the rendered page in a
   real browser; their `pending-test:` entries are deleted.
@@ -209,9 +210,13 @@ specs hold today.
 
 - **NFR-S1** — The checker treats spec and test text as data: nothing from a file is executed,
   evaluated or interpolated into a command.
-- **NFR-S2** — A commit the gnome writes on its own branch, whatever its message, never makes
-  the task read as delivered (F122): delivery is recognised only on a commit the factory's own
-  round records place outside every round the gnome ran.
+- **NFR-S2** — A record the gnome writes on the task branch — a commit subject, an envelope
+  file, a recorded position, a base pin — never makes a pickup act as if the factory had written
+  it (F122, F135): delivery, the pending cleanup, a gate's approval and the law binding are read
+  at the factory register, the one ref only a factory closing push moves; and in container mode
+  the harvest admits no gnome commit that touches a factory-owned path or carries a `gnomish: `
+  subject, so such content never becomes durable. Host mode carries no such claim, and the threat
+  registry, the glossary and this requirement say so.
 - **NFR-S3** — No class outside the secrets adapter reads a credential from the process
   environment (F107): the agent's credentials and the child environment's credential layer come
   through `SecretsProvider`.

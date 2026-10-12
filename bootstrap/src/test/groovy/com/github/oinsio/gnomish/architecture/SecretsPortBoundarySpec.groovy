@@ -12,7 +12,6 @@ import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import java.nio.file.Files
-import spock.lang.PendingFeature
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -91,7 +90,6 @@ class SecretsPortBoundarySpec extends Specification {
 
     // FR18, NFR-S1: the process environment, where a credential variable lives, is read by the adapter alone
     // Scenario: operator/secrets-provider / One seam to audit
-    @PendingFeature(reason = 'F107 (route-agent-credentials-through-secrets): the agent credential seam and the child-env allowlist read credentials from the process environment')
     def "FR18, NFR-S1: no class outside the secrets adapter reads the process environment"() {
         expect:
         productionClasses.findAll { owner ->

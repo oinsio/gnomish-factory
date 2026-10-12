@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 
@@ -21,7 +21,7 @@ import spock.lang.Specification
 class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFixture {
 
     def law = PipelineLaw.ofContent([:])
-    def childEnv = ChildEnvAllowlist.none()
+    def childEnv = TestChildEnvironment.hostAllowlist()
 
     private static SandboxRunPieces pieces() {
         new SandboxRunPieces(

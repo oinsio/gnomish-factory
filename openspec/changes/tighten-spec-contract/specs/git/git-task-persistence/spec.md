@@ -2,6 +2,32 @@
 
 ## ADDED Requirements
 
+### Requirement: Factory register ref
+The factory SHALL keep, per task, the ref `refs/gnomish-factory/<task>` in origin and in its clone, naming its latest closing commit: STARTED, a round's state commit, a snapshot, an outcome, an approval, an appended decision, a salvage, the cleanup. Every closing push SHALL push the task branch and the register in one atomic push; a mid-round push or harvest SHALL move the branch alone. Every touchpoint fetch of the branch SHALL fetch the register with it.
+**Implements**: FR13, NFR-S2 of tighten-spec-contract
+**Notes**: The register is the factory's trust anchor on the branch: a commit id is content-addressed, and only a factory closing push moves the ref (design D13 of tighten-spec-contract).
+**Notes**: In host mode the gnome shares the clone and can move the ref; the host tier carries no integrity claim (design D19), and the register there is a detection.
+
+#### Scenario: Branch and register land together
+- **WHEN** a closing commit is pushed
+- **THEN** origin's task branch and register both name the new commit, or neither moved — a refusal of either ref lands nothing
+
+#### Scenario: A mid-round push leaves the register
+- **WHEN** a mid-round push or an admitted harvest pushes the branch
+- **THEN** the register at origin and in the clone still names the previous closing commit
+
+#### Scenario: The register follows every closing commit
+- **WHEN** any factory closing commit lands — STARTED, state, snapshot, outcome, approval, decision, salvage or cleanup
+- **THEN** after its push the register and the branch tip are the same commit, on a bare origin, for every closing path of both media
+
+#### Scenario: Killed between admission and push
+- **WHEN** an instance dies after the admission moved the branch locally and before its push
+- **THEN** the next pickup fetches the register and the branch from origin, the register names the last closing commit, and the next harvest re-admits the range as an ordinary open round
+
+#### Scenario: The touchpoint fetch carries the register
+- **WHEN** a pickup, a status read or a reconcile fetches the task branch from origin
+- **THEN** the same transfer fetches the register, and a missing or non-ancestor register classifies the branch `Unknown` rather than being guessed
+
 ### Requirement: Factory-side branch-tip observation
 In sandboxed mode the factory SHALL observe the task branch's tip in the environment by a poll, run and rate-limited on the factory side.
 **Implements**: FR5 of add-sandbox-core; FR6, NFR-S1, UX3 of own-git-transfer-argv; FR4 of tighten-spec-contract
@@ -454,7 +480,7 @@ After every round commit, and after every task lifecycle commit a mode records, 
 
 #### Scenario: Mid-round tip movement in a box is pushed
 - **WHEN** the gnome commits mid-round inside the environment and the rate-limited poll observes the moved tip
-- **THEN** the adapter harvests the branch and pushes it best-effort
+- **THEN** the adapter harvests the branch through the admission gate and pushes what it admitted best-effort; the register ref is not part of that push
 
 #### Scenario: Completion reaches origin without human involvement
 - **WHEN** a task ends `Completed` with an origin remote configured, in host or sandboxed mode
@@ -593,13 +619,14 @@ Push SHALL be the adapter's monopoly, coded in factory logic — never expressed
 - **THEN** it runs only if HEAD is on the task branch and the old tip is an ancestor of it
 
 #### Scenario: A refused mid-round harvest leaves the verdict to the round boundary
-- **WHEN** a sandboxed mid-round harvest is refused as not fast-forward
-- **THEN** the push is skipped with a WARN, the fast-forward-only harvest being the ancestry check, and the authoritative verdict is left to the round-boundary check
+- **WHEN** a sandboxed mid-round harvest is refused — not fast-forward, or the admission inspection rejects a commit in the fetched range
+- **THEN** the push is skipped with a WARN, the branch tip is unchanged, nothing refused becomes durable, and the authoritative verdict is the boundary violation the round close reports
 
 ### Requirement: Gnome commits within a round
-Gnome commits inside a round SHALL be allowed (encouraged via stage instructions, using plain git); the adapter's commit closes the round. At the round boundary the factory SHALL verify what the gnome committed — the previous tip still an ancestor, `.gnomish-task/` untouched except the current round's decision request — with three outcomes, clean, violated or cannot-verify; a violation SHALL abort the task.
-**Implements**: FR13, FR16 of make-checkpoint-gate-durable; FR12 of add-git-workflow; FR21, FR23 of add-sandbox-core; FR13 of harden-logging-observability
+Gnome commits inside a round SHALL be allowed (encouraged via stage instructions, using plain git); the adapter's commit closes the round. At every admission of gnome commits — the harvest in sandboxed mode, the round close in host mode — one inspection SHALL judge the range above the register: the previous tip still an ancestor, no second parent, `.gnomish-task/` untouched except the current round's decision request, no `gnomish: ` subject — with three outcomes, clean, violated or cannot-verify; a violation SHALL abort the task.
+**Implements**: FR13, FR16 of make-checkpoint-gate-durable; FR12 of add-git-workflow; FR21, FR23 of add-sandbox-core; FR13 of harden-logging-observability; FR13, NFR-S2 of tighten-spec-contract
 **Notes**: A boundary violation breaks durability, which is why it aborts the task instead of failing the round.
+**Notes**: The one inspection replaces the host and container twins of the check (design D18 of tighten-spec-contract); the harvest runs it before the branch moves, the host round close over `previousTip..HEAD`.
 
 #### Scenario: Fine-grained gnome history is preserved
 - **WHEN** the gnome makes three commits during a round
@@ -630,7 +657,19 @@ Gnome commits inside a round SHALL be allowed (encouraged via stage instructions
 
 #### Scenario: Sandboxed boundary verification runs on harvested refs
 - **WHEN** a sandboxed round closes
-- **THEN** boundary verification runs factory-side against the harvested refs, and a history rewrite is refused by the fast-forward-only harvest itself
+- **THEN** boundary verification runs factory-side against the quarantine ref the harvest fetched, before the branch moves to it, and a history rewrite is refused by the fast-forward-only harvest itself
+
+#### Scenario: A service subject in a gnome commit is a violation
+- **WHEN** a commit in the inspected range carries a subject starting with `gnomish: ` — the cleanup, snapshot, round or task-event form — and the factory did not write it
+- **THEN** the inspection reports a violation naming the commit and its subject, and the commit is not admitted
+
+#### Scenario: An uncommitted envelope edit does not ride the host round commit
+- **WHEN** at a host round close the working tree holds an uncommitted change under `.gnomish-task/` other than the current round's decision request
+- **THEN** persist restores the factory-owned paths from the registered commit before staging, the round commit carries the factory's own envelope, and the edit is reported as a violation
+
+#### Scenario: A violation's Aborted outcome is built from the registered envelope
+- **WHEN** a boundary violation aborts the task
+- **THEN** the Aborted outcome commit carries `task.json` and `state.json` derived from the registered commit's envelope, never from the tip's, so a later pickup resumes from the factory's record
 
 #### Scenario: No in-box check decides the boundary
 - **WHEN** a sandboxed round's snapshot commit is made inside the environment and the harvested refs show a boundary violation
@@ -638,7 +677,7 @@ Gnome commits inside a round SHALL be allowed (encouraged via stage instructions
 
 #### Scenario: A host round boundary checks the worktree
 - **WHEN** a host-mode round closes
-- **THEN** persist checks that HEAD is on the task branch, that the previous tip is an ancestor, and that `.gnomish-task/` is untouched apart from the current round's decision request
+- **THEN** persist checks that HEAD is on the task branch, that the previous tip is an ancestor, and that `.gnomish-task/` is untouched apart from the current round's decision request — in the committed range and in the working tree alike
 
 #### Scenario: A boundary violation keeps its evidence
 - **WHEN** persist throws on a boundary violation
@@ -701,6 +740,10 @@ In sandboxed mode a round SHALL close in two steps: first a snapshot commit of t
 - **WHEN** a factory dies after the snapshot commit but before the state commit
 - **THEN** a resuming instance finds the snapshot unrecorded in `state.json`, re-runs verification against it, and the attempt counter is unchanged
 
+#### Scenario: The snapshot subject is read at the register only
+- **WHEN** a resuming instance looks for a pending verification
+- **THEN** it reads the stage, round and token from the subject of the registered commit, and a snapshot-shaped subject on a commit above the register is not a snapshot
+
 #### Scenario: Daemon-inserted commit is caught by the parent-check
 - **WHEN** a background process in the box commits to the branch between the snapshot and state commits
 - **THEN** the harvested state commit's parent is not the snapshot commit and the task aborts as a boundary violation
@@ -742,13 +785,22 @@ In sandboxed mode, materialize SHALL create the working copy as a clone from the
 - **THEN** the seed clone refuses it — the local-path shortcut that would have copied it unchecked is never taken
 
 ### Requirement: Harvest protocol
-The factory SHALL collect results by fetching the task branch from the environment with a factory-fixed refspec (never names produced inside the box), fast-forward-only; rewritten history SHALL be refused. A tag, a submodule reference, or a configuration value authored inside the box SHALL change nothing in the factory clone beyond the one task branch ref. Harvest SHALL precede any push; pushes continue to run outside the environment with factory credentials.
-**Implements**: FR5 of add-sandbox-core; FR6, NFR-S1, UX3 of own-git-transfer-argv
-**Notes**: The harvest fetch is a transfer built by the one transfer owner (see `git-transfer`).
+The factory SHALL collect results by fetching the task branch from the environment into the quarantine ref `refs/gnomish-quarantine/<task>` with a factory-fixed refspec (never names produced inside the box); the task branch SHALL move to the fetched commit only after the admission inspection passed, fast-forward-only; rewritten or refused history SHALL never move it. A tag, a submodule reference, or a configuration value authored inside the box SHALL change nothing in the factory clone beyond the quarantine and task branch refs. Harvest SHALL precede any push.
+**Implements**: FR5 of add-sandbox-core; FR6, NFR-S1, UX3 of own-git-transfer-argv; FR13, NFR-S2 of tighten-spec-contract
+**Notes**: The harvest fetch is a transfer built by the one transfer owner (see `git-transfer`); pushes run outside the environment with factory credentials.
+**Notes**: The quarantine ref is git's own receive-side shape — objects admitted to the branch only after the check passed (design D18 of tighten-spec-contract).
 
 #### Scenario: Rewritten history is refused at the boundary
 - **WHEN** the branch history inside the box was rewritten
-- **THEN** the harvest fetch fails non-fast-forward and the factory treats it as the existing history-rewrite violation
+- **THEN** the admission finds the fetched commit is not a descendant of the task branch, the branch does not move, and the factory treats it as the existing history-rewrite violation
+
+#### Scenario: The branch moves only through the admission
+- **WHEN** any harvest runs — mid-round, snapshot, state commit or salvage
+- **THEN** the fetch writes the quarantine ref alone, and the task branch ref is updated by the admission owner after its inspection, never by the fetch
+
+#### Scenario: Refused content is not durable
+- **WHEN** the admission refuses the fetched range
+- **THEN** the task branch and the register are unchanged locally and at origin, and the refused commits remain reachable only from the quarantine ref for the violation report
 
 #### Scenario: Hooks do not cross the boundary
 - **WHEN** the gnome installs git hooks in the in-box clone
@@ -813,11 +865,10 @@ answers.
 ### Requirement: Stall detection governs a progressing transfer
 The factory SHALL enable git's own no-progress detection for the transports it uses — an abort when
 throughput stays below a floor for a sustained window over HTTP, and connect plus keepalive limits
-over SSH — configured per invocation only. The stall detection is
-the primary mechanism for a dead connection; the deadline SHALL remain a hard wall-clock bound on
-every network command, which progress does not extend, so the operator raises
-`factory.git-network-timeout` for transfers that need longer.
+over SSH — configured per invocation only. The deadline SHALL remain a hard wall-clock bound on
+every network command, which progress does not extend.
 **Implements**: FR4, NFR-S1, G3 of bound-subprocess-commands
+**Notes**: Stall detection is the primary mechanism for a dead connection; the operator raises `factory.git-network-timeout` for transfers that need longer.
 
 #### Scenario: A slow but progressing transfer completes
 - **WHEN** a large fetch over a slow link keeps transferring data
@@ -1062,9 +1113,13 @@ tag, or commit, as origin classified it at refresh), the commit SHA the
 branch was created from, and the source rule that produced the decision —
 written in the task-creation commit. The pin extends the existing
 `baseCommit` slot behind the wire version gate.
-Resume SHALL read the pin and never re-derive the base decision (see
-base-ref-resolution).
-**Implements**: FR7 of add-base-ref-resolution; NFR-O2 of add-base-ref-resolution
+Resume SHALL read the pin at the registered commit and never re-derive the
+base decision (see base-ref-resolution).
+**Implements**: FR7 of add-base-ref-resolution; NFR-O2 of add-base-ref-resolution; NFR-S2 of tighten-spec-contract
+
+#### Scenario: The pin is read at the register
+- **WHEN** resume binds the law of a task whose tip is above its registered commit
+- **THEN** the pin comes from the registered commit's `task.json`, and a pin on a commit above the register is never read
 
 #### Scenario: Creation commit carries the pin
 - **WHEN** the task-creation commit on a fresh branch is inspected

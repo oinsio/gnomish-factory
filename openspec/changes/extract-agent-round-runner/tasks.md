@@ -29,6 +29,19 @@
   three bounds); delete `AgentAiSeam`, the Claude list in `AgentSettingsValidator`,
   `RoundTimeout` shape parsing, `FactoryProperties.agentCliEnvPassthrough`; located-error spec
   for a settings typo (FR7, NFR-S1, D6)
+- F107 (carried from `tighten-spec-contract`): since that change, the agent CLI's credentials and
+  every child-environment value reach a round only through `SecretsProvider`: the run's
+  `ChildEnvAllowlist` resolves them through the `ChildEnvValues` role interface the root binds at
+  `CheckEquipment` (`childEnv` for the run path, `installationChildEnv` for the container path),
+  `AgentAiSeam.variables(childEnv)` reads the five seam names through `ChildEnvAllowlist.resolve`,
+  and `EnvFileSecretsProvider` is the only production reader of the process environment
+  (`SecretsPortBoundarySpec`). Deleting `AgentAiSeam` in 2.3 keeps that route: the names
+  `ClaudeDialect.describe` declares are resolved through the run's allowlist, never through
+  `System.getenv` and never through a new `ChildEnvAllowlist.of` overload without a value source;
+  `AgentCredentialSeamBoundarySpec` moves its one allowed file from `AgentAiSeam` to the dialect,
+  and `AgentSecretsFolderRoundSpec` (a host-folder token reaching every round and vote) stays
+  green. Note that the allowlist's declared credential names are a withheld set — `compose` and
+  `resolve` strip them — so the dialect's credential names must not be added through `declaring`.
 - [ ] 2.4 `--json-schema` for `verdict` and `decision` answers with final-text fallback at WARN;
   `JudgeVerdictExtractor` reduced to SARIF conversion; malformed → malformed answer (FR3, FR4)
 - [ ] 2.5 Continuation: session id as key in the result; `--resume` on `start` with continuation;

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.time.Duration
@@ -40,7 +41,7 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
                         properties,
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
                 new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
                 environment,
@@ -78,7 +79,7 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
                         properties,
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
                 new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
                 environment,

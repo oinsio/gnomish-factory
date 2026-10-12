@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import java.time.InstantSource
 
@@ -52,8 +53,11 @@ final class ContainerSupportFixture {
             OwnershipMode ownershipMode, ClaimEpochSource epochs, SandboxProperties sandbox, FactoryProperties factory) {
         // The check providers' credential declarations are resolved by the composition root and
         // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
-        // provider, so the declared set and the registry are empty.
-        new ContainerRunSupportFactory([], [:], ownershipMode, epochs, sandbox, factory, realTime())
+        // provider, so the declared set and the registry are empty. The allowlist's values are the
+        // test JVM's environment, the stand-in for the root's secrets port (NFR-S3 of
+        // tighten-spec-contract).
+        new ContainerRunSupportFactory(TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), []), [:],
+        ownershipMode, epochs, sandbox, factory, realTime())
     }
 
     /**
@@ -78,7 +82,8 @@ final class ContainerSupportFixture {
             FactoryProperties factory, OwnershipMode ownershipMode, ClaimEpochSource epochs,
             List<String> checkCredentialEnvVars = []) {
         (ContainerRunSupport) new ContainerRunSupportFactory(
-                checkCredentialEnvVars, [:], ownershipMode, epochs, sandbox, factory, realTime())
+                TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), checkCredentialEnvVars), [:],
+                ownershipMode, epochs, sandbox, factory, realTime())
                 .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
     }
 }

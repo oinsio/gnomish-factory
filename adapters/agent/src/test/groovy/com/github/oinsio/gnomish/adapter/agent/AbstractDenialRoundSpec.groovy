@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -35,13 +36,13 @@ abstract class AbstractDenialRoundSpec extends Specification {
     }
 
     protected HostRoundEnvironmentSource hostSource() {
-        new HostRoundEnvironmentSource(new DecisionFileTransport(decisionRoot), clock, ChildEnvAllowlist.none())
+        new HostRoundEnvironmentSource(new DecisionFileTransport(decisionRoot), clock, TestChildEnvironment.hostAllowlist())
     }
 
     protected StageExecutor executorFor(String scenario, RoundEnvironmentSource source) {
         new CliStageExecutor(
                 FakeAgentSupport.propertiesFor(scenario), clock,
-                { AgentProgressEvent e -> } as AgentProgressListener, LAW, source)
+                { AgentProgressEvent e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
     }
 
     // Delegates to FakeAgentSupport#requestFor, the single owner of this fixture shape.

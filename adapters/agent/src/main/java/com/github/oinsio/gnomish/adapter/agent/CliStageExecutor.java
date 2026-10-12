@@ -55,7 +55,7 @@ public final class CliStageExecutor implements StageExecutor {
 
     /**
      * No-op listener. See the canonical constructor {@link #CliStageExecutor(FactoryProperties,
-     * InstantSource, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for the full parameter
+     * InstantSource, AgentProgressListener, ChildEnvAllowlist, PipelineLaw, RoundEnvironmentSource)} for the full parameter
      * contract.
      */
     public CliStageExecutor(FactoryProperties factoryProperties, InstantSource clock, PipelineLaw law) {
@@ -64,7 +64,7 @@ public final class CliStageExecutor implements StageExecutor {
 
     /**
      * {@link ChildEnvAllowlist#none()}. See the canonical constructor {@link #CliStageExecutor(
-     * FactoryProperties, InstantSource, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for
+     * FactoryProperties, InstantSource, AgentProgressListener, ChildEnvAllowlist, PipelineLaw, RoundEnvironmentSource)} for
      * the full parameter contract.
      */
     public CliStageExecutor(
@@ -77,7 +77,7 @@ public final class CliStageExecutor implements StageExecutor {
 
     /**
      * Host default (a {@link HostRoundEnvironmentSource}). See the canonical constructor {@link
-     * #CliStageExecutor(FactoryProperties, InstantSource, AgentProgressListener, PipelineLaw,
+     * #CliStageExecutor(FactoryProperties, InstantSource, AgentProgressListener, ChildEnvAllowlist, PipelineLaw,
      * RoundEnvironmentSource)} for the full parameter contract.
      */
     public CliStageExecutor(
@@ -98,6 +98,9 @@ public final class CliStageExecutor implements StageExecutor {
      * @param factoryProperties installation config: the CLI binary path; never null
      * @param clock the read-time source for process start/exit stamping; never null
      * @param progressListener the live-progress subscriber for this executor's rounds; never null
+     * @param childEnv the run's child-environment allowlist the rounds' AI seam variables are
+     *     resolved through — the secrets port, in production (NFR-S3 of tighten-spec-contract);
+     *     never null
      * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core); never null
      * @param environmentSource where each round's environment and decision transport come from;
      *     never null
@@ -106,10 +109,11 @@ public final class CliStageExecutor implements StageExecutor {
             FactoryProperties factoryProperties,
             InstantSource clock,
             AgentProgressListener progressListener,
+            ChildEnvAllowlist childEnv,
             PipelineLaw law,
             RoundEnvironmentSource environmentSource) {
-        this.equipment =
-                new AgentRoundEquipment(factoryProperties, clock, progressListener, new AgentRoundResultExtractor());
+        this.equipment = new AgentRoundEquipment(
+                factoryProperties, clock, progressListener, new AgentRoundResultExtractor(), childEnv);
         this.promptBuilder = new ExecutorPromptBuilder(law);
         this.environmentSource = environmentSource;
     }
@@ -139,7 +143,13 @@ public final class CliStageExecutor implements StageExecutor {
             DecisionFileTransport decisionFileTransport,
             ChildEnvAllowlist childEnv,
             PipelineLaw law) {
-        this(factoryProperties, clock, progressListener, law, hostRounds(decisionFileTransport, clock, childEnv));
+        this(
+                factoryProperties,
+                clock,
+                progressListener,
+                childEnv,
+                law,
+                hostRounds(decisionFileTransport, clock, childEnv));
     }
 
     /**
