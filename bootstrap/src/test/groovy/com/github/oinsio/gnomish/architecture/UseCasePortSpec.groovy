@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
@@ -14,7 +15,6 @@ import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.domain.JavaModifier
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
-import spock.lang.PendingFeature
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -38,8 +38,15 @@ class UseCasePortSpec extends Specification {
         ContainerRuntimeProbe
     ]
 
-    /** The two collaborators whose concrete adapter a use case still constructs (finding F119). */
-    private static final List<Class<?>> SELF_SUPPLIED_PORTS = [ConsoleIO, Workspace]
+    /**
+     * The collaborators whose concrete adapter use cases used to construct themselves (finding
+     * F119), and the factory port the composition root now opens the workspace through (design D12
+     * of tighten-spec-contract). The two adapters, {@code SystemConsoleIO} and {@code
+     * DirectoryWorkspace}, are classes this spec keeps in {@code :application}: the check runners,
+     * the agent and git adapters and the shared test fixtures read them by type and cannot reach
+     * {@code :bootstrap}. What this list pins is that only the composition root constructs them.
+     */
+    private static final List<Class<?>> SELF_SUPPLIED_PORTS = [ConsoleIO, Workspace, WorkspaceFactory]
 
     /** The layers that own use cases and their ports. */
     private static final List<String> USE_CASE_MODULES = ['/application/', '/domain/']
@@ -65,7 +72,6 @@ class UseCasePortSpec extends Specification {
     }
 
     // Scenario: build/module-layering / A use case reaches its collaborator through a port
-    @PendingFeature(reason = 'F119 (close-assembly-escape-hatches): use cases in :application construct SystemConsoleIO and DirectoryWorkspace themselves')
     def "#port.simpleName is supplied by the composition root, not constructed by a use case"() {
         expect:
         suppliedThroughPort(port)

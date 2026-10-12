@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.util.List;
 
@@ -28,7 +28,7 @@ public sealed interface PipelineLoadOutcome {
      * @param workspace the workspace constructed from {@code --dir}, for the runner to
      *     proceed with (FR1, D3)
      */
-    record Loaded(PipelineDefinition definition, DirectoryWorkspace workspace) implements PipelineLoadOutcome {}
+    record Loaded(PipelineDefinition definition, Workspace workspace) implements PipelineLoadOutcome {}
 
     /**
      * The {@code .gnomish/} tree failed to load: every {@link com.github.oinsio.gnomish.domain

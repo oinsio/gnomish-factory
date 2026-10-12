@@ -118,7 +118,8 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 time),
                 time,
                 properties,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new DirectoryWorkspaceFactory())
     }
 
     // FR3 of add-plugin-architecture: a configured provider's client is built lazily, on first
@@ -171,7 +172,8 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 githubCheckProperties(),
                 new SandboxProperties(null, null, null, null, null, [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
-                ], false, null, null, null, null))
+                ], false, null, null, null, null),
+                new DirectoryWorkspaceFactory())
 
         when:
         assembly.assemble(

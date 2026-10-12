@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 
@@ -42,17 +43,24 @@ record TakeCommandSeams(
      * default (2, design D3); production wiring overrides via {@link #withServeProperties} with the
      * project's real, possibly-configured ServeProperties instead (task 6.2, FR2).
      *
-     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard.
+     * <p>The takeover prompt reads the operator through {@code console}, the composition root's
+     * console owner — the seams build no console adapter of their own (finding F119, design D12 of
+     * tighten-spec-contract).
+     *
+     * <p>Implements FR18, FR22 of supervise-daemon-loops-and-embed-dashboard; FR13 of
+     * tighten-spec-contract.
      *
      * @param time the heartbeat's "now" and the beat's and the reaper's waiting; never null
+     * @param console the operator console the takeover prompt is printed to and read from; never
+     *     null
      * @return the default seams on {@code time}; never null
      */
-    static TakeCommandSeams defaults(TimeEquipment time) {
+    static TakeCommandSeams defaults(TimeEquipment time, ConsoleIO console) {
         return new TakeCommandSeams(
                 time,
                 time.sleeper(),
                 new SystemMonotonicTime(),
-                ConsoleTakeoverConfirmation.systemTty(),
+                ConsoleTakeoverConfirmation.systemTty(console),
                 new ServeProperties(0, null, null, null, null, null, null, null, null, null));
     }
 

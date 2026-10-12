@@ -92,7 +92,7 @@ tracker:
         // TTY, no flag → headless refusal, exactly what this spec's Working row asserts MDC around.
         newTakeCommand(
                 testProperties(instanceName: INSTANCE_NAME, agentCliBinary: FakeAgentSupport.wrapperFor('plain-round')), registeredClone, registry, { time ->
-                    TakeCommandSeams.defaults(time).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
+                    TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout()).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
                 })
     }
 

@@ -7,9 +7,9 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
  * TerminalPresence} has said an operator is attached (design D22 of
  * supervise-daemon-loops-and-embed-dashboard, clause (iii): a seam a spec fakes is a role interface
  * in the owning module, never a JDK functional type — this replaces a {@code Supplier<ConsoleIO>}).
- * {@link ConsoleTakeoverConfirmation} calls it lazily, so a headless run never touches standard
- * input; the production answer wraps the process's own standard streams, a spec hands back a
- * recording console.
+ * {@link ConsoleTakeoverConfirmation} calls it lazily, so a headless run never reads standard
+ * input; the production answer is the console owner the composition root handed in (finding F119 of
+ * tighten-spec-contract), a spec hands back a recording console.
  *
  * <p>Implements FR6 of add-claim-heartbeat; FR18 of supervise-daemon-loops-and-embed-dashboard.
  */

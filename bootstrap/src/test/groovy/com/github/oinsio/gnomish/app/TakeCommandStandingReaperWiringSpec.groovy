@@ -126,7 +126,7 @@ tracker:
 
     private TakeCommand newCommand(ServeProperties serveProperties) {
         newTakeCommand(testProps(), registeredClone, [github: fixedFactory(tracker)], { time ->
-            TakeCommandSeams.defaults(new TimeEquipment(time.clock(), budgetedRealSleeper(600)))
+            TakeCommandSeams.defaults(new TimeEquipment(time.clock(), budgetedRealSleeper(600)), LiveConsoleIO.onStdout())
             .withServeProperties(serveProperties)
             .withReaperSleeper(budgetedRealSleeper(600))
         })

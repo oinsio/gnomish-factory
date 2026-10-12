@@ -96,7 +96,7 @@ tracker:
                 newAssembly(properties, TakeCommands.slotTime()), TaskGitFixture.real(), registeredClone, 'taskId', properties,
                 new TrackerWiring([github: factory], new MapSecretsProvider(secrets),
                 TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
-                    TakeCommandSeams.defaults(time)
+                    TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout())
                 }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 

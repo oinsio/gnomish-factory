@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -21,7 +22,6 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-
 import java.nio.file.Path
 import java.util.function.UnaryOperator
 /**
@@ -213,6 +213,9 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             // assembly before creating a branch, so a chain that reaches a manual fresh run needs
             // this answered with the same fixed commit its law reads report.
             lawCommitOf: { binding -> LAW_COMMIT },
+            // F119 of tighten-spec-contract: the host run paths open their worktree through the
+            // assembly; this fake answers as the root's realization does.
+            workspaceAt: { Path root -> new DirectoryWorkspace(root) },
         ] as RunAssembly
     }
 
@@ -251,6 +254,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
             },
             lawCommitOf: { binding -> LAW_COMMIT },
+            workspaceAt: { Path root -> new DirectoryWorkspace(root) },
         ] as RunAssembly
         return self
     }

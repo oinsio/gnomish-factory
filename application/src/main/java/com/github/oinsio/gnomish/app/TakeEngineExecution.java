@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.RevocationHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalTransitions;
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -131,7 +130,7 @@ record TakeEngineExecution(
         var delegate = git.store().attemptPersistence(worktree, taskId);
         var persistence = new RevocationCheckingAttemptPersistence(
                 delegate, order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
-        var workspace = new DirectoryWorkspace(worktree);
+        var workspace = assembly.workspaceAt(worktree);
         // The one take attachment point for the mid-round push decoration (FR1, FR3, design D3
         // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
         // funnel through this method, so neither entry point can silently lose it.

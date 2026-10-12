@@ -72,8 +72,9 @@ tracker:
 
     private TakeCommand newCommand(SandboxLifecyclePass pass) {
         newTakeCommand(
-                testProperties(instanceName: 'gnomish-factory'), registeredClone, [github: fakeFactory(tracker)],
-                { time -> TakeCommandSeams.defaults(time) }, pass)
+                testProperties(instanceName: 'gnomish-factory'), registeredClone, [github: fakeFactory(tracker)], { time ->
+                    TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout())
+                }, pass)
     }
 
     // Scenario: tracker/tracker-take / A tracker error during the sweep skips the verdict

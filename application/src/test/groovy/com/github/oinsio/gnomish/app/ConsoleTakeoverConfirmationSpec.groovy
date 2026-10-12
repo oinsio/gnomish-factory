@@ -102,12 +102,11 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
 
     // FR6, D9: the production wiring factory returns a real, ready confirmation — its return value
     // must not be null (kills the NullReturnValsMutator on systemTty()). Constructing it only wires
-    // the System.console()/SystemConsoleIO method-reference suppliers; neither is invoked here, so
-    // this is deterministic even under a headless test JVM — no terminal is touched until confirm()
-    // consults the probe.
+    // the System.console() probe; it is not invoked here, so this is deterministic even under a
+    // headless test JVM — no terminal is touched until confirm() consults the probe.
     def "systemTty wires a non-null production confirmation without touching the terminal"() {
         expect:
-        ConsoleTakeoverConfirmation.systemTty() != null
+        ConsoleTakeoverConfirmation.systemTty(new RecordingConsole()) != null
     }
 
     // FR6: EOF at the prompt (Ctrl-D) is a non-confirming answer, never an escaping exception.
@@ -123,16 +122,26 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
     }
 
     // FR6, design D9: systemTty() must hand back a real, fully wired confirmation — never null —
-    // with both production seams present (PIT: NULL_RETURNS on systemTty). The seams themselves
-    // (System.console() probe, stdin/stdout console) stay unexercised: they carry @DoNotMutate as
-    // pure System integration wiring, and building the record is side-effect-free.
+    // with both production seams present (PIT: NULL_RETURNS on systemTty). The System.console()
+    // probe stays unexercised: it carries @DoNotMutate as pure System integration wiring, and
+    // building the record is side-effect-free.
     def "systemTty wires a non-null production confirmation with both seams present"() {
         when:
-        def production = ConsoleTakeoverConfirmation.systemTty()
+        def production = ConsoleTakeoverConfirmation.systemTty(new RecordingConsole())
 
         then:
         production != null
         production.terminal() != null
         production.opener() != null
+    }
+
+    // F119 of tighten-spec-contract (design D12): the production confirmation opens the console the
+    // composition root handed in, never one it builds itself.
+    def "systemTty opens the console the composition root supplied"() {
+        given:
+        def rootConsole = new RecordingConsole()
+
+        expect:
+        ConsoleTakeoverConfirmation.systemTty(rootConsole).opener().open().is(rootConsole)
     }
 }

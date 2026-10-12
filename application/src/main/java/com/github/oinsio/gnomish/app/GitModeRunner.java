@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -41,7 +40,7 @@ import java.util.List;
  * by itself, risk decision-file temp dirs or logs entering the round commit. Both are already
  * anchored outside any workspace root by construction, unchanged by this class: {@code
  * CliStageExecutor}'s {@code DecisionFileTransport} always roots each round's temp directory
- * under {@code java.io.tmpdir} (never under the {@link DirectoryWorkspace} it is handed), and
+ * under {@code java.io.tmpdir} (never under the workspace it is handed), and
  * {@code logback-spring.xml} writes the instance's rolling log file under the factory home's {@code
  * projects/<name>/logs/} — both independent of {@code --dir}/worktree/workspace entirely. See {@code
  * GitModeWorkspaceHygieneSpec} for the regression proof: a real round's commit tree contains only
@@ -121,7 +120,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
                 initialState);
 
         var persistence = git.store().attemptPersistence(worktree, taskId);
-        var workspace = new DirectoryWorkspace(worktree);
+        var workspace = assembly.workspaceAt(worktree);
         // The host half of the mid-round push (FR1, FR3, design D3 of wire-host-mid-round-push):
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.

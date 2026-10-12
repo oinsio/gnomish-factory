@@ -10,9 +10,11 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
+import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import org.jspecify.annotations.Nullable;
@@ -101,6 +103,22 @@ public interface RunAssembly {
      * @return the equipment every run this assembly builds reads "now" from and waits on; never null
      */
     TimeEquipment timeEquipment();
+
+    /**
+     * The host workspace a run of this assembly works in at {@code root} — the task worktree of a
+     * git-mode run, a {@code take} run and a host resume. The assembly opens it through the {@link
+     * com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory} the composition root supplied,
+     * so no use case constructs a workspace adapter itself (finding F119, design D12 of
+     * tighten-spec-contract). A container run never calls this: its workspace comes with the
+     * sandbox support.
+     *
+     * <p>Implements FR13 of tighten-spec-contract.
+     *
+     * @param root the directory the run works in; must already exist
+     * @return the workspace over {@code root}; never null
+     * @throws IllegalArgumentException if {@code root} is not an existing directory
+     */
+    Workspace workspaceAt(Path root);
 
     /**
      * Returns a copy of this assembly that also fans every engine event into {@code listener} (task

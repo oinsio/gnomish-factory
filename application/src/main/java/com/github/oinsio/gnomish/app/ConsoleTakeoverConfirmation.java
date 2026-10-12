@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -17,26 +16,29 @@ import java.util.Locale;
  *
  * <p>The TTY probe and the console are injected as role interfaces ({@link TerminalPresence}, {@link
  * ConsoleOpener}) so the class is unit- and mutation-testable without a real terminal; {@link
- * #systemTty()} wires the production pair ({@code System.console()} and a {@link SystemConsoleIO}
- * over the process's own stdin/stdout, matching {@code ManualRunConfiguration#systemConsoleIO}). The
- * {@link ConsoleIO} is opened lazily, only when a TTY is confirmed present, so a headless run never
- * touches {@code System.in}.
+ * #systemTty} wires the production pair: {@code System.console()} as the probe and the console the
+ * composition root hands in ({@code ManualRunConfiguration#systemConsoleIO}, the owner over stdin and
+ * stdout) — this class constructs no console adapter of its own (finding F119, design D12 of
+ * tighten-spec-contract). The {@link ConsoleIO} is opened, and read, only when a TTY is confirmed
+ * present, so a headless run never reads {@code System.in}.
  *
  * <p>Implements FR6 of add-claim-heartbeat; the two role types implement FR18 of
- * supervise-daemon-loops-and-embed-dashboard (design D22).
+ * supervise-daemon-loops-and-embed-dashboard (design D22); FR13 of tighten-spec-contract.
  */
 record ConsoleTakeoverConfirmation(TerminalPresence terminal, ConsoleOpener opener) implements TakeoverConfirmation {
 
     /**
-     * The production wiring: a real interactive terminal as the TTY probe, {@link SystemConsoleIO}
-     * over stdin/stdout. On JDK 22+ {@code System.console()} is non-null even for a piped stream, so
-     * the probe is {@code Console#isTerminal()} — true only for an attached terminal. The probe and
-     * the console are named methods (not lambdas) so their mutants attribute to the {@link
-     * DoNotMutate} methods below rather than to synthetic lambda methods.
+     * The production wiring: a real interactive terminal as the TTY probe, {@code console} as the
+     * prompt's console. On JDK 22+ {@code System.console()} is non-null even for a piped stream, so
+     * the probe is {@code Console#isTerminal()} — true only for an attached terminal. The probe is a
+     * named method (not a lambda) so its mutants attribute to the {@link DoNotMutate} method below
+     * rather than to a synthetic lambda method.
+     *
+     * @param console the operator console the composition root supplies; never null
+     * @return the confirmation over a real terminal probe and {@code console}; never null
      */
-    static ConsoleTakeoverConfirmation systemTty() {
-        return new ConsoleTakeoverConfirmation(
-                ConsoleTakeoverConfirmation::realTerminalAttached, ConsoleTakeoverConfirmation::systemConsole);
+    static ConsoleTakeoverConfirmation systemTty(ConsoleIO console) {
+        return new ConsoleTakeoverConfirmation(ConsoleTakeoverConfirmation::realTerminalAttached, () -> console);
     }
 
     // @DoNotMutate: a real-terminal probe cannot be exercised by a unit test — under a headless test
@@ -48,13 +50,6 @@ record ConsoleTakeoverConfirmation(TerminalPresence terminal, ConsoleOpener open
     @SuppressWarnings("SystemConsoleNull")
     private static boolean realTerminalAttached() {
         return System.console() != null && System.console().isTerminal();
-    }
-
-    // @DoNotMutate: wraps the process's own stdin/stdout; building it in a unit test would bind to
-    // real System.in. Pure System integration wiring, exercised only against an actual terminal.
-    @DoNotMutate
-    private static ConsoleIO systemConsole() {
-        return new SystemConsoleIO(System.in, System.out);
     }
 
     @Override

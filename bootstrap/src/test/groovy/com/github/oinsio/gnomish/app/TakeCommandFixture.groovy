@@ -31,7 +31,7 @@ trait TakeCommandFixture implements AppAssemblyFixture {
     TakeCommand newTakeCommand(
             FactoryProperties factoryProperties, RegisteredClone clone, Map<String, TrackerAdapterFactory> trackerFactories,
             Closure<TakeCommandSeams> seams = { time ->
-                TakeCommandSeams.defaults(time)
+                TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout())
             },
             SandboxLifecyclePass sandboxLifecyclePass = SandboxLifecyclePass.NONE) {
         TakeCommands.of(

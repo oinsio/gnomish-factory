@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import java.nio.file.Path
 import spock.lang.Specification
@@ -17,7 +18,13 @@ class PipelineStartupSpec extends Specification {
     @TempDir
     Path projectRoot
 
-    private final PipelineStartup startup = new PipelineStartup(TrackerValidatorStub.plainSource())
+    /** Every root the startup opened a workspace at, through the factory the root hands in (F119). */
+    private final List<Path> opened = []
+
+    private final PipelineStartup startup = new PipelineStartup(TrackerValidatorStub.plainSource(), { Path root ->
+        opened << root
+        new DirectoryWorkspace(root)
+    } as WorkspaceFactory)
 
     private void write(String relative, String text) {
         GnomishProjectFixture.writeGnomishFile(projectRoot, relative, text)
@@ -42,6 +49,9 @@ class PipelineStartupSpec extends Specification {
         loaded.definition().stages()*.name() == ['plan']
         loaded.workspace() instanceof DirectoryWorkspace
         (loaded.workspace() as DirectoryWorkspace).root() == projectRoot
+
+        and: 'F119 of tighten-spec-contract: the workspace was opened through the supplied factory'
+        opened == [projectRoot]
     }
 
     def "FR1/FR12/D3: a missing .gnomish/ produces a Failed outcome with rendered loader errors"() {

@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory
+import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -29,7 +31,9 @@ class HeartbeatConstantsSourceSpec extends Specification {
     @TempDir
     Path gnomeWorktree
 
-    private final PipelineStartup startup = new PipelineStartup(TrackerValidatorStub.acceptingGithubSource())
+    private final PipelineStartup startup = new PipelineStartup(TrackerValidatorStub.acceptingGithubSource(), { Path root ->
+        new DirectoryWorkspace(root)
+    } as WorkspaceFactory)
 
     /**
      * Writes a complete, valid {@code .gnomish/} tree under {@code root} whose

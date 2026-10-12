@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
@@ -261,9 +262,26 @@ public class ManualRunConfiguration {
             CheckEquipment checkEquipment,
             TimeEquipment timeEquipment,
             FactoryProperties factoryProperties,
-            SandboxProperties sandboxProperties) {
+            SandboxProperties sandboxProperties,
+            WorkspaceFactory workspaceFactory) {
         return new ManualRunAssembly(
-                systemConsoleIO, errorConsoleIO, checkEquipment, timeEquipment, factoryProperties, sandboxProperties);
+                systemConsoleIO,
+                errorConsoleIO,
+                checkEquipment,
+                timeEquipment,
+                factoryProperties,
+                sandboxProperties,
+                workspaceFactory);
+    }
+
+    /**
+     * The host workspace realization (finding F119, design D12 of tighten-spec-contract): built
+     * once here and handed to {@link PipelineStartup} and the run assembly, so no use case
+     * constructs a workspace adapter itself.
+     */
+    @Bean
+    public WorkspaceFactory workspaceFactory() {
+        return new DirectoryWorkspaceFactory();
     }
 
     /**

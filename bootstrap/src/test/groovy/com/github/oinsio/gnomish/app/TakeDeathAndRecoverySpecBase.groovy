@@ -146,7 +146,7 @@ tracker:
                 'taskId',
                 factoryProperties,
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
-                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper)).withReaperSleeper(reaperSleeper).withHeartbeatMonotonicTime(monotonic).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
+                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper), LiveConsoleIO.onStdout()).withReaperSleeper(reaperSleeper).withHeartbeatMonotonicTime(monotonic).withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE)
                 }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 

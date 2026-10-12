@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory;
+import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import java.io.IOException;
@@ -10,32 +11,37 @@ import org.springframework.stereotype.Component;
 
 /**
  * Loads the pipeline definition exactly once at startup, before any dialog (FR1, FR12, design
- * D3): constructs the {@link DirectoryWorkspace} from {@link RunArguments#dir()}, then asks the
- * {@link PipelineSource} port for that directory's definition.
+ * D3): opens the {@link Workspace} at {@link RunArguments#dir()} through the {@link
+ * WorkspaceFactory} the composition root supplied (finding F119, design D12 of
+ * tighten-spec-contract), then asks the {@link PipelineSource} port for that directory's
+ * definition.
  *
  * <p>This class stays pure with respect to process concerns: it neither prints nor exits.
  * An invalid tree is reported back as {@link PipelineLoadOutcome.Failed}, carrying every
  * {@link ConfigError#render()} line — "loader errors printed as-is" (spec) describes the
  * shape of that data, not an action taken here; the eventual runner loop (task 7.4+) prints
  * it and exits 3 (task 7.9, design D10, via Boot's {@code ExitCodeGenerator}). A
- * non-existent {@code --project} ({@link DirectoryWorkspace}'s {@link IllegalArgumentException})
+ * non-existent {@code --project} (the {@link WorkspaceFactory}'s {@link IllegalArgumentException})
  * and a genuine I/O fault reading {@code .gnomish/} ({@link IOException}) both propagate
  * unchanged — classifying them into exit codes is likewise task 7.9's concern.
  *
- * <p>Implements FR1, FR12, D3 of add-manual-run.
+ * <p>Implements FR1, FR12, D3 of add-manual-run; FR13 of tighten-spec-contract.
  */
 @Component
 public final class PipelineStartup {
 
     private final PipelineSource pipelineSource;
+    private final WorkspaceFactory workspaces;
 
     /**
      * @param pipelineSource where the project's definition is loaded from; the configured
      *     realization also makes a malformed {@code tracker.<type>} subsection a located load error
      *     (FR17 of add-tracker-port) rather than something surfacing only later; never null
+     * @param workspaces opens the run's workspace at {@code --dir}; never null
      */
-    public PipelineStartup(PipelineSource pipelineSource) {
+    public PipelineStartup(PipelineSource pipelineSource, WorkspaceFactory workspaces) {
         this.pipelineSource = pipelineSource;
+        this.workspaces = workspaces;
     }
 
     /**
@@ -47,12 +53,12 @@ public final class PipelineStartup {
      * @return {@link PipelineLoadOutcome.Loaded} with the definition and workspace when the
      *     tree is valid, else {@link PipelineLoadOutcome.Failed} with the rendered errors
      * @throws IllegalArgumentException if {@code args.dir()} is not a pre-existing
-     *     directory ({@link DirectoryWorkspace})
+     *     directory ({@link WorkspaceFactory})
      * @throws IOException if the definition cannot be read (a genuine I/O fault, not a
      *     validation problem — {@link PipelineSource})
      */
     public PipelineLoadOutcome load(RunArguments args) throws IOException {
-        DirectoryWorkspace workspace = new DirectoryWorkspace(args.dir());
+        Workspace workspace = workspaces.at(args.dir());
         LoadOutcome outcome = pipelineSource.load(args.dir());
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> new PipelineLoadOutcome.Loaded(definition, workspace);

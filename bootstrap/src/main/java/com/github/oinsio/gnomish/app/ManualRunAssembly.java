@@ -8,16 +8,19 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
+import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
+import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
@@ -80,6 +83,9 @@ public final class ManualRunAssembly implements RunAssembly {
     // Attached per invocation by take/serve (FR13 of add-base-ref-resolution); a manual run never
     // reads a task tier by binding, so it stays unattached and bindTaskTier is never reached.
     final @Nullable PipelineSource pipelineSource;
+    // The composition root's host workspace realization (finding F119, design D12 of
+    // tighten-spec-contract): every host run path opens its worktree through workspaceAt.
+    final WorkspaceFactory workspaces;
 
     /**
      * The dominant construction: no extra engine listener, no sandbox pieces, no host-git
@@ -92,13 +98,15 @@ public final class ManualRunAssembly implements RunAssembly {
             CheckEquipment checks,
             TimeEquipment time,
             FactoryProperties factoryProperties,
-            SandboxProperties sandboxProperties) {
+            SandboxProperties sandboxProperties,
+            WorkspaceFactory workspaces) {
         this.systemConsoleIO = systemConsoleIO;
         this.errorConsole = errorConsole;
         this.checks = checks;
         this.time = time;
         this.factoryProperties = factoryProperties;
         this.sandboxProperties = sandboxProperties;
+        this.workspaces = workspaces;
         this.extraListener = null;
         this.sandbox = null;
         this.hostGitPush = UnaryOperator.identity();
@@ -118,6 +126,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.time = base.time;
         this.factoryProperties = base.factoryProperties;
         this.sandboxProperties = base.sandboxProperties;
+        this.workspaces = base.workspaces;
         this.extraListener = extraListener;
         this.sandbox = sandbox;
         this.hostGitPush = hostGitPush;
@@ -271,5 +280,11 @@ public final class ManualRunAssembly implements RunAssembly {
     @Override
     public TimeEquipment timeEquipment() {
         return time;
+    }
+
+    /** Opens the host workspace through the root's {@link WorkspaceFactory} (finding F119). */
+    @Override
+    public Workspace workspaceAt(Path root) {
+        return workspaces.at(root);
     }
 }

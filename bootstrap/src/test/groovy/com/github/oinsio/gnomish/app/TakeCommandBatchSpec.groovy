@@ -86,7 +86,7 @@ tracker:
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry, ServeProperties serveProperties) {
         newTakeCommand(testProps(), registeredClone, registry, { time ->
-            TakeCommandSeams.defaults(time).withServeProperties(serveProperties)
+            TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout()).withServeProperties(serveProperties)
         })
     }
 

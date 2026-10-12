@@ -112,12 +112,13 @@ public class TrackerCommandConfiguration {
 
     /**
      * {@code take}'s production seams, with the installation's {@link ServeProperties} for batch
-     * mode (FR2 of add-factory-serve: "the N limit applies to batch and serve") and the process
-     * time equipment.
+     * mode (FR2 of add-factory-serve: "the N limit applies to batch and serve"), the process
+     * time equipment and the console owner the takeover prompt reads the operator through
+     * (finding F119 of tighten-spec-contract).
      */
     @Bean
-    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, TimeEquipment timeEquipment) {
-        return TakeCommandSeams.defaults(timeEquipment).withServeProperties(serveProperties);
+    TakeCommandSeams takeCommandSeams(ServeProperties serveProperties, TimeEquipment timeEquipment, ConsoleIO console) {
+        return TakeCommandSeams.defaults(timeEquipment, console).withServeProperties(serveProperties);
     }
 
     /**

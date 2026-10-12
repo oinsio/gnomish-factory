@@ -109,7 +109,7 @@ tracker:
                 'taskId',
                 factoryProperties,
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), { time ->
-                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper)).withReaperSleeper(reaperSleeper)
+                    TakeCommandSeams.defaults(new TimeEquipment(time.clock(), sleeper), LiveConsoleIO.onStdout()).withReaperSleeper(reaperSleeper)
                 }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 }

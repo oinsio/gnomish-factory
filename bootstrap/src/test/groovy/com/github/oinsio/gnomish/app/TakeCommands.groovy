@@ -68,7 +68,7 @@ final class TakeCommands {
             FactoryProperties factoryProperties, TrackerWiring trackerWiring,
             SandboxLifecyclePass sandboxLifecyclePass, ContainerTakeSupport containerTakeSupport) {
         of(assembly, git, clone, taskIdMdcKey, factoryProperties, trackerWiring, { TimeEquipment time ->
-            TakeCommandSeams.defaults(time)
+            TakeCommandSeams.defaults(time, LiveConsoleIO.onStdout())
         }, sandboxLifecyclePass, containerTakeSupport)
     }
 

@@ -122,7 +122,7 @@ final class ManualRunDrive {
                 synthesized.initialState(),
                 inPlacePersistence,
                 List.of(),
-                LawBinding.workingTree(loaded.workspace().root()));
+                LawBinding.workingTree(runArguments.dir()));
         // No branch, no return path: an in-place stop ends the task for good (design D5 of
         // make-run-headless), and the process still exits 10/11 by the outcome.
         TaskOutcome outcome = run.loop()

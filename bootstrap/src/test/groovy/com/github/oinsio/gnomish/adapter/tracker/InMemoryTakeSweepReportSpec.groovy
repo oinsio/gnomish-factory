@@ -67,7 +67,7 @@ class InMemoryTakeSweepReportSpec extends Specification implements AbortLifecycl
         def properties = testProperties(agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
         try {
             newTakeCommand(properties, registeredClone, [github: trackerFactory], { time ->
-                com.github.oinsio.gnomish.app.TakeCommandSeams.defaults(time)
+                com.github.oinsio.gnomish.app.TakeCommandSeams.defaults(time, com.github.oinsio.gnomish.app.LiveConsoleIO.onStdout())
             }, ONE_STOPPED_TWO_DISPOSED).run(takeArgs('take', 'PROJ-1', "--dir=$projectDir"))
             throw new IllegalStateException('take returned without an exit code')
         } catch (TakeExitCodeException e) {
